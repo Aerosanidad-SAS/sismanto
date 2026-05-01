@@ -1,0 +1,45 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import type { IncidentFormData } from "@/lib/validations";
+import { incidentSchema } from "@/lib/validations";
+
+export async function createIncident(data: IncidentFormData) {
+  const parsed = incidentSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = createClient();
+
+  try {
+    const payload = parsed.data;
+    const { data: incident, error } = await supabase
+      .from("incidents")
+      .insert({
+        vehicle_id: payload.vehicleId,
+        descripcion: payload.descripcion,
+        severidad: payload.severidad,
+        reportado_por: payload.reportadoPor,
+        afecta_operatividad: payload.afectaOperatividad,
+        estado: "ABIERTO",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    // El trigger de la BD actualizará el estado del vehículo si afecta_operatividad = true
+
+    revalidatePath("/");
+    revalidatePath("/novedades");
+    revalidatePath(`/vehiculos/${payload.vehicleId}`);
+
+    return { success: true, data: incident };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Error desconocido",
+    };
+  }
+}

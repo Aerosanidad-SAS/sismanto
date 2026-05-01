@@ -1,0 +1,309 @@
+"use client";
+
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { vehicleSchema, type VehicleFormData } from "@/lib/validations";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { crearVehiculo, actualizarVehiculo } from "@/app/api/actions/vehiculos";
+import type { OperationalCenter, Vehicle } from "@/types";
+
+interface VehicleFormProps {
+  centros: OperationalCenter[];
+  vehicle?: Vehicle & { operational_centers?: { id: number; nombre: string; codigo: string } | null };
+  onSuccess?: () => void;
+  onCancel?: () => void;
+}
+
+export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isEditing = !!vehicle;
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<VehicleFormData>({
+    resolver: zodResolver(vehicleSchema),
+    defaultValues: vehicle
+      ? {
+          placa: vehicle.placa,
+          marca: vehicle.marca || "",
+          modelo: vehicle.modelo || "",
+          linea: vehicle.linea || "",
+          tipo_combustible: vehicle.tipo_combustible || vehicle.combustible || "",
+          tipo_llantas: vehicle.tipo_llantas || "",
+          tipo_bombillos: vehicle.tipo_bombillos || "",
+          tipo_refrigerante: vehicle.tipo_refrigerante || "",
+          aceite_usado: vehicle.aceite_usado || "",
+          ref_filtro_aire_motor: vehicle.ref_filtro_aire_motor || "",
+          ref_filtro_aceite: vehicle.ref_filtro_aceite || "",
+          ref_filtro_combustible: vehicle.ref_filtro_combustible || "",
+          notas: vehicle.notas || "",
+          vencimiento_soat: vehicle.vencimiento_soat || "",
+          vencimiento_tecnicomecanica: vehicle.vencimiento_tecnicomecanica || vehicle.vencimiento_rtm || "",
+          centro_operativo_id: vehicle.centro_operativo_id || centros[0]?.id || 0,
+        }
+      : {
+          placa: "",
+          marca: "",
+          modelo: "",
+          linea: "",
+          tipo_combustible: "",
+          tipo_llantas: "",
+          tipo_bombillos: "",
+          tipo_refrigerante: "",
+          aceite_usado: "",
+          ref_filtro_aire_motor: "",
+          ref_filtro_aceite: "",
+          ref_filtro_combustible: "",
+          notas: "",
+          vencimiento_soat: "",
+          vencimiento_tecnicomecanica: "",
+          centro_operativo_id: centros[0]?.id || 0,
+        },
+  });
+
+  const centroId = watch("centro_operativo_id");
+
+  const onSubmit = async (data: VehicleFormData) => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const result = isEditing
+        ? await actualizarVehiculo(vehicle!.id, data)
+        : await crearVehiculo(data);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        onSuccess?.();
+      }
+    } catch {
+      setError("Error al guardar el vehículo. Intente nuevamente.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* Sección: Identificación */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          Identificación
+        </h3>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <Label htmlFor="placa">Placa *</Label>
+            <Input
+              id="placa"
+              {...register("placa")}
+              className="mt-1 uppercase"
+              placeholder="ABC123"
+              disabled={isEditing}
+            />
+            {errors.placa && (
+              <p className="text-xs text-red-600 mt-1">{errors.placa.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="marca">Marca</Label>
+            <Input id="marca" {...register("marca")} className="mt-1" placeholder="Chevrolet" />
+          </div>
+          <div>
+            <Label htmlFor="modelo">Modelo</Label>
+            <Input id="modelo" {...register("modelo")} className="mt-1" placeholder="2020" />
+          </div>
+          <div>
+            <Label htmlFor="linea">Línea</Label>
+            <Input id="linea" {...register("linea")} className="mt-1" placeholder="NPR" />
+          </div>
+          <div>
+            <Label htmlFor="centro">Centro de Operaciones *</Label>
+            <Select
+              value={centroId ? String(centroId) : ""}
+              onValueChange={(v) => setValue("centro_operativo_id", parseInt(v))}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Seleccione un centro" />
+              </SelectTrigger>
+              <SelectContent>
+                {centros.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.centro_operativo_id && (
+              <p className="text-xs text-red-600 mt-1">
+                {errors.centro_operativo_id.message}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Sección: Fluidos y Filtros */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          Fluidos y Filtros
+        </h3>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <Label htmlFor="tipo_combustible">Tipo de Combustible</Label>
+            <Input
+              id="tipo_combustible"
+              {...register("tipo_combustible")}
+              className="mt-1"
+              placeholder="Gasolina / ACPM"
+            />
+          </div>
+          <div>
+            <Label htmlFor="tipo_refrigerante">Tipo de Refrigerante</Label>
+            <Input
+              id="tipo_refrigerante"
+              {...register("tipo_refrigerante")}
+              className="mt-1"
+              placeholder="Ej: Ethylene Glycol 50%"
+            />
+          </div>
+          <div>
+            <Label htmlFor="aceite_usado">Aceite Usado</Label>
+            <Input
+              id="aceite_usado"
+              {...register("aceite_usado")}
+              className="mt-1"
+              placeholder="Ej: 15W-40 API CI-4"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ref_filtro_aire_motor">Ref. Filtro de Aire Motor</Label>
+            <Input
+              id="ref_filtro_aire_motor"
+              {...register("ref_filtro_aire_motor")}
+              className="mt-1"
+              placeholder="Ej: SA-6709"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ref_filtro_aceite">Ref. Filtro de Aceite</Label>
+            <Input
+              id="ref_filtro_aceite"
+              {...register("ref_filtro_aceite")}
+              className="mt-1"
+              placeholder="Ej: PH3614"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ref_filtro_combustible">Ref. Filtro de Combustible</Label>
+            <Input
+              id="ref_filtro_combustible"
+              {...register("ref_filtro_combustible")}
+              className="mt-1"
+              placeholder="Ej: FF5052"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Sección: Neumáticos y Eléctrico */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          Neumáticos y Sistema Eléctrico
+        </h3>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label htmlFor="tipo_llantas">Tipo de Llantas</Label>
+            <Input
+              id="tipo_llantas"
+              {...register("tipo_llantas")}
+              className="mt-1"
+              placeholder="Ej: 215/75 R17.5"
+            />
+          </div>
+          <div>
+            <Label htmlFor="tipo_bombillos">Tipo de Bombillos</Label>
+            <Input
+              id="tipo_bombillos"
+              {...register("tipo_bombillos")}
+              className="mt-1"
+              placeholder="Ej: LED / H4 55W"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Sección: Vencimientos */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          Vencimientos
+        </h3>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label htmlFor="vencimiento_soat">Fecha Vencimiento SOAT</Label>
+            <Input
+              id="vencimiento_soat"
+              type="date"
+              {...register("vencimiento_soat")}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="vencimiento_tecnicomecanica">
+              Fecha Vencimiento Técnico-Mecánica
+            </Label>
+            <Input
+              id="vencimiento_tecnicomecanica"
+              type="date"
+              {...register("vencimiento_tecnicomecanica")}
+              className="mt-1"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Sección: Notas */}
+      <div>
+        <Label htmlFor="notas">Notas</Label>
+        <Textarea
+          id="notas"
+          {...register("notas")}
+          className="mt-1"
+          rows={3}
+          placeholder="Observaciones generales del vehículo..."
+        />
+      </div>
+
+      <div className="flex justify-end gap-3 pt-2">
+        {onCancel && (
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancelar
+          </Button>
+        )}
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Guardando..." : isEditing ? "Actualizar" : "Crear Vehículo"}
+        </Button>
+      </div>
+    </form>
+  );
+}

@@ -1,0 +1,226 @@
+// Tipos TypeScript basados en el esquema de Supabase
+
+export type VehicleStatus = 'OPERATIVO' | 'FUERA_DE_SERVICIO';
+export type MaintenanceType = 'PREVENTIVO' | 'CORRECTIVO';
+export type SeverityLevel = 'BAJA' | 'MEDIA' | 'ALTA';
+export type IncidentStatus = 'ABIERTO' | 'EN_PROCESO' | 'CERRADO';
+
+export interface OperationalCenter {
+  id: number;
+  codigo: string;
+  nombre: string;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface Supplier {
+  id: number;
+  nombre: string;
+  nit?: string | null;
+  contacto?: string | null;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface FuelLog {
+  id: number;
+  vehicle_id: string;
+  fecha: string;
+  kilometraje: number;
+  galones: number;
+  costo?: number | null;
+  notas?: string | null;
+  created_at: string;
+}
+
+export interface Vehicle {
+  id: string;
+  placa: string;
+  marca?: string | null;
+  modelo?: string | null;
+  linea?: string | null;
+  tipo_llantas?: string | null;
+  combustible?: string | null;
+  tipo_combustible?: string | null;
+  tipo_bombillos?: string | null;
+  tipo_refrigerante?: string | null;
+  aceite_usado?: string | null;
+  ref_filtro_aire_motor?: string | null;
+  ref_filtro_aceite?: string | null;
+  ref_filtro_combustible?: string | null;
+  notas?: string | null;
+  vencimiento_rtm?: string | null;
+  vencimiento_soat?: string | null;
+  vencimiento_tecnicomecanica?: string | null;
+  estado_actual: VehicleStatus;
+  centro_operativo: string;
+  centro_operativo_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MaintenanceCategory {
+  id: number;
+  nombre: string;
+  grupo_padre?: string | null;
+  tipo_default?: MaintenanceType | null;
+  activo: boolean;
+}
+
+export interface MaintenanceRecord {
+  id_manto: number;
+  vehicle_id: string;
+  fecha: string;
+  kilometraje_actual: number;
+  tipo: MaintenanceType;
+  categoria_id?: number | null;
+  descripcion_trabajo?: string | null;
+  proveedor?: string | null;
+  supplier_id?: number | null;
+  valor?: number | null;
+  numero_factura?: string | null;
+  tiempo_fuera_servicio_horas?: number | null;
+  notas_adicionales?: string | null;
+  incident_id?: number | null;
+  created_at: string;
+  created_by?: string | null;
+}
+
+export interface Incident {
+  id: number;
+  vehicle_id: string;
+  fecha_reporte: string;
+  descripcion: string;
+  severidad: SeverityLevel;
+  reportado_por: string;
+  afecta_operatividad: boolean;
+  estado: IncidentStatus;
+  fecha_cierre?: string | null;
+  mantenimiento_cierre_id?: number | null;
+  tiempo_resolucion_horas?: number | null;
+  created_at: string;
+}
+
+export interface MileageLog {
+  id: number;
+  vehicle_id: string;
+  fecha: string;
+  lectura_kilometraje: number;
+  created_at: string;
+}
+
+export interface MaintenanceSchedule {
+  id: number;
+  nombre_tarea: string;
+  categoria_id?: number | null;
+  frecuencia_km?: number | null;
+  frecuencia_meses?: number | null;
+  descripcion?: string | null;
+  activo: boolean;
+}
+
+// Tipos para formularios
+export interface MaintenanceFormData {
+  vehicleId: string;
+  fecha: Date;
+  kilometrajeActual: number;
+  tipo: MaintenanceType;
+  categoriaId: number;
+  descripcionTrabajo: string;
+  proveedor: string;
+  supplierId?: number;
+  valor: number;
+  numeroFactura?: string;
+  tiempoFueraServicioHoras?: number;
+  notasAdicionales?: string;
+  incidentId?: number;
+}
+
+export interface IncidentFormData {
+  vehicleId: string;
+  descripcion: string;
+  severidad: SeverityLevel;
+  reportadoPor: string;
+  afectaOperatividad: boolean;
+}
+
+// Tipos para KPIs
+export interface UptimeKPI {
+  vehicleId: string;
+  placa: string;
+  horasTotales: number;
+  horasFueraServicio: number;
+  porcentajeDisponibilidad: number;
+  cumpleMeta: boolean;
+}
+
+export interface TCOKPI {
+  placa?: string | null;
+  centroOperativo?: string | null;
+  costoPreventivo: number;
+  costoCorrectivo: number;
+  costoTotal: number;
+  cantidadMantenimientos: number;
+}
+
+export interface RatioPCKPI {
+  costoPreventivo: number;
+  costoCorrectivo: number;
+  ratio: number;
+  cantidadPreventivo: number;
+  cantidadCorrectivo: number;
+}
+
+export interface ResolutionTimeKPI {
+  severidad: SeverityLevel;
+  promedioHoras: number;
+  cantidadCerradas: number;
+  cantidadAbiertas: number;
+}
+
+export interface CostoPorVehiculoKPI {
+  vehicleId: string;
+  placa: string;
+  marca?: string | null;
+  costoPreventivo: number;
+  costoCorrectivo: number;
+  costoTotal: number;
+  cantidadMantenimientos: number;
+}
+
+export interface DisponibilidadVehiculo {
+  vehicleId: string;
+  placa: string;
+  marca?: string | null;
+  horasTotales: number;
+  tfdsHoras: number;
+  disponibilidadPct: number;
+  cumpleMeta: boolean;
+}
+
+export interface ConsumoVehiculo {
+  vehicleId: string;
+  placa: string;
+  marca?: string | null;
+  kmRecorridos: number;
+  consumoPromedioKmGal: number | null;
+  totalGalones: number;
+  cantidadCargas: number;
+}
+
+// Tipos para el dashboard
+export interface DashboardSummary {
+  totalOperativos: number;
+  totalFueraServicio: number;
+  costoMesActual: number;
+  novedadesAbiertas: number;
+  proximosVencimientos: number;
+}
+
+export interface MaintenanceAlert {
+  placa: string;
+  nombreTarea: string;
+  kmProximoManto: number;
+  kmActual: number;
+  kmFaltantes: number;
+}
