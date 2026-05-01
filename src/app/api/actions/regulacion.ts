@@ -34,7 +34,7 @@ export async function assignVehicleToOvem(
   fechaInicio: string,
   fechaFin?: string
 ) {
-  const { profile } = await requireRole(["ADMIN", "SUPERADMIN", "REGULACION"]);
+  const profile = await requireRole(["ADMIN", "SUPERADMIN", "REGULACION"]);
 
   const parseFin = fechaFin?.trim()
     ? fechaFin.trim()
