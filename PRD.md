@@ -91,7 +91,7 @@ Registrar aquí cada hito relevante: fecha, objetivo, resultado breve, evidencia
 
 ## 6. Matriz de acceso UI (sidebar)
 
-Fuente en código: `src/app/(dashboard)/layout.tsx` (`ALL_NAV`). **SUPERADMIN** ve las mismas entradas que **ADMIN** (filtro: ítems cuyo arreglo `roles` incluye `ADMIN`). El layout redirige en cliente a **OVEM** si intenta acceder a `/`, `/kpis` o `/consumo`; **GERENCIAL** queda limitado efectivamente a `/`, `/kpis`, `/consumo` y rutas bajo `/admin` si el menú las expusiera.
+Fuente en código: `src/app/(dashboard)/layout.tsx` (`ALL_NAV`). **SUPERADMIN** ve las mismas entradas que **ADMIN** (filtro: ítems cuyo arreglo `roles` incluye `ADMIN`). Redirecciones en cliente: rutas `/`, `/kpis` y `/consumo` llevan a OVEM a **`/ovem`**; **GERENCIAL** fuera de **`/`**, **`/kpis`** o **`/consumo`** se redirige a **`/`**.
 
 | Rol | Enlaces del menú lateral |
 |-----|---------------------------|
