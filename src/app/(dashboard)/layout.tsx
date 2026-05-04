@@ -58,11 +58,7 @@ export default function DashboardLayout({
   }, [pathname, router]);
 
   const navItems = profile
-    ? ALL_NAV.filter(
-        (n) =>
-          n.roles.includes(profile.role_codigo) ||
-          (profile.role_codigo === "SUPERADMIN" && n.roles.includes("ADMIN"))
-      )
+    ? ALL_NAV.filter((n) => n.roles.includes(profile.role_codigo))
     : [];
 
   if (loading) {

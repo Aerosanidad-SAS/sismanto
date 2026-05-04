@@ -377,10 +377,18 @@ export type Database = {
         Relationships: []
       }
       user_profiles: {
-        Row: { id: number; user_id: string; role_id: number; nombre_completo: string | null; email: string | null; activo: boolean; created_at: string; updated_at: string }
-        Insert: { id?: number; user_id: string; role_id: number; nombre_completo?: string | null; email?: string | null; activo?: boolean; created_at?: string; updated_at?: string }
-        Update: { id?: number; user_id?: string; role_id?: number; nombre_completo?: string | null; email?: string | null; activo?: boolean; created_at?: string; updated_at?: string }
-        Relationships: []
+        Row: { id: number; user_id: string; role_id: number; nombre_completo: string | null; email: string | null; activo: boolean; operational_center_id: number | null; created_at: string; updated_at: string }
+        Insert: { id?: number; user_id: string; role_id: number; nombre_completo?: string | null; email?: string | null; activo?: boolean; operational_center_id?: number | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; user_id?: string; role_id?: number; nombre_completo?: string | null; email?: string | null; activo?: boolean; operational_center_id?: number | null; created_at?: string; updated_at?: string }
+        Relationships: [
+          {
+            foreignKeyName: "user_profiles_operational_center_id_fkey"
+            columns: ["operational_center_id"]
+            isOneToOne: false
+            referencedRelation: "operational_centers"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       vehicle_assignments: {
         Row: { id: number; user_id: string; vehicle_id: string; fecha_inicio: string; fecha_fin: string | null; activo: boolean; asignado_por: string | null; created_at: string }
@@ -389,9 +397,9 @@ export type Database = {
         Relationships: []
       }
       daily_checks: {
-        Row: { id: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial: number | null; kilometraje_final: number | null; checklist_ok: boolean; observaciones: string | null; created_at: string }
-        Insert: { id?: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok: boolean; observaciones?: string | null; created_at?: string }
-        Update: { id?: number; user_id?: string; vehicle_id?: string; fecha?: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok?: boolean; observaciones?: string | null; created_at?: string }
+        Row: { id: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial: number | null; kilometraje_final: number | null; checklist_ok: boolean; observaciones: string | null; is_assignment: boolean; created_at: string }
+        Insert: { id?: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok: boolean; observaciones?: string | null; is_assignment?: boolean; created_at?: string }
+        Update: { id?: number; user_id?: string; vehicle_id?: string; fecha?: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok?: boolean; observaciones?: string | null; is_assignment?: boolean; created_at?: string }
         Relationships: []
       }
       maintenance_schedule: {
@@ -429,7 +437,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_user_center: {
+        Args: { p_user_id?: string }
+        Returns: number | null
+      }
     }
     Enums: {
       vehicle_status: 'OPERATIVO' | 'FUERA_DE_SERVICIO'

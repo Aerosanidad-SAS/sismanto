@@ -108,7 +108,7 @@ export async function createUserAsAdmin(data: {
   nombreCompleto: string;
   roleCodigo: UserRole;
 }) {
-  await requireRole(["ADMIN", "SUPERADMIN"]);
+  await requireRole(["ADMIN"]);
   const parsed = createUserAsAdminSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -143,7 +143,7 @@ export async function createUserAsAdmin(data: {
 }
 
 export async function updateUserRole(userId: string, roleCodigo: UserRole) {
-  await requireRole(["ADMIN", "SUPERADMIN"]);
+  await requireRole(["ADMIN"]);
   const parsed = updateUserRoleSchema.safeParse({ userId, roleCodigo });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -162,7 +162,7 @@ export async function updateUserRole(userId: string, roleCodigo: UserRole) {
 }
 
 export async function toggleUserActive(userId: string, activo: boolean) {
-  await requireRole(["ADMIN", "SUPERADMIN"]);
+  await requireRole(["ADMIN"]);
   const parsed = toggleUserActiveSchema.safeParse({ userId, activo });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 

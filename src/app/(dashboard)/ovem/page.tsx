@@ -12,7 +12,7 @@ export default async function OvemPage() {
   if (!user) redirect("/login");
 
   const profile = await getProfile();
-  if (!profile || !["OVEM", "ADMIN", "SUPERADMIN"].includes(profile.role_codigo)) {
+  if (!profile || !["OVEM", "ADMIN"].includes(profile.role_codigo)) {
     redirect("/");
   }
 

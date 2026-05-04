@@ -42,18 +42,20 @@ export async function submitDailyCheck(data: {
   kilometrajeFinal?: number;
   checklistOk: boolean;
   observaciones?: string;
+  isAssignment?: boolean;
 }) {
   const parsed = dailyCheckSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const row = parsed.data;
 
-  const profile = await requireRole(["OVEM", "ADMIN", "SUPERADMIN"]);
+  const profile = await requireRole(["OVEM", "ADMIN"]);
   if (profile.role_codigo === "OVEM" && profile.user_id !== row.userId) {
     return { error: "No autorizado" };
   }
 
   const supabase = createClient();
-  const { error } = await supabase.from("daily_checks").upsert(
+
+  const { error: checkError } = await supabase.from("daily_checks").upsert(
     {
       user_id: row.userId,
       vehicle_id: row.vehicleId,
@@ -62,11 +64,31 @@ export async function submitDailyCheck(data: {
       kilometraje_final: row.kilometrajeFinal ?? null,
       checklist_ok: row.checklistOk,
       observaciones: row.observaciones ?? null,
+      is_assignment: row.isAssignment,
     },
     { onConflict: "user_id,vehicle_id,fecha" }
   );
 
-  if (error) return { error: error.message };
+  if (checkError) return { error: checkError.message };
+
+  // Si el OVEM marcó asignación, crear vehicle_assignment para hoy
+  if (row.isAssignment) {
+    const { error: assignError } = await supabase
+      .from("vehicle_assignments")
+      .upsert(
+        {
+          user_id: row.userId,
+          vehicle_id: row.vehicleId,
+          fecha_inicio: row.fecha,
+          fecha_fin: row.fecha,
+          activo: true,
+          asignado_por: row.userId,
+        },
+        { onConflict: "user_id,vehicle_id,fecha_inicio" }
+      );
+    if (assignError) return { error: assignError.message };
+  }
+
   revalidatePath("/ovem");
   return { success: true };
 }
@@ -87,7 +109,7 @@ export async function updateKilometrajeOdometer(
 
   const { userId: uid, vehicleId: vid, fecha: fechaVal, kilometraje: kmVal } = parsed.data;
 
-  const profile = await requireRole(["OVEM", "ADMIN", "SUPERADMIN"]);
+  const profile = await requireRole(["OVEM", "ADMIN"]);
   if (profile.role_codigo === "OVEM") {
     const assigned = await getVehiculoPorOVEM(uid, vid);
     if (!assigned) return { error: "No tiene asignado este vehículo" };

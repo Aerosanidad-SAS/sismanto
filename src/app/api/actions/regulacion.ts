@@ -7,7 +7,7 @@ import { toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/valida
 import { z } from "zod";
 
 export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERATIVO" | "FUERA_DE_SERVICIO") {
-  await requireRole(["ADMIN", "SUPERADMIN", "REGULACION"]);
+  await requireRole(["ADMIN", "REGULACION"]);
 
   const parsed = toggleVehicleStatusSchema.safeParse({ vehicleId, nuevoEstado });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
@@ -34,11 +34,14 @@ export async function assignVehicleToOvem(
   fechaInicio: string,
   fechaFin?: string
 ) {
-  const profile = await requireRole(["ADMIN", "SUPERADMIN", "REGULACION"]);
+  const profile = await requireRole(["ADMIN", "REGULACION", "OVEM"]);
 
-  const parseFin = fechaFin?.trim()
-    ? fechaFin.trim()
-    : undefined;
+  // OVEM solo puede asignarse a sí mismo
+  if (profile.role_codigo === "OVEM" && userId !== profile.user_id) {
+    return { error: "Un OVEM solo puede asignarse a sí mismo" };
+  }
+
+  const parseFin = fechaFin?.trim() ? fechaFin.trim() : undefined;
   const parsed = vehicleAssignmentSchema.safeParse({
     vehicleId,
     userId,
@@ -48,7 +51,6 @@ export async function assignVehicleToOvem(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
-
   const fin = parsed.data.fechaFin?.trim() || null;
 
   const { error } = await supabase.from("vehicle_assignments").insert({
@@ -66,7 +68,7 @@ export async function assignVehicleToOvem(
 }
 
 export async function unassignVehicle(assignmentId: number) {
-  await requireRole(["ADMIN", "SUPERADMIN", "REGULACION"]);
+  await requireRole(["ADMIN", "REGULACION"]);
   const idParsed = z.number().int().positive().safeParse(assignmentId);
   if (!idParsed.success) return { error: idParsed.error.issues[0]?.message ?? "Datos inválidos" };
 
