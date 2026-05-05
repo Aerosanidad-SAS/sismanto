@@ -40,6 +40,9 @@ import {
 import type { ConsumoVehiculo } from "@/types";
 import { Fuel, MapPin, TrendingUp } from "lucide-react";
 
+/** Radix Select no permite SelectItem value=""; usar centinela para “Todos”. */
+const SELECT_ALL = "__all__";
+
 interface ConsumoClienteProps {
   metricas: ConsumoVehiculo[];
   vehicles: { id: string; placa: string; marca?: string | null }[];
@@ -128,12 +131,15 @@ export function ConsumoCliente({
             </div>
             <div>
               <Label>Vehículo</Label>
-              <Select value={vehiculoId} onValueChange={setVehiculoId}>
+              <Select
+                value={vehiculoId || SELECT_ALL}
+                onValueChange={(v) => setVehiculoId(v === SELECT_ALL ? "" : v)}
+              >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value={SELECT_ALL}>Todos</SelectItem>
                   {vehicles.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.placa} {v.marca ? `(${v.marca})` : ""}
@@ -144,12 +150,15 @@ export function ConsumoCliente({
             </div>
             <div>
               <Label>Centro Operaciones</Label>
-              <Select value={centroId} onValueChange={setCentroId}>
+              <Select
+                value={centroId || SELECT_ALL}
+                onValueChange={(v) => setCentroId(v === SELECT_ALL ? "" : v)}
+              >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value={SELECT_ALL}>Todos</SelectItem>
                   {centros.map((c) => (
                     <SelectItem key={c.id} value={String(c.id)}>
                       {c.nombre}
