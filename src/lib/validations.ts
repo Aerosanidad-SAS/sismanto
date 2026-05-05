@@ -21,18 +21,21 @@ export const maintenanceSchema = z.object({
 
 export type MaintenanceFormData = z.infer<typeof maintenanceSchema>;
 
-// Schema de validación para incidente/novedad
+// Schema de validación para incidente/novedad (severidad opcional si el reporter no la define; servidor usa MEDIA)
 export const incidentSchema = z.object({
   vehicleId: z.string().uuid('ID de vehículo inválido'),
   descripcion: z.string().min(10, 'Mínimo 10 caracteres'),
-  severidad: z.enum(['BAJA', 'MEDIA', 'ALTA'], {
-    required_error: 'Debe seleccionar una severidad',
-  }),
+  severidad: z.enum(['BAJA', 'MEDIA', 'ALTA']).optional(),
   reportadoPor: z.string().min(3, 'Mínimo 3 caracteres'),
   afectaOperatividad: z.boolean().default(false),
 });
 
 export type IncidentFormData = z.infer<typeof incidentSchema>;
+
+export const updateIncidentPrioridadSchema = z.object({
+  incidentId: z.number().int().positive(),
+  prioridad: z.enum(['BAJA', 'MEDIA', 'ALTA']).nullable(),
+});
 
 // Schema de validación para vehículo (completo)
 export const vehicleSchema = z.object({
@@ -51,6 +54,9 @@ export const vehicleSchema = z.object({
   notas: z.string().optional(),
   vencimiento_soat: z.string().optional().nullable(),
   vencimiento_tecnicomecanica: z.string().optional().nullable(),
+  costo_soat_anual: z.coerce.number().nonnegative().optional().nullable(),
+  costo_tecnomecanica_anual: z.coerce.number().nonnegative().optional().nullable(),
+  costo_poliza_anual: z.coerce.number().nonnegative().optional().nullable(),
   centro_operativo_id: z.number().int().positive('Debe seleccionar un centro de operaciones'),
 });
 
@@ -121,7 +127,7 @@ export const signInSchema = z.object({
   password: z.string().min(1, "Contraseña requerida"),
 });
 
-const userRoleEnum = z.enum(["OVEM", "ADMIN", "REGULACION", "GERENCIAL"]);
+const userRoleEnum = z.enum(["OVEM", "ADMIN", "REGULACION", "GERENCIAL", "MANTENIMIENTO"]);
 
 export const createUserAsAdminSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -222,6 +228,110 @@ export const filaCombustibleImportSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Fecha inválida: "${row.fecha}"`, path: ["fecha"] });
     }
   });
+
+function cleanImportString(v: unknown): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  const s = String(v).trim();
+  return s === "" ? undefined : s;
+}
+
+/** Fila Excel/CSV vehículos (centro_codigo = operational_centers.codigo). */
+export const filaVehiculoImportSchema = z
+  .object({
+    placa: z.unknown(),
+    marca: z.unknown().optional(),
+    modelo: z.unknown().optional(),
+    linea: z.unknown().optional(),
+    centro_codigo: z.unknown(),
+    tipo_combustible: z.unknown().optional(),
+    tipo_llantas: z.unknown().optional(),
+    tipo_bombillos: z.unknown().optional(),
+    tipo_refrigerante: z.unknown().optional(),
+    aceite_usado: z.unknown().optional(),
+    ref_filtro_aire_motor: z.unknown().optional(),
+    ref_filtro_aceite: z.unknown().optional(),
+    ref_filtro_combustible: z.unknown().optional(),
+    notas: z.unknown().optional(),
+    vencimiento_soat: z.unknown().optional(),
+    vencimiento_tecnicomecanica: z.unknown().optional(),
+  })
+  .transform((raw) => ({
+    placa: String(raw.placa ?? "").trim().toUpperCase(),
+    marca: cleanImportString(raw.marca),
+    modelo: cleanImportString(raw.modelo),
+    linea: cleanImportString(raw.linea),
+    centro_codigo: String(raw.centro_codigo ?? "").trim().toUpperCase(),
+    tipo_combustible: cleanImportString(raw.tipo_combustible),
+    tipo_llantas: cleanImportString(raw.tipo_llantas),
+    tipo_bombillos: cleanImportString(raw.tipo_bombillos),
+    tipo_refrigerante: cleanImportString(raw.tipo_refrigerante),
+    aceite_usado: cleanImportString(raw.aceite_usado),
+    ref_filtro_aire_motor: cleanImportString(raw.ref_filtro_aire_motor),
+    ref_filtro_aceite: cleanImportString(raw.ref_filtro_aceite),
+    ref_filtro_combustible: cleanImportString(raw.ref_filtro_combustible),
+    notas: cleanImportString(raw.notas),
+    vencimiento_soat: cleanImportString(raw.vencimiento_soat),
+    vencimiento_tecnicomecanica: cleanImportString(raw.vencimiento_tecnicomecanica),
+  }))
+  .superRefine((row, ctx) => {
+    if (row.placa.length < 5 || row.placa.length > 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Placa debe tener entre 5 y 10 caracteres",
+        path: ["placa"],
+      });
+    }
+    if (!row.centro_codigo || row.centro_codigo.length < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "centro_codigo es requerido (código del centro operativo)",
+        path: ["centro_codigo"],
+      });
+    }
+    if (row.vencimiento_soat && Number.isNaN(Date.parse(row.vencimiento_soat))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Fecha inválida: "${row.vencimiento_soat}"`,
+        path: ["vencimiento_soat"],
+      });
+    }
+    if (
+      row.vencimiento_tecnicomecanica &&
+      Number.isNaN(Date.parse(row.vencimiento_tecnicomecanica))
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Fecha inválida: "${row.vencimiento_tecnicomecanica}"`,
+        path: ["vencimiento_tecnicomecanica"],
+      });
+    }
+  });
+
+export type FilaVehiculoImport = z.output<typeof filaVehiculoImportSchema>;
+
+/** Fila Excel/CSV proveedores */
+export const filaProveedorImportSchema = z
+  .object({
+    nombre: z.unknown(),
+    nit: z.unknown().optional(),
+    contacto: z.unknown().optional(),
+  })
+  .transform((raw) => ({
+    nombre: String(raw.nombre ?? "").trim(),
+    nit: cleanImportString(raw.nit),
+    contacto: cleanImportString(raw.contacto),
+  }))
+  .superRefine((row, ctx) => {
+    if (row.nombre.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Nombre debe tener al menos 3 caracteres",
+        path: ["nombre"],
+      });
+    }
+  });
+
+export type FilaProveedorImport = z.output<typeof filaProveedorImportSchema>;
 
 export const operationalCenterUpdateNombreSchema = z.object({
   nombre: z.string().min(3, "Mínimo 3 caracteres").max(200),

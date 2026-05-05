@@ -22,6 +22,8 @@ interface IncidentFormProps {
   afectaOperatividad: boolean;
   onSuccess: () => void;
   reportadoPorDefault?: string;
+  /** Ocultar severidad percibida (p. ej. OVEM): el servidor usará clasificación MEDIA por defecto */
+  hideSeveridad?: boolean;
 }
 
 export function IncidentForm({
@@ -29,6 +31,7 @@ export function IncidentForm({
   afectaOperatividad,
   onSuccess,
   reportadoPorDefault,
+  hideSeveridad = false,
 }: IncidentFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +47,7 @@ export function IncidentForm({
     defaultValues: {
       vehicleId,
       afectaOperatividad,
-      severidad: "ALTA",
+      ...(hideSeveridad ? {} : { severidad: "MEDIA" as const }),
       reportadoPor: reportadoPorDefault || "",
     },
   });
@@ -86,29 +89,31 @@ export function IncidentForm({
         )}
       </div>
 
-      <div>
-        <Label htmlFor="severidad">Severidad *</Label>
-        <Select
-          value={severidad}
-          onValueChange={(value) =>
-            setValue("severidad", value as "BAJA" | "MEDIA" | "ALTA")
-          }
-        >
-          <SelectTrigger className="mt-1">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="BAJA">Leve (Slight)</SelectItem>
-            <SelectItem value="MEDIA">Moderada (Moderate)</SelectItem>
-            <SelectItem value="ALTA">Severa (Severe)</SelectItem>
-          </SelectContent>
-        </Select>
-        {errors.severidad && (
-          <p className="text-sm text-red-600 mt-1">
-            {errors.severidad.message}
-          </p>
-        )}
-      </div>
+      {!hideSeveridad && (
+        <div>
+          <Label htmlFor="severidad">Clasificación del reporte *</Label>
+          <Select
+            value={severidad ?? "MEDIA"}
+            onValueChange={(value) =>
+              setValue("severidad", value as "BAJA" | "MEDIA" | "ALTA")
+            }
+          >
+            <SelectTrigger className="mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="BAJA">Leve</SelectItem>
+              <SelectItem value="MEDIA">Moderada</SelectItem>
+              <SelectItem value="ALTA">Severa</SelectItem>
+            </SelectContent>
+          </Select>
+          {errors.severidad && (
+            <p className="text-sm text-red-600 mt-1">
+              {errors.severidad.message}
+            </p>
+          )}
+        </div>
+      )}
 
       <div>
         <Label htmlFor="reportadoPor">Reportado por *</Label>

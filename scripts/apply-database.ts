@@ -135,6 +135,7 @@ Cómo obtenerla (Supabase, UI actual):
     ["003_rbac.sql", path.join(process.cwd(), "scripts", "migrations", "003_rbac.sql")],
     ["004_rls_roles.sql", path.join(process.cwd(), "scripts", "migrations", "004_rls_roles.sql")],
     ["005_maintenance_items_checklist.sql", path.join(process.cwd(), "scripts", "migrations", "005_maintenance_items_checklist.sql")],
+    ["006_mantenimiento_flota_ovem.sql", path.join(process.cwd(), "scripts", "migrations", "006_mantenimiento_flota_ovem.sql")],
   ] as const;
 
   try {

@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   submitDailyCheck,
   updateKilometrajeOdometer,
   getDailyCheckForToday,
 } from "@/app/api/actions/ovem";
-import { createIncident } from "@/app/api/actions/incidents";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { IncidentForm } from "@/components/dashboard/incident-form";
-import { CheckCircle2, Gauge, AlertCircle } from "lucide-react";
-
+import { CheckCircle2, Gauge, AlertCircle, ClipboardCheck, ArrowLeft, ArrowRight } from "lucide-react";
 const CHECKLIST_ITEMS = [
   "Nivel de aceite",
   "Nivel de refrigerante",
@@ -42,27 +40,37 @@ const CHECKLIST_ITEMS = [
 interface OvemPortalProps {
   userId: string;
   userName: string;
-  vehicles: any[];
+  vehicles: Array<{
+    id: string;
+    placa: string;
+    marca?: string | null;
+    modelo?: string | null;
+    estado_actual?: string;
+  }>;
   isAdmin: boolean;
 }
 
+type Flow = null | "preoperacional" | "novedad";
+
 export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalProps) {
   const router = useRouter();
-  const [vehicleId, setVehicleId] = useState<string>("");
+  const [flow, setFlow] = useState<Flow>(null);
+  const [vehicleId, setVehicleId] = useState("");
   const [km, setKm] = useState("");
   const [checklistOk, setChecklistOk] = useState(false);
   const [observaciones, setObservaciones] = useState("");
-  const [showNovedad, setShowNovedad] = useState(false);
+  const [showNovedadDialog, setShowNovedadDialog] = useState(false);
   const [dailyCheckDone, setDailyCheckDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [novedadesOpen, setNovedadesOpen] = useState(false);
 
   const hoy = new Date().toISOString().split("T")[0];
-  const selectedVehicle = vehicles.find((v: any) => v.id === vehicleId);
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
 
   useEffect(() => {
-    if (vehicleId) {
+    if (vehicleId && flow === "preoperacional") {
       getDailyCheckForToday(userId, vehicleId).then((dc) => {
         if (dc) {
           setDailyCheckDone(true);
@@ -73,13 +81,22 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
           setDailyCheckDone(false);
         }
       });
-    } else {
+    } else if (!vehicleId || flow !== "preoperacional") {
       setDailyCheckDone(false);
     }
-  }, [vehicleId, userId]);
+  }, [vehicleId, userId, flow]);
+
+  useEffect(() => {
+    setVehicleId("");
+    setKm("");
+    setError(null);
+    setSuccess(null);
+    setShowNovedadDialog(false);
+    setNovedadesOpen(false);
+  }, [flow]);
 
   const handleSubmitChecklist = async () => {
-    if (!vehicleId) return;
+    if (!vehicleId || flow !== "preoperacional") return;
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -127,24 +144,78 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
     setLoading(false);
   };
 
-  if (vehicles.length === 0) {
+  const goHub = () => {
+    setFlow(null);
+    setVehicleId("");
+  };
+
+  /* Flujo inicial: opciones sin exigir asignaciones */
+  if (flow === null) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <p className="text-center text-gray-500">
-            No tiene vehículos asignados para este turno. Contacte a Regulación.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Elija una acción</CardTitle>
+            <CardDescription>
+              Puede trabajar con cualquier vehículo de la flota. No necesita tener una asignación previa
+              en regulación para iniciar preoperacional o reportar una novedad.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-4">
+            <Button
+              className="h-auto py-6 flex flex-col gap-2 flex-1"
+              variant="outline"
+              onClick={() => setFlow("preoperacional")}
+            >
+              <ClipboardCheck className="h-8 w-8" />
+              <span className="text-base font-semibold">Iniciar preoperacional</span>
+              <span className="text-xs font-normal text-muted-foreground text-center">
+                Checklist diario y kilometraje
+              </span>
+            </Button>
+            <Button
+              className="h-auto py-6 flex flex-col gap-2 flex-1"
+              variant="outline"
+              onClick={() => setFlow("novedad")}
+            >
+              <AlertCircle className="h-8 w-8" />
+              <span className="text-base font-semibold">Reportar novedad</span>
+              <span className="text-xs font-normal text-muted-foreground text-center">
+                Formulario de incidente por vehículo
+              </span>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {!isAdmin && vehicles.length === 0 && (
+          <Card>
+            <CardContent className="py-8">
+              <p className="text-center text-muted-foreground">
+                No hay vehículos en el sistema todavía. Si cree que es un error, contacte al administrador.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="ghost" size="sm" onClick={goHub} className="gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          Volver
+        </Button>
+        <p className="text-sm text-muted-foreground">
+          {flow === "preoperacional" ? "Preoperacional" : "Reporte de novedad"}
+        </p>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Seleccionar vehículo</CardTitle>
-          <CardDescription>Vehículo asignado para su turno actual</CardDescription>
+          <CardDescription>El mismo vehículo aplica para esta sesión.</CardDescription>
         </CardHeader>
         <CardContent>
           <Select value={vehicleId} onValueChange={setVehicleId}>
@@ -152,9 +223,11 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
               <SelectValue placeholder="Seleccione un vehículo" />
             </SelectTrigger>
             <SelectContent>
-              {vehicles.map((v: any) => (
+              {vehicles.map((v) => (
                 <SelectItem key={v.id} value={v.id}>
-                  {v.placa} {v.marca ? `- ${v.marca}` : ""}
+                  {v.placa}
+                  {v.marca ? ` — ${v.marca}` : ""}{" "}
+                  {v.estado_actual === "FUERA_DE_SERVICIO" ? "(Fuera de servicio)" : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -162,7 +235,31 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
         </CardContent>
       </Card>
 
-      {vehicleId && (
+      {vehicleId && flow === "novedad" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Reportar novedad</CardTitle>
+            <CardDescription>
+              Vehículo {selectedVehicle?.placa}. La prioridad operativa la asigna administración en el
+              módulo de novedades.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <IncidentForm
+              vehicleId={vehicleId}
+              afectaOperatividad={false}
+              onSuccess={() => {
+                router.refresh();
+                setFlow(null);
+              }}
+              reportadoPorDefault={userName}
+              hideSeveridad
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {vehicleId && flow === "preoperacional" && (
         <>
           <Card>
             <CardHeader>
@@ -170,12 +267,10 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
                 <CheckCircle2 className="h-5 w-5" />
                 Checklist pre-operacional diario
               </CardTitle>
-              <CardDescription>
-                Revise los puntos antes de iniciar su turno
-              </CardDescription>
+              <CardDescription>Revise los puntos antes de iniciar su turno.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
                 {CHECKLIST_ITEMS.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -240,11 +335,11 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
                 Actualizar kilometraje
               </CardTitle>
               <CardDescription>
-                Registre el kilometraje actual. No puede ser menor al último registrado.
+                Registre el kilometraje actual. No puede ser menor al último registrado en el sistema.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-2 items-end">
+              <div className="flex gap-2 items-end flex-wrap">
                 <div>
                   <Label htmlFor="km-odometer">Kilometraje</Label>
                   <Input
@@ -264,34 +359,59 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5" />
-                Reportar novedad
-              </CardTitle>
-              <CardDescription>
-                Reporte fallas técnicas: Leve, Moderada o Severa
-              </CardDescription>
+            <CardHeader className="pb-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <AlertCircle className="h-5 w-5" />
+                    Reportar novedad desde preoperacional
+                  </CardTitle>
+                  <CardDescription>
+                    Si detectó una falla durante la inspección, regístrela aquí (mismo vehículo).
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 shrink-0"
+                  onClick={() => setNovedadesOpen((o) => !o)}
+                >
+                  {novedadesOpen ? "Ocultar" : "Mostrar"}
+                  <ArrowRight className={`h-4 w-4 transition ${novedadesOpen ? "rotate-90" : ""}`} />
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              <Button onClick={() => setShowNovedad(true)} variant="outline">
-                Crear novedad
-              </Button>
-            </CardContent>
+            {novedadesOpen && (
+              <CardContent className="space-y-3 border-t pt-4">
+                <p className="text-sm text-muted-foreground">
+                  También puede abrir el mismo formulario en una ventana aparte si prefiere.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setShowNovedadDialog(true)}>
+                    Abrir formulario de novedad
+                  </Button>
+                </div>
+              </CardContent>
+            )}
           </Card>
         </>
       )}
 
-      <Dialog open={showNovedad} onOpenChange={setShowNovedad}>
+      <Dialog open={showNovedadDialog} onOpenChange={setShowNovedadDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reportar Novedad - {selectedVehicle?.placa}</DialogTitle>
+            <DialogTitle>Reportar Novedad — {selectedVehicle?.placa}</DialogTitle>
           </DialogHeader>
           <IncidentForm
             vehicleId={vehicleId}
             afectaOperatividad={false}
-            onSuccess={() => setShowNovedad(false)}
+            onSuccess={() => {
+              setShowNovedadDialog(false);
+              router.refresh();
+            }}
             reportadoPorDefault={userName}
+            hideSeveridad
           />
         </DialogContent>
       </Dialog>

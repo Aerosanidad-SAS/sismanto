@@ -2,7 +2,8 @@ export type UserRole =
   | "OVEM"
   | "ADMIN"
   | "REGULACION"
-  | "GERENCIAL";
+  | "GERENCIAL"
+  | "MANTENIMIENTO";
 
 export function isAdminLike(role: UserRole): boolean {
   return role === "ADMIN";
@@ -10,10 +11,11 @@ export function isAdminLike(role: UserRole): boolean {
 
 export function getDefaultRoute(role: UserRole): string {
   switch (role) {
-    case "OVEM":       return "/ovem";
-    case "ADMIN":      return "/";
-    case "REGULACION": return "/regulacion";
-    case "GERENCIAL":  return "/";
-    default:           return "/login";
+    case "OVEM":           return "/ovem";
+    case "ADMIN":          return "/";
+    case "REGULACION":     return "/regulacion";
+    case "GERENCIAL":      return "/";
+    case "MANTENIMIENTO":  return "/vehiculos";
+    default:               return "/login";
   }
 }

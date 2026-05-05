@@ -7,18 +7,21 @@ import { VehiculosTab } from "./vehiculos-tab";
 import { CentrosTab } from "./centros-tab";
 import { ProveedoresTab } from "./proveedores-tab";
 import { CargaMasivaTab } from "./carga-masiva-tab";
+import { ServiciosTab } from "./servicios-tab";
 import type { OperationalCenter, Supplier } from "@/types";
 
 interface ConfiguracionTabsProps {
   vehicles: any[];
   centros: OperationalCenter[];
   proveedores: Supplier[];
+  serviceTypes: Array<{ id: number; codigo: string; nombre: string; activo: boolean; orden: number }>;
 }
 
 const tabItems = [
   { id: "vehiculos", label: "Vehículos" },
   { id: "centros", label: "Centros de Operaciones" },
   { id: "proveedores", label: "Proveedores" },
+  { id: "servicios", label: "Servicios prestados" },
   { id: "carga", label: "Carga Masiva" },
 ];
 
@@ -26,6 +29,7 @@ export function ConfiguracionTabs({
   vehicles,
   centros,
   proveedores,
+  serviceTypes,
 }: ConfiguracionTabsProps) {
   return (
     <Tabs.Root defaultValue="vehiculos">
@@ -55,6 +59,10 @@ export function ConfiguracionTabs({
 
       <Tabs.Content value="proveedores">
         <ProveedoresTab proveedores={proveedores} />
+      </Tabs.Content>
+
+      <Tabs.Content value="servicios">
+        <ServiciosTab initialTypes={serviceTypes} />
       </Tabs.Content>
 
       <Tabs.Content value="carga">

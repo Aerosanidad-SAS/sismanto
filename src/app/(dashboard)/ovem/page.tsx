@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/app/api/actions/auth";
 import { isAdminLike } from "@/lib/auth-utils";
-import { getAssignedVehicles } from "@/app/api/actions/ovem";
 import { OvemPortal } from "@/components/ovem/ovem-portal";
 
 export default async function OvemPage() {
@@ -16,9 +15,10 @@ export default async function OvemPage() {
     redirect("/");
   }
 
-  const vehicles = isAdminLike(profile.role_codigo)
-    ? (await supabase.from("vehicles").select("id, placa, marca, modelo, estado_actual").order("placa")).data || []
-    : await getAssignedVehicles(user.id);
+  const { data: vehicles = [] } = await supabase
+    .from("vehicles")
+    .select("id, placa, marca, modelo, estado_actual")
+    .order("placa");
 
   return (
     <div className="space-y-6">

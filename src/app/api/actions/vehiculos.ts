@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { VehicleFormData } from "@/lib/validations";
 import { vehicleSchema } from "@/lib/validations";
 import { z } from "zod";
+import { requireRole } from "@/app/api/actions/auth";
 
 export async function getVehiculos() {
   const supabase = createClient();
@@ -26,6 +27,7 @@ export async function getVehiculoPorId(id: string) {
 }
 
 export async function crearVehiculo(formData: VehicleFormData) {
+  await requireRole(["ADMIN"]);
   const parsed = vehicleSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -56,6 +58,9 @@ export async function crearVehiculo(formData: VehicleFormData) {
     notas: fd.notas || null,
     vencimiento_soat: fd.vencimiento_soat || null,
     vencimiento_tecnicomecanica: fd.vencimiento_tecnicomecanica || null,
+    costo_soat_anual: fd.costo_soat_anual ?? null,
+    costo_tecnomecanica_anual: fd.costo_tecnomecanica_anual ?? null,
+    costo_poliza_anual: fd.costo_poliza_anual ?? null,
     centro_operativo: centro?.codigo || "OTRO",
     centro_operativo_id: fd.centro_operativo_id,
     estado_actual: "OPERATIVO",
@@ -68,6 +73,7 @@ export async function crearVehiculo(formData: VehicleFormData) {
 }
 
 export async function actualizarVehiculo(id: string, formData: VehicleFormData) {
+  await requireRole(["ADMIN", "REGULACION"]);
   const idParsed = z.string().uuid("ID de vehículo inválido").safeParse(id);
   if (!idParsed.success) return { error: idParsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -101,6 +107,9 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
       notas: fd.notas || null,
       vencimiento_soat: fd.vencimiento_soat || null,
       vencimiento_tecnicomecanica: fd.vencimiento_tecnicomecanica || null,
+      costo_soat_anual: fd.costo_soat_anual ?? null,
+      costo_tecnomecanica_anual: fd.costo_tecnomecanica_anual ?? null,
+      costo_poliza_anual: fd.costo_poliza_anual ?? null,
       centro_operativo: centro?.codigo || "OTRO",
       centro_operativo_id: fd.centro_operativo_id,
       updated_at: new Date().toISOString(),
@@ -115,6 +124,7 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
 }
 
 export async function eliminarVehiculo(id: string) {
+  await requireRole(["ADMIN"]);
   const idParsed = z.string().uuid("ID de vehículo inválido").safeParse(id);
   if (!idParsed.success) return { error: idParsed.error.issues[0]?.message ?? "Datos inválidos" };
 

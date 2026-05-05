@@ -110,12 +110,11 @@ export async function updateKilometrajeOdometer(
   const { userId: uid, vehicleId: vid, fecha: fechaVal, kilometraje: kmVal } = parsed.data;
 
   const profile = await requireRole(["OVEM", "ADMIN"]);
-  if (profile.role_codigo === "OVEM") {
-    const assigned = await getVehiculoPorOVEM(uid, vid);
-    if (!assigned) return { error: "No tiene asignado este vehículo" };
-  }
-
   const supabase = createClient();
+  if (profile.role_codigo === "OVEM") {
+    const { data: v } = await supabase.from("vehicles").select("id").eq("id", vid).maybeSingle();
+    if (!v) return { error: "Vehículo no encontrado" };
+  }
   const { data: ultimo } = await supabase
     .from("mileage_logs")
     .select("lectura_kilometraje")

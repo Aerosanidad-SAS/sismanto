@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -16,15 +17,20 @@ import {
   Radio,
   Users,
   LogOut,
+  Menu,
+  X,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
+import { Button } from "@/components/ui/button";
 
 const ALL_NAV = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard, roles: ["ADMIN", "GERENCIAL", "REGULACION"] as UserRole[] },
-  { name: "Vehículos", href: "/vehiculos", icon: Truck, roles: ["ADMIN", "REGULACION"] as UserRole[] },
-  { name: "Mantenimientos", href: "/mantenimientos", icon: Wrench, roles: ["ADMIN"] as UserRole[] },
-  { name: "Novedades", href: "/novedades", icon: AlertTriangle, roles: ["ADMIN", "REGULACION"] as UserRole[] },
+  { name: "Dashboard", href: "/", icon: LayoutDashboard, roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO"] as UserRole[] },
+  { name: "Vehículos", href: "/vehiculos", icon: Truck, roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"] as UserRole[] },
+  { name: "Mantenimientos", href: "/mantenimientos", icon: Wrench, roles: ["ADMIN", "MANTENIMIENTO"] as UserRole[] },
+  { name: "Novedades", href: "/novedades", icon: AlertTriangle, roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"] as UserRole[] },
   { name: "KPIs", href: "/kpis", icon: BarChart3, roles: ["ADMIN", "GERENCIAL"] as UserRole[] },
   { name: "Consumo", href: "/consumo", icon: Fuel, roles: ["ADMIN", "GERENCIAL"] as UserRole[] },
   { name: "Regulación", href: "/regulacion", icon: Radio, roles: ["ADMIN", "REGULACION"] as UserRole[] },
@@ -38,17 +44,42 @@ const ROLE_BADGE_STYLES: Record<UserRole, string> = {
   REGULACION: "bg-[#2BB6C7] text-white",
   GERENCIAL: "bg-[#1B6368] text-white",
   OVEM: "bg-[#9C9B99] text-white",
+  MANTENIMIENTO: "bg-[#B45309] text-white",
 };
+
+const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
 
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [profile, setProfile] = useState<Awaited<ReturnType<typeof getProfile>>>(null);
   const [loading, setLoading] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  /** Solo lg+: barra lateral estrecha (iconos). En móvil el drawer siempre muestra texto completo. */
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === "1") {
+        setSidebarCollapsed(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setCollapsedPersist = useCallback((next: boolean) => {
+    setSidebarCollapsed(next);
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSE_KEY, next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     getProfile().then((p) => {
@@ -58,21 +89,49 @@ export default function DashboardLayout({
         if (p.role_codigo === "OVEM" && (pathname === "/" || pathname === "/kpis" || pathname === "/consumo")) {
           router.replace("/ovem");
         }
-        if (p.role_codigo === "GERENCIAL" && !["/", "/kpis", "/consumo"].includes(pathname) && !pathname.startsWith("/admin")) {
+        if (
+          p.role_codigo === "MANTENIMIENTO" &&
+          ["/kpis", "/consumo", "/configuracion", "/regulacion", "/admin", "/ovem"].some(
+            (b) => pathname === b || pathname.startsWith(`${b}/`)
+          )
+        ) {
+          router.replace("/vehiculos");
+        }
+        if (
+          p.role_codigo === "GERENCIAL" &&
+          !["/", "/kpis", "/consumo"].includes(pathname) &&
+          !pathname.startsWith("/admin")
+        ) {
           router.replace("/");
         }
       }
     });
   }, [pathname, router]);
 
-  const navItems = profile
-    ? ALL_NAV.filter((n) => n.roles.includes(profile.role_codigo))
-    : [];
+  /* Cerrar drawer al navegar (patrón app móvil) */
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [mobileNavOpen]);
+
+  const navItems = profile ? ALL_NAV.filter((n) => n.roles.includes(profile.role_codigo)) : [];
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-foreground">Cargando...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <p className="text-foreground text-center">Cargando...</p>
       </div>
     );
   }
@@ -80,79 +139,231 @@ export default function DashboardLayout({
   if (!profile) {
     router.replace("/pending");
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-foreground">Redirigiendo...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <p className="text-foreground text-center">Redirigiendo...</p>
       </div>
     );
   }
 
+  const showCollapsedChrome = sidebarCollapsed;
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="fixed inset-y-0 left-0 w-72 bg-card border-r border-border">
-        <div className="flex flex-col h-full">
-          <div className="h-20 px-6 border-b border-border flex items-center">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                <Activity className="h-5 w-5" />
-              </div>
-              <div className="leading-none">
+    <div className="min-h-screen bg-background min-h-[100dvh]">
+      {/* Backdrop solo móvil / tablet cuando el drawer está abierto */}
+      <button
+        type="button"
+        aria-label="Cerrar menú"
+        className={cn(
+          "fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] transition-opacity lg:hidden",
+          mobileNavOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setMobileNavOpen(false)}
+      />
+
+      {/* Barra superior móvil: áreas seguras + objetivo táctil ≥44px */}
+      <header
+        className={cn(
+          "lg:hidden sticky top-0 z-30 flex min-h-[3.25rem] items-center gap-3 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80",
+          "pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] py-2 pt-[max(0.5rem,env(safe-area-inset-top))]"
+        )}
+      >
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-11 w-11 shrink-0 border-border shadow-sm touch-manipulation"
+          aria-expanded={mobileNavOpen}
+          aria-controls="dashboard-sidebar"
+          onClick={() => setMobileNavOpen((o) => !o)}
+        >
+          {mobileNavOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
+        </Button>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="h-9 w-9 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <Activity className="h-4 w-4" aria-hidden />
+          </div>
+          <div className="min-w-0 leading-tight">
+            <p className="font-[var(--font-bebas-neue)] truncate text-lg uppercase tracking-wide text-primary">Aero</p>
+            <p className="font-[var(--font-bebas-neue)] truncate text-lg uppercase tracking-wide text-accent -mt-0.5">Manto</p>
+          </div>
+        </div>
+      </header>
+
+      <aside
+        id="dashboard-sidebar"
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-card shadow-xl transition-[transform,width] duration-200 ease-out",
+          /* Ancho responsive */
+          "w-[min(19rem,calc(100vw-env(safe-area-inset-left)-1rem))] max-w-[100vw]",
+          "lg:w-72 lg:max-w-none lg:shadow-none",
+          showCollapsedChrome && "lg:!w-[4.75rem]",
+          /* Drawer móvil */
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          "pl-[env(safe-area-inset-left)]"
+        )}
+      >
+        {/* Cabecera sidebar (solo desktop: logo completo + colapsar) */}
+        <div
+          className={cn(
+            "hidden lg:flex border-b border-border shrink-0",
+            showCollapsedChrome ? "h-auto flex-col items-stretch gap-1 px-2 py-3" : "h-20 items-center px-6"
+          )}
+        >
+          <div className={cn("flex items-center gap-3", showCollapsedChrome && "justify-center flex-col px-0")}>
+            <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Activity className="h-5 w-5" aria-hidden />
+            </div>
+            {!showCollapsedChrome && (
+              <div className="leading-none min-w-0">
                 <p className="font-[var(--font-bebas-neue)] uppercase tracking-[0.02em] text-xl text-primary">Aero</p>
                 <p className="font-[var(--font-bebas-neue)] uppercase tracking-[0.02em] text-xl text-accent">Manto</p>
               </div>
-            </div>
+            )}
           </div>
-          <div className="px-4 py-4 border-b border-border">
-            <div className="flex items-center gap-3 rounded-lg bg-muted px-3 py-3">
-              <div className="h-9 w-9 rounded-full bg-primary text-white text-sm font-semibold flex items-center justify-center">
-                {(profile.nombre_completo || profile.email).trim().charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "shrink-0 text-muted-foreground hover:text-foreground",
+              showCollapsedChrome ? "mx-auto h-10 w-10" : "ml-auto"
+            )}
+            title={showCollapsedChrome ? "Expandir menú" : "Colapsar menú"}
+            aria-label={showCollapsedChrome ? "Expandir menú lateral" : "Colapsar menú lateral"}
+            onClick={() => setCollapsedPersist(!sidebarCollapsed)}
+          >
+            {showCollapsedChrome ? (
+              <PanelLeft className="h-5 w-5" aria-hidden />
+            ) : (
+              <PanelLeftClose className="h-5 w-5" aria-hidden />
+            )}
+          </Button>
+        </div>
+
+        {/* Logo en drawer móvil (la barra superior ya muestra marca; aquí repetimos opcional más compacto) */}
+        <div className="lg:hidden flex items-center justify-between px-4 py-4 border-b border-border shrink-0 min-h-[3.25rem]">
+          <span className="text-sm font-semibold text-muted-foreground">Menú</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 touch-manipulation"
+            aria-label="Cerrar menú"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div
+          className={cn(
+            "px-3 sm:px-4 py-4 border-b border-border shrink-0",
+            showCollapsedChrome && "lg:px-2 lg:flex lg:justify-center"
+          )}
+        >
+          <div
+            title={
+              showCollapsedChrome
+                ? `${profile.nombre_completo || profile.email || ""} · ${profile.role_codigo}`
+                : undefined
+            }
+            className={cn(
+              "flex items-center gap-3 rounded-lg bg-muted px-3 py-3 min-w-0",
+              showCollapsedChrome && "lg:flex-col lg:px-2 lg:py-2 lg:justify-center lg:gap-1"
+            )}
+          >
+            <div className="h-11 w-11 shrink-0 rounded-full bg-primary text-white text-sm font-semibold flex items-center justify-center lg:h-10 lg:w-10">
+              {(profile.nombre_completo || profile.email).trim().charAt(0).toUpperCase()}
+            </div>
+            {!showCollapsedChrome && (
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground truncate">{profile.nombre_completo || profile.email}</p>
                 <span
                   className={cn(
-                    "inline-flex mt-1 rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wide",
+                    "inline-flex mt-1 rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wide max-w-full truncate",
                     ROLE_BADGE_STYLES[profile.role_codigo]
                   )}
                 >
                   {profile.role_codigo}
                 </span>
               </div>
-            </div>
-          </div>
-          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors",
-                    isActive ? "bg-[#2BB6C7] text-white" : "text-[#666564] hover:bg-[#F4EFE6]"
-                  )}
-                >
-                  <Icon className="mr-3 h-5 w-5" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="p-4 border-t border-border">
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="flex items-center w-full px-4 py-2 text-sm text-[#DC2626] hover:bg-red-50 rounded-lg transition-colors"
-              >
-                <LogOut className="mr-3 h-5 w-5" />
-                Cerrar sesión
-              </button>
-            </form>
+            )}
           </div>
         </div>
-      </div>
-      <div className="pl-72">
-        <main className="p-8">{children}</main>
+
+        <nav
+          className={cn(
+            "flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-4 space-y-1 overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]",
+            showCollapsedChrome && "lg:px-2"
+          )}
+        >
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                title={showCollapsedChrome ? item.name : undefined}
+                className={cn(
+                  "flex items-center rounded-lg transition-colors touch-manipulation min-h-[44px] lg:min-h-10",
+                  showCollapsedChrome
+                    ? "lg:justify-center lg:px-2 lg:py-3"
+                    : "px-4 py-3.5 lg:py-3",
+                  isActive ? "bg-[#2BB6C7] text-white" : "text-[#666564] active:bg-muted hover:bg-[#F4EFE6] lg:hover:bg-[#F4EFE6]"
+                )}
+                onClick={() => setMobileNavOpen(false)}
+              >
+                <Icon className={cn("h-5 w-5 shrink-0", !showCollapsedChrome && "mr-3")} aria-hidden />
+                <span className={cn("text-sm font-medium truncate", showCollapsedChrome && "lg:sr-only")}>
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div
+          className={cn(
+            "mt-auto border-t border-border p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))]",
+            showCollapsedChrome && "lg:p-2"
+          )}
+        >
+          <form action={signOut}>
+            <button
+              type="submit"
+              title={showCollapsedChrome ? "Cerrar sesión" : undefined}
+              className={cn(
+                "flex w-full items-center rounded-lg text-sm font-medium text-[#DC2626] hover:bg-red-50 active:bg-red-100 transition-colors min-h-[44px] lg:min-h-auto touch-manipulation",
+                showCollapsedChrome ? "lg:justify-center lg:px-2 lg:py-3" : "px-4 py-3.5 lg:py-2"
+              )}
+            >
+              <LogOut className={cn("h-5 w-5 shrink-0", !showCollapsedChrome && "mr-3")} aria-hidden />
+              <span className={cn(showCollapsedChrome && "lg:sr-only")}>Cerrar sesión</span>
+            </button>
+          </form>
+        </div>
+      </aside>
+
+      <div
+        className={cn(
+          "transition-[padding] duration-200 ease-out min-h-[100dvh]",
+          /* Espacio lateral solo en escritorio cuando el sidebar está fijo visible */
+          "lg:pl-72",
+          showCollapsedChrome && "lg:!pl-[4.75rem]"
+        )}
+      >
+        <main
+          className={cn(
+            "mx-auto w-full max-w-[100vw]",
+            /* Padding contenido más cómodo en móvil; tablas pueden usar overflow-x-auto en cada página */
+            "px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-8",
+            "pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+          )}
+        >
+          <div className="max-w-[1600px] mx-auto">{children}</div>
+        </main>
       </div>
     </div>
   );

@@ -113,6 +113,8 @@ export default async function DashboardPage({
     getResolucionNovedades(fechaInicio, fechaFin),
   ]);
   const isReadOnly = profile?.role_codigo === "GERENCIAL";
+  const hideFinanceKpis =
+    profile?.role_codigo === "REGULACION" || profile?.role_codigo === "MANTENIMIENTO";
 
   return (
     <div className="space-y-8">
@@ -122,7 +124,9 @@ export default async function DashboardPage({
       </div>
 
       {/* KPIs resumen */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div
+        className={`grid gap-4 md:grid-cols-2 ${hideFinanceKpis ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}
+      >
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vehículos Operativos</CardTitle>
@@ -134,16 +138,18 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Costo Mes Actual</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data.costoMesActual)}</div>
-            <p className="text-xs text-muted-foreground">En mantenimientos realizados</p>
-          </CardContent>
-        </Card>
+        {!hideFinanceKpis && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Costo Mes Actual</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(data.costoMesActual)}</div>
+              <p className="text-xs text-muted-foreground">En mantenimientos realizados</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -169,13 +175,15 @@ export default async function DashboardPage({
       </div>
 
       {/* Métricas principales del período */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <CostoPorVehiculoCard
-          datos={costos}
-          tipo={tipoCosto}
-          fechaInicio={fechaInicio}
-          fechaFin={fechaFin}
-        />
+      <div className={`grid gap-6 ${hideFinanceKpis ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}>
+        {!hideFinanceKpis && (
+          <CostoPorVehiculoCard
+            datos={costos}
+            tipo={tipoCosto}
+            fechaInicio={fechaInicio}
+            fechaFin={fechaFin}
+          />
+        )}
         <DisponibilidadCard datos={disponibilidad} />
       </div>
 

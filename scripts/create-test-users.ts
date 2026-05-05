@@ -29,11 +29,25 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 const PASSWORD = "Aeromanto2025!";
 
-const USERS = [
-  { email: "admin@aeromanto.co",      roleCodigo: "ADMIN",      nombre: "Administrador" },
-  { email: "ovem@aeromanto.co",       roleCodigo: "OVEM",       nombre: "Conductor OVEM" },
+type UserSeed = {
+  email: string;
+  roleCodigo: string;
+  nombre: string;
+  /** Si se omite, se usa PASSWORD global */
+  password?: string;
+};
+
+const USERS: UserSeed[] = [
+  { email: "admin@aeromanto.co", roleCodigo: "ADMIN", nombre: "Administrador" },
+  { email: "ovem@aeromanto.co", roleCodigo: "OVEM", nombre: "Conductor OVEM" },
   { email: "regulacion@aeromanto.co", roleCodigo: "REGULACION", nombre: "Regulación" },
-  { email: "gerencial@aeromanto.co",  roleCodigo: "GERENCIAL",  nombre: "Gerencial" },
+  { email: "gerencial@aeromanto.co", roleCodigo: "GERENCIAL", nombre: "Gerencial" },
+  {
+    email: "mantenimiento@aeromanto.co",
+    roleCodigo: "MANTENIMIENTO",
+    nombre: "Líder Mantenimiento",
+    password: "aero123",
+  },
 ];
 
 let roleCache: Record<string, number> | null = null;
@@ -78,9 +92,10 @@ async function main() {
     process.stdout.write(`Creando ${u.email} (${u.roleCodigo})... `);
 
     // 1. Crear en Auth
+    const userPassword = u.password ?? PASSWORD;
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email: u.email,
-      password: PASSWORD,
+      password: userPassword,
       email_confirm: true,
     });
 
@@ -93,14 +108,14 @@ async function main() {
         const existing = list?.users?.find((x) => x.email === u.email);
         if (!existing) {
           console.log("❌ No se pudo obtener usuario existente");
-          results.push({ email: u.email, rol: u.roleCodigo, contrasena: PASSWORD, estado: "Error: " + authError.message });
+          results.push({ email: u.email, rol: u.roleCodigo, contrasena: userPassword, estado: "Error: " + authError.message });
           continue;
         }
         userId = existing.id;
         console.log("(ya existía) ");
       } else {
         console.log("❌", authError.message);
-        results.push({ email: u.email, rol: u.roleCodigo, contrasena: PASSWORD, estado: "Error: " + authError.message });
+        results.push({ email: u.email, rol: u.roleCodigo, contrasena: userPassword, estado: "Error: " + authError.message });
         continue;
       }
     } else {
@@ -110,7 +125,7 @@ async function main() {
     // 2. Obtener role_id
     const roleId = await getRoleId(u.roleCodigo);
     if (!roleId) {
-      results.push({ email: u.email, rol: u.roleCodigo, contrasena: PASSWORD, estado: "Error: rol no encontrado" });
+      results.push({ email: u.email, rol: u.roleCodigo, contrasena: userPassword, estado: "Error: rol no encontrado" });
       continue;
     }
 
@@ -122,10 +137,10 @@ async function main() {
 
     if (profileError) {
       console.log("❌ Error en perfil:", profileError.message);
-      results.push({ email: u.email, rol: u.roleCodigo, contrasena: PASSWORD, estado: "Error perfil: " + profileError.message });
+      results.push({ email: u.email, rol: u.roleCodigo, contrasena: userPassword, estado: "Error perfil: " + profileError.message });
     } else {
       console.log("✅");
-      results.push({ email: u.email, rol: u.roleCodigo, contrasena: PASSWORD, estado: "✅ Creado" });
+      results.push({ email: u.email, rol: u.roleCodigo, contrasena: userPassword, estado: "✅ Creado" });
     }
   }
 

@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/app/api/actions/auth";
 import { ConfiguracionTabs } from "@/components/configuracion/configuracion-tabs";
 
 async function getConfiguracionData() {
@@ -23,17 +25,26 @@ async function getConfiguracionData() {
         .order("nombre"),
     ]);
 
+    const serviceTypesRes = await supabase.from("service_types").select("*").order("orden");
+    const serviceTypes = serviceTypesRes.error ? [] : serviceTypesRes.data || [];
+
     return {
       vehicles: vehicles || [],
       centros: centros || [],
       proveedores: proveedores || [],
+      serviceTypes,
     };
   } catch {
-    return { vehicles: [], centros: [], proveedores: [] };
+    return { vehicles: [], centros: [], proveedores: [], serviceTypes: [] };
   }
 }
 
 export default async function ConfiguracionPage() {
+  const profile = await getProfile();
+  if (!profile || profile.role_codigo !== "ADMIN") {
+    redirect("/");
+  }
+
   const data = await getConfiguracionData();
 
   return (
@@ -49,6 +60,7 @@ export default async function ConfiguracionPage() {
         vehicles={data.vehicles}
         centros={data.centros}
         proveedores={data.proveedores}
+        serviceTypes={(data.serviceTypes || []) as any}
       />
     </div>
   );

@@ -52,6 +52,10 @@ export interface Vehicle {
   vencimiento_rtm?: string | null;
   vencimiento_soat?: string | null;
   vencimiento_tecnicomecanica?: string | null;
+  /** Costos anuales estimados / administrativos (migración 006) */
+  costo_soat_anual?: number | null;
+  costo_tecnomecanica_anual?: number | null;
+  costo_poliza_anual?: number | null;
   estado_actual: VehicleStatus;
   centro_operativo: string;
   centro_operativo_id?: number | null;
@@ -92,6 +96,8 @@ export interface Incident {
   fecha_reporte: string;
   descripcion: string;
   severidad: SeverityLevel;
+  /** Prioridad operativa definida solo por administración */
+  prioridad?: SeverityLevel | null;
   reportado_por: string;
   afecta_operatividad: boolean;
   estado: IncidentStatus;

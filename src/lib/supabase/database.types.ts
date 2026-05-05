@@ -124,6 +124,9 @@ export type Database = {
           vencimiento_rtm: string | null
           vencimiento_soat: string | null
           vencimiento_tecnicomecanica: string | null
+          costo_soat_anual: number | null
+          costo_tecnomecanica_anual: number | null
+          costo_poliza_anual: number | null
           estado_actual: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
           centro_operativo: string
           centro_operativo_id: number | null
@@ -149,6 +152,9 @@ export type Database = {
           vencimiento_rtm?: string | null
           vencimiento_soat?: string | null
           vencimiento_tecnicomecanica?: string | null
+          costo_soat_anual?: number | null
+          costo_tecnomecanica_anual?: number | null
+          costo_poliza_anual?: number | null
           estado_actual?: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
           centro_operativo: string
           centro_operativo_id?: number | null
@@ -293,6 +299,7 @@ export type Database = {
           fecha_reporte: string
           descripcion: string
           severidad: 'BAJA' | 'MEDIA' | 'ALTA'
+          prioridad: 'BAJA' | 'MEDIA' | 'ALTA' | null
           reportado_por: string
           afecta_operatividad: boolean
           estado: 'ABIERTO' | 'EN_PROCESO' | 'CERRADO'
@@ -307,6 +314,7 @@ export type Database = {
           fecha_reporte?: string
           descripcion: string
           severidad: 'BAJA' | 'MEDIA' | 'ALTA'
+          prioridad?: 'BAJA' | 'MEDIA' | 'ALTA' | null
           reportado_por: string
           afecta_operatividad?: boolean
           fecha_cierre?: string | null
@@ -320,6 +328,7 @@ export type Database = {
           fecha_reporte?: string
           descripcion?: string
           severidad?: 'BAJA' | 'MEDIA' | 'ALTA'
+          prioridad?: 'BAJA' | 'MEDIA' | 'ALTA' | null
           reportado_por?: string
           afecta_operatividad?: boolean
           estado?: 'ABIERTO' | 'EN_PROCESO' | 'CERRADO'

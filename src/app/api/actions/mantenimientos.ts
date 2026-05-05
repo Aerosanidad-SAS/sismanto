@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { MaintenanceFormData } from "@/lib/validations";
 import { maintenanceSchema } from "@/lib/validations";
+import { requireRole } from "@/app/api/actions/auth";
 
 async function getUltimoKilometraje(vehicleId: string): Promise<number> {
   const supabase = createClient();
@@ -30,6 +31,7 @@ async function countNovedadesAbiertas(vehicleId: string): Promise<number> {
 }
 
 export async function crearMantenimiento(formData: MaintenanceFormData) {
+  await requireRole(["ADMIN", "MANTENIMIENTO"]);
   const parsed = maintenanceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -106,6 +108,7 @@ export async function crearMantenimiento(formData: MaintenanceFormData) {
     revalidatePath("/mantenimientos");
     revalidatePath(`/vehiculos/${payload.vehicleId}`);
     revalidatePath("/");
+    revalidatePath("/novedades");
 
     return { success: true, data: manto };
   } catch (error) {

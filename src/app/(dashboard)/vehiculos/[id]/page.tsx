@@ -1,9 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/app/api/actions/auth";
+import { listVehicleServiceRevenue } from "@/app/api/actions/service-revenue";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateShort, formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { VehicleServiceRevenuePanel } from "@/components/vehiculos/vehicle-service-revenue-panel";
 
 async function getVehicle(id: string) {
   try {
@@ -89,9 +92,29 @@ export default async function VehicleDetailPage({
     );
   }
 
-  const mantenimientos = await getVehicleMaintenances(params.id);
-  const incidentes = await getVehicleIncidents(params.id);
-  const kilometrajes = await getVehicleMileage(params.id);
+  const [mantenimientos, incidentes, kilometrajes, profile] = await Promise.all([
+    getVehicleMaintenances(params.id),
+    getVehicleIncidents(params.id),
+    getVehicleMileage(params.id),
+    getProfile(),
+  ]);
+
+  const showRevenue =
+    profile?.role_codigo === "ADMIN" || profile?.role_codigo === "GERENCIAL";
+
+  let revenueRows: any[] = [];
+  let serviceTypeOptions: any[] = [];
+  if (showRevenue) {
+    const rev = await listVehicleServiceRevenue(params.id);
+    revenueRows = rev.data || [];
+    const supabase = createClient();
+    const { data: types } = await supabase
+      .from("service_types")
+      .select("id, codigo, nombre")
+      .eq("activo", true)
+      .order("orden");
+    serviceTypeOptions = types || [];
+  }
 
   return (
     <div className="space-y-8">
@@ -158,6 +181,28 @@ export default async function VehicleDetailPage({
                 ? formatDateShort(vehicle.vencimiento_rtm)
                 : "N/A"}
             </div>
+            {(vehicle.costo_soat_anual != null ||
+              vehicle.costo_tecnomecanica_anual != null ||
+              vehicle.costo_poliza_anual != null) && (
+              <>
+                <div>
+                  <span className="font-medium">Costo anual SOAT:</span>{" "}
+                  {vehicle.costo_soat_anual != null
+                    ? formatCurrency(vehicle.costo_soat_anual)
+                    : "—"}
+                </div>
+                <div>
+                  <span className="font-medium">Costo anual técnico-mecánica:</span>{" "}
+                  {vehicle.costo_tecnomecanica_anual != null
+                    ? formatCurrency(vehicle.costo_tecnomecanica_anual)
+                    : "—"}
+                </div>
+                <div>
+                  <span className="font-medium">Costo anual póliza:</span>{" "}
+                  {vehicle.costo_poliza_anual != null ? formatCurrency(vehicle.costo_poliza_anual) : "—"}
+                </div>
+              </>
+            )}
             <div>
               <span className="font-medium">Tipo de Llantas:</span>{" "}
               {vehicle.tipo_llantas || "N/A"}
@@ -169,6 +214,25 @@ export default async function VehicleDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {showRevenue && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ingresos por prestación de servicios</CardTitle>
+            <CardDescription>
+              Valores por tipo de servicio (TAB, TAM, MD…) y mes, para cruces con facturación e indicador B/C.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VehicleServiceRevenuePanel
+              vehicleId={params.id}
+              serviceTypes={serviceTypeOptions}
+              initialRows={revenueRows}
+              canEdit={profile?.role_codigo === "ADMIN"}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Último Kilometraje */}
       {kilometrajes.length > 0 && (
@@ -245,7 +309,8 @@ export default async function VehicleDetailPage({
               <TableRow>
                 <TableHead>Fecha Reporte</TableHead>
                 <TableHead>Descripción</TableHead>
-                <TableHead>Severidad</TableHead>
+                <TableHead>Clasif.</TableHead>
+                <TableHead>Prioridad</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Fecha Cierre</TableHead>
               </TableRow>
@@ -269,6 +334,13 @@ export default async function VehicleDetailPage({
                     >
                       {inc.severidad}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {(inc as any).prioridad ? (
+                      <Badge variant="outline">{(inc as any).prioridad}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge

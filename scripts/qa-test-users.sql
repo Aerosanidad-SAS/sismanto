@@ -11,6 +11,7 @@
 --   gerencial@aeromanto.co      → GERENCIAL (nombre en Auth; rol sigue siendo GERENCIAL)
 --   ovem@aeromanto.co           → OVEM
 --   regulacion@aeromanto.co     → REGULACION
+--   mantenimiento@aeromanto.co  → MANTENIMIENTO (contraseña: crear en Auth o script create-test-users, ej. aero123)
 --
 -- Ejecutar una vez en SQL Editor (idempotente por ON CONFLICT user_id).
 -- =============================================================================
@@ -24,7 +25,8 @@ JOIN (
     ('innovizar@aerosanidadsas.com', 'ADMIN', 'Innovizar'),
     ('gerencial@aeromanto.co', 'GERENCIAL', 'Gerencia'),
     ('ovem@aeromanto.co', 'OVEM', 'OVEM'),
-    ('regulacion@aeromanto.co', 'REGULACION', 'Regulación')
+    ('regulacion@aeromanto.co', 'REGULACION', 'Regulación'),
+    ('mantenimiento@aeromanto.co', 'MANTENIMIENTO', 'Líder Mantenimiento')
 ) AS v(email, rol_codigo, nombre) ON lower(trim(u.email)) = lower(trim(v.email))
 JOIN roles r ON r.codigo = v.rol_codigo
 ON CONFLICT (user_id) DO UPDATE

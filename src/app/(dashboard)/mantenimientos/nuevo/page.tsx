@@ -1,5 +1,7 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/app/api/actions/auth";
 import { MaintenanceForm } from "@/components/forms/maintenance-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -23,6 +25,11 @@ async function getFormData() {
 }
 
 export default async function NuevoMantenimientoPage() {
+  const profile = await getProfile();
+  if (!profile || !["ADMIN", "MANTENIMIENTO"].includes(profile.role_codigo)) {
+    redirect("/");
+  }
+
   const { vehicles, categories, proveedores } = await getFormData();
 
   const categoriasAgrupadas = categories.reduce((acc, cat) => {

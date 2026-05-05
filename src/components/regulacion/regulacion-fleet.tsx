@@ -30,6 +30,114 @@ interface RegulacionFleetProps {
   ovemUsers: { user_id: string; nombre_completo: string | null; email: string | null }[];
 }
 
+function VehicleLane({
+  vehicles,
+  title,
+  subtitle,
+  emptyText,
+  tone,
+  onToggle,
+  onAssignClick,
+  onUnassign,
+  loading,
+}: {
+  vehicles: any[];
+  title: string;
+  subtitle: string;
+  emptyText: string;
+  tone: "available" | "fds";
+  onToggle: (id: string, estado: string) => void;
+  onAssignClick: (id: string) => void;
+  onUnassign: (assignmentId: number) => void;
+  loading: boolean;
+}) {
+  return (
+    <Card className="flex flex-col min-h-[420px]">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg flex items-center gap-2">
+          {tone === "available" ? (
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
+          ) : (
+            <XCircle className="h-5 w-5 text-red-600" />
+          )}
+          {title}
+        </CardTitle>
+        <CardDescription>{subtitle}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-y-auto max-h-[70vh] space-y-2 pr-1">
+        {vehicles.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">{emptyText}</p>
+        ) : (
+          vehicles.map((v: any) => (
+            <div
+              key={v.id}
+              className={`rounded-lg border p-3 text-sm space-y-2 ${
+                tone === "available" ? "border-green-200 bg-green-50/40" : "border-red-200 bg-red-50/40"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-bold">{v.placa}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {v.marca || v.modelo || "—"}
+                  </div>
+                </div>
+                <Badge variant={v.estado_actual === "OPERATIVO" ? "success" : "destructive"}>
+                  {v.estado_actual === "OPERATIVO" ? "Disponible" : "FDS"}
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {v.assignments?.length > 0 ? (
+                  <div className="space-y-1">
+                    {v.assignments.map((a: any) => (
+                      <div key={a.id} className="flex items-center gap-2">
+                        <span className="truncate">
+                          {a.driver?.nombre_completo || a.driver?.email || "—"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-red-600 shrink-0"
+                          onClick={() => onUnassign(a.id)}
+                          disabled={loading}
+                          aria-label="Desasignar"
+                        >
+                          <UserMinus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span>Sin conductor asignado</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={
+                    v.estado_actual === "OPERATIVO"
+                      ? "text-orange-700 border-orange-300 hover:bg-orange-50"
+                      : "text-green-700 border-green-600 hover:bg-green-50"
+                  }
+                  onClick={() => onToggle(v.id, v.estado_actual)}
+                  disabled={loading}
+                >
+                  {v.estado_actual === "OPERATIVO" ? "Marcar fuera de servicio" : "Marcar disponible"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onAssignClick(v.id)} disabled={loading}>
+                  <UserPlus className="h-4 w-4 mr-1" />
+                  Asignar OVEM
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
   const router = useRouter();
   const [assigningVehicle, setAssigningVehicle] = useState<string | null>(null);
@@ -37,6 +145,9 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hoy = new Date().toISOString().split("T")[0];
+
+  const disponibles = fleet.filter((v) => v.estado_actual === "OPERATIVO");
+  const fueraServicio = fleet.filter((v) => v.estado_actual === "FUERA_DE_SERVICIO");
 
   const handleToggle = async (vehicleId: string, currentStatus: string) => {
     setLoading(true);
@@ -72,9 +183,6 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
     setLoading(false);
   };
 
-  const operativos = fleet.filter((v) => v.estado_actual === "OPERATIVO").length;
-  const fueraServicio = fleet.filter((v) => v.estado_actual === "FUERA_DE_SERVICIO").length;
-
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
@@ -86,7 +194,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{operativos}</div>
+            <div className="text-2xl font-bold text-green-600">{disponibles.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -97,100 +205,47 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{fueraServicio}</div>
+            <div className="text-2xl font-bold text-red-600">{fueraServicio.length}</div>
           </CardContent>
         </Card>
       </div>
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-          {error}
-        </div>
+        <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">{error}</div>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Flota - Toggle Disponibilidad</CardTitle>
+          <CardTitle className="text-xl uppercase tracking-wide">FLOTA</CardTitle>
           <CardDescription>
-            Cambie el estado de cada vehículo (Disponible / Fuera de servicio)
+            Columna izquierda: vehículos disponibles. Columna derecha: fuera de servicio (FDS). Al cambiar el
+            estado, el vehículo pasa a la otra columna.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-medium">Placa</th>
-                  <th className="text-left py-3 px-4 font-medium">Modelo</th>
-                  <th className="text-left py-3 px-4 font-medium">Estado</th>
-                  <th className="text-left py-3 px-4 font-medium">Conductor asignado</th>
-                  <th className="text-left py-3 px-4 font-medium">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fleet.map((v) => (
-                  <tr key={v.id} className="border-b last:border-0">
-                    <td className="py-3 px-4 font-bold">{v.placa}</td>
-                    <td className="py-3 px-4">{v.marca || v.modelo || "—"}</td>
-                    <td className="py-3 px-4">
-                      <Badge
-                        variant={v.estado_actual === "OPERATIVO" ? "success" : "destructive"}
-                      >
-                        {v.estado_actual === "OPERATIVO" ? "Disponible" : "Fuera de servicio"}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4">
-                      {v.assignments?.length > 0 ? (
-                        <div className="space-y-1">
-                          {v.assignments.map((a: any) => (
-                            <div key={a.id} className="flex items-center gap-2">
-                              <span>{a.driver?.nombre_completo || a.driver?.email || "—"}</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-red-600"
-                                onClick={() => handleUnassign(a.id)}
-                                disabled={loading}
-                              >
-                                <UserMinus className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">Sin asignar</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggle(v.id, v.estado_actual)}
-                        disabled={loading}
-                        className={
-                          v.estado_actual === "OPERATIVO"
-                            ? "text-orange-600 border-orange-300 hover:bg-orange-50"
-                            : "text-green-600 border-green-300 hover:bg-green-50"
-                        }
-                      >
-                        {v.estado_actual === "OPERATIVO"
-                          ? "Marcar fuera de servicio"
-                          : "Marcar disponible"}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setAssigningVehicle(v.id)}
-                        disabled={loading}
-                      >
-                        <UserPlus className="h-4 w-4 mr-1" />
-                        Asignar OVEM
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid gap-6 lg:grid-cols-2 items-start">
+            <VehicleLane
+              vehicles={disponibles}
+              title="Vehículos disponibles"
+              subtitle="Operativos y listos para despacho."
+              emptyText="No hay vehículos en estado disponible."
+              tone="available"
+              onToggle={handleToggle}
+              onAssignClick={setAssigningVehicle}
+              onUnassign={handleUnassign}
+              loading={loading}
+            />
+            <VehicleLane
+              vehicles={fueraServicio}
+              title="Vehículos fuera de servicio"
+              subtitle="Incluye unidades en mantenimiento o indisponibles."
+              emptyText="No hay vehículos fuera de servicio."
+              tone="fds"
+              onToggle={handleToggle}
+              onAssignClick={setAssigningVehicle}
+              onUnassign={handleUnassign}
+              loading={loading}
+            />
           </div>
         </CardContent>
       </Card>

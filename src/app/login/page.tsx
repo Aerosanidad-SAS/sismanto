@@ -35,8 +35,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-      <Card className="w-full max-w-md">
+    <div
+      className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-muted/40 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))]"
+    >
+      <Card className="w-full max-w-md shadow-md border-border">
         <CardHeader>
           <CardTitle className="text-2xl">Aeromanto</CardTitle>
           <CardDescription>Inicie sesión con su cuenta</CardDescription>
@@ -71,7 +73,7 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full min-h-11 touch-manipulation" disabled={loading}>
               {loading ? "Iniciando sesión..." : "Iniciar sesión"}
             </Button>
           </form>

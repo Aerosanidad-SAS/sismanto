@@ -7,6 +7,12 @@ import { vehicleSchema, type VehicleFormData } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CatalogCombobox } from "@/components/forms/catalog-combobox";
+import {
+  opcionesTipoCombustible,
+  opcionesTipoRefrigerante,
+  opcionesAceite,
+} from "@/lib/vehicle-fluid-options";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -55,6 +61,9 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
           notas: vehicle.notas || "",
           vencimiento_soat: vehicle.vencimiento_soat || "",
           vencimiento_tecnicomecanica: vehicle.vencimiento_tecnicomecanica || vehicle.vencimiento_rtm || "",
+          costo_soat_anual: vehicle.costo_soat_anual ?? undefined,
+          costo_tecnomecanica_anual: vehicle.costo_tecnomecanica_anual ?? undefined,
+          costo_poliza_anual: vehicle.costo_poliza_anual ?? undefined,
           centro_operativo_id: vehicle.centro_operativo_id || centros[0]?.id || 0,
         }
       : {
@@ -73,11 +82,17 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
           notas: "",
           vencimiento_soat: "",
           vencimiento_tecnicomecanica: "",
+          costo_soat_anual: undefined,
+          costo_tecnomecanica_anual: undefined,
+          costo_poliza_anual: undefined,
           centro_operativo_id: centros[0]?.id || 0,
         },
   });
 
   const centroId = watch("centro_operativo_id");
+  const tipoCombustible = watch("tipo_combustible");
+  const tipoRefrigerante = watch("tipo_refrigerante");
+  const aceiteUsado = watch("aceite_usado");
 
   const onSubmit = async (data: VehicleFormData) => {
     setIsSubmitting(true);
@@ -171,30 +186,39 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
         <div className="grid gap-4 md:grid-cols-3">
           <div>
             <Label htmlFor="tipo_combustible">Tipo de Combustible</Label>
-            <Input
-              id="tipo_combustible"
-              {...register("tipo_combustible")}
-              className="mt-1"
-              placeholder="Gasolina / ACPM"
-            />
+            <div className="mt-1">
+              <CatalogCombobox
+                id="tipo_combustible"
+                options={opcionesTipoCombustible}
+                value={tipoCombustible ?? ""}
+                onChange={(v) => setValue("tipo_combustible", v, { shouldValidate: true })}
+                placeholder="Buscar o escribir combustible…"
+              />
+            </div>
           </div>
           <div>
             <Label htmlFor="tipo_refrigerante">Tipo de Refrigerante</Label>
-            <Input
-              id="tipo_refrigerante"
-              {...register("tipo_refrigerante")}
-              className="mt-1"
-              placeholder="Ej: Ethylene Glycol 50%"
-            />
+            <div className="mt-1">
+              <CatalogCombobox
+                id="tipo_refrigerante"
+                options={opcionesTipoRefrigerante}
+                value={tipoRefrigerante ?? ""}
+                onChange={(v) => setValue("tipo_refrigerante", v, { shouldValidate: true })}
+                placeholder="Buscar o escribir refrigerante…"
+              />
+            </div>
           </div>
           <div>
             <Label htmlFor="aceite_usado">Aceite Usado</Label>
-            <Input
-              id="aceite_usado"
-              {...register("aceite_usado")}
-              className="mt-1"
-              placeholder="Ej: 15W-40 API CI-4"
-            />
+            <div className="mt-1">
+              <CatalogCombobox
+                id="aceite_usado"
+                options={opcionesAceite}
+                value={aceiteUsado ?? ""}
+                onChange={(v) => setValue("aceite_usado", v, { shouldValidate: true })}
+                placeholder="Buscar o escribir aceite…"
+              />
+            </div>
           </div>
           <div>
             <Label htmlFor="ref_filtro_aire_motor">Ref. Filtro de Aire Motor</Label>
@@ -277,6 +301,42 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
               type="date"
               {...register("vencimiento_tecnicomecanica")}
               className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="costo_soat_anual">Costo anual SOAT ($)</Label>
+            <Input
+              id="costo_soat_anual"
+              type="number"
+              step="0.01"
+              min={0}
+              {...register("costo_soat_anual")}
+              className="mt-1"
+              placeholder="Opcional"
+            />
+          </div>
+          <div>
+            <Label htmlFor="costo_tecnomecanica_anual">Costo anual técnico-mecánica ($)</Label>
+            <Input
+              id="costo_tecnomecanica_anual"
+              type="number"
+              step="0.01"
+              min={0}
+              {...register("costo_tecnomecanica_anual")}
+              className="mt-1"
+              placeholder="Opcional"
+            />
+          </div>
+          <div>
+            <Label htmlFor="costo_poliza_anual">Costo anual póliza ($)</Label>
+            <Input
+              id="costo_poliza_anual"
+              type="number"
+              step="0.01"
+              min={0}
+              {...register("costo_poliza_anual")}
+              className="mt-1"
+              placeholder="Opcional"
             />
           </div>
         </div>
