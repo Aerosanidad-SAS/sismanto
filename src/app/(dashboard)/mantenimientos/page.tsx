@@ -33,8 +33,8 @@ export default async function MantenimientosPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Mantenimientos</h1>
-          <p className="text-gray-600 mt-2">
+          <h1 className="text-3xl">Mantenimientos</h1>
+          <p className="mt-2 text-muted-foreground">
             Historial completo de mantenimientos realizados
           </p>
         </div>

@@ -72,10 +72,10 @@ export function CostoPorVehiculoCard({
                 key={btn.id}
                 onClick={() => cambiarTipo(btn.id)}
                 disabled={isPending}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                   tipo === btn.id
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border text-muted-foreground hover:bg-muted"
                 }`}
               >
                 {btn.label}
@@ -90,7 +90,7 @@ export function CostoPorVehiculoCard({
       </CardHeader>
       <CardContent>
         {datos.length === 0 ? (
-          <p className="text-center text-gray-500 py-4 text-sm">
+          <p className="py-4 text-center text-sm text-muted-foreground">
             No hay registros en este período
           </p>
         ) : (
@@ -118,7 +118,7 @@ export function CostoPorVehiculoCard({
                     <TableCell className="text-right font-semibold">
                       {formatCurrency(d.costoTotal)}
                     </TableCell>
-                    <TableCell className="text-right text-sm text-gray-500">
+                    <TableCell className="text-right text-sm text-muted-foreground">
                       {d.cantidadMantenimientos}
                     </TableCell>
                   </TableRow>

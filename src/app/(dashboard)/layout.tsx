@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   LayoutDashboard,
   Truck,
   Wrench,
@@ -31,6 +32,13 @@ const ALL_NAV = [
   { name: "Configuración", href: "/configuracion", icon: Settings, roles: ["ADMIN"] as UserRole[] },
   { name: "Usuarios", href: "/admin/usuarios", icon: Users, roles: ["ADMIN"] as UserRole[] },
 ];
+
+const ROLE_BADGE_STYLES: Record<UserRole, string> = {
+  ADMIN: "bg-[#7F7FF4] text-white",
+  REGULACION: "bg-[#2BB6C7] text-white",
+  GERENCIAL: "bg-[#1B6368] text-white",
+  OVEM: "bg-[#9C9B99] text-white",
+};
 
 export default function DashboardLayout({
   children,
@@ -63,8 +71,8 @@ export default function DashboardLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-600">Cargando...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-foreground">Cargando...</p>
       </div>
     );
   }
@@ -72,22 +80,44 @@ export default function DashboardLayout({
   if (!profile) {
     router.replace("/pending");
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-600">Redirigiendo...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-foreground">Redirigiendo...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200">
+    <div className="min-h-screen bg-background">
+      <div className="fixed inset-y-0 left-0 w-72 bg-card border-r border-border">
         <div className="flex flex-col h-full">
-          <div className="flex items-center h-16 px-6 border-b border-gray-200">
-            <h1 className="text-xl font-bold text-gray-900">Aeromanto</h1>
+          <div className="h-20 px-6 border-b border-border flex items-center">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div className="leading-none">
+                <p className="font-[var(--font-bebas-neue)] uppercase tracking-[0.02em] text-xl text-primary">Aero</p>
+                <p className="font-[var(--font-bebas-neue)] uppercase tracking-[0.02em] text-xl text-accent">Manto</p>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center h-12 px-4 border-b border-gray-100 bg-gray-50">
-            <span className="text-xs text-gray-500 truncate">{profile.nombre_completo || profile.email}</span>
-            <span className="ml-2 text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">{profile.role_codigo}</span>
+          <div className="px-4 py-4 border-b border-border">
+            <div className="flex items-center gap-3 rounded-lg bg-muted px-3 py-3">
+              <div className="h-9 w-9 rounded-full bg-primary text-white text-sm font-semibold flex items-center justify-center">
+                {(profile.nombre_completo || profile.email).trim().charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{profile.nombre_completo || profile.email}</p>
+                <span
+                  className={cn(
+                    "inline-flex mt-1 rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wide",
+                    ROLE_BADGE_STYLES[profile.role_codigo]
+                  )}
+                >
+                  {profile.role_codigo}
+                </span>
+              </div>
+            </div>
           </div>
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
@@ -99,7 +129,7 @@ export default function DashboardLayout({
                   href={item.href}
                   className={cn(
                     "flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors",
-                    isActive ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                    isActive ? "bg-[#2BB6C7] text-white" : "text-[#666564] hover:bg-[#F4EFE6]"
                   )}
                 >
                   <Icon className="mr-3 h-5 w-5" />
@@ -108,9 +138,12 @@ export default function DashboardLayout({
               );
             })}
           </nav>
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 border-t border-border">
             <form action={signOut}>
-              <button type="submit" className="flex items-center w-full px-4 py-2 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg">
+              <button
+                type="submit"
+                className="flex items-center w-full px-4 py-2 text-sm text-[#DC2626] hover:bg-red-50 rounded-lg transition-colors"
+              >
                 <LogOut className="mr-3 h-5 w-5" />
                 Cerrar sesión
               </button>
@@ -118,7 +151,7 @@ export default function DashboardLayout({
           </div>
         </div>
       </div>
-      <div className="pl-64">
+      <div className="pl-72">
         <main className="p-8">{children}</main>
       </div>
     </div>

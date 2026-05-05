@@ -58,8 +58,8 @@ export default async function NovedadesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Novedades e Incidentes</h1>
-        <p className="text-gray-600 mt-2">
+        <h1 className="text-3xl">Novedades e Incidentes</h1>
+        <p className="mt-2 text-muted-foreground">
           Gestión de reportes de novedades y incidentes de la flota
         </p>
       </div>
@@ -120,7 +120,7 @@ export default async function NovedadesPage() {
                   <TableCell className="font-medium">
                     <Link
                       href={`/vehiculos/${novedad.vehicle_id}`}
-                      className="text-blue-600 hover:underline"
+                      className="text-primary hover:underline"
                     >
                       {novedad.vehicles?.placa}
                     </Link>

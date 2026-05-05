@@ -35,10 +35,8 @@ export default async function NuevoMantenimientoPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Nuevo Mantenimiento</h1>
-        <p className="text-gray-600 mt-2">
-          Registre un nuevo mantenimiento para un vehículo
-        </p>
+        <h1 className="text-3xl">Nuevo Mantenimiento</h1>
+        <p className="mt-2 text-muted-foreground">Registre un nuevo mantenimiento para un vehículo</p>
       </div>
 
       <Card>

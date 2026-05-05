@@ -213,7 +213,7 @@ export function ConsumoCliente({
         </CardHeader>
         <CardContent>
           {metricas.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">
+            <p className="py-8 text-center text-sm text-muted-foreground">
               No hay datos en el período seleccionado. Verifique que existan registros de mantenimiento o combustible.
             </p>
           ) : (
@@ -232,7 +232,7 @@ export function ConsumoCliente({
                 {metricas.map((m) => (
                   <TableRow key={m.vehicleId}>
                     <TableCell className="font-bold">{m.placa}</TableCell>
-                    <TableCell className="text-gray-600">{m.marca || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{m.marca || "—"}</TableCell>
                     <TableCell className="text-right">
                       {m.kmRecorridos > 0 ? m.kmRecorridos.toLocaleString() : "—"}
                     </TableCell>
@@ -240,7 +240,7 @@ export function ConsumoCliente({
                       {m.consumoPromedioKmGal !== null
                         ? m.consumoPromedioKmGal.toFixed(2)
                         : (
-                          <span className="text-xs text-gray-400">Sin datos</span>
+                          <span className="text-xs text-muted-foreground">Sin datos</span>
                         )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -269,7 +269,7 @@ export function ConsumoCliente({
                   <XAxis type="number" tickFormatter={(v) => v.toLocaleString()} />
                   <YAxis type="category" dataKey="placa" width={70} />
                   <Tooltip formatter={(v: any) => [`${v.toLocaleString()} km`, "Km"]} />
-                  <Bar dataKey="km" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="km" fill="hsl(var(--chart-1))" radius={[0, 6, 6, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -287,7 +287,7 @@ export function ConsumoCliente({
                     <XAxis type="number" />
                     <YAxis type="category" dataKey="placa" width={70} />
                     <Tooltip formatter={(v: any) => [`${v} km/gal`, "Consumo"]} />
-                    <Bar dataKey="km/gal" fill="#10b981" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="km/gal" fill="hsl(var(--chart-2))" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>

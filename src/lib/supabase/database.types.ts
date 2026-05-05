@@ -432,6 +432,113 @@ export type Database = {
         }
         Relationships: []
       }
+      maintenance_items: {
+        Row: {
+          id: number
+          maintenance_record_id: number
+          descripcion: string
+          cantidad: number
+          valor_unitario: number
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          maintenance_record_id: number
+          descripcion: string
+          cantidad?: number
+          valor_unitario: number
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          maintenance_record_id?: number
+          descripcion?: string
+          cantidad?: number
+          valor_unitario?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_items_maintenance_record_id_fkey"
+            columns: ["maintenance_record_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_records"
+            referencedColumns: ["id_manto"]
+          }
+        ]
+      }
+      checklist_items: {
+        Row: {
+          id: number
+          categoria: string
+          descripcion: string
+          cantidad_esperada: string | null
+          orden: number
+          activo: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          categoria: string
+          descripcion: string
+          cantidad_esperada?: string | null
+          orden?: number
+          activo?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          categoria?: string
+          descripcion?: string
+          cantidad_esperada?: string | null
+          orden?: number
+          activo?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      daily_check_items: {
+        Row: {
+          id: number
+          daily_check_id: number
+          checklist_item_id: number
+          estado: 'OK' | 'FALLA' | 'NO_APLICA'
+          observacion: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          daily_check_id: number
+          checklist_item_id: number
+          estado: 'OK' | 'FALLA' | 'NO_APLICA'
+          observacion?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          daily_check_id?: number
+          checklist_item_id?: number
+          estado?: 'OK' | 'FALLA' | 'NO_APLICA'
+          observacion?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_check_items_daily_check_id_fkey"
+            columns: ["daily_check_id"]
+            isOneToOne: false
+            referencedRelation: "daily_checks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_check_items_checklist_item_id_fkey"
+            columns: ["checklist_item_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_items"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

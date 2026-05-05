@@ -29,8 +29,8 @@ export default async function AdminUsuariosPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
-        <p className="text-gray-600 mt-2">Crear, editar y deshabilitar usuarios y roles</p>
+        <h1 className="text-3xl">Gestión de Usuarios</h1>
+        <p className="mt-2 text-muted-foreground">Crear, editar y deshabilitar usuarios y roles</p>
       </div>
       <AdminUsuarios users={usersWithRole} roles={roles || []} />
     </div>

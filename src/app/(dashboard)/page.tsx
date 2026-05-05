@@ -117,10 +117,8 @@ export default async function DashboardPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">
-          Resumen ejecutivo de la flota de ambulancias
-        </p>
+        <h1 className="text-3xl">Dashboard</h1>
+        <p className="mt-2 text-muted-foreground">Resumen ejecutivo de la flota de ambulancias</p>
       </div>
 
       {/* KPIs resumen */}
@@ -194,7 +192,7 @@ export default async function DashboardPage({
         </CardHeader>
         <CardContent>
           {data.vehicles.length === 0 ? (
-            <p className="text-sm text-gray-500 py-6 text-center">
+            <p className="py-6 text-center text-sm text-muted-foreground">
               No hay vehículos registrados. Vaya a Configuración para crear el primero.
             </p>
           ) : (

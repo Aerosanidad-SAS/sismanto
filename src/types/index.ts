@@ -224,3 +224,87 @@ export interface MaintenanceAlert {
   kmActual: number;
   kmFaltantes: number;
 }
+
+// ── Migración 005 ──────────────────────────────────────────
+
+export type ChecklistItemEstado = 'OK' | 'FALLA' | 'NO_APLICA';
+
+export type ChecklistCategoria =
+  | 'GENERAL'
+  | 'LUCES'
+  | 'CABINA'
+  | 'EQUIPO_BASICO'
+  | 'EQUIPO_CARRETERA';
+
+export interface ChecklistItem {
+  id: number;
+  categoria: ChecklistCategoria;
+  descripcion: string;
+  cantidad_esperada: string | null;
+  orden: number;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface DailyCheckItem {
+  id: number;
+  daily_check_id: number;
+  checklist_item_id: number;
+  estado: ChecklistItemEstado;
+  observacion: string | null;
+  created_at: string;
+}
+
+export interface MaintenanceItem {
+  id: number;
+  maintenance_record_id: number;
+  descripcion: string;
+  cantidad: number;
+  valor_unitario: number;
+  created_at: string;
+}
+
+// Form types
+
+export interface MaintenanceItemInput {
+  descripcion: string;
+  cantidad: number;
+  valor_unitario: number;
+}
+
+export interface DailyCheckItemInput {
+  checklist_item_id: number;
+  estado: ChecklistItemEstado;
+  observacion?: string;
+}
+
+// Tipo extendido con ítems para el formulario de mantenimiento
+export interface MaintenanceRecordWithItems extends MaintenanceRecord {
+  items: MaintenanceItem[];
+}
+
+// Tipo extendido del daily_check con resultados por ítem
+export interface DailyCheckWithItems {
+  id: number;
+  user_id: string;
+  vehicle_id: string;
+  fecha: string;
+  kilometraje_inicial: number | null;
+  kilometraje_final: number | null;
+  checklist_ok: boolean;
+  observaciones: string | null;
+  is_assignment: boolean;
+  created_at: string;
+  items: DailyCheckItem[];
+}
+
+// Para la vista admin del Portal OVEM
+export interface PreoperacionalResumen {
+  vehicle_id: string;
+  placa: string;
+  conductor: string | null;
+  fecha: string;
+  estado: 'COMPLETADO' | 'PENDIENTE';
+  hayFallas: boolean;
+  cantidadFallas: number;
+}

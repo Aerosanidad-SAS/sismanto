@@ -81,7 +81,7 @@ export default async function VehicleDetailPage({
   if (!vehicle) {
     return (
       <div className="space-y-8">
-        <Link href="/vehiculos" className="text-blue-600 hover:underline">
+        <Link href="/vehiculos" className="text-primary hover:underline">
           ← Volver a Vehículos
         </Link>
         <p className="text-muted-foreground mt-4">No se pudo cargar el vehículo</p>
@@ -96,10 +96,10 @@ export default async function VehicleDetailPage({
   return (
     <div className="space-y-8">
       <div>
-        <Link href="/vehiculos" className="text-blue-600 hover:underline">
+        <Link href="/vehiculos" className="text-primary hover:underline">
           ← Volver a Vehículos
         </Link>
-        <h1 className="text-3xl font-bold text-gray-900 mt-4">
+        <h1 className="mt-4 text-3xl">
           Vehículo: {vehicle.placa}
         </h1>
       </div>

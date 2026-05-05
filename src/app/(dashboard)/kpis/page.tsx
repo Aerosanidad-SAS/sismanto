@@ -181,8 +181,8 @@ export default async function KPIsPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">KPIs y Métricas</h1>
-        <p className="text-gray-600 mt-2">
+        <h1 className="text-3xl">KPIs y Métricas</h1>
+        <p className="mt-2 text-muted-foreground">
           Indicadores clave de rendimiento de la flota
         </p>
       </div>

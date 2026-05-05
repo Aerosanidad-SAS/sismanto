@@ -35,7 +35,13 @@ interface KPIDashboardProps {
   fechaFin: string;
 }
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
+const COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+];
 
 export function KPIDashboard({
   uptimeData,
@@ -163,7 +169,7 @@ export function KPIDashboard({
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="disponibilidad" fill="#0088FE" />
+              <Bar dataKey="disponibilidad" fill={COLORS[0]} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -185,8 +191,8 @@ export function KPIDashboard({
               <YAxis />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
               <Legend />
-              <Bar dataKey="preventivo" stackId="a" fill="#00C49F" />
-              <Bar dataKey="correctivo" stackId="a" fill="#FF8042" />
+              <Bar dataKey="preventivo" stackId="a" fill={COLORS[1]} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="correctivo" stackId="a" fill={COLORS[2]} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -213,7 +219,7 @@ export function KPIDashboard({
                     `${name}: ${(percent * 100).toFixed(0)}%`
                   }
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill={COLORS[0]}
                   dataKey="value"
                 >
                   {ratioPieData.map((entry, index) => (
@@ -248,8 +254,8 @@ export function KPIDashboard({
                 <Area
                   type="monotone"
                   dataKey="promedioHoras"
-                  stroke="#8884d8"
-                  fill="#8884d8"
+                  stroke={COLORS[3]}
+                  fill={COLORS[3]}
                 />
               </AreaChart>
             </ResponsiveContainer>

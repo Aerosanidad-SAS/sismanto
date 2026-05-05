@@ -25,10 +25,8 @@ export default async function VehiculosPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Vehículos</h1>
-        <p className="text-gray-600 mt-2">
-          Gestión de la flota de ambulancias
-        </p>
+        <h1 className="text-3xl">Vehículos</h1>
+        <p className="mt-2 text-muted-foreground">Gestión de la flota de ambulancias</p>
       </div>
 
       <Card>
@@ -82,7 +80,7 @@ export default async function VehiculosPage() {
                   </TableCell>
                   <TableCell>
                     <Link href={`/vehiculos/${vehicle.id}`}>
-                      <span className="text-blue-600 hover:underline cursor-pointer">
+                      <span className="cursor-pointer text-primary hover:underline">
                         Ver Detalle
                       </span>
                     </Link>

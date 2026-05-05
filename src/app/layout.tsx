@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Bebas_Neue, Inter } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
+const bebasNeue = Bebas_Neue({
+  subsets: ["latin"],
+  variable: "--font-bebas-neue",
+  weight: "400",
+});
 
 export const metadata: Metadata = {
   title: "Sistema de Gestión de Flotas - Aeromanto",
@@ -16,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.className} ${bebasNeue.variable}`}>{children}</body>
     </html>
   );
 }
