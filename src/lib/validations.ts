@@ -152,9 +152,21 @@ export const dailyCheckSchema = z.object({
   fecha: z.string().min(1, "Fecha requerida"),
   kilometrajeInicial: z.number().int().nonnegative("Kilometraje inicial inválido"),
   kilometrajeFinal: z.number().int().nonnegative().optional(),
-  checklistOk: z.boolean(),
+  /** Mantiene compatibilidad, pero se recalcula por daily_check_items (trigger DB). */
+  checklistOk: z.boolean().optional(),
   observaciones: z.string().optional(),
   isAssignment: z.boolean().default(false),
+  items: z
+    .array(
+      z.object({
+        checklistItemId: z.number().int().positive(),
+        estado: z.enum(["OK", "FALLA", "NO_APLICA"]),
+        /** Para ítems con cantidad esperada numérica (ej. 2 luces): cuántos están OK. */
+        cantidadOk: z.number().int().nonnegative().optional(),
+        observacion: z.string().optional(),
+      })
+    )
+    .optional(),
 });
 
 export const updateKilometrajeOdometerSchema = z.object({

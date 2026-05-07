@@ -24,6 +24,8 @@ interface IncidentFormProps {
   reportadoPorDefault?: string;
   /** Ocultar severidad percibida (p. ej. OVEM): el servidor usará clasificación MEDIA por defecto */
   hideSeveridad?: boolean;
+  /** Prefill de descripción (p. ej. desde un ítem fallado del preoperacional) */
+  initialDescripcion?: string;
 }
 
 export function IncidentForm({
@@ -32,6 +34,7 @@ export function IncidentForm({
   onSuccess,
   reportadoPorDefault,
   hideSeveridad = false,
+  initialDescripcion,
 }: IncidentFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,7 @@ export function IncidentForm({
     defaultValues: {
       vehicleId,
       afectaOperatividad,
+      descripcion: initialDescripcion || "",
       ...(hideSeveridad ? {} : { severidad: "MEDIA" as const }),
       reportadoPor: reportadoPorDefault || "",
     },

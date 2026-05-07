@@ -5,6 +5,17 @@ import { requireRole } from "./auth";
 import { revalidatePath } from "next/cache";
 import { dailyCheckSchema, updateKilometrajeOdometerSchema } from "@/lib/validations";
 
+export async function getChecklistItemsActivos() {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("checklist_items")
+    .select("id, categoria, descripcion, cantidad_esperada, orden, activo")
+    .eq("activo", true)
+    .order("orden", { ascending: true });
+  if (error) return [];
+  return data || [];
+}
+
 export async function getAssignedVehicles(userId: string) {
   const supabase = createClient();
   const hoy = new Date().toISOString().split("T")[0];
@@ -40,9 +51,14 @@ export async function submitDailyCheck(data: {
   fecha: string;
   kilometrajeInicial: number;
   kilometrajeFinal?: number;
-  checklistOk: boolean;
   observaciones?: string;
   isAssignment?: boolean;
+  items?: Array<{
+    checklistItemId: number;
+    estado: "OK" | "FALLA" | "NO_APLICA";
+    cantidadOk?: number;
+    observacion?: string;
+  }>;
 }) {
   const parsed = dailyCheckSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
@@ -55,21 +71,42 @@ export async function submitDailyCheck(data: {
 
   const supabase = createClient();
 
-  const { error: checkError } = await supabase.from("daily_checks").upsert(
-    {
-      user_id: row.userId,
-      vehicle_id: row.vehicleId,
-      fecha: row.fecha,
-      kilometraje_inicial: row.kilometrajeInicial,
-      kilometraje_final: row.kilometrajeFinal ?? null,
-      checklist_ok: row.checklistOk,
-      observaciones: row.observaciones ?? null,
-      is_assignment: row.isAssignment,
-    },
-    { onConflict: "user_id,vehicle_id,fecha" }
-  );
+  const { data: checkRow, error: checkError } = await supabase
+    .from("daily_checks")
+    .upsert(
+      {
+        user_id: row.userId,
+        vehicle_id: row.vehicleId,
+        fecha: row.fecha,
+        kilometraje_inicial: row.kilometrajeInicial,
+        kilometraje_final: row.kilometrajeFinal ?? null,
+        // checklist_ok se recalcula por trigger basado en daily_check_items
+        observaciones: row.observaciones ?? null,
+        is_assignment: row.isAssignment,
+      },
+      { onConflict: "user_id,vehicle_id,fecha" }
+    )
+    .select("id")
+    .single();
 
   if (checkError) return { error: checkError.message };
+
+  const dailyCheckId = checkRow?.id;
+  if (dailyCheckId && row.items && row.items.length > 0) {
+    // Upsert por item. Si cantidadOk < cantidad esperada, UI ya manda estado=FALLA.
+    const payload = row.items.map((it) => ({
+      daily_check_id: dailyCheckId,
+      checklist_item_id: it.checklistItemId,
+      estado: it.estado,
+      cantidad_ok: it.cantidadOk ?? null,
+      observacion: it.observacion?.trim() || null,
+    }));
+
+    const { error: itemsErr } = await supabase
+      .from("daily_check_items")
+      .upsert(payload, { onConflict: "daily_check_id,checklist_item_id" });
+    if (itemsErr) return { error: itemsErr.message };
+  }
 
   // Si el OVEM marcó asignación, crear vehicle_assignment para hoy
   if (row.isAssignment) {
@@ -153,4 +190,27 @@ export async function getDailyCheckForToday(userId: string, vehicleId: string) {
     .eq("fecha", hoy)
     .single();
   return data;
+}
+
+export async function getDailyCheckItemsForToday(userId: string, vehicleId: string) {
+  const supabase = createClient();
+  const hoy = new Date().toISOString().split("T")[0];
+
+  const { data: check } = await supabase
+    .from("daily_checks")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("vehicle_id", vehicleId)
+    .eq("fecha", hoy)
+    .single();
+
+  if (!check?.id) return [];
+
+  const { data, error } = await supabase
+    .from("daily_check_items")
+    .select("checklist_item_id, estado, observacion, cantidad_ok")
+    .eq("daily_check_id", check.id);
+
+  if (error) return [];
+  return data || [];
 }

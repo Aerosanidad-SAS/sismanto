@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/app/api/actions/auth";
 import { isAdminLike } from "@/lib/auth-utils";
 import { OvemPortal } from "@/components/ovem/ovem-portal";
+import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
 
 export default async function OvemPage() {
   const supabase = createClient();
@@ -20,6 +21,8 @@ export default async function OvemPage() {
     .select("id, placa, marca, modelo, estado_actual")
     .order("placa");
 
+  const checklistItems = await getChecklistItemsActivos();
+
   return (
     <div className="space-y-6">
       <div>
@@ -33,6 +36,7 @@ export default async function OvemPage() {
         userId={user.id}
         userName={profile.nombre_completo || profile.email || "Usuario"}
         vehicles={vehicles}
+        checklistItems={checklistItems}
         isAdmin={isAdminLike(profile.role_codigo)}
       />
     </div>

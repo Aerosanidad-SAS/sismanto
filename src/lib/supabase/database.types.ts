@@ -512,6 +512,7 @@ export type Database = {
           daily_check_id: number
           checklist_item_id: number
           estado: 'OK' | 'FALLA' | 'NO_APLICA'
+          cantidad_ok: number | null
           observacion: string | null
           created_at: string
         }
@@ -520,6 +521,7 @@ export type Database = {
           daily_check_id: number
           checklist_item_id: number
           estado: 'OK' | 'FALLA' | 'NO_APLICA'
+          cantidad_ok?: number | null
           observacion?: string | null
           created_at?: string
         }
@@ -528,6 +530,7 @@ export type Database = {
           daily_check_id?: number
           checklist_item_id?: number
           estado?: 'OK' | 'FALLA' | 'NO_APLICA'
+          cantidad_ok?: number | null
           observacion?: string | null
           created_at?: string
         }

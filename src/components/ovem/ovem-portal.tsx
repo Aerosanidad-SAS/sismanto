@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   submitDailyCheck,
   updateKilometrajeOdometer,
   getDailyCheckForToday,
+  getDailyCheckItemsForToday,
 } from "@/app/api/actions/ovem";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,15 +28,8 @@ import {
 } from "@/components/ui/dialog";
 import { IncidentForm } from "@/components/dashboard/incident-form";
 import { CheckCircle2, Gauge, AlertCircle, ClipboardCheck, ArrowLeft, ArrowRight } from "lucide-react";
-const CHECKLIST_ITEMS = [
-  "Nivel de aceite",
-  "Nivel de refrigerante",
-  "Estado de neumáticos",
-  "Luces y señalización",
-  "Frenos",
-  "Documentación (SOAT, RTM)",
-  "Equipo de emergencia",
-];
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { cn } from "@/lib/utils";
 
 interface OvemPortalProps {
   userId: string;
@@ -47,17 +41,24 @@ interface OvemPortalProps {
     modelo?: string | null;
     estado_actual?: string;
   }>;
+  checklistItems: Array<{
+    id: number;
+    categoria: string;
+    descripcion: string;
+    cantidad_esperada: string | null;
+    orden: number;
+    activo: boolean;
+  }>;
   isAdmin: boolean;
 }
 
 type Flow = null | "preoperacional" | "novedad";
 
-export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalProps) {
+export function OvemPortal({ userId, userName, vehicles, checklistItems, isAdmin }: OvemPortalProps) {
   const router = useRouter();
   const [flow, setFlow] = useState<Flow>(null);
   const [vehicleId, setVehicleId] = useState("");
   const [km, setKm] = useState("");
-  const [checklistOk, setChecklistOk] = useState(false);
   const [observaciones, setObservaciones] = useState("");
   const [showNovedadDialog, setShowNovedadDialog] = useState(false);
   const [dailyCheckDone, setDailyCheckDone] = useState(false);
@@ -65,6 +66,15 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [novedadesOpen, setNovedadesOpen] = useState(false);
+  const [checkItemsState, setCheckItemsState] = useState<
+    Record<
+      number,
+      { estado: "OK" | "FALLA" | "NO_APLICA"; cantidadOk?: number; observacion?: string }
+    >
+  >({});
+  const [incidentFromItem, setIncidentFromItem] = useState<null | { title: string; desc: string }>(
+    null
+  );
 
   const hoy = new Date().toISOString().split("T")[0];
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
@@ -74,12 +84,23 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
       getDailyCheckForToday(userId, vehicleId).then((dc) => {
         if (dc) {
           setDailyCheckDone(true);
-          setChecklistOk(dc.checklist_ok);
           setObservaciones(dc.observaciones || "");
           if (dc.kilometraje_inicial) setKm(String(dc.kilometraje_inicial));
         } else {
           setDailyCheckDone(false);
         }
+      });
+
+      getDailyCheckItemsForToday(userId, vehicleId).then((items) => {
+        const map: typeof checkItemsState = {};
+        for (const it of items as any[]) {
+          map[it.checklist_item_id] = {
+            estado: it.estado,
+            cantidadOk: it.cantidad_ok ?? undefined,
+            observacion: it.observacion ?? undefined,
+          };
+        }
+        setCheckItemsState(map);
       });
     } else if (!vehicleId || flow !== "preoperacional") {
       setDailyCheckDone(false);
@@ -93,7 +114,18 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
     setSuccess(null);
     setShowNovedadDialog(false);
     setNovedadesOpen(false);
+    setCheckItemsState({});
   }, [flow]);
+
+  const checklistItemsByCategoria = useMemo(() => {
+    const m = new Map<string, OvemPortalProps["checklistItems"]>();
+    for (const it of checklistItems) {
+      const arr = m.get(it.categoria) || [];
+      arr.push(it);
+      m.set(it.categoria, arr);
+    }
+    return Array.from(m.entries());
+  }, [checklistItems]);
 
   const handleSubmitChecklist = async () => {
     if (!vehicleId || flow !== "preoperacional") return;
@@ -112,8 +144,13 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
       fecha: hoy,
       kilometrajeInicial: kmNum,
       kilometrajeFinal: kmNum,
-      checklistOk,
       observaciones: observaciones || undefined,
+      items: Object.entries(checkItemsState).map(([id, v]) => ({
+        checklistItemId: parseInt(id, 10),
+        estado: v.estado,
+        cantidadOk: v.cantidadOk,
+        observacion: v.observacion,
+      })),
     });
     if (result?.error) setError(result.error);
     else {
@@ -269,35 +306,150 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
               </CardTitle>
               <CardDescription>Revise los puntos antes de iniciar su turno.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                {CHECKLIST_ITEMS.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-              <div>
-                <Label>¿Todos los puntos están OK?</Label>
-                <div className="flex gap-4 mt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="checklist"
-                      checked={checklistOk}
-                      onChange={() => setChecklistOk(true)}
-                    />
-                    Sí
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="checklist"
-                      checked={!checklistOk}
-                      onChange={() => setChecklistOk(false)}
-                    />
-                    No
-                  </label>
+            <CardContent className="space-y-6">
+              <p className="text-sm text-muted-foreground">
+                Responda cada ítem de forma independiente. Si un ítem falla, descríbalo y desde ahí puede
+                reportar una novedad (ej: &quot;farola delantera sin luz media&quot;).
+              </p>
+
+              {checklistItems.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No hay ítems activos del preoperacional. Aplique la migración 005 o verifique la tabla{" "}
+                  <code className="text-xs bg-muted px-1 rounded">checklist_items</code>.
+                </p>
+              )}
+
+              {checklistItemsByCategoria.map(([categoria, items]) => (
+                <div key={categoria} className="space-y-3">
+                  <h3 className="text-sm font-semibold tracking-wide text-foreground">
+                    {categoria.replaceAll("_", " ")}
+                  </h3>
+                  <div className="space-y-2">
+                    {items.map((it) => {
+                      const expectedNum = it.cantidad_esperada ? Number(it.cantidad_esperada) : NaN;
+                      const isNumericQty = Number.isFinite(expectedNum) && expectedNum > 0;
+                      const st = checkItemsState[it.id] || { estado: "OK" as const };
+
+                      const showAlert = st.estado === "FALLA";
+
+                      return (
+                        <div
+                          key={it.id}
+                          className={cn(
+                            "rounded-lg border p-3",
+                            showAlert ? "border-red-300 bg-red-50/50" : "border-border bg-card"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground">{it.descripcion}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Esperado: {it.cantidad_esperada || "OK"}
+                              </p>
+                            </div>
+                            {showAlert ? (
+                              <span className="text-xs font-semibold text-red-700">ALERTA</span>
+                            ) : (
+                              <span className="text-xs font-semibold text-muted-foreground">—</span>
+                            )}
+                          </div>
+
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            {isNumericQty ? (
+                              <div className="space-y-2">
+                                <Label className="text-xs">¿Cuántos están OK?</Label>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={expectedNum}
+                                    value={st.cantidadOk ?? expectedNum}
+                                    onChange={(e) => {
+                                      const v = parseInt(e.target.value || "0", 10);
+                                      const clamped = Math.max(0, Math.min(expectedNum, Number.isNaN(v) ? 0 : v));
+                                      const estado = clamped < expectedNum ? "FALLA" : "OK";
+                                      setCheckItemsState((prev) => ({
+                                        ...prev,
+                                        [it.id]: { ...prev[it.id], cantidadOk: clamped, estado },
+                                      }));
+                                    }}
+                                    className="w-28"
+                                  />
+                                  <span className="text-xs text-muted-foreground">de {expectedNum}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <Label className="text-xs">Estado</Label>
+                                <RadioGroup
+                                  value={st.estado}
+                                  onValueChange={(v) =>
+                                    setCheckItemsState((prev) => ({
+                                      ...prev,
+                                      [it.id]: { ...prev[it.id], estado: v as any },
+                                    }))
+                                  }
+                                  className="grid grid-cols-3 gap-3"
+                                >
+                                  {[
+                                    { v: "OK", label: "OK" },
+                                    { v: "FALLA", label: "Falla" },
+                                    { v: "NO_APLICA", label: "N/A" },
+                                  ].map((opt) => (
+                                    <label key={opt.v} className="flex items-center gap-2 text-sm">
+                                      <RadioGroupItem value={opt.v} />
+                                      <span className="text-xs">{opt.label}</span>
+                                    </label>
+                                  ))}
+                                </RadioGroup>
+                              </div>
+                            )}
+
+                            <div className="space-y-2">
+                              <Label className="text-xs">Observación</Label>
+                              <Input
+                                value={st.observacion ?? ""}
+                                placeholder={
+                                  st.estado === "FALLA"
+                                    ? "Describa la falla (ej: farola sin luz media)"
+                                    : "Opcional"
+                                }
+                                onChange={(e) =>
+                                  setCheckItemsState((prev) => ({
+                                    ...prev,
+                                    [it.id]: { ...prev[it.id], observacion: e.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          {st.estado === "FALLA" && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  setIncidentFromItem({
+                                    title: `Reportar novedad — ${selectedVehicle?.placa}`,
+                                    desc:
+                                      `${categoria.replaceAll("_", " ")}: ${it.descripcion}. ` +
+                                      (st.observacion ? `Detalle: ${st.observacion}` : "Detalle: "),
+                                  })
+                                }
+                              >
+                                Reportar novedad de este ítem
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ))}
+
               <div>
                 <Label htmlFor="km-inicial">Kilometraje actual</Label>
                 <Input
@@ -412,6 +564,25 @@ export function OvemPortal({ userId, userName, vehicles, isAdmin }: OvemPortalPr
             }}
             reportadoPorDefault={userName}
             hideSeveridad
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!incidentFromItem} onOpenChange={() => setIncidentFromItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{incidentFromItem?.title || "Reportar novedad"}</DialogTitle>
+          </DialogHeader>
+          <IncidentForm
+            vehicleId={vehicleId}
+            afectaOperatividad={false}
+            onSuccess={() => {
+              setIncidentFromItem(null);
+              router.refresh();
+            }}
+            reportadoPorDefault={userName}
+            hideSeveridad
+            initialDescripcion={incidentFromItem?.desc}
           />
         </DialogContent>
       </Dialog>

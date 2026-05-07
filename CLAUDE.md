@@ -56,6 +56,10 @@ The `(dashboard)` route group is protected by middleware (`src/middleware.ts`), 
 
 Role is stored in `user_profiles.role`. Middleware and Server Actions check `user_profiles` to gate access; RLS policies enforce the same rules at DB level.
 
+### Backlog / notas de producto
+
+- **OVEM - tanqueo (pendiente)**: añadir en Portal OVEM una opción para registrar tanqueo con campos requeridos: `placa`, `fecha`, `km`, `galones`, `valor_total` (y persistir en `fuel_logs` o tabla equivalente según el flujo).
+
 ### Database Migrations
 
 All schema changes go in numbered SQL files — never modify existing ones:
@@ -66,6 +70,9 @@ scripts/migrations/
   002_iteracion2.sql
   003_rbac.sql
   004_reserved_rls.sql          # Reserved (placeholder unless extended with new RLS)
+  005_maintenance_items_checklist.sql
+  006_mantenimiento_flota_ovem.sql
+  007_daily_check_items_cantidad_ok.sql
 ```
 
 Migrations are idempotent. RLS policies must live in migration files, not be set via the Supabase dashboard UI.
