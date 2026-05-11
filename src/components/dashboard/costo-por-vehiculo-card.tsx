@@ -30,6 +30,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { CostoPorVehiculoKPI } from "@/types";
 import { DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HelpTrigger } from "@/components/ui/help-trigger";
 import { stripDashboardGlobalParams } from "@/lib/dashboard-search-params";
 
 type TipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
@@ -109,9 +110,14 @@ export function CostoPorVehiculoCard({
       <CardHeader className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-muted-foreground shrink-0" />
-            <div>
-              <CardTitle>Costo por Vehículo</CardTitle>
+            <span title="Costos de mantenimiento" className="inline-flex shrink-0">
+              <DollarSign className="h-5 w-5 text-muted-foreground" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle>Costo por vehículo</CardTitle>
+                <HelpTrigger text="Suma de mantenimientos por unidad en el período seleccionado (respeta filtros globales si están activos). Use tipo, centro, placas CSV o búsqueda en descripción de trabajo." />
+              </div>
               <CardDescription>Sumatoria de mantenimientos en el período (orden: mayor a menor)</CardDescription>
             </div>
           </div>

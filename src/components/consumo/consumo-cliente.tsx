@@ -5,11 +5,14 @@ import { useRouter, usePathname } from "next/navigation";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from "recharts";
 import {
   Card,
@@ -35,7 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ConsumoVehiculo } from "@/types";
+import type { ConsumoVehiculo, RendimientoCombustibleMes } from "@/types";
 import { Fuel, MapPin, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +49,8 @@ const SELECT_ALL = "__all__";
 
 interface ConsumoClienteProps {
   metricas: ConsumoVehiculo[];
+  /** Promedio mensual km/gal en el alcance de los filtros (flota, centro o una placa). */
+  serieRendimientoMensual: RendimientoCombustibleMes[];
   vehicles: { id: string; placa: string; marca?: string | null }[];
   centros: { id: number; nombre: string }[];
   fechaInicio: string;
@@ -54,8 +59,21 @@ interface ConsumoClienteProps {
   centroIdFiltro?: number;
 }
 
+function labelAlcanceRendimiento(centroId: string, vehiculoId: string, centros: { id: number; nombre: string }[], vehicles: { id: string; placa: string }[]) {
+  if (vehiculoId) {
+    const p = vehicles.find((v) => v.id === vehiculoId)?.placa;
+    return p ? `Vehículo ${p}` : "Vehículo seleccionado";
+  }
+  if (centroId) {
+    const c = centros.find((x) => String(x.id) === centroId)?.nombre;
+    return c ? `Centro: ${c}` : "Centro seleccionado";
+  }
+  return "Flota completa";
+}
+
 export function ConsumoCliente({
   metricas,
+  serieRendimientoMensual,
   vehicles,
   centros,
   fechaInicio: initialFechaInicio,
@@ -102,6 +120,16 @@ export function ConsumoCliente({
     .sort((a, b) => (b.consumoPromedioKmGal || 0) - (a.consumoPromedioKmGal || 0))
     .slice(0, 40)
     .map((m) => ({ placa: m.placa, "km/gal": Number((m.consumoPromedioKmGal || 0).toFixed(2)) }));
+
+  const chartLineRendimiento = serieRendimientoMensual.map((row) => ({
+    mes: row.mes,
+    mesLabel: (() => {
+      const [y, m] = row.mes.split("-").map(Number);
+      return `${String(m).padStart(2, "0")}/${y}`;
+    })(),
+    "km/gal": row.rendimientoKmGal !== null ? Number(row.rendimientoKmGal.toFixed(2)) : null,
+  }));
+  const haySerieRendimiento = chartLineRendimiento.some((r) => r["km/gal"] !== null);
 
   return (
     <div className="space-y-6">
@@ -190,6 +218,54 @@ export function ConsumoCliente({
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-base">Rendimiento en el tiempo (km/gal por mes)</CardTitle>
+          <CardDescription>
+            Promedio mensual en el período; el alcance sigue los filtros de arriba:{" "}
+            <span className="font-medium text-foreground">
+              {labelAlcanceRendimiento(centroId, vehiculoId, centros, vehicles)}
+            </span>
+            . Requiere al menos dos cargas de combustible en el mismo mes por unidad para incluirla en el
+            promedio de ese mes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!haySerieRendimiento ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              No hay suficientes registros de combustible en el período para armar la serie mensual. Amplíe fechas
+              o verifique cargas por mes.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={chartLineRendimiento} margin={{ left: 4, right: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="mesLabel" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
+                <Tooltip
+                  formatter={(value) => {
+                    const v = typeof value === "number" ? value : Number(value);
+                    return v != null && !Number.isNaN(v)
+                      ? [`${v} km/gal`, "Promedio"]
+                      : ["Sin dato", ""];
+                  }}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="km/gal"
+                  name="km/gal (prom.)"
+                  stroke="hsl(var(--chart-1))"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       {chartDataConsumo.length > 0 && (
         <Card>

@@ -117,6 +117,86 @@ export async function getMetricasConsumo(
   }
 }
 
+/** Rendimiento km/gal agregado por mes calendario (YYYY-MM) para gráficas de tendencia. */
+export async function getRendimientoCombustibleSerieMensual(
+  fechaInicio: string,
+  fechaFin: string,
+  vehicleId?: string,
+  centroId?: number
+) {
+  try {
+    const validated = metricasConsumoParamsSchema.safeParse({
+      fechaInicio,
+      fechaFin,
+      vehicleId,
+      centroId,
+    });
+    if (!validated.success) return [];
+
+    const { fechaInicio: fi, fechaFin: ff, vehicleId: vid, centroId: cid } = validated.data;
+
+    const supabase = createClient();
+
+    let vehiclesQuery = supabase.from("vehicles").select("id, placa, marca, centro_operativo_id");
+    if (vid) vehiclesQuery = vehiclesQuery.eq("id", vid);
+    if (cid !== undefined) vehiclesQuery = vehiclesQuery.eq("centro_operativo_id", cid);
+    const { data: vehicles } = await vehiclesQuery;
+    if (!vehicles || vehicles.length === 0) return [];
+
+    const vehicleIds = vehicles.map((v) => v.id);
+
+    const { data: fuelLogs } = await supabase
+      .from("fuel_logs")
+      .select("vehicle_id, fecha, kilometraje, galones")
+      .in("vehicle_id", vehicleIds)
+      .gte("fecha", fi)
+      .lte("fecha", ff)
+      .order("fecha");
+
+    const logs = fuelLogs || [];
+
+    const monthKeys: string[] = [];
+    const start = new Date(fi + "T12:00:00");
+    const end = new Date(ff + "T12:00:00");
+    const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+    while (cur <= endMonth) {
+      monthKeys.push(
+        `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`
+      );
+      cur.setMonth(cur.getMonth() + 1);
+    }
+
+    const rendimientoMesVehiculo = (vehicleIdRow: string, yyyymm: string): number | null => {
+      const inMonth = logs
+        .filter((l) => l.vehicle_id === vehicleIdRow && String(l.fecha).slice(0, 7) === yyyymm)
+        .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+      if (inMonth.length < 2) return null;
+      const vals: number[] = [];
+      for (let i = 1; i < inMonth.length; i++) {
+        const kmDelta = inMonth[i].kilometraje - inMonth[i - 1].kilometraje;
+        const gal = inMonth[i].galones;
+        if (kmDelta > 0 && gal > 0) vals.push(kmDelta / gal);
+      }
+      if (vals.length === 0) return null;
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    };
+
+    return monthKeys.map((mes) => {
+      const porVehiculo = vehicleIds
+        .map((id) => rendimientoMesVehiculo(id, mes))
+        .filter((x): x is number => x !== null);
+      const rendimientoKmGal =
+        porVehiculo.length > 0
+          ? porVehiculo.reduce((a, b) => a + b, 0) / porVehiculo.length
+          : null;
+      return { mes, rendimientoKmGal };
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function registrarCombustible(data: {
   vehicleId: string;
   fecha: string;

@@ -80,7 +80,7 @@ export async function submitDailyCheck(data: {
         fecha: row.fecha,
         kilometraje_inicial: row.kilometrajeInicial,
         kilometraje_final: row.kilometrajeFinal ?? null,
-        // checklist_ok se recalcula por trigger basado en daily_check_items
+        checklist_ok: false,
         observaciones: row.observaciones ?? null,
         is_assignment: row.isAssignment,
       },

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,33 +16,28 @@ interface VehicleStatusCardProps {
   readOnly?: boolean;
 }
 
+/** Acceso rápido al formulario de novedad (no cambia el estado operativo; use la etiqueta de estado para eso). */
 export function VehicleStatusCard({ vehicle, readOnly }: VehicleStatusCardProps) {
   const [showIncidentDialog, setShowIncidentDialog] = useState(false);
-
-  const handleStatusChange = () => {
-    if (vehicle.estado_actual === "OPERATIVO") {
-      // Forzar creación de incidente
-      setShowIncidentDialog(true);
-    } else {
-      // Evaluar si hay novedades abiertas antes de cambiar a operativo
-      // Esta lógica debería estar en un Server Action
-      // Por ahora, solo cerramos el dialog si existe
-      setShowIncidentDialog(false);
-    }
-  };
 
   if (readOnly) return <span className="text-gray-400 text-sm">—</span>;
 
   return (
     <>
-      <Button onClick={handleStatusChange} size="sm" variant="outline">
-        Cambiar Estado
+      <Button
+        type="button"
+        onClick={() => setShowIncidentDialog(true)}
+        size="sm"
+        variant="outline"
+        title="Registrar una novedad o incidente sobre este vehículo"
+      >
+        Reportar novedad
       </Button>
 
       <Dialog open={showIncidentDialog} onOpenChange={setShowIncidentDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reportar Novedad - {vehicle.placa}</DialogTitle>
+            <DialogTitle>Reportar novedad — {vehicle.placa}</DialogTitle>
           </DialogHeader>
           <IncidentForm
             vehicleId={vehicle.id}

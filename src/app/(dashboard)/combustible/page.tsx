@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getMetricasConsumo } from "@/app/api/actions/consumo";
+import { getMetricasConsumo, getRendimientoCombustibleSerieMensual } from "@/app/api/actions/consumo";
 import { ConsumoCliente } from "@/components/consumo/consumo-cliente";
 
 async function getInitialData() {
@@ -29,9 +29,10 @@ export default async function CombustiblePage({
   const vehicleId = searchParams.vehiculo || undefined;
   const centroId = searchParams.centro ? parseInt(searchParams.centro, 10) : undefined;
 
-  const [{ vehicles, centros }, metricas] = await Promise.all([
+  const [{ vehicles, centros }, metricas, serieRendimientoMensual] = await Promise.all([
     getInitialData(),
     getMetricasConsumo(fechaInicio, fechaFin, vehicleId, centroId),
+    getRendimientoCombustibleSerieMensual(fechaInicio, fechaFin, vehicleId, centroId),
   ]);
 
   return (
@@ -45,6 +46,7 @@ export default async function CombustiblePage({
 
       <ConsumoCliente
         metricas={metricas}
+        serieRendimientoMensual={serieRendimientoMensual}
         vehicles={vehicles}
         centros={centros}
         fechaInicio={fechaInicio}

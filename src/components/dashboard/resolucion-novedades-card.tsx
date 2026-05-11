@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { formatDateShort } from "@/lib/utils";
 import { ClipboardList } from "lucide-react";
+import { HelpTrigger } from "@/components/ui/help-trigger";
 
 interface ResumenNovedades {
   total: number;
@@ -58,9 +59,14 @@ export function ResolucionNovedadesCard({
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <ClipboardList className="h-5 w-5 text-muted-foreground" />
-          <div>
-            <CardTitle>Resolución de Novedades</CardTitle>
+          <span title="Listado de novedades en el período" className="inline-flex shrink-0">
+            <ClipboardList className="h-5 w-5 text-muted-foreground" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle>Resolución de novedades</CardTitle>
+              <HelpTrigger text="Muestra novedades del período (alineado con filtros globales cuando están activos) y un resumen de cuántas se cerraron, cuántas siguen abiertas y el tiempo medio hasta el cierre." />
+            </div>
             <CardDescription>Eficacia en atención de novedades reportadas</CardDescription>
           </div>
         </div>

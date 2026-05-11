@@ -1,10 +1,18 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KPIDashboard } from "@/components/charts/kpi-dashboard";
-import { formatCurrency } from "@/lib/utils";
 
-async function getKPIData(fechaInicio: string, fechaFin: string) {
+type TcoTipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
+
+async function getKPIData(
+  fechaInicio: string,
+  fechaFin: string,
+  tcoFiltros?: {
+    centroId?: number;
+    tipo: TcoTipoFiltro;
+    placaFragment?: string;
+  }
+) {
   try {
     const supabase = createClient();
 
@@ -47,18 +55,36 @@ async function getKPIData(fechaInicio: string, fechaFin: string) {
     }) || [];
 
     // KPI 2: TCO (Total Cost of Ownership)
-    const { data: mantenimientos } = await supabase
+    const { data: mantenimientosRaw } = await supabase
     .from("maintenance_records")
     .select(`
       tipo,
       valor,
-      vehicles!inner(placa, centro_operativo)
+      vehicles!inner(placa, centro_operativo, centro_operativo_id)
     `)
     .gte("fecha", fechaInicio)
     .lte("fecha", fechaFin);
 
+    let mantenimientos = mantenimientosRaw || [];
+    if (tcoFiltros?.centroId != null && !Number.isNaN(tcoFiltros.centroId)) {
+      mantenimientos = mantenimientos.filter(
+        (m: any) => Number(m.vehicles?.centro_operativo_id) === tcoFiltros!.centroId
+      );
+    }
+    if (tcoFiltros?.tipo && tcoFiltros.tipo !== "AMBOS") {
+      mantenimientos = mantenimientos.filter((m: any) => m.tipo === tcoFiltros!.tipo);
+    }
+    if (tcoFiltros?.placaFragment?.trim()) {
+      const q = tcoFiltros.placaFragment.trim().toUpperCase();
+      mantenimientos = mantenimientos.filter((m: any) =>
+        String(m.vehicles?.placa || "")
+          .toUpperCase()
+          .includes(q)
+      );
+    }
+
     const tcoData: Record<string, any> = {};
-    mantenimientos?.forEach((m: any) => {
+    mantenimientos.forEach((m: any) => {
       const key = `${m.vehicles.centro_operativo}_${m.vehicles.placa}`;
       if (!tcoData[key]) {
         tcoData[key] = {
@@ -80,19 +106,17 @@ async function getKPIData(fechaInicio: string, fechaFin: string) {
       }
     });
 
-    // KPI 3: Ratio Preventivo/Correctivo
-    const totalPreventivo = mantenimientos?.reduce(
+    // KPI 3: Ratio Preventivo/Correctivo (mismo subconjunto que TCO si hay filtros)
+    const totalPreventivo = mantenimientos.reduce(
       (sum, m: any) => sum + (m.tipo === "PREVENTIVO" ? m.valor || 0 : 0),
       0
-    ) || 0;
-    const totalCorrectivo = mantenimientos?.reduce(
+    );
+    const totalCorrectivo = mantenimientos.reduce(
       (sum, m: any) => sum + (m.tipo === "CORRECTIVO" ? m.valor || 0 : 0),
       0
-    ) || 0;
-    const cantidadPreventivo =
-      mantenimientos?.filter((m: any) => m.tipo === "PREVENTIVO").length || 0;
-    const cantidadCorrectivo =
-      mantenimientos?.filter((m: any) => m.tipo === "CORRECTIVO").length || 0;
+    );
+    const cantidadPreventivo = mantenimientos.filter((m: any) => m.tipo === "PREVENTIVO").length;
+    const cantidadCorrectivo = mantenimientos.filter((m: any) => m.tipo === "CORRECTIVO").length;
 
     const ratioPC = {
       costoPreventivo: totalPreventivo,
@@ -165,7 +189,13 @@ async function getKPIData(fechaInicio: string, fechaFin: string) {
 export default async function KPIsPage({
   searchParams,
 }: {
-  searchParams: { inicio?: string; fin?: string };
+  searchParams: {
+    inicio?: string;
+    fin?: string;
+    kCentro?: string;
+    kTipo?: string;
+    kPlaca?: string;
+  };
 }) {
   const hoy = new Date();
   const inicioMes = new Date();
@@ -176,7 +206,28 @@ export default async function KPIsPage({
     searchParams.inicio || inicioMes.toISOString().split("T")[0];
   const fechaFin = searchParams.fin || hoy.toISOString().split("T")[0];
 
-  const kpiData = await getKPIData(fechaInicio, fechaFin);
+  const kCentroParsed = searchParams.kCentro ? parseInt(searchParams.kCentro, 10) : NaN;
+  const tcoCentroId =
+    !Number.isNaN(kCentroParsed) && kCentroParsed > 0 ? kCentroParsed : undefined;
+  const kTipoRaw = (searchParams.kTipo || "AMBOS").toUpperCase();
+  const tcoTipo: TcoTipoFiltro =
+    kTipoRaw === "PREVENTIVO" || kTipoRaw === "CORRECTIVO" ? kTipoRaw : "AMBOS";
+  const tcoPlaca = searchParams.kPlaca?.trim() || undefined;
+
+  const supabase = createClient();
+  const [{ data: centrosKpi }, { data: vehiclesKpi }] = await Promise.all([
+    supabase.from("operational_centers").select("id, nombre").eq("activo", true).order("nombre"),
+    supabase.from("vehicles").select("placa").order("placa"),
+  ]);
+  const placasKpi = Array.from(
+    new Set((vehiclesKpi || []).map((v: { placa: string }) => String(v.placa || "").trim()).filter(Boolean))
+  );
+
+  const kpiData = await getKPIData(fechaInicio, fechaFin, {
+    centroId: tcoCentroId,
+    tipo: tcoTipo,
+    placaFragment: tcoPlaca,
+  });
 
   return (
     <div className="space-y-8">
@@ -195,6 +246,11 @@ export default async function KPIsPage({
           resolucionData={kpiData.resolucionData}
           fechaInicio={fechaInicio}
           fechaFin={fechaFin}
+          centrosOperativos={centrosKpi ?? []}
+          placasDisponibles={placasKpi}
+          tcoCentroIdInicial={tcoCentroId}
+          tcoTipoInicial={tcoTipo}
+          tcoPlacaInicial={tcoPlaca ?? ""}
         />
       </Suspense>
     </div>

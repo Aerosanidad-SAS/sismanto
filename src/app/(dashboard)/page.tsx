@@ -14,6 +14,9 @@ import {
   getResolucionNovedades,
 } from "@/app/api/actions/dashboard-metrics";
 import { AlertTriangle, Calendar, DollarSign, Truck } from "lucide-react";
+import { HelpTrigger } from "@/components/ui/help-trigger";
+import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
+import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { EstadoFlotaDetalle, type NovedadAbiertaResumen } from "@/components/dashboard/estado-flota-detalle";
 import { DashboardGlobalFiltros } from "@/components/dashboard/dashboard-global-filters";
 
@@ -217,81 +220,126 @@ export default async function DashboardPage({
   const isReadOnly = profile?.role_codigo === "GERENCIAL";
   const hideFinanceKpis =
     profile?.role_codigo === "REGULACION" || profile?.role_codigo === "MANTENIMIENTO";
+  const puedeToggleEstadoEnTabla = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
+
+  const placasFueraServicio = (data.vehicles as { placa?: string; estado_actual?: string }[])
+    .filter((v) => v.estado_actual === "FUERA_DE_SERVICIO")
+    .map((v) => String(v.placa || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl">Dashboard</h1>
-        <p className="mt-2 text-muted-foreground">Resumen ejecutivo de la flota de ambulancias</p>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+        <div className="min-w-0">
+          <h1 className="text-3xl">Dashboard</h1>
+          <p className="mt-2 text-muted-foreground">Resumen ejecutivo de la flota de ambulancias</p>
+        </div>
+        <DashboardGlobalFiltros
+          className="shrink-0 lg:max-w-[min(100%,36rem)]"
+          centros={centrosOp}
+          globalInicio={globalPeriodoValido ? gInicioOk : null}
+          globalFin={globalPeriodoValido ? gFinOk : null}
+          globalCentroId={globalPeriodoValido ? globalCentroId ?? null : null}
+          fechaDefectoInicio={searchParams.inicio || defaultInicio}
+          fechaDefectoFin={searchParams.fin || defaultFin}
+          modoGlobalActivo={globalPeriodoValido}
+        />
       </div>
 
-      <DashboardGlobalFiltros
-        centros={centrosOp}
-        globalInicio={globalPeriodoValido ? gInicioOk : null}
-        globalFin={globalPeriodoValido ? gFinOk : null}
-        globalCentroId={globalPeriodoValido ? globalCentroId ?? null : null}
-        fechaDefectoInicio={searchParams.inicio || defaultInicio}
-        fechaDefectoFin={searchParams.fin || defaultFin}
-        modoGlobalActivo={globalPeriodoValido}
-      />
-
-      {/* KPIs resumen */}
-      <div
-        className={`grid gap-4 md:grid-cols-2 ${hideFinanceKpis ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}
-      >
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vehículos</CardTitle>
-            <Truck className="h-4 w-4 text-muted-foreground" />
+      {/* KPIs resumen: vehículos ~mitad anchura; resto en cuadrícula compacta */}
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
+        <Card className="min-w-0 xl:w-1/2 xl:max-w-[50%]">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <CardTitle className="text-sm font-medium">Vehículos</CardTitle>
+              <HelpTrigger text="Conteo de unidades en estado operativo frente a fuera de servicio (despacho). Las placas en rojo corresponden al FDS actual en inventario." />
+            </div>
+            <span title="Estado de despacho de la flota" className="inline-flex shrink-0">
+              <Truck className="h-4 w-4 text-muted-foreground" aria-hidden />
+            </span>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-md border bg-green-500/10 border-green-600/25 px-3 py-2">
+              <div className="rounded-md border border-green-600/25 bg-green-500/10 px-3 py-2">
                 <p className="text-[11px] font-medium uppercase text-muted-foreground">Operativos</p>
                 <p className="text-xl font-bold text-green-800 dark:text-green-300">{data.totalOperativos}</p>
               </div>
-              <div className="rounded-md border bg-red-500/10 border-red-600/25 px-3 py-2">
+              <div className="rounded-md border border-red-600/25 bg-red-500/10 px-3 py-2">
                 <p className="text-[11px] font-medium uppercase text-muted-foreground">Fuera de servicio</p>
                 <p className="text-xl font-bold text-red-800 dark:text-red-300">{data.totalFueraServicio}</p>
               </div>
             </div>
+            {placasFueraServicio.length > 0 ? (
+              <div className="mt-3 border-t pt-3">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Placas fuera de servicio
+                </p>
+                <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+                  {placasFueraServicio.map((p) => (
+                    <Badge key={p} variant="destructive" className="font-mono text-[10px]">
+                      {p}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
-        {!hideFinanceKpis && (
+        <div
+          className={`grid min-w-0 flex-1 gap-3 sm:grid-cols-2 ${hideFinanceKpis ? "xl:grid-cols-2" : "xl:grid-cols-3"}`}
+        >
+          {!hideFinanceKpis && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium">Costo mes actual</CardTitle>
+                  <HelpTrigger text="Suma de valores de mantenimientos registrados desde el día 1 del mes calendario en curso hasta hoy." />
+                </div>
+                <span title="Costo de mantenimiento" className="inline-flex shrink-0">
+                  <DollarSign className="h-4 w-4 text-muted-foreground" aria-hidden />
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(data.costoMesActual)}</div>
+                <p className="text-xs text-muted-foreground">Mantenimientos del mes</p>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Costo Mes Actual</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm font-medium">Novedades abiertas</CardTitle>
+                <HelpTrigger text="Incidencias en estado ABIERTO que aún no se cierran en el sistema." />
+              </div>
+              <span title="Alertas operativas" className="inline-flex shrink-0">
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(data.costoMesActual)}</div>
-              <p className="text-xs text-muted-foreground">En mantenimientos realizados</p>
+              <div className="text-2xl font-bold">{data.novedadesAbiertas}</div>
+              <p className="text-xs text-muted-foreground">Requieren atención</p>
             </CardContent>
           </Card>
-        )}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Novedades Abiertas</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.novedadesAbiertas}</div>
-            <p className="text-xs text-muted-foreground">Requieren atención</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Próximos Vencimientos</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.proximosVencimientos}</div>
-            <p className="text-xs text-muted-foreground">SOAT/Técnico-Mec. en 30 días</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm font-medium">Próximos vencimientos</CardTitle>
+                <HelpTrigger text="Cantidad de vehículos con SOAT, RTM o técnico-mecánica que vencen en los próximos 30 días." />
+              </div>
+              <span title="Documentación y vencimientos" className="inline-flex shrink-0">
+                <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden />
+              </span>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{data.proximosVencimientos}</div>
+              <p className="text-xs text-muted-foreground">SOAT / técnico-mec. en 30 días</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Métricas principales del período */}
@@ -314,6 +362,11 @@ export default async function DashboardPage({
           fechaInicio={fechaDispInicio}
           fechaFin={fechaDispFin}
           centroIdFiltro={centroValidDisp}
+          puedeToggleEstado={
+            profile?.role_codigo === "ADMIN" ||
+            profile?.role_codigo === "REGULACION" ||
+            profile?.role_codigo === "MANTENIMIENTO"
+          }
         />
       </div>
 
@@ -326,7 +379,10 @@ export default async function DashboardPage({
       {/* Estado de Flota */}
       <Card>
         <CardHeader>
-          <CardTitle>Estado de Flota</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle>Estado de flota</CardTitle>
+            <HelpTrigger text="Listado de todas las unidades con estado administrativo, centro, fecha del último mantenimiento y acceso al detalle de novedades abiertas o en proceso." />
+          </div>
         </CardHeader>
         <CardContent>
           {data.vehicles.length === 0 ? (
@@ -349,9 +405,11 @@ export default async function DashboardPage({
                   <TableRow key={vehicle.id}>
                     <TableCell className="font-medium">{vehicle.placa}</TableCell>
                     <TableCell>
-                      <Badge variant={vehicle.estado_actual === "OPERATIVO" ? "success" : "destructive"}>
-                        {vehicle.estado_actual}
-                      </Badge>
+                      <VehicleEstadoBadge
+                        vehicleId={vehicle.id}
+                        estado={vehicle.estado_actual}
+                        puedeEditar={puedeToggleEstadoEnTabla}
+                      />
                     </TableCell>
                     <TableCell>{vehicle.centro_operativo}</TableCell>
                     <TableCell>

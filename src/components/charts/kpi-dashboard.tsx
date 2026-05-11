@@ -1,6 +1,18 @@
 "use client";
 
+import { useEffect, useState, useTransition } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   LineChart,
   Line,
@@ -26,6 +38,8 @@ import type {
   ResolutionTimeKPI,
 } from "@/types";
 
+const SELECT_ALL = "__all__";
+
 interface KPIDashboardProps {
   uptimeData: UptimeKPI[];
   tcoData: TCOKPI[];
@@ -33,6 +47,11 @@ interface KPIDashboardProps {
   resolucionData: ResolutionTimeKPI[];
   fechaInicio: string;
   fechaFin: string;
+  centrosOperativos: { id: number; nombre: string }[];
+  placasDisponibles: string[];
+  tcoCentroIdInicial?: number;
+  tcoTipoInicial: "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
+  tcoPlacaInicial: string;
 }
 
 const COLORS = [
@@ -50,7 +69,41 @@ export function KPIDashboard({
   resolucionData,
   fechaInicio,
   fechaFin,
+  centrosOperativos,
+  placasDisponibles,
+  tcoCentroIdInicial,
+  tcoTipoInicial,
+  tcoPlacaInicial,
 }: KPIDashboardProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [pending, startTransition] = useTransition();
+
+  const [kCen, setKCen] = useState(tcoCentroIdInicial ? String(tcoCentroIdInicial) : "");
+  const [kTipo, setKTipo] = useState(tcoTipoInicial);
+  const [kPlaca, setKPlaca] = useState(tcoPlacaInicial);
+
+  useEffect(() => {
+    setKCen(tcoCentroIdInicial ? String(tcoCentroIdInicial) : "");
+  }, [tcoCentroIdInicial]);
+  useEffect(() => {
+    setKTipo(tcoTipoInicial);
+  }, [tcoTipoInicial]);
+  useEffect(() => {
+    setKPlaca(tcoPlacaInicial);
+  }, [tcoPlacaInicial]);
+
+  const aplicarFiltrosTco = () => {
+    const p = new URLSearchParams(searchParams.toString());
+    if (kCen) p.set("kCentro", kCen);
+    else p.delete("kCentro");
+    if (kTipo !== "AMBOS") p.set("kTipo", kTipo);
+    else p.delete("kTipo");
+    if (kPlaca.trim()) p.set("kPlaca", kPlaca.trim());
+    else p.delete("kPlaca");
+    startTransition(() => router.push(`${pathname}?${p.toString()}`));
+  };
   // Preparar datos para gráficos
   const uptimeChartData = uptimeData.map((item) => ({
     placa: item.placa,
@@ -180,8 +233,63 @@ export function KPIDashboard({
         <CardHeader>
           <CardTitle>TCO por Vehículo/Centro</CardTitle>
           <CardDescription>
-            Costo total de mantenimiento desglosado por tipo
+            Costo total de mantenimiento desglosado por tipo. Los filtros siguientes aplican a esta gráfica y al
+            ratio preventivo/correctivo del mismo subconjunto de órdenes.
           </CardDescription>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Centro de operación</Label>
+              <Select value={kCen || SELECT_ALL} onValueChange={(v) => setKCen(v === SELECT_ALL ? "" : v)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SELECT_ALL}>Todos</SelectItem>
+                  {centrosOperativos.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Tipo de mantenimiento</Label>
+              <Select
+                value={kTipo}
+                onValueChange={(v) => setKTipo(v as "AMBOS" | "PREVENTIVO" | "CORRECTIVO")}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AMBOS">Preventivo y correctivo</SelectItem>
+                  <SelectItem value="PREVENTIVO">Solo preventivo</SelectItem>
+                  <SelectItem value="CORRECTIVO">Solo correctivo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+              <Label className="text-xs">Placa (contiene)</Label>
+              <Input
+                className="h-9"
+                value={kPlaca}
+                onChange={(e) => setKPlaca(e.target.value)}
+                placeholder="Ej. JQS, TRG542"
+                list="kpi-placas-datalist"
+              />
+              <datalist id="kpi-placas-datalist">
+                {placasDisponibles.slice(0, 80).map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <Button type="button" size="sm" className="h-9 w-full sm:w-auto" disabled={pending} onClick={aplicarFiltrosTco}>
+                {pending ? "…" : "Aplicar filtros"}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>

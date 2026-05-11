@@ -26,17 +26,83 @@ import { cn } from "@/lib/utils";
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
 import { Button } from "@/components/ui/button";
 
-const ALL_NAV = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard, roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO"] as UserRole[] },
-  { name: "Vehículos", href: "/vehiculos", icon: Truck, roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"] as UserRole[] },
-  { name: "Mantenimientos", href: "/mantenimientos", icon: Wrench, roles: ["ADMIN", "MANTENIMIENTO"] as UserRole[] },
-  { name: "Novedades", href: "/novedades", icon: AlertTriangle, roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"] as UserRole[] },
-  { name: "KPIs", href: "/kpis", icon: BarChart3, roles: ["ADMIN", "GERENCIAL"] as UserRole[] },
-  { name: "Combustible", href: "/combustible", icon: Fuel, roles: ["ADMIN", "GERENCIAL"] as UserRole[] },
-  { name: "Regulación", href: "/regulacion", icon: Radio, roles: ["ADMIN", "REGULACION"] as UserRole[] },
-  { name: "Portal OVEM", href: "/ovem", icon: ClipboardCheck, roles: ["ADMIN", "OVEM"] as UserRole[] },
-  { name: "Configuración", href: "/configuracion", icon: Settings, roles: ["ADMIN"] as UserRole[] },
-  { name: "Usuarios", href: "/admin/usuarios", icon: Users, roles: ["ADMIN"] as UserRole[] },
+const ALL_NAV: {
+  name: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  roles: UserRole[];
+  hint: string;
+}[] = [
+  {
+    name: "Dashboard",
+    href: "/",
+    icon: LayoutDashboard,
+    roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO"],
+    hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
+  },
+  {
+    name: "Vehículos",
+    href: "/vehiculos",
+    icon: Truck,
+    roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"],
+    hint: "Inventario y fichas de ambulancias; kilometraje y datos técnicos.",
+  },
+  {
+    name: "Mantenimientos",
+    href: "/mantenimientos",
+    icon: Wrench,
+    roles: ["ADMIN", "MANTENIMIENTO"],
+    hint: "Registro e importación de órdenes de mantenimiento preventivo y correctivo.",
+  },
+  {
+    name: "Novedades",
+    href: "/novedades",
+    icon: AlertTriangle,
+    roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"],
+    hint: "Incidencias y seguimiento hasta cierre; impacto en operatividad.",
+  },
+  {
+    name: "KPIs",
+    href: "/kpis",
+    icon: BarChart3,
+    roles: ["ADMIN", "GERENCIAL"],
+    hint: "Indicadores agregados: disponibilidad, TCO, ratio P/C y tiempos de resolución.",
+  },
+  {
+    name: "Combustible",
+    href: "/combustible",
+    icon: Fuel,
+    roles: ["ADMIN", "GERENCIAL"],
+    hint: "Consumo, rendimiento km/gal y cargas por vehículo y centro.",
+  },
+  {
+    name: "Regulación",
+    href: "/regulacion",
+    icon: Radio,
+    roles: ["ADMIN", "REGULACION"],
+    hint: "Despacho: disponibles vs fuera de servicio y asignación de conductores OVEM.",
+  },
+  {
+    name: "Portal OVEM",
+    href: "/ovem",
+    icon: ClipboardCheck,
+    roles: ["ADMIN", "OVEM"],
+    hint: "Preoperacional, checklist y kilometraje del conductor asignado.",
+  },
+  {
+    name: "Configuración",
+    href: "/configuracion",
+    icon: Settings,
+    roles: ["ADMIN"],
+    hint: "Parámetros generales y catálogos administrados por administración.",
+  },
+  {
+    name: "Usuarios",
+    href: "/admin/usuarios",
+    icon: Users,
+    roles: ["ADMIN"],
+    hint: "Alta, roles y estado de cuentas del personal.",
+  },
 ];
 
 const ROLE_BADGE_STYLES: Record<UserRole, string> = {
@@ -279,7 +345,7 @@ export default function DashboardLayout({
             )}
           >
             <div className="h-11 w-11 shrink-0 rounded-full bg-primary text-white text-sm font-semibold flex items-center justify-center lg:h-10 lg:w-10">
-              {(profile.nombre_completo || profile.email).trim().charAt(0).toUpperCase()}
+              {(profile.nombre_completo || profile.email || "?").trim().charAt(0).toUpperCase()}
             </div>
             {!showCollapsedChrome && (
               <div className="min-w-0 flex-1">
@@ -311,7 +377,7 @@ export default function DashboardLayout({
               <Link
                 key={item.name}
                 href={item.href}
-                title={showCollapsedChrome ? item.name : undefined}
+                title={showCollapsedChrome ? `${item.name}: ${item.hint}` : item.hint}
                 className={cn(
                   "flex items-center rounded-lg transition-colors touch-manipulation min-h-[44px] lg:min-h-10",
                   showCollapsedChrome

@@ -12,7 +12,7 @@ async function getFormData() {
       supabase.from("vehicles").select("id, placa").order("placa"),
       supabase
         .from("maintenance_categories")
-        .select("id, nombre, grupo_padre")
+        .select("id, nombre, grupo_padre, activo")
         .eq("activo", true)
         .order("grupo_padre")
         .order("nombre"),
