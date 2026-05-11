@@ -4,6 +4,8 @@ Sistema completo de control de mantenimientos para flota de ambulancias desarrol
 
 **Documentación del proyecto:** este archivo (`README.md`) es la documentación principal. Aquí encontrarás la guía de ejecución, variables de entorno, módulos, tablas, estructura, arquitectura y stack tecnológico.
 
+**Contexto vivo para continuar trabajo (IA / handoff):** [docs/CONTEXTO_PARA_IA.md](docs/CONTEXTO_PARA_IA.md) — resumen de stack, rutas, decisiones recientes, SQL y flujo deploy. En un chat nuevo en Cursor podés usar `@docs/CONTEXTO_PARA_IA.md` para cargar ese contexto.
+
 **Requisitos y roadmap vivo:** [PRD.md](PRD.md) (Product Requirement Document: capacidades del sistema, estado y registro de avance).
 
 ---
