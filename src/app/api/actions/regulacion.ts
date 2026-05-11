@@ -7,7 +7,7 @@ import { toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/valida
 import { z } from "zod";
 
 export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERATIVO" | "FUERA_DE_SERVICIO") {
-  await requireRole(["ADMIN", "REGULACION"]);
+  await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
 
   const parsed = toggleVehicleStatusSchema.safeParse({ vehicleId, nuevoEstado });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
@@ -24,6 +24,8 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
   if (error) return { error: error.message };
   revalidatePath("/regulacion");
   revalidatePath("/vehiculos");
+  revalidatePath(`/vehiculos/${parsed.data.vehicleId}`);
+  revalidatePath("/configuracion");
   revalidatePath("/");
   return { success: true };
 }

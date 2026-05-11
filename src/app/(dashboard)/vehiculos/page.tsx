@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { VehiculosTablaExpandible } from "@/components/vehiculos/vehiculos-tabla-expandible";
+import { getProfile } from "@/app/api/actions/auth";
+import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 
 async function getVehicles() {
   try {
@@ -17,7 +19,8 @@ async function getVehicles() {
 }
 
 export default async function VehiculosPage() {
-  const vehicles = await getVehicles();
+  const [vehicles, profile] = await Promise.all([getVehicles(), getProfile()]);
+  const puedeEditarEstado = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
 
   return (
     <div className="space-y-8">
@@ -37,8 +40,11 @@ export default async function VehiculosPage() {
           <p className="text-sm text-muted-foreground mb-3">
             Pulse la fila para desplegar opciones. En el detalle puede actualizar el kilometraje (obligatorio fecha y
             lectura).
+            {puedeEditarEstado
+              ? " Si su rol lo permite, pulse el estado (OPERATIVO / FUERA_DE_SERVICIO) para alternarlo."
+              : ""}
           </p>
-          <VehiculosTablaExpandible vehicles={vehicles} />
+          <VehiculosTablaExpandible vehicles={vehicles} puedeEditarEstado={puedeEditarEstado} />
         </CardContent>
       </Card>
     </div>

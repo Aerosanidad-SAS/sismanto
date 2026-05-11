@@ -10,6 +10,8 @@ import { VehicleServiceRevenuePanel } from "@/components/vehiculos/vehicle-servi
 import { VehicleKilometrajeForm } from "@/components/vehiculos/vehicle-kilometraje-form";
 import { ElectricVehicleInsight } from "@/components/vehiculos/electric-vehicle-insight";
 import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
+import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
+import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 
 async function getVehicle(id: string) {
   try {
@@ -112,6 +114,8 @@ export default async function VehicleDetailPage({
 
   const esElectricoFlota = ELECTRIC_VEHICLE_PLACAS.has(String(vehicle.placa || "").toUpperCase());
 
+  const puedeToggleEstadoVehiculo = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
+
   let revenueRows: any[] = [];
   let serviceTypeOptions: any[] = [];
   if (showRevenue) {
@@ -160,17 +164,16 @@ export default async function VehicleDetailPage({
               <span className="font-medium">Centro Operativo:</span>{" "}
               {vehicle.centro_operativo}
             </div>
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">Estado:</span>{" "}
-              <Badge
-                variant={
-                  vehicle.estado_actual === "OPERATIVO"
-                    ? "success"
-                    : "destructive"
-                }
-              >
-                {vehicle.estado_actual}
-              </Badge>
+              <VehicleEstadoBadge
+                vehicleId={vehicle.id}
+                estado={vehicle.estado_actual}
+                puedeEditar={puedeToggleEstadoVehiculo}
+              />
+              {puedeToggleEstadoVehiculo ? (
+                <span className="text-[11px] text-muted-foreground">Clic en la etiqueta para alternar operativo / FDS.</span>
+              ) : null}
             </div>
           </CardContent>
         </Card>

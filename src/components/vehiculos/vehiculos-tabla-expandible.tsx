@@ -10,15 +10,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDateShort } from "@/lib/utils";
 import { VehicleKilometrajeForm } from "@/components/vehiculos/vehicle-kilometraje-form";
 import type { Vehicle } from "@/types";
+import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function VehiculosTablaExpandible({ vehicles }: { vehicles: Vehicle[] }) {
+export function VehiculosTablaExpandible({
+  vehicles,
+  puedeEditarEstado = false,
+}: {
+  vehicles: Vehicle[];
+  /** ADMIN, REGULACION o MANTENIMIENTO: el badge de estado es clicable. */
+  puedeEditarEstado?: boolean;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
@@ -54,10 +61,12 @@ export function VehiculosTablaExpandible({ vehicles }: { vehicles: Vehicle[] }) 
                 <TableCell>{vehicle.modelo || "N/A"}</TableCell>
                 <TableCell>{vehicle.linea || "N/A"}</TableCell>
                 <TableCell>{vehicle.centro_operativo}</TableCell>
-                <TableCell>
-                  <Badge variant={vehicle.estado_actual === "OPERATIVO" ? "success" : "destructive"}>
-                    {vehicle.estado_actual}
-                  </Badge>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <VehicleEstadoBadge
+                    vehicleId={vehicle.id}
+                    estado={vehicle.estado_actual}
+                    puedeEditar={puedeEditarEstado}
+                  />
                 </TableCell>
                 <TableCell>
                   {vehicle.vencimiento_soat ? formatDateShort(vehicle.vencimiento_soat) : "N/A"}

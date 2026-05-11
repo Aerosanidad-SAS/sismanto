@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { VehicleForm } from "@/components/forms/vehicle-form";
 import { eliminarVehiculo } from "@/app/api/actions/vehiculos";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
 import {
   Card,
   CardContent,
@@ -118,11 +118,12 @@ export function VehiculosTab({ vehicles, centros }: VehiculosTabProps) {
                       {v.operational_centers?.nombre || v.centro_operativo || "—"}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={v.estado_actual === "OPERATIVO" ? "success" : "destructive"}
-                      >
-                        {v.estado_actual === "OPERATIVO" ? "Operativo" : "Fuera de Serv."}
-                      </Badge>
+                      <VehicleEstadoBadge
+                        vehicleId={v.id}
+                        estado={v.estado_actual}
+                        puedeEditar
+                        etiqueta={v.estado_actual === "OPERATIVO" ? "Operativo" : "Fuera de Serv."}
+                      />
                     </TableCell>
                     <TableCell className="text-sm">
                       {v.vencimiento_soat ? formatDateShort(v.vencimiento_soat) : "—"}
