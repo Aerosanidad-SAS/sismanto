@@ -2,12 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  submitDailyCheck,
-  updateKilometrajeOdometer,
-  getDailyCheckForToday,
-  getDailyCheckItemsForToday,
-} from "@/app/api/actions/ovem";
+import { submitDailyCheck, getDailyCheckForToday, getDailyCheckItemsForToday } from "@/app/api/actions/ovem";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { IncidentForm } from "@/components/dashboard/incident-form";
-import { CheckCircle2, Gauge, AlertCircle, ClipboardCheck, ArrowLeft, ArrowRight } from "lucide-react";
+import { CheckCircle2, AlertCircle, ClipboardCheck, ArrowLeft, ArrowRight } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +35,7 @@ interface OvemPortalProps {
     marca?: string | null;
     modelo?: string | null;
     estado_actual?: string;
+    centro_operativo?: string;
   }>;
   checklistItems: Array<{
     id: number;
@@ -50,11 +46,19 @@ interface OvemPortalProps {
     activo: boolean;
   }>;
   isAdmin: boolean;
+  viewerRole?: "OVEM" | "ADMIN";
 }
 
 type Flow = null | "preoperacional" | "novedad";
 
-export function OvemPortal({ userId, userName, vehicles, checklistItems, isAdmin }: OvemPortalProps) {
+export function OvemPortal({
+  userId,
+  userName,
+  vehicles,
+  checklistItems,
+  isAdmin,
+  viewerRole = "ADMIN",
+}: OvemPortalProps) {
   const router = useRouter();
   const [flow, setFlow] = useState<Flow>(null);
   const [vehicleId, setVehicleId] = useState("");
@@ -117,27 +121,55 @@ export function OvemPortal({ userId, userName, vehicles, checklistItems, isAdmin
     setCheckItemsState({});
   }, [flow]);
 
+  const checklistFiltrado = useMemo(() => {
+    return checklistItems.filter((it) => {
+      if (viewerRole === "OVEM" && it.descripcion === "Sticker Visible") return false;
+      if (it.descripcion === "Radio Base") {
+        const co = selectedVehicle?.centro_operativo;
+        if (!co || String(co).toUpperCase() !== "AIRPLAN") return false;
+      }
+      return true;
+    });
+  }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo]);
+
   const checklistItemsByCategoria = useMemo(() => {
     const m = new Map<string, OvemPortalProps["checklistItems"]>();
-    for (const it of checklistItems) {
+    for (const it of checklistFiltrado) {
       const arr = m.get(it.categoria) || [];
       arr.push(it);
       m.set(it.categoria, arr);
     }
     return Array.from(m.entries());
-  }, [checklistItems]);
+  }, [checklistFiltrado]);
 
   const handleSubmitChecklist = async () => {
     if (!vehicleId || flow !== "preoperacional") return;
     setLoading(true);
     setError(null);
     setSuccess(null);
-    const kmNum = parseInt(km);
-    if (isNaN(kmNum) || kmNum < 0) {
-      setError("Ingrese un kilometraje válido");
+    const kmNum = parseInt(km, 10);
+    if (isNaN(kmNum) || kmNum <= 0) {
+      setError("El kilometraje actual es obligatorio y debe ser mayor a cero.");
       setLoading(false);
       return;
     }
+    const idsVisibles = new Set(checklistFiltrado.map((it) => it.id));
+    const desdeEstado = Object.entries(checkItemsState)
+      .filter(([id]) => idsVisibles.has(parseInt(id, 10)))
+      .map(([id, v]) => ({
+        checklistItemId: parseInt(id, 10),
+        estado: v.estado,
+        cantidadOk: v.cantidadOk,
+        observacion: v.observacion,
+      }));
+    const noAplicaOcultos = checklistItems
+      .filter((it) => !idsVisibles.has(it.id))
+      .map((it) => ({
+        checklistItemId: it.id,
+        estado: "NO_APLICA" as const,
+        observacion: undefined as string | undefined,
+      }));
+
     const result = await submitDailyCheck({
       userId,
       vehicleId,
@@ -145,37 +177,12 @@ export function OvemPortal({ userId, userName, vehicles, checklistItems, isAdmin
       kilometrajeInicial: kmNum,
       kilometrajeFinal: kmNum,
       observaciones: observaciones || undefined,
-      items: Object.entries(checkItemsState).map(([id, v]) => ({
-        checklistItemId: parseInt(id, 10),
-        estado: v.estado,
-        cantidadOk: v.cantidadOk,
-        observacion: v.observacion,
-      })),
+      items: [...desdeEstado, ...noAplicaOcultos],
     });
     if (result?.error) setError(result.error);
     else {
       setSuccess("Checklist completado correctamente");
       setDailyCheckDone(true);
-      router.refresh();
-    }
-    setLoading(false);
-  };
-
-  const handleUpdateKm = async () => {
-    if (!vehicleId) return;
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-    const kmNum = parseInt(km);
-    if (isNaN(kmNum) || kmNum < 0) {
-      setError("Ingrese un kilometraje válido");
-      setLoading(false);
-      return;
-    }
-    const result = await updateKilometrajeOdometer(userId, vehicleId, hoy, kmNum);
-    if (result?.error) setError(result.error);
-    else {
-      setSuccess("Kilometraje actualizado");
       router.refresh();
     }
     setLoading(false);
@@ -312,7 +319,7 @@ export function OvemPortal({ userId, userName, vehicles, checklistItems, isAdmin
                 reportar una novedad (ej: &quot;farola delantera sin luz media&quot;).
               </p>
 
-              {checklistItems.length === 0 && (
+              {checklistFiltrado.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   No hay ítems activos del preoperacional. Aplique la migración 005 o verifique la tabla{" "}
                   <code className="text-xs bg-muted px-1 rounded">checklist_items</code>.
@@ -452,9 +459,11 @@ export function OvemPortal({ userId, userName, vehicles, checklistItems, isAdmin
 
               <div>
                 <Label htmlFor="km-inicial">Kilometraje actual</Label>
+                <span className="text-destructive"> *</span>
                 <Input
                   id="km-inicial"
                   type="number"
+                  required
                   value={km}
                   onChange={(e) => setKm(e.target.value)}
                   placeholder="Ej: 125000"
@@ -477,36 +486,6 @@ export function OvemPortal({ userId, userName, vehicles, checklistItems, isAdmin
               <Button onClick={handleSubmitChecklist} disabled={loading}>
                 {loading ? "Guardando..." : dailyCheckDone ? "Actualizar checklist" : "Enviar checklist"}
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Gauge className="h-5 w-5" />
-                Actualizar kilometraje
-              </CardTitle>
-              <CardDescription>
-                Registre el kilometraje actual. No puede ser menor al último registrado en el sistema.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2 items-end flex-wrap">
-                <div>
-                  <Label htmlFor="km-odometer">Kilometraje</Label>
-                  <Input
-                    id="km-odometer"
-                    type="number"
-                    value={km}
-                    onChange={(e) => setKm(e.target.value)}
-                    placeholder="Ej: 125000"
-                    className="mt-1 w-40"
-                  />
-                </div>
-                <Button onClick={handleUpdateKm} disabled={loading} variant="outline">
-                  Actualizar
-                </Button>
-              </div>
             </CardContent>
           </Card>
 

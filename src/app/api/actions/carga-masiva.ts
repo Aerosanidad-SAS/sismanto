@@ -228,7 +228,7 @@ export async function importarCombustible(filas: FilaCombustible[]): Promise<Res
     resultado.errores.push(...erroresLote);
   }
 
-  revalidatePath("/consumo");
+  revalidatePath("/combustible");
   return resultado;
 }
 

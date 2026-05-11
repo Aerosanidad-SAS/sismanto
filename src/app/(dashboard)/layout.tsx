@@ -32,7 +32,7 @@ const ALL_NAV = [
   { name: "Mantenimientos", href: "/mantenimientos", icon: Wrench, roles: ["ADMIN", "MANTENIMIENTO"] as UserRole[] },
   { name: "Novedades", href: "/novedades", icon: AlertTriangle, roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"] as UserRole[] },
   { name: "KPIs", href: "/kpis", icon: BarChart3, roles: ["ADMIN", "GERENCIAL"] as UserRole[] },
-  { name: "Consumo", href: "/consumo", icon: Fuel, roles: ["ADMIN", "GERENCIAL"] as UserRole[] },
+  { name: "Combustible", href: "/combustible", icon: Fuel, roles: ["ADMIN", "GERENCIAL"] as UserRole[] },
   { name: "Regulación", href: "/regulacion", icon: Radio, roles: ["ADMIN", "REGULACION"] as UserRole[] },
   { name: "Portal OVEM", href: "/ovem", icon: ClipboardCheck, roles: ["ADMIN", "OVEM"] as UserRole[] },
   { name: "Configuración", href: "/configuracion", icon: Settings, roles: ["ADMIN"] as UserRole[] },
@@ -86,12 +86,18 @@ export default function DashboardLayout({
       setProfile(p);
       setLoading(false);
       if (p) {
-        if (p.role_codigo === "OVEM" && (pathname === "/" || pathname === "/kpis" || pathname === "/consumo")) {
+        if (
+          p.role_codigo === "OVEM" &&
+          (pathname === "/" ||
+            pathname === "/kpis" ||
+            pathname === "/consumo" ||
+            pathname === "/combustible")
+        ) {
           router.replace("/ovem");
         }
         if (
           p.role_codigo === "MANTENIMIENTO" &&
-          ["/kpis", "/consumo", "/configuracion", "/regulacion", "/admin", "/ovem"].some(
+          ["/kpis", "/consumo", "/combustible", "/configuracion", "/regulacion", "/admin", "/ovem"].some(
             (b) => pathname === b || pathname.startsWith(`${b}/`)
           )
         ) {
@@ -99,7 +105,7 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "GERENCIAL" &&
-          !["/", "/kpis", "/consumo"].includes(pathname) &&
+          !["/", "/kpis", "/consumo", "/combustible"].includes(pathname) &&
           !pathname.startsWith("/admin")
         ) {
           router.replace("/");

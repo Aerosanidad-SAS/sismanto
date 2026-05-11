@@ -7,6 +7,54 @@ import { vehicleSchema } from "@/lib/validations";
 import { z } from "zod";
 import { requireRole } from "@/app/api/actions/auth";
 
+const fechaKmRegex = z
+  .string()
+  .min(1)
+  .refine((s) => !Number.isNaN(Date.parse(s)), "Fecha inválida");
+
+const registrarKmVehSchema = z.object({
+  vehicleId: z.string().uuid("ID de vehículo inválido"),
+  fecha: fechaKmRegex,
+  lecturaKilometraje: z.number().int().positive("El kilometraje debe ser mayor a cero"),
+});
+
+export async function registrarKilometrajeVehiculo(input: z.infer<typeof registrarKmVehSchema>) {
+  await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
+  const parsed = registrarKmVehSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const { vehicleId: vid, fecha: fechaVal, lecturaKilometraje: kmVal } = parsed.data;
+  const supabase = createClient();
+
+  const { data: ultimo } = await supabase
+    .from("mileage_logs")
+    .select("lectura_kilometraje")
+    .eq("vehicle_id", vid)
+    .order("fecha", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const ultimoKm = ultimo?.lectura_kilometraje ?? 0;
+  if (kmVal < ultimoKm) {
+    return { error: `El kilometraje no puede ser menor al último registrado (${ultimoKm})` };
+  }
+
+  const { error } = await supabase.from("mileage_logs").upsert(
+    {
+      vehicle_id: vid,
+      fecha: fechaVal,
+      lectura_kilometraje: kmVal,
+    },
+    { onConflict: "vehicle_id,fecha" }
+  );
+
+  if (error) return { error: error.message };
+  revalidatePath("/vehiculos");
+  revalidatePath(`/vehiculos/${vid}`);
+  revalidatePath("/");
+  return { success: true };
+}
+
 export async function getVehiculos() {
   const supabase = createClient();
   const { data } = await supabase

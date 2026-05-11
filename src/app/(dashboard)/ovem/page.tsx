@@ -18,7 +18,7 @@ export default async function OvemPage() {
 
   const { data: vehicles = [] } = await supabase
     .from("vehicles")
-    .select("id, placa, marca, modelo, estado_actual")
+    .select("id, placa, marca, modelo, estado_actual, centro_operativo")
     .order("placa");
 
   const checklistItems = await getChecklistItemsActivos();
@@ -35,9 +35,10 @@ export default async function OvemPage() {
       <OvemPortal
         userId={user.id}
         userName={profile.nombre_completo || profile.email || "Usuario"}
-        vehicles={vehicles}
+        vehicles={vehicles ?? []}
         checklistItems={checklistItems}
         isAdmin={isAdminLike(profile.role_codigo)}
+        viewerRole={profile.role_codigo === "OVEM" ? "OVEM" : "ADMIN"}
       />
     </div>
   );

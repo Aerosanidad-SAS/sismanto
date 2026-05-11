@@ -8,8 +8,14 @@ import { getProfile } from "@/app/api/actions/auth";
 import { CostoPorVehiculoCard } from "@/components/dashboard/costo-por-vehiculo-card";
 import { DisponibilidadCard } from "@/components/dashboard/disponibilidad-card";
 import { ResolucionNovedadesCard } from "@/components/dashboard/resolucion-novedades-card";
-import { getCostosPorVehiculo, getDisponibilidadPorVehiculo, getResolucionNovedades } from "@/app/api/actions/dashboard-metrics";
+import {
+  getCostosPorVehiculo,
+  getDisponibilidadPorVehiculo,
+  getResolucionNovedades,
+} from "@/app/api/actions/dashboard-metrics";
 import { AlertTriangle, Calendar, DollarSign, Truck } from "lucide-react";
+import { EstadoFlotaDetalle, type NovedadAbiertaResumen } from "@/components/dashboard/estado-flota-detalle";
+import { DashboardGlobalFiltros } from "@/components/dashboard/dashboard-global-filters";
 
 const DEFAULT_DATA = {
   totalOperativos: 0,
@@ -18,7 +24,8 @@ const DEFAULT_DATA = {
   novedadesAbiertas: 0,
   proximosVencimientos: 0,
   vehicles: [] as any[],
-  mantenimientosPorVehiculo: [] as any[],
+  ultimoMantenimientoPorVehicleId: {} as Record<string, string>,
+  novedadesAbiertasPorVehicleId: {} as Record<string, NovedadAbiertaResumen[]>,
 };
 
 async function getDashboardData() {
@@ -62,15 +69,33 @@ async function getDashboardData() {
 
     const { data: ultimosMantenimientos = [] } = await supabase
       .from("maintenance_records")
-      .select("id_manto, fecha, vehicle_id, vehicles!inner(placa, estado_actual, centro_operativo)")
+      .select("fecha, vehicle_id")
       .order("fecha", { ascending: false });
 
-    const map = new Map();
+    const ultimoMantenimientoPorVehicleId: Record<string, string> = {};
     (ultimosMantenimientos ?? []).forEach((m: any) => {
-      if (!map.has(m.vehicle_id)) {
-        map.set(m.vehicle_id, { vehicle: m.vehicles, ultimoMantenimiento: m.fecha });
+      if (!ultimoMantenimientoPorVehicleId[m.vehicle_id]) {
+        ultimoMantenimientoPorVehicleId[m.vehicle_id] = m.fecha;
       }
     });
+
+    const { data: incAbiertos = [] } = await supabase
+      .from("incidents")
+      .select("id, vehicle_id, descripcion, fecha_reporte, estado")
+      .in("estado", ["ABIERTO", "EN_PROCESO"])
+      .order("fecha_reporte", { ascending: false });
+
+    const novedadesAbiertasPorVehicleId: Record<string, NovedadAbiertaResumen[]> = {};
+    for (const inc of incAbiertos as any[]) {
+      const vid = inc.vehicle_id;
+      if (!novedadesAbiertasPorVehicleId[vid]) novedadesAbiertasPorVehicleId[vid] = [];
+      novedadesAbiertasPorVehicleId[vid].push({
+        id: inc.id,
+        descripcion: inc.descripcion,
+        fecha_reporte: inc.fecha_reporte,
+        estado: inc.estado,
+      });
+    }
 
     return {
       totalOperativos,
@@ -79,7 +104,8 @@ async function getDashboardData() {
       novedadesAbiertas: novedadesAbiertas ?? 0,
       proximosVencimientos,
       vehicles: vehicles ?? [],
-      mantenimientosPorVehiculo: Array.from(map.values()),
+      ultimoMantenimientoPorVehicleId,
+      novedadesAbiertasPorVehicleId,
     };
   } catch {
     return DEFAULT_DATA;
@@ -89,16 +115,92 @@ async function getDashboardData() {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { inicio?: string; fin?: string; tipoCosto?: string };
+  searchParams: {
+    inicio?: string;
+    fin?: string;
+    tipoCosto?: string;
+    costoCentro?: string;
+    costoPlacas?: string;
+    costoBusqueda?: string;
+    dispInicio?: string;
+    dispFin?: string;
+    dispCentro?: string;
+    gInicio?: string;
+    gFin?: string;
+    gCentro?: string;
+  };
 }) {
   const hoy = new Date();
   const inicioMes = new Date();
   inicioMes.setDate(1);
   inicioMes.setHours(0, 0, 0, 0);
 
-  const fechaInicio = searchParams.inicio || inicioMes.toISOString().split("T")[0];
-  const fechaFin = searchParams.fin || hoy.toISOString().split("T")[0];
+  const defaultInicio = inicioMes.toISOString().split("T")[0];
+  const defaultFin = hoy.toISOString().split("T")[0];
+
+  const parseDashDate = (s?: string): string | null => {
+    const t = s?.trim();
+    if (!t || Number.isNaN(Date.parse(t))) return null;
+    return t;
+  };
+
+  const gInicioOk = parseDashDate(searchParams.gInicio);
+  const gFinOk = parseDashDate(searchParams.gFin);
+  const globalPeriodoValido = Boolean(
+    gInicioOk &&
+      gFinOk &&
+      new Date(gInicioOk).getTime() <= new Date(gFinOk).getTime()
+  );
+
+  let globalCentroId: number | undefined;
+  if (globalPeriodoValido && searchParams.gCentro?.trim()) {
+    const n = parseInt(searchParams.gCentro, 10);
+    if (!Number.isNaN(n) && n > 0) globalCentroId = n;
+  }
+
+  const fechaInicio = globalPeriodoValido
+    ? gInicioOk!
+    : searchParams.inicio || defaultInicio;
+  const fechaFin = globalPeriodoValido ? gFinOk! : searchParams.fin || defaultFin;
   const tipoCosto = (searchParams.tipoCosto as "AMBOS" | "PREVENTIVO" | "CORRECTIVO") || "AMBOS";
+
+  const costoCentroId = searchParams.costoCentro ? parseInt(searchParams.costoCentro, 10) : undefined;
+  const centroValidoCostoCard =
+    costoCentroId != null && !Number.isNaN(costoCentroId) ? costoCentroId : undefined;
+  const centroValidoCosto = globalPeriodoValido ? globalCentroId : centroValidoCostoCard;
+
+  const dispCentroParsed = searchParams.dispCentro ? parseInt(searchParams.dispCentro, 10) : undefined;
+  const centroValidDispCard =
+    dispCentroParsed != null && !Number.isNaN(dispCentroParsed) ? dispCentroParsed : undefined;
+  const centroValidDisp = globalPeriodoValido ? globalCentroId : centroValidDispCard;
+
+  const fechaDispInicio = globalPeriodoValido
+    ? gInicioOk!
+    : searchParams.dispInicio?.trim() || fechaInicio;
+  const fechaDispFin = globalPeriodoValido
+    ? gFinOk!
+    : searchParams.dispFin?.trim() || fechaFin;
+
+  const supabaseLite = createClient();
+  const { data: centrosRaw } = await supabaseLite
+    .from("operational_centers")
+    .select("id, nombre")
+    .eq("activo", true)
+    .order("nombre");
+
+  const centrosOp = centrosRaw ?? [];
+
+  const opcionesCosto = globalPeriodoValido
+    ? {
+        centroOperativoId: globalCentroId,
+        placasCsv: undefined as string | undefined,
+        textoTrabajo: undefined as string | undefined,
+      }
+    : {
+        centroOperativoId: centroValidoCosto,
+        placasCsv: searchParams.costoPlacas,
+        textoTrabajo: searchParams.costoBusqueda,
+      };
 
   const [profile, data, costos, disponibilidad, resoluciones] = await Promise.all([
     getProfile(),
@@ -108,8 +210,8 @@ export default async function DashboardPage({
         setTimeout(() => reject(new Error("timeout")), 8000)
       ),
     ]).catch(() => DEFAULT_DATA),
-    getCostosPorVehiculo(fechaInicio, fechaFin, tipoCosto),
-    getDisponibilidadPorVehiculo(fechaInicio, fechaFin),
+    getCostosPorVehiculo(fechaInicio, fechaFin, tipoCosto, opcionesCosto),
+    getDisponibilidadPorVehiculo(fechaDispInicio, fechaDispFin, centroValidDisp),
     getResolucionNovedades(fechaInicio, fechaFin),
   ]);
   const isReadOnly = profile?.role_codigo === "GERENCIAL";
@@ -123,18 +225,36 @@ export default async function DashboardPage({
         <p className="mt-2 text-muted-foreground">Resumen ejecutivo de la flota de ambulancias</p>
       </div>
 
+      <DashboardGlobalFiltros
+        centros={centrosOp}
+        globalInicio={globalPeriodoValido ? gInicioOk : null}
+        globalFin={globalPeriodoValido ? gFinOk : null}
+        globalCentroId={globalPeriodoValido ? globalCentroId ?? null : null}
+        fechaDefectoInicio={searchParams.inicio || defaultInicio}
+        fechaDefectoFin={searchParams.fin || defaultFin}
+        modoGlobalActivo={globalPeriodoValido}
+      />
+
       {/* KPIs resumen */}
       <div
         className={`grid gap-4 md:grid-cols-2 ${hideFinanceKpis ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}
       >
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vehículos Operativos</CardTitle>
+            <CardTitle className="text-sm font-medium">Vehículos</CardTitle>
             <Truck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.totalOperativos}</div>
-            <p className="text-xs text-muted-foreground">{data.totalFueraServicio} fuera de servicio</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-md border bg-green-500/10 border-green-600/25 px-3 py-2">
+                <p className="text-[11px] font-medium uppercase text-muted-foreground">Operativos</p>
+                <p className="text-xl font-bold text-green-800 dark:text-green-300">{data.totalOperativos}</p>
+              </div>
+              <div className="rounded-md border bg-red-500/10 border-red-600/25 px-3 py-2">
+                <p className="text-[11px] font-medium uppercase text-muted-foreground">Fuera de servicio</p>
+                <p className="text-xl font-bold text-red-800 dark:text-red-300">{data.totalFueraServicio}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -182,9 +302,19 @@ export default async function DashboardPage({
             tipo={tipoCosto}
             fechaInicio={fechaInicio}
             fechaFin={fechaFin}
+            centros={centrosOp}
+            centroIdFiltro={centroValidoCosto}
+            placasFiltro={globalPeriodoValido ? "" : searchParams.costoPlacas || ""}
+            textoTrabajo={globalPeriodoValido ? "" : searchParams.costoBusqueda || ""}
           />
         )}
-        <DisponibilidadCard datos={disponibilidad} />
+        <DisponibilidadCard
+          datos={disponibilidad}
+          centros={centrosOp}
+          fechaInicio={fechaDispInicio}
+          fechaFin={fechaDispFin}
+          centroIdFiltro={centroValidDisp}
+        />
       </div>
 
       {/* Resolución de novedades */}
@@ -225,16 +355,19 @@ export default async function DashboardPage({
                     </TableCell>
                     <TableCell>{vehicle.centro_operativo}</TableCell>
                     <TableCell>
-                      {data.mantenimientosPorVehiculo.find((m: any) => m.vehicle?.id === vehicle.id)
-                        ?.ultimoMantenimiento
-                        ? formatDateShort(
-                            data.mantenimientosPorVehiculo.find((m: any) => m.vehicle?.id === vehicle.id)
-                              .ultimoMantenimiento
-                          )
+                      {data.ultimoMantenimientoPorVehicleId[vehicle.id]
+                        ? formatDateShort(data.ultimoMantenimientoPorVehicleId[vehicle.id])
                         : "N/A"}
                     </TableCell>
                     <TableCell className="text-right">
-                      <VehicleStatusCard vehicle={vehicle} readOnly={isReadOnly} />
+                      <div className="inline-flex flex-wrap justify-end gap-2">
+                        <EstadoFlotaDetalle
+                          placa={vehicle.placa}
+                          ultimoMantenimientoFecha={data.ultimoMantenimientoPorVehicleId[vehicle.id] ?? null}
+                          novedadesAbiertas={data.novedadesAbiertasPorVehicleId[vehicle.id] ?? []}
+                        />
+                        <VehicleStatusCard vehicle={vehicle} readOnly={isReadOnly} />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -198,6 +198,8 @@ export interface DisponibilidadVehiculo {
   vehicleId: string;
   placa: string;
   marca?: string | null;
+  /** DISP = operativo, FDS = fuera de servicio */
+  estadoOperativo?: "DISP" | "FDS";
   horasTotales: number;
   tfdsHoras: number;
   disponibilidadPct: number;

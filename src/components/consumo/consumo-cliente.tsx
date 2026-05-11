@@ -9,7 +9,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 import {
@@ -21,7 +20,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -39,6 +37,9 @@ import {
 } from "@/components/ui/table";
 import type { ConsumoVehiculo } from "@/types";
 import { Fuel, MapPin, TrendingUp } from "lucide-react";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
 
 /** Radix Select no permite SelectItem value=""; usar centinela para “Todos”. */
 const SELECT_ALL = "__all__";
@@ -99,82 +100,60 @@ export function ConsumoCliente({
   const chartDataConsumo = metricas
     .filter((m) => m.consumoPromedioKmGal !== null)
     .sort((a, b) => (b.consumoPromedioKmGal || 0) - (a.consumoPromedioKmGal || 0))
-    .slice(0, 15)
+    .slice(0, 40)
     .map((m) => ({ placa: m.placa, "km/gal": Number((m.consumoPromedioKmGal || 0).toFixed(2)) }));
 
   return (
     <div className="space-y-6">
-      {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-            <div>
-              <Label>Fecha Inicio</Label>
-              <Input
-                type="date"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Fecha Fin</Label>
-              <Input
-                type="date"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Vehículo</Label>
-              <Select
-                value={vehiculoId || SELECT_ALL}
-                onValueChange={(v) => setVehiculoId(v === SELECT_ALL ? "" : v)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SELECT_ALL}>Todos</SelectItem>
-                  {vehicles.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.placa} {v.marca ? `(${v.marca})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Centro Operaciones</Label>
-              <Select
-                value={centroId || SELECT_ALL}
-                onValueChange={(v) => setCentroId(v === SELECT_ALL ? "" : v)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SELECT_ALL}>Todos</SelectItem>
-                  {centros.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button onClick={aplicarFiltros} disabled={isPending} className="w-full">
-                {isPending ? "Cargando..." : "Aplicar"}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="rounded-lg border bg-card px-3 py-3 sm:px-4">
+        <p className="text-xs font-medium text-muted-foreground mb-2">Filtros (fecha, centro, placa)</p>
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+          <Input
+            type="date"
+            value={fechaInicio}
+            onChange={(e) => setFechaInicio(e.target.value)}
+            className="h-9 w-[9.25rem]"
+            aria-label="Fecha inicio"
+          />
+          <Input
+            type="date"
+            value={fechaFin}
+            onChange={(e) => setFechaFin(e.target.value)}
+            className="h-9 w-[9.25rem]"
+            aria-label="Fecha fin"
+          />
+          <Select value={vehiculoId || SELECT_ALL} onValueChange={(v) => setVehiculoId(v === SELECT_ALL ? "" : v)}>
+            <SelectTrigger className="h-9 w-[min(100%,11rem)] sm:w-[11rem]" aria-label="Vehículo">
+              <SelectValue placeholder="Todas las placas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SELECT_ALL}>Todos</SelectItem>
+              {vehicles.map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  {v.placa}
+                  {v.marca ? ` (${v.marca})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={centroId || SELECT_ALL} onValueChange={(v) => setCentroId(v === SELECT_ALL ? "" : v)}>
+            <SelectTrigger className="h-9 w-[min(100%,13rem)] sm:w-[13rem]" aria-label="Centro">
+              <SelectValue placeholder="Centro" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SELECT_ALL}>Todos los centros</SelectItem>
+              {centros.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={aplicarFiltros} disabled={isPending} size="sm" className="h-9">
+            {isPending ? "…" : "Aplicar"}
+          </Button>
+        </div>
+      </div>
 
       {/* KPIs de resumen */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -212,6 +191,28 @@ export function ConsumoCliente({
         </Card>
       </div>
 
+      {chartDataConsumo.length > 0 && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-base">Rendimiento por galón (km/gal)</CardTitle>
+            <CardDescription>
+              Flota filtrada (hasta 40 vehículos con cargas suficientes). Usa los mismos filtros de arriba.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ResponsiveContainer width="100%" height={Math.min(720, 120 + chartDataConsumo.length * 18)}>
+              <BarChart data={chartDataConsumo} layout="vertical" margin={{ left: 8, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="placa" width={72} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => [`${v} km/gal`, ""]} />
+                <Bar dataKey="km/gal" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabla */}
       <Card>
         <CardHeader>
@@ -229,7 +230,7 @@ export function ConsumoCliente({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Placa</TableHead>
+                  <TableHead className="w-[140px]">Placa</TableHead>
                   <TableHead>Marca</TableHead>
                   <TableHead className="text-right">Km Recorridos</TableHead>
                   <TableHead className="text-right">Consumo Prom. (km/gal)</TableHead>
@@ -240,7 +241,18 @@ export function ConsumoCliente({
               <TableBody>
                 {metricas.map((m) => (
                   <TableRow key={m.vehicleId}>
-                    <TableCell className="font-bold">{m.placa}</TableCell>
+                    <TableCell className="font-bold">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Link href={`/vehiculos/${m.vehicleId}`} className="hover:underline text-primary">
+                          {m.placa}
+                        </Link>
+                        {ELECTRIC_VEHICLE_PLACAS.has(String(m.placa || "").toUpperCase()) ? (
+                          <Badge variant="secondary" className="text-[10px] px-1">
+                            EV · ver comparativo
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{m.marca || "—"}</TableCell>
                     <TableCell className="text-right">
                       {m.kmRecorridos > 0 ? m.kmRecorridos.toLocaleString() : "—"}
@@ -264,45 +276,23 @@ export function ConsumoCliente({
         </CardContent>
       </Card>
 
-      {/* Gráficos */}
       {chartDataKm.length > 0 && (
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Km Recorridos por Vehículo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartDataKm} layout="vertical" margin={{ left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={(v) => v.toLocaleString()} />
-                  <YAxis type="category" dataKey="placa" width={70} />
-                  <Tooltip formatter={(v: any) => [`${v.toLocaleString()} km`, "Km"]} />
-                  <Bar dataKey="km" fill="hsl(var(--chart-1))" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {chartDataConsumo.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Consumo Promedio (km/gal)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartDataConsumo} layout="vertical" margin={{ left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis type="category" dataKey="placa" width={70} />
-                    <Tooltip formatter={(v: any) => [`${v} km/gal`, "Consumo"]} />
-                    <Bar dataKey="km/gal" fill="hsl(var(--chart-2))" radius={[0, 6, 6, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-base">Km recorridos (ranking corto)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={chartDataKm} layout="vertical" margin={{ left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" tickFormatter={(v) => v.toLocaleString()} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="placa" width={70} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => [`${v.toLocaleString()} km`, ""]} />
+                <Bar dataKey="km" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

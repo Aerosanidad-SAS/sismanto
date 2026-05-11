@@ -6,10 +6,51 @@ import type { CostoPorVehiculoKPI, DisponibilidadVehiculo } from "@/types";
 
 type TipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
 
+export type CostosPorVehiculoOpciones = {
+  centroOperativoId?: number;
+  /** Placas separadas por coma; vacío no filtra */
+  placasCsv?: string;
+  /** Coincidencia parcial en trabajo, categoría o ítem de factura */
+  textoTrabajo?: string;
+};
+
+function normalizarPlacas(csv: string | undefined): Set<string> | null {
+  if (!csv || !csv.trim()) return null;
+  const parts = csv
+    .split(/[,;\s]+/)
+    .map((p) => p.trim().toUpperCase())
+    .filter(Boolean);
+  return parts.length ? new Set(parts) : null;
+}
+
+function coincideTextoTrabajo(
+  r: {
+    descripcion_trabajo?: string | null;
+    maintenance_categories?: { nombre?: string | null } | null;
+    id_manto?: number;
+  },
+  itemsByManto: Record<number, string[]>,
+  q: string
+): boolean {
+  const n = q.trim().toLowerCase();
+  if (!n) return true;
+  const hay = (s?: string | null) => (s || "").toLowerCase().includes(n);
+  if (hay(r.descripcion_trabajo)) return true;
+  if (hay(r.maintenance_categories?.nombre)) return true;
+  const mid = r.id_manto;
+  if (mid != null) {
+    for (const d of itemsByManto[mid] || []) {
+      if (hay(d)) return true;
+    }
+  }
+  return false;
+}
+
 export async function getCostosPorVehiculo(
   fechaInicio: string,
   fechaFin: string,
-  tipo: TipoFiltro = "AMBOS"
+  tipo: TipoFiltro = "AMBOS",
+  opciones: CostosPorVehiculoOpciones = {}
 ): Promise<CostoPorVehiculoKPI[]> {
   try {
     const dr = dateRangeSchema.safeParse({ fechaInicio, fechaFin });
@@ -19,12 +60,19 @@ export async function getCostosPorVehiculo(
 
     const { fechaInicio: fi, fechaFin: ff } = dr.data;
     const tipoF = tipoOk.data;
+    const centroId = opciones.centroOperativoId;
+    const placasSet = normalizarPlacas(opciones.placasCsv);
+    const textoQ = opciones.textoTrabajo?.trim() || "";
 
     const supabase = createClient();
 
     let query = supabase
       .from("maintenance_records")
-      .select(`vehicle_id, tipo, valor, vehicles!inner(placa, marca)`)
+      .select(
+        `id_manto, vehicle_id, tipo, valor, descripcion_trabajo,
+         maintenance_categories(nombre),
+         vehicles!inner(placa, marca, centro_operativo_id)`
+      )
       .gte("fecha", fi)
       .lte("fecha", ff);
 
@@ -32,8 +80,32 @@ export async function getCostosPorVehiculo(
       query = query.eq("tipo", tipoF);
     }
 
-    const { data: registros } = await query;
-    if (!registros) return [];
+    const { data: registrosRaw } = await query;
+    if (!registrosRaw) return [];
+
+    let registros = registrosRaw as any[];
+
+    if (centroId != null && Number.isFinite(centroId)) {
+      registros = registros.filter((r) => r.vehicles?.centro_operativo_id === centroId);
+    }
+    if (placasSet && placasSet.size > 0) {
+      registros = registros.filter((r) => placasSet.has(String(r.vehicles?.placa || "").toUpperCase()));
+    }
+
+    let itemsByManto: Record<number, string[]> = {};
+    if (textoQ && registros.length > 0) {
+      const ids = [...new Set(registros.map((r) => r.id_manto as number))];
+      const { data: itemRows } = await supabase
+        .from("maintenance_items")
+        .select("maintenance_record_id, descripcion")
+        .in("maintenance_record_id", ids);
+      for (const row of itemRows || []) {
+        const rid = row.maintenance_record_id as number;
+        if (!itemsByManto[rid]) itemsByManto[rid] = [];
+        itemsByManto[rid].push(String(row.descripcion || ""));
+      }
+      registros = registros.filter((r) => coincideTextoTrabajo(r, itemsByManto, textoQ));
+    }
 
     const map: Record<string, CostoPorVehiculoKPI> = {};
     registros.forEach((r: any) => {
@@ -64,7 +136,8 @@ export async function getCostosPorVehiculo(
 
 export async function getDisponibilidadPorVehiculo(
   fechaInicio: string,
-  fechaFin: string
+  fechaFin: string,
+  centroOperativoId?: number
 ): Promise<DisponibilidadVehiculo[]> {
   try {
     const dr = dateRangeSchema.safeParse({ fechaInicio, fechaFin });
@@ -74,10 +147,14 @@ export async function getDisponibilidadPorVehiculo(
     const supabase = createClient();
     const META_DISPONIBILIDAD = 95;
 
-    const { data: vehicles } = await supabase
+    let vehQuery = supabase
       .from("vehicles")
-      .select("id, placa, marca")
+      .select("id, placa, marca, estado_actual")
       .order("placa");
+    if (centroOperativoId != null && Number.isFinite(centroOperativoId)) {
+      vehQuery = vehQuery.eq("centro_operativo_id", centroOperativoId);
+    }
+    const { data: vehicles } = await vehQuery;
     if (!vehicles) return [];
 
     const horasTotales =
@@ -128,10 +205,13 @@ export async function getDisponibilidadPorVehiculo(
           ? Math.max(0, ((horasTotales - tfdsHoras) / horasTotales) * 100)
           : 100;
 
+      const estadoOp =
+        String(v.estado_actual || "").toUpperCase() === "OPERATIVO" ? ("DISP" as const) : ("FDS" as const);
       return {
         vehicleId: v.id,
         placa: v.placa,
         marca: v.marca,
+        estadoOperativo: estadoOp,
         horasTotales,
         tfdsHoras,
         disponibilidadPct,

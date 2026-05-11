@@ -1,9 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { formatDateShort } from "@/lib/utils";
-import Link from "next/link";
+import { VehiculosTablaExpandible } from "@/components/vehiculos/vehiculos-tabla-expandible";
 
 async function getVehicles() {
   try {
@@ -37,58 +34,11 @@ export default async function VehiculosPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Placa</TableHead>
-                <TableHead>Modelo</TableHead>
-                <TableHead>Línea</TableHead>
-                <TableHead>Centro Operativo</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Vencimiento SOAT</TableHead>
-                <TableHead>Vencimiento RTM</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {vehicles.map((vehicle) => (
-                <TableRow key={vehicle.id}>
-                  <TableCell className="font-medium">{vehicle.placa}</TableCell>
-                  <TableCell>{vehicle.modelo || "N/A"}</TableCell>
-                  <TableCell>{vehicle.linea || "N/A"}</TableCell>
-                  <TableCell>{vehicle.centro_operativo}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        vehicle.estado_actual === "OPERATIVO"
-                          ? "success"
-                          : "destructive"
-                      }
-                    >
-                      {vehicle.estado_actual}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {vehicle.vencimiento_soat
-                      ? formatDateShort(vehicle.vencimiento_soat)
-                      : "N/A"}
-                  </TableCell>
-                  <TableCell>
-                    {vehicle.vencimiento_rtm
-                      ? formatDateShort(vehicle.vencimiento_rtm)
-                      : "N/A"}
-                  </TableCell>
-                  <TableCell>
-                    <Link href={`/vehiculos/${vehicle.id}`}>
-                      <span className="cursor-pointer text-primary hover:underline">
-                        Ver Detalle
-                      </span>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <p className="text-sm text-muted-foreground mb-3">
+            Pulse la fila para desplegar opciones. En el detalle puede actualizar el kilometraje (obligatorio fecha y
+            lectura).
+          </p>
+          <VehiculosTablaExpandible vehicles={vehicles} />
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Card,
@@ -17,17 +17,34 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import type { CostoPorVehiculoKPI } from "@/types";
 import { DollarSign } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { stripDashboardGlobalParams } from "@/lib/dashboard-search-params";
 
 type TipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
+
+const SELECT_ALL = "__all__";
 
 interface CostoPorVehiculoCardProps {
   datos: CostoPorVehiculoKPI[];
   tipo: TipoFiltro;
   fechaInicio: string;
   fechaFin: string;
+  centros: { id: number; nombre: string }[];
+  centroIdFiltro?: number;
+  placasFiltro?: string;
+  textoTrabajo?: string;
 }
 
 export function CostoPorVehiculoCard({
@@ -35,63 +52,146 @@ export function CostoPorVehiculoCard({
   tipo: initialTipo,
   fechaInicio,
   fechaFin,
+  centros,
+  centroIdFiltro,
+  placasFiltro = "",
+  textoTrabajo = "",
 }: CostoPorVehiculoCardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [tipo, setTipo] = useState<TipoFiltro>(initialTipo);
+  const [centro, setCentro] = useState(centroIdFiltro ? String(centroIdFiltro) : "");
+  const [placas, setPlacas] = useState(placasFiltro);
+  const [txt, setTxt] = useState(textoTrabajo);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => setTipo(initialTipo), [initialTipo]);
+  useEffect(() => setCentro(centroIdFiltro ? String(centroIdFiltro) : ""), [centroIdFiltro]);
+  useEffect(() => setPlacas(placasFiltro), [placasFiltro]);
+  useEffect(() => setTxt(textoTrabajo), [textoTrabajo]);
+
+  const pushParams = (
+    nextTipo: TipoFiltro,
+    nextCentro: string,
+    nextPlacas: string,
+    nextTxt: string
+  ) => {
+    const params = new URLSearchParams(window.location.search);
+    stripDashboardGlobalParams(params);
+    params.set("tipoCosto", nextTipo);
+    params.set("inicio", fechaInicio);
+    params.set("fin", fechaFin);
+    if (nextCentro) params.set("costoCentro", nextCentro);
+    else params.delete("costoCentro");
+    if (nextPlacas.trim()) params.set("costoPlacas", nextPlacas.trim());
+    else params.delete("costoPlacas");
+    if (nextTxt.trim()) params.set("costoBusqueda", nextTxt.trim());
+    else params.delete("costoBusqueda");
+    startTransition(() => router.push(`${pathname}?${params.toString()}`));
+  };
 
   const cambiarTipo = (nuevoTipo: TipoFiltro) => {
     setTipo(nuevoTipo);
-    const params = new URLSearchParams(window.location.search);
-    params.set("tipoCosto", nuevoTipo);
-    startTransition(() => router.push(`${pathname}?${params.toString()}`));
+    pushParams(nuevoTipo, centro, placas, txt);
   };
+
+  const aplicarGrupo2 = () => pushParams(tipo, centro, placas, txt);
 
   const totalFlota = datos.reduce((s, d) => s + d.costoTotal, 0);
   const tiposBtn: { id: TipoFiltro; label: string }[] = [
     { id: "AMBOS", label: "Todos" },
-    { id: "PREVENTIVO", label: "Preventivos" },
-    { id: "CORRECTIVO", label: "Correctivos" },
+    { id: "PREVENTIVO", label: "Preventivo" },
+    { id: "CORRECTIVO", label: "Correctivo" },
   ];
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
+      <CardHeader className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-muted-foreground" />
+            <DollarSign className="h-5 w-5 text-muted-foreground shrink-0" />
             <div>
               <CardTitle>Costo por Vehículo</CardTitle>
-              <CardDescription>Sumatoria de mantenimientos en el período</CardDescription>
+              <CardDescription>Sumatoria de mantenimientos en el período (orden: mayor a menor)</CardDescription>
             </div>
           </div>
-          <div className="flex gap-1">
-            {tiposBtn.map((btn) => (
-              <button
-                key={btn.id}
-                onClick={() => cambiarTipo(btn.id)}
-                disabled={isPending}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  tipo === btn.id
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {btn.label}
-              </button>
-            ))}
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase">Grupo 1 · Tipo</p>
+            <div className="flex flex-wrap gap-1">
+              {tiposBtn.map((btn) => (
+                <button
+                  key={btn.id}
+                  type="button"
+                  onClick={() => cambiarTipo(btn.id)}
+                  disabled={isPending}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    tipo === btn.id
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="pt-2">
+
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Grupo 2 · Cruce y búsqueda</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <Label className="text-xs">Centro de operaciones</Label>
+              <Select
+                value={centro || SELECT_ALL}
+                onValueChange={(v) => setCentro(v === SELECT_ALL ? "" : v)}
+              >
+                <SelectTrigger className="h-9 mt-1">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SELECT_ALL}>Todos</SelectItem>
+                  {centros.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label className="text-xs">Placa(s)</Label>
+              <Input
+                className="h-9 mt-1"
+                placeholder="Una o varias: ABC123, XYZ890"
+                value={placas}
+                onChange={(e) => setPlacas(e.target.value)}
+              />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-4">
+              <Label className="text-xs">Buscar en trabajo / categoría / ítems (ej. aceite)</Label>
+              <Input
+                className="h-9 mt-1"
+                placeholder="Filtra facturas cuyo detalle coincida"
+                value={txt}
+                onChange={(e) => setTxt(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button type="button" size="sm" onClick={aplicarGrupo2} disabled={isPending}>
+            {isPending ? "Aplicando…" : "Aplicar filtros"}
+          </Button>
+        </div>
+
+        <div>
           <p className="text-2xl font-bold">{formatCurrency(totalFlota)}</p>
-          <p className="text-xs text-muted-foreground">Total flota — {datos.length} vehículos</p>
+          <p className="text-xs text-muted-foreground">Total resultados — {datos.length} vehículos</p>
         </div>
       </CardHeader>
       <CardContent>
         {datos.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">
-            No hay registros en este período
+            No hay registros con estos filtros en el período
           </p>
         ) : (
           <div className="max-h-72 overflow-y-auto">
@@ -109,15 +209,9 @@ export function CostoPorVehiculoCard({
                 {datos.map((d) => (
                   <TableRow key={d.vehicleId}>
                     <TableCell className="font-medium">{d.placa}</TableCell>
-                    <TableCell className="text-right text-sm">
-                      {formatCurrency(d.costoPreventivo)}
-                    </TableCell>
-                    <TableCell className="text-right text-sm">
-                      {formatCurrency(d.costoCorrectivo)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(d.costoTotal)}
-                    </TableCell>
+                    <TableCell className="text-right text-sm">{formatCurrency(d.costoPreventivo)}</TableCell>
+                    <TableCell className="text-right text-sm">{formatCurrency(d.costoCorrectivo)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(d.costoTotal)}</TableCell>
                     <TableCell className="text-right text-sm text-muted-foreground">
                       {d.cantidadMantenimientos}
                     </TableCell>

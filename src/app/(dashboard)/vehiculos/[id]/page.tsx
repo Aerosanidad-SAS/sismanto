@@ -7,6 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatDateShort, formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { VehicleServiceRevenuePanel } from "@/components/vehiculos/vehicle-service-revenue-panel";
+import { VehicleKilometrajeForm } from "@/components/vehiculos/vehicle-kilometraje-form";
+import { ElectricVehicleInsight } from "@/components/vehiculos/electric-vehicle-insight";
+import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
 
 async function getVehicle(id: string) {
   try {
@@ -102,6 +105,13 @@ export default async function VehicleDetailPage({
   const showRevenue =
     profile?.role_codigo === "ADMIN" || profile?.role_codigo === "GERENCIAL";
 
+  const canRegistrarKm =
+    profile?.role_codigo === "ADMIN" ||
+    profile?.role_codigo === "REGULACION" ||
+    profile?.role_codigo === "MANTENIMIENTO";
+
+  const esElectricoFlota = ELECTRIC_VEHICLE_PLACAS.has(String(vehicle.placa || "").toUpperCase());
+
   let revenueRows: any[] = [];
   let serviceTypeOptions: any[] = [];
   if (showRevenue) {
@@ -130,8 +140,9 @@ export default async function VehicleDetailPage({
       {/* Información General */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Información General</CardTitle>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between space-y-0">
+            <CardTitle className="text-lg">Información General</CardTitle>
+            {canRegistrarKm ? <VehicleKilometrajeForm vehicleId={vehicle.id} placa={vehicle.placa} /> : null}
           </CardHeader>
           <CardContent className="space-y-2">
             <div>
@@ -181,6 +192,12 @@ export default async function VehicleDetailPage({
                 ? formatDateShort(vehicle.vencimiento_rtm)
                 : "N/A"}
             </div>
+            <div>
+              <span className="font-medium">Vencimiento técnico-mecánica:</span>{" "}
+              {vehicle.vencimiento_tecnicomecanica
+                ? formatDateShort(vehicle.vencimiento_tecnicomecanica)
+                : "N/A"}
+            </div>
             {(vehicle.costo_soat_anual != null ||
               vehicle.costo_tecnomecanica_anual != null ||
               vehicle.costo_poliza_anual != null) && (
@@ -214,6 +231,8 @@ export default async function VehicleDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {esElectricoFlota && <ElectricVehicleInsight />}
 
       {showRevenue && (
         <Card>
