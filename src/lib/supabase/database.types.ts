@@ -203,6 +203,47 @@ export type Database = {
           }
         ]
       }
+      vehicle_status_history: {
+        Row: {
+          id: number
+          vehicle_id: string
+          estado_nuevo: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
+          estado_anterior: 'OPERATIVO' | 'FUERA_DE_SERVICIO' | null
+          fecha_cambio: string
+          registrado_por: string | null
+          notas: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          vehicle_id: string
+          estado_nuevo: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
+          estado_anterior?: 'OPERATIVO' | 'FUERA_DE_SERVICIO' | null
+          fecha_cambio?: string
+          registrado_por?: string | null
+          notas?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          vehicle_id?: string
+          estado_nuevo?: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
+          estado_anterior?: 'OPERATIVO' | 'FUERA_DE_SERVICIO' | null
+          fecha_cambio?: string
+          registrado_por?: string | null
+          notas?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_status_history_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       maintenance_categories: {
         Row: {
           id: number

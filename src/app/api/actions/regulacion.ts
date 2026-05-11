@@ -7,21 +7,43 @@ import { toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/valida
 import { z } from "zod";
 
 export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERATIVO" | "FUERA_DE_SERVICIO") {
-  await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
+  const profile = await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
 
   const parsed = toggleVehicleStatusSchema.safeParse({ vehicleId, nuevoEstado });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
+
+  // Leer estado anterior para el historial
+  const { data: vehicleActual } = await supabase
+    .from("vehicles")
+    .select("estado_actual")
+    .eq("id", parsed.data.vehicleId)
+    .single();
+
+  const estadoAnterior = vehicleActual?.estado_actual ?? null;
+  const hoy = new Date().toISOString().split("T")[0];
+
   const { error } = await supabase
     .from("vehicles")
     .update({
       estado_actual: parsed.data.nuevoEstado,
+      // fds_desde: se establece al entrar a FDS y se borra al volver a OPERATIVO
+      fds_desde: parsed.data.nuevoEstado === "FUERA_DE_SERVICIO" ? hoy : null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", parsed.data.vehicleId);
 
   if (error) return { error: error.message };
+
+  // Registrar en historial (fallo silencioso para no bloquear la operación)
+  await supabase.from("vehicle_status_history").insert({
+    vehicle_id: parsed.data.vehicleId,
+    estado_nuevo: parsed.data.nuevoEstado,
+    estado_anterior: estadoAnterior,
+    registrado_por: profile.user_id,
+  });
+
   revalidatePath("/regulacion");
   revalidatePath("/vehiculos");
   revalidatePath(`/vehiculos/${parsed.data.vehicleId}`);
