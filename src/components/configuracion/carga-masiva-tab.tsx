@@ -67,7 +67,7 @@ const COLUMNAS_VEHICULOS = [
   "vencimiento_tecnicomecanica",
 ];
 
-const COLUMNAS_PROVEEDORES = ["nombre", "nit", "contacto"];
+const COLUMNAS_PROVEEDORES = ["nombre", "nit", "telefono", "ciudad", "servicio", "direccion"];
 
 const MODOS: { id: TipoCarga; label: string }[] = [
   { id: "mantenimientos", label: "Mantenimientos" },
@@ -271,8 +271,8 @@ export function CargaMasivaTab() {
             )}
             {tipoCarga === "proveedores" && (
               <p className="text-xs text-gray-500">
-                Si el NIT (solo dígitos) o el nombre ya existe, la fila se omite.{" "}
-                <strong>nit</strong> y <strong>contacto</strong> son opcionales.
+                Requeridos: <strong>nombre, telefono, ciudad, servicio, direccion</strong>. Opcional: <strong>nit</strong>.
+                Si el NIT o el nombre ya existe, la fila se omite.
               </p>
             )}
           </div>

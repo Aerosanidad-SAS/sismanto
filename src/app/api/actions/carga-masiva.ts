@@ -392,9 +392,13 @@ export async function importarProveedores(filas: FilaProveedor[]): Promise<Resul
 
       try {
         const rowParsed = filaProveedorImportSchema.safeParse({
-          nombre: raw.nombre,
-          nit: raw.nit,
-          contacto: raw.contacto,
+          nombre:    raw.nombre,
+          nit:       raw.nit,
+          telefono:  raw.telefono,
+          ciudad:    raw.ciudad,
+          servicio:  raw.servicio,
+          direccion: raw.direccion,
+          contacto:  raw.contacto,
         });
 
         if (!rowParsed.success) {
@@ -439,9 +443,13 @@ export async function importarProveedores(filas: FilaProveedor[]): Promise<Resul
         }
 
         registros.push({
-          nombre: r.nombre,
-          nit: r.nit ?? null,
-          contacto: r.contacto ?? null,
+          nombre:    r.nombre,
+          nit:       r.nit       ?? null,
+          telefono:  r.telefono,
+          ciudad:    r.ciudad,
+          servicio:  r.servicio,
+          direccion: r.direccion,
+          contacto:  r.contacto  ?? null,
           activo: true,
         });
       } catch {

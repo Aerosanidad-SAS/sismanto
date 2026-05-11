@@ -11,13 +11,16 @@ async function getKPIData(
     centroId?: number;
     tipo: TcoTipoFiltro;
     placaFragment?: string;
-  }
+  },
+  dispCentroId?: number
 ) {
   try {
     const supabase = createClient();
 
     // KPI 1: Tasa de Disponibilidad (Uptime)
-    const { data: vehicles } = await supabase.from("vehicles").select("id, placa");
+    const { data: vehicles } = await supabase
+      .from("vehicles")
+      .select("id, placa, centro_operativo, centro_operativo_id");
 
     const horasTotales =
     (new Date(fechaFin).getTime() - new Date(fechaInicio).getTime()) /
@@ -30,8 +33,15 @@ async function getKPIData(
     .gte("fecha_reporte", fechaInicio)
     .lte("fecha_reporte", fechaFin);
 
+    let vehiclesFiltrados = vehicles || [];
+    if (dispCentroId != null) {
+      vehiclesFiltrados = vehiclesFiltrados.filter(
+        (v: any) => Number(v.centro_operativo_id) === dispCentroId
+      );
+    }
+
     const uptimeData =
-    vehicles?.map((v) => {
+    vehiclesFiltrados.map((v: any) => {
       const incidentesVehiculo = incidents?.filter(
         (i) => i.vehicle_id === v.id
       ) || [];
@@ -45,14 +55,15 @@ async function getKPIData(
       const porcentaje = ((horasTotales - horasFuera) / horasTotales) * 100;
 
       return {
-        vehicleId: (v as any).id,
-        placa: (v as any).placa,
+        vehicleId: v.id,
+        placa: v.placa,
+        centroOperativo: String(v.centro_operativo || ""),
         horasTotales,
         horasFueraServicio: horasFuera,
         porcentajeDisponibilidad: Math.max(0, porcentaje),
         cumpleMeta: Math.max(0, porcentaje) >= 95,
       };
-    }) || [];
+    });
 
     // KPI 2: TCO (Total Cost of Ownership)
     const { data: mantenimientosRaw } = await supabase
@@ -195,6 +206,7 @@ export default async function KPIsPage({
     kCentro?: string;
     kTipo?: string;
     kPlaca?: string;
+    kDispCentro?: string;
   };
 }) {
   const hoy = new Date();
@@ -214,6 +226,10 @@ export default async function KPIsPage({
     kTipoRaw === "PREVENTIVO" || kTipoRaw === "CORRECTIVO" ? kTipoRaw : "AMBOS";
   const tcoPlaca = searchParams.kPlaca?.trim() || undefined;
 
+  const kDispCentroParsed = searchParams.kDispCentro ? parseInt(searchParams.kDispCentro, 10) : NaN;
+  const dispCentroId = !Number.isNaN(kDispCentroParsed) && kDispCentroParsed > 0
+    ? kDispCentroParsed : undefined;
+
   const supabase = createClient();
   const [{ data: centrosKpi }, { data: vehiclesKpi }] = await Promise.all([
     supabase.from("operational_centers").select("id, nombre").eq("activo", true).order("nombre"),
@@ -223,11 +239,12 @@ export default async function KPIsPage({
     new Set((vehiclesKpi || []).map((v: { placa: string }) => String(v.placa || "").trim()).filter(Boolean))
   );
 
-  const kpiData = await getKPIData(fechaInicio, fechaFin, {
-    centroId: tcoCentroId,
-    tipo: tcoTipo,
-    placaFragment: tcoPlaca,
-  });
+  const kpiData = await getKPIData(
+    fechaInicio,
+    fechaFin,
+    { centroId: tcoCentroId, tipo: tcoTipo, placaFragment: tcoPlaca },
+    dispCentroId
+  );
 
   return (
     <div className="space-y-8">
@@ -251,6 +268,7 @@ export default async function KPIsPage({
           tcoCentroIdInicial={tcoCentroId}
           tcoTipoInicial={tcoTipo}
           tcoPlacaInicial={tcoPlaca ?? ""}
+          dispCentroIdInicial={dispCentroId}
         />
       </Suspense>
     </div>

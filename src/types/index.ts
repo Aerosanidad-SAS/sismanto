@@ -18,6 +18,10 @@ export interface Supplier {
   nombre: string;
   nit?: string | null;
   contacto?: string | null;
+  telefono?: string | null;
+  ciudad?: string | null;
+  servicio?: string | null;
+  direccion?: string | null;
   activo: boolean;
   created_at: string;
 }
@@ -156,6 +160,7 @@ export interface IncidentFormData {
 export interface UptimeKPI {
   vehicleId: string;
   placa: string;
+  centroOperativo: string;
   horasTotales: number;
   horasFueraServicio: number;
   porcentajeDisponibilidad: number;

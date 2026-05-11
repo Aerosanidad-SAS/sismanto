@@ -33,9 +33,13 @@ export async function crearProveedor(formData: SupplierFormData) {
   const { data, error } = await supabase
     .from("suppliers")
     .insert({
-      nombre: parsed.data.nombre,
-      nit: parsed.data.nit || null,
-      contacto: parsed.data.contacto || null,
+      nombre:    parsed.data.nombre,
+      nit:       parsed.data.nit       || null,
+      telefono:  parsed.data.telefono,
+      ciudad:    parsed.data.ciudad,
+      servicio:  parsed.data.servicio,
+      direccion: parsed.data.direccion,
+      contacto:  parsed.data.contacto  || null,
       activo: true,
     })
     .select()
@@ -56,9 +60,13 @@ export async function actualizarProveedor(id: number, formData: SupplierFormData
   const { error } = await supabase
     .from("suppliers")
     .update({
-      nombre: parsed.data.nombre,
-      nit: parsed.data.nit || null,
-      contacto: parsed.data.contacto || null,
+      nombre:    parsed.data.nombre,
+      nit:       parsed.data.nit       || null,
+      telefono:  parsed.data.telefono,
+      ciudad:    parsed.data.ciudad,
+      servicio:  parsed.data.servicio,
+      direccion: parsed.data.direccion,
+      contacto:  parsed.data.contacto  || null,
     })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };

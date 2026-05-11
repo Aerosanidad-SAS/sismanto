@@ -73,9 +73,13 @@ export type OperationalCenterFormData = z.infer<typeof operationalCenterSchema>;
 
 // Schema para proveedor
 export const supplierSchema = z.object({
-  nombre: z.string().min(3, 'Mínimo 3 caracteres').max(200),
-  nit: z.string().optional(),
-  contacto: z.string().optional(),
+  nombre:    z.string().min(3, 'Mínimo 3 caracteres').max(200),
+  nit:       z.string().optional(),
+  telefono:  z.string().min(7, 'Teléfono requerido (mínimo 7 caracteres)'),
+  ciudad:    z.string().min(2, 'Ciudad requerida'),
+  servicio:  z.string().min(3, 'Servicio requerido (mínimo 3 caracteres)'),
+  direccion: z.string().min(5, 'Dirección requerida (mínimo 5 caracteres)'),
+  contacto:  z.string().optional(),
 });
 
 export type SupplierFormData = z.infer<typeof supplierSchema>;
@@ -324,23 +328,29 @@ export type FilaVehiculoImport = z.output<typeof filaVehiculoImportSchema>;
 /** Fila Excel/CSV proveedores */
 export const filaProveedorImportSchema = z
   .object({
-    nombre: z.unknown(),
-    nit: z.unknown().optional(),
-    contacto: z.unknown().optional(),
+    nombre:    z.unknown(),
+    nit:       z.unknown().optional(),
+    telefono:  z.unknown(),
+    ciudad:    z.unknown(),
+    servicio:  z.unknown(),
+    direccion: z.unknown(),
+    contacto:  z.unknown().optional(),
   })
   .transform((raw) => ({
-    nombre: String(raw.nombre ?? "").trim(),
-    nit: cleanImportString(raw.nit),
-    contacto: cleanImportString(raw.contacto),
+    nombre:    String(raw.nombre    ?? "").trim(),
+    nit:       cleanImportString(raw.nit),
+    telefono:  String(raw.telefono  ?? "").trim(),
+    ciudad:    String(raw.ciudad    ?? "").trim(),
+    servicio:  String(raw.servicio  ?? "").trim(),
+    direccion: String(raw.direccion ?? "").trim(),
+    contacto:  cleanImportString(raw.contacto),
   }))
   .superRefine((row, ctx) => {
-    if (row.nombre.length < 3) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Nombre debe tener al menos 3 caracteres",
-        path: ["nombre"],
-      });
-    }
+    if (row.nombre.length < 3)    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Nombre debe tener al menos 3 caracteres", path: ["nombre"] });
+    if (!row.telefono)            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Teléfono requerido",  path: ["telefono"] });
+    if (!row.ciudad)              ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Ciudad requerida",    path: ["ciudad"] });
+    if (row.servicio.length < 3)  ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Servicio requerido (mínimo 3 caracteres)", path: ["servicio"] });
+    if (row.direccion.length < 5) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Dirección requerida (mínimo 5 caracteres)", path: ["direccion"] });
   });
 
 export type FilaProveedorImport = z.output<typeof filaProveedorImportSchema>;

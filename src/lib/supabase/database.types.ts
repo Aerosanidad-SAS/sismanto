@@ -42,6 +42,10 @@ export type Database = {
           nombre: string
           nit: string | null
           contacto: string | null
+          telefono: string | null
+          ciudad: string | null
+          servicio: string | null
+          direccion: string | null
           activo: boolean
           created_at: string
         }
@@ -50,6 +54,10 @@ export type Database = {
           nombre: string
           nit?: string | null
           contacto?: string | null
+          telefono?: string | null
+          ciudad?: string | null
+          servicio?: string | null
+          direccion?: string | null
           activo?: boolean
           created_at?: string
         }
@@ -58,6 +66,10 @@ export type Database = {
           nombre?: string
           nit?: string | null
           contacto?: string | null
+          telefono?: string | null
+          ciudad?: string | null
+          servicio?: string | null
+          direccion?: string | null
           activo?: boolean
           created_at?: string
         }
