@@ -130,6 +130,8 @@ export type Database = {
           estado_actual: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
           centro_operativo: string
           centro_operativo_id: number | null
+          /** Inicio operativo fuera de servicio (negocio); ver migración 009. */
+          fds_desde: string | null
           created_at: string
           updated_at: string
         }
@@ -158,6 +160,7 @@ export type Database = {
           estado_actual?: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
           centro_operativo: string
           centro_operativo_id?: number | null
+          fds_desde?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -180,9 +183,13 @@ export type Database = {
           vencimiento_rtm?: string | null
           vencimiento_soat?: string | null
           vencimiento_tecnicomecanica?: string | null
+          costo_soat_anual?: number | null
+          costo_tecnomecanica_anual?: number | null
+          costo_poliza_anual?: number | null
           estado_actual?: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
           centro_operativo?: string
           centro_operativo_id?: number | null
+          fds_desde?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -385,6 +392,81 @@ export type Database = {
         Update: { id?: number; codigo?: string; nombre?: string; descripcion?: string | null; created_at?: string }
         Relationships: []
       }
+      service_types: {
+        Row: {
+          id: number
+          codigo: string
+          nombre: string
+          activo: boolean
+          orden: number
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          codigo: string
+          nombre: string
+          activo?: boolean
+          orden?: number
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          codigo?: string
+          nombre?: string
+          activo?: boolean
+          orden?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      vehicle_service_revenue: {
+        Row: {
+          id: number
+          vehicle_id: string
+          service_type_id: number
+          periodo: string
+          monto: number
+          notas: string | null
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: number
+          vehicle_id: string
+          service_type_id: number
+          periodo: string
+          monto: number
+          notas?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: number
+          vehicle_id?: string
+          service_type_id?: number
+          periodo?: string
+          monto?: number
+          notas?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_service_revenue_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_service_revenue_service_type_id_fkey"
+            columns: ["service_type_id"]
+            isOneToOne: false
+            referencedRelation: "service_types"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       user_profiles: {
         Row: { id: number; user_id: string; role_id: number; nombre_completo: string | null; email: string | null; activo: boolean; operational_center_id: number | null; created_at: string; updated_at: string }
         Insert: { id?: number; user_id: string; role_id: number; nombre_completo?: string | null; email?: string | null; activo?: boolean; operational_center_id?: number | null; created_at?: string; updated_at?: string }
@@ -577,20 +659,3 @@ export type Database = {
     }
   }
 }
-
-type DefaultSchema = Database[Extract<keyof Database, "public">]
-
-export type Tables<
-  DefaultSchemaOrName extends keyof DefaultSchema["Tables"] | { schema: keyof Database },
-  TableName extends DefaultSchemaOrName extends { schema: keyof Database }
-    ? keyof Database[DefaultSchemaOrName["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaOrName extends { schema: keyof Database }
-  ? Database[DefaultSchemaOrName["schema"]]["Tables"][TableName] extends {
-      Row: infer R
-    }
-    ? R
-    : never
-  : DefaultSchemaOrName extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaOrName]["Row"]
-    : never

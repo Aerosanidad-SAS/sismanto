@@ -59,6 +59,8 @@ export interface Vehicle {
   estado_actual: VehicleStatus;
   centro_operativo: string;
   centro_operativo_id?: number | null;
+  /** Fecha desde la cual la unidad queda fuera de servicio operativo (migración 009). */
+  fds_desde?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -204,6 +206,12 @@ export interface DisponibilidadVehiculo {
   tfdsHoras: number;
   disponibilidadPct: number;
   cumpleMeta: boolean;
+}
+
+/** Punto mensual para gráfica de rendimiento combustible (km/gal). */
+export interface RendimientoCombustibleMes {
+  mes: string;
+  rendimientoKmGal: number | null;
 }
 
 export interface ConsumoVehiculo {
