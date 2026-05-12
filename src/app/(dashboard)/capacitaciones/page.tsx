@@ -24,11 +24,7 @@ export default async function CapacitacionesPage() {
             Capacitaciones asignadas y evaluaciones pendientes
           </p>
         </div>
-        <CapacitacionesOvem
-          assignments={assignments}
-          ovemName={profile.nombre_completo ?? profile.email ?? "OVEM"}
-          userId={profile.user_id}
-        />
+        <CapacitacionesOvem assignments={assignments} />
       </div>
     );
   }

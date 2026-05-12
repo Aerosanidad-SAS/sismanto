@@ -60,9 +60,16 @@ export function EvaluacionFlow({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const submittedRef = useRef(false);
+  // Ref so doSubmit always reads the latest responses without being a dependency
+  const responsesRef = useRef(responses);
+  const sessionRef = useRef(session);
   const router = useRouter();
 
   const questions: any[] = training.questions ?? [];
+
+  // Keep refs in sync with state
+  useEffect(() => { responsesRef.current = responses; }, [responses]);
+  useEffect(() => { sessionRef.current = session; }, [session]);
 
   const resolveText = useCallback(
     (text: string) => {
@@ -79,20 +86,22 @@ export function EvaluacionFlow({
     [ovemName]
   );
 
+  // Stable callback: reads from refs, never changes identity
   const doSubmit = useCallback(() => {
-    if (submittedRef.current || !session) return;
+    const currentSession = sessionRef.current;
+    if (submittedRef.current || !currentSession) return;
     submittedRef.current = true;
     startTransition(async () => {
-      const saves = Object.entries(responses).map(([qid, r]) =>
+      const saves = Object.entries(responsesRef.current).map(([qid, r]) =>
         guardarRespuesta({
-          session_id: session.id,
+          session_id: currentSession.id,
           question_id: Number(qid),
           opcion_id: r.opcion_id ?? null,
           respuesta_texto: r.respuesta_texto ?? null,
         })
       );
       await Promise.all(saves);
-      const { error: fErr } = await finalizarSesion(session.id);
+      const { error: fErr } = await finalizarSesion(currentSession.id);
       if (fErr) {
         submittedRef.current = false;
         setError(fErr);
@@ -101,7 +110,7 @@ export function EvaluacionFlow({
       setPhase("completed");
       router.refresh();
     });
-  }, [session, responses, router]);
+  }, [router]); // stable: no session/responses deps
 
   useEffect(() => {
     if (phase !== "evaluation" || !session?.fecha_inicio) return;
@@ -117,7 +126,7 @@ export function EvaluacionFlow({
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [phase, session, training.tiempo_limite_minutos, doSubmit]);
+  }, [phase, session?.fecha_inicio, training.tiempo_limite_minutos, doSubmit]);
 
   const handleStartEval = () => {
     setError(null);

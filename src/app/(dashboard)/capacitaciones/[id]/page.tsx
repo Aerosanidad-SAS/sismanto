@@ -97,7 +97,7 @@ export default async function CapacitacionDetailPage({
 
   // ── ADMIN / COORDINACION: id is a training ID ─────────────────────────────
   if (!["ADMIN", "COORDINACION"].includes(profile.role_codigo)) {
-    redirect("/capacitaciones");
+    redirect("/");
   }
 
   const [{ data: training, error }, assignments, ovems] = await Promise.all([

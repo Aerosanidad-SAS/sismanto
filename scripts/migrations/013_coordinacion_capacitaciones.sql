@@ -105,6 +105,22 @@ ALTER TABLE training_assignments       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE training_sessions          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE training_responses         ENABLE ROW LEVEL SECURITY;
 
+-- Drop policies idempotently before recreating
+DROP POLICY IF EXISTS "tr_select"   ON trainings;
+DROP POLICY IF EXISTS "tr_write"    ON trainings;
+DROP POLICY IF EXISTS "tq_select"   ON training_questions;
+DROP POLICY IF EXISTS "tq_write"    ON training_questions;
+DROP POLICY IF EXISTS "tqo_select"  ON training_question_options;
+DROP POLICY IF EXISTS "tqo_write"   ON training_question_options;
+DROP POLICY IF EXISTS "ta_select"   ON training_assignments;
+DROP POLICY IF EXISTS "ta_write"    ON training_assignments;
+DROP POLICY IF EXISTS "ts_select"   ON training_sessions;
+DROP POLICY IF EXISTS "ts_insert"   ON training_sessions;
+DROP POLICY IF EXISTS "ts_update"   ON training_sessions;
+DROP POLICY IF EXISTS "tres_select" ON training_responses;
+DROP POLICY IF EXISTS "tres_insert" ON training_responses;
+DROP POLICY IF EXISTS "tres_update" ON training_responses;
+
 -- trainings: ADMIN/COORDINACION ven todo; resto solo activos
 CREATE POLICY "tr_select" ON trainings FOR SELECT TO authenticated
   USING (activo = TRUE OR get_user_role() IN ('ADMIN','COORDINACION'));
@@ -112,7 +128,7 @@ CREATE POLICY "tr_write" ON trainings FOR ALL TO authenticated
   USING  (get_user_role() = 'ADMIN')
   WITH CHECK (get_user_role() = 'ADMIN');
 
--- questions & options: mismo acceso que trainings
+-- questions & options: acceso de lectura a todos los autenticados; escritura solo ADMIN
 CREATE POLICY "tq_select" ON training_questions FOR SELECT TO authenticated USING (true);
 CREATE POLICY "tq_write"  ON training_questions FOR ALL TO authenticated
   USING  (get_user_role() = 'ADMIN')

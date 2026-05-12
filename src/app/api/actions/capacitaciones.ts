@@ -155,6 +155,9 @@ export async function getSessionDetail(sessionId: number) {
 }
 
 export async function listAllOvems() {
+  const profile = await getProfile();
+  if (!profile || !["ADMIN", "COORDINACION"].includes(profile.role_codigo)) return [];
+
   const supabase = createClient();
   const { data } = await supabase
     .from("user_profiles")
@@ -462,6 +465,16 @@ export async function guardarRespuesta(input: unknown) {
   const profile = await getProfile();
   if (!profile) return { error: "No autenticado" };
 
+  // Verify ownership via RLS: createClient only returns sessions the user owns
+  const supabase = createClient();
+  const { data: sessionCheck } = await supabase
+    .from("training_sessions")
+    .select("id")
+    .eq("id", parsed.data.session_id)
+    .eq("estado", "EN_CURSO")
+    .maybeSingle();
+  if (!sessionCheck) return { error: "Sesión no encontrada o no autorizada" };
+
   const admin = createAdminClient();
 
   let es_correcta: boolean | null = null;
@@ -535,6 +548,16 @@ export async function getAssignmentEvidence(assignmentId: number) {
 export async function finalizarSesion(sessionId: number) {
   const profile = await getProfile();
   if (!profile) return { error: "No autenticado" };
+
+  // Verify ownership via RLS
+  const supabase = createClient();
+  const { data: sessionCheck } = await supabase
+    .from("training_sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .eq("estado", "EN_CURSO")
+    .maybeSingle();
+  if (!sessionCheck) return { error: "Sesión no encontrada o no autorizada" };
 
   const admin = createAdminClient();
   const { data: responses } = await admin

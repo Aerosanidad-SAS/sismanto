@@ -8,8 +8,6 @@ import { formatDateShort } from "@/lib/utils";
 
 interface Props {
   assignments: any[];
-  ovemName: string;
-  userId: string;
 }
 
 export function CapacitacionesOvem({ assignments }: Props) {

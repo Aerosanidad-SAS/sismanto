@@ -50,16 +50,34 @@ The `(dashboard)` route group is protected by middleware (`src/middleware.ts`), 
 3. **Client Components** are used only for state, browser APIs, or interactive UI. They call Server Actions for writes.
 4. **RLS** (Row Level Security) enforces access control at the DB layer for every user-facing table — not just in application code.
 
-### RBAC (4 roles)
+### RBAC (6 roles)
 
 | Role | Access |
 |------|--------|
-| OVEM | Driver portal: daily checks, km entry, own incidents |
+| OVEM | Driver portal: daily checks, km entry, own incidents, capacitaciones |
 | Regulación | Fleet state, driver assignment, availability toggle |
 | Gerencial | Read-only dashboard and reports |
-| Admin | Full access + user management |
+| Admin | Full access + user management + capacitaciones management |
+| Mantenimiento | Maintenance records and vehicle inspection |
+| Coordinacion | Fleet overview, driver assignments, metrics, capacitaciones grading |
 
-Role is stored in `user_profiles.role`. Middleware and Server Actions check `user_profiles` to gate access; RLS policies enforce the same rules at DB level.
+Role is stored in `user_profiles.role_id` (FK to `roles.id`). The **column is `role_codigo`**, not `role`. Always use `profile.role_codigo` in code. Middleware and Server Actions check `user_profiles` via `getProfile()` from `@/app/api/actions/auth`.
+
+### Auth pattern — critical
+
+```typescript
+// CORRECT — always import from here:
+import { getProfile } from "@/app/api/actions/auth";
+const profile = await getProfile();
+if (!profile || profile.role_codigo !== "ADMIN") return { error: "Sin permisos" };
+
+// WRONG — getUserProfile does NOT exist in auth-utils:
+import { getUserProfile } from "@/lib/auth-utils"; // ❌ no existe
+profile.role   // ❌ campo incorrecto
+profile.role_codigo  // ✓ campo correcto
+```
+
+`auth-utils.ts` only exports helper predicates (`puedeVerCapacitaciones`, etc.) and `UserRole` type — it has no async functions.
 
 ### Backlog / notas de producto
 
@@ -84,7 +102,6 @@ scripts/migrations/
   012_preventive_maintenance_plan.sql   # Plan de mantenimiento preventivo + alertas
   013_coordinacion_capacitaciones.sql   # Rol COORDINACION + módulo Capacitaciones (6 tablas)
   011_suppliers_fields.sql              # ADD COLUMNS telefono, ciudad, servicio, direccion a suppliers
-  012_preventive_maintenance_plan.sql   # Plan preventivo: maintenance_plan_items, vehicle_maintenance_log, view alerts
 ```
 
 Migrations are idempotent. RLS policies must live in migration files, not be set via the Supabase dashboard UI.
@@ -98,6 +115,27 @@ Migrations are idempotent. RLS policies must live in migration files, not be set
 | `src/types/index.ts` | Shared TypeScript types |
 | `src/components/ui/` | shadcn/ui base components |
 | `src/app/api/actions/` | Server Actions by feature domain |
+
+### database.types.ts — editing rule
+
+After any edit, verify brace balance before building:
+```bash
+node --input-type=module -e "
+import{readFileSync}from'fs';
+const c=readFileSync('src/lib/supabase/database.types.ts','utf-8');
+let d=0;for(const ch of c){if(ch==='{')d++;if(ch==='}')d--;}
+console.log(d===0?'OK':'BRACE MISMATCH depth='+d);
+"
+```
+Training tables live inside `Tables:`, before `Views:`. The `Views:` block only contains `vehicle_maintenance_alerts`.
+
+### Build errors — filtering
+
+Prefer filtered output to avoid 100-line dumps:
+```bash
+npm run build 2>&1 | grep -E "Error:|error TS|Module not found|Failed" | head -30
+```
+Use `tail -80` only when the filtered output is empty.
 
 ## Conventions (from `.cursor/rules/`)
 
