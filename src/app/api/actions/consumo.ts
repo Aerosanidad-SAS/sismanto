@@ -33,59 +33,110 @@ export async function getMetricasConsumo(
 
     const vehicleIds = vehicles.map((v) => v.id);
 
-    // Cargas de combustible en el período
-    const { data: fuelLogs } = await supabase
+    // Cargas de combustible hasta fecha fin (incluye historial anterior al período para baseline)
+    const { data: fuelLogsAll } = await supabase
       .from("fuel_logs")
       .select("*")
       .in("vehicle_id", vehicleIds)
-      .gte("fecha", fi)
       .lte("fecha", ff)
       .order("vehicle_id")
       .order("fecha");
 
-    // Kilometrajes de mantenimientos (para calcular km recorridos cuando no hay fuel_logs)
+    // Kilometrajes de mantenimientos hasta fecha fin (sirve como fallback y baseline)
     const { data: maintenanceKm } = await supabase
       .from("maintenance_records")
       .select("vehicle_id, kilometraje_actual, fecha")
       .in("vehicle_id", vehicleIds)
-      .gte("fecha", fi)
       .lte("fecha", ff)
       .order("vehicle_id")
       .order("fecha");
 
+    // Baseline preferido desde mileage_logs
+    const { data: mileageLogs } = await supabase
+      .from("mileage_logs")
+      .select("vehicle_id, lectura_kilometraje, fecha")
+      .in("vehicle_id", vehicleIds)
+      .lte("fecha", ff)
+      .order("vehicle_id")
+      .order("fecha");
+
+    const fuelLogs = fuelLogsAll || [];
+
+    const pickLatestKmBefore = (
+      rows: Array<{ fecha: string; km: number }>,
+      fechaRef: string
+    ): number | null => {
+      let candidate: number | null = null;
+      for (const r of rows) {
+        if (String(r.fecha) <= String(fechaRef)) candidate = r.km;
+        else break;
+      }
+      return candidate;
+    };
+
     // Calcular métricas por vehículo
     const metricas = vehicles.map((vehicle) => {
-      const logsVehiculo = (fuelLogs || []).filter(
-        (f) => f.vehicle_id === vehicle.id
+      const logsVehiculoAllSorted = fuelLogs
+        .filter((f) => f.vehicle_id === vehicle.id)
+        .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+      const logsVehiculoPeriodo = logsVehiculoAllSorted.filter(
+        (f) => String(f.fecha) >= fi && String(f.fecha) <= ff
       );
-      const kmManto = (maintenanceKm || []).filter(
-        (m) => m.vehicle_id === vehicle.id
+
+      const kmMantoAll = (maintenanceKm || []).filter((m) => m.vehicle_id === vehicle.id);
+      const kmMantoPeriodo = kmMantoAll.filter(
+        (m) => String(m.fecha) >= fi && String(m.fecha) <= ff
       );
+      const mileVehAll = (mileageLogs || []).filter((m) => m.vehicle_id === vehicle.id);
+
+      const anchorsMileage = mileVehAll.map((m) => ({
+        fecha: String(m.fecha),
+        km: Number(m.lectura_kilometraje || 0),
+      }));
+      const anchorsMaintenance = kmMantoAll.map((m) => ({
+        fecha: String(m.fecha),
+        km: Number(m.kilometraje_actual || 0),
+      }));
 
       let kmRecorridos = 0;
       let consumoPromedioKmGal: number | null = null;
       let totalGalones = 0;
-      let cantidadCargas = logsVehiculo.length;
+      let cantidadCargas = logsVehiculoPeriodo.length;
 
       // Calcular km recorridos
-      if (logsVehiculo.length >= 2) {
-        const kmMin = Math.min(...logsVehiculo.map((f) => f.kilometraje));
-        const kmMax = Math.max(...logsVehiculo.map((f) => f.kilometraje));
+      if (logsVehiculoPeriodo.length >= 2) {
+        const kmMin = Math.min(...logsVehiculoPeriodo.map((f) => f.kilometraje));
+        const kmMax = Math.max(...logsVehiculoPeriodo.map((f) => f.kilometraje));
         kmRecorridos = kmMax - kmMin;
-      } else if (kmManto.length >= 2) {
-        const kmMin = Math.min(...kmManto.map((m) => m.kilometraje_actual));
-        const kmMax = Math.max(...kmManto.map((m) => m.kilometraje_actual));
+      } else if (kmMantoPeriodo.length >= 2) {
+        const kmMin = Math.min(...kmMantoPeriodo.map((m) => m.kilometraje_actual));
+        const kmMax = Math.max(...kmMantoPeriodo.map((m) => m.kilometraje_actual));
         kmRecorridos = kmMax - kmMin;
-      } else if (kmManto.length === 1) {
+      } else if (kmMantoPeriodo.length === 1) {
         kmRecorridos = 0;
       }
 
-      // Calcular consumo km/gal para cada carga
-      if (logsVehiculo.length >= 2) {
+      // Calcular consumo km/gal por carga del período, usando baseline histórico en primera carga
+      if (logsVehiculoPeriodo.length >= 1) {
         const consumosPorCarga: number[] = [];
-        for (let i = 1; i < logsVehiculo.length; i++) {
-          const kmDelta = logsVehiculo[i].kilometraje - logsVehiculo[i - 1].kilometraje;
-          const galones = logsVehiculo[i].galones;
+        for (let i = 0; i < logsVehiculoAllSorted.length; i++) {
+          const cur = logsVehiculoAllSorted[i];
+          if (String(cur.fecha) < fi || String(cur.fecha) > ff) continue;
+
+          let kmPrevio: number | null =
+            i > 0 ? Number(logsVehiculoAllSorted[i - 1].kilometraje || 0) : null;
+
+          if (kmPrevio === null) {
+            // 1) baseline desde mileage_logs
+            kmPrevio = pickLatestKmBefore(anchorsMileage, String(cur.fecha));
+          }
+          if (kmPrevio === null) {
+            // 2) fallback a maintenance_records
+            kmPrevio = pickLatestKmBefore(anchorsMaintenance, String(cur.fecha));
+          }
+
+          const kmDelta = Number(cur.kilometraje || 0) - Number(kmPrevio || 0);
+          const galones = Number(cur.galones || 0);
           if (kmDelta > 0 && galones > 0) {
             consumosPorCarga.push(kmDelta / galones);
           }
@@ -94,9 +145,9 @@ export async function getMetricasConsumo(
           consumoPromedioKmGal =
             consumosPorCarga.reduce((a, b) => a + b, 0) / consumosPorCarga.length;
         }
-        totalGalones = logsVehiculo.reduce((sum, f) => sum + f.galones, 0);
-      } else if (logsVehiculo.length === 1) {
-        totalGalones = logsVehiculo[0].galones;
+        totalGalones = logsVehiculoPeriodo.reduce((sum, f) => sum + f.galones, 0);
+      } else if (logsVehiculoPeriodo.length === 1) {
+        totalGalones = logsVehiculoPeriodo[0].galones;
         cantidadCargas = 1;
       }
 

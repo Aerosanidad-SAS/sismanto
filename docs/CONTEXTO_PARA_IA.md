@@ -23,10 +23,11 @@
 
 Rutas bajo `src/app/(dashboard)/`. El menú lateral filtra por rol en `src/app/(dashboard)/layout.tsx` (`ALL_NAV`).
 
-- **ADMIN:** dashboard, vehículos, mantenimientos, novedades, KPIs, **combustible** (`/combustible`), regulación, OVEM, configuración, usuarios.
+- **ADMIN:** dashboard, coordinación, vehículos, mantenimientos, novedades, KPIs, **combustible** (`/combustible`), regulación, OVEM, capacitaciones, configuración, usuarios.
 - **GERENCIAL:** dashboard, KPIs, combustible.
 - **REGULACION / MANTENIMIENTO:** subconjuntos (ver layout).
 - **OVEM:** redirige desde `/` a `/ovem` si intenta dashboard financiero; portal preoperacional en `/ovem`.
+- **COORDINACION:** ruta principal `/coordinacion` + acceso de lectura a `/capacitaciones`.
 
 **Nota:** `/consumo` redirige a `/combustible` (módulo renombrado en UI).
 
@@ -48,10 +49,25 @@ Rutas bajo `src/app/(dashboard)/`. El menú lateral filtra por rol en `src/app/(
 
 - Página: `src/app/(dashboard)/combustible/page.tsx` · UI: `src/components/consumo/consumo-cliente.tsx` · métricas server: `src/app/api/actions/consumo.ts`.
 - Placas eléctricas de referencia (insight en ficha): constantes en `src/lib/electric-reference.ts`.
+- El cálculo de rendimiento considera baseline histórico para la primera carga del período (combina `fuel_logs`, `mileage_logs` y fallback de `maintenance_records`).
 
 ### Mantenimientos
 
 - Filtros por URL: `mPlaca`, `mDesde`, `mHasta`, `mCat`, `mTipo`, `mProv`, `mFac` · `src/app/(dashboard)/mantenimientos/page.tsx` + `src/components/mantenimientos/mantenimiento-filtros.tsx`.
+- Importación masiva (`src/app/api/actions/carga-masiva.ts`) ahora detecta posibles duplicados por clave (con/sin factura) y los reporta en `omitidos`.
+
+### Coordinación (`/coordinacion`)
+
+- Panel operativo consolidado para coordinación CRA: estado flota, OVEM activos y asignaciones vigentes, novedades abiertas y alertas preventivas.
+- Archivos: `src/app/(dashboard)/coordinacion/page.tsx`, rol en `src/lib/auth-utils.ts` y menú en `src/app/(dashboard)/layout.tsx`.
+
+### Capacitaciones (`/capacitaciones`)
+
+- Nuevo módulo con cursos, banco de preguntas MC, preguntas abiertas, asignaciones, intentos, revisión Admin y evidencia imprimible.
+- Archivos clave:
+  - Server actions: `src/app/api/actions/capacitaciones.ts`
+  - Páginas: `src/app/(dashboard)/capacitaciones/page.tsx`, `src/app/(dashboard)/capacitaciones/[assignmentId]/page.tsx`, `src/app/(dashboard)/capacitaciones/evidencia/[assignmentId]/page.tsx`
+  - Componentes: `src/components/capacitaciones/*`
 
 ### Vehículos
 
@@ -66,6 +82,8 @@ Rutas bajo `src/app/(dashboard)/`. El menú lateral filtra por rol en `src/app/(
 
 - Scripts en `scripts/migrations/` (numerados). **El deploy de Next no ejecuta SQL:** cada migración nueva debe correrse en el **SQL Editor** de Supabase (staging/prod según corresponda).
 - **008** — `scripts/migrations/008_fleet_vencimientos_checklist.sql`: vencimientos SOAT/RTM/técnico, estados FDS, perfil eléctrico en placas indicadas, checklist OVEM. *Si ya se aplicó en tu proyecto, indícalo en chats nuevos para no repetir.*
+- **013** — `scripts/migrations/013_coordinacion_role_access.sql`: rol `COORDINACION` + políticas de lectura operativa.
+- **014** — `scripts/migrations/014_training_module.sql`: tablas/políticas del módulo de capacitaciones y evaluaciones.
 
 ---
 

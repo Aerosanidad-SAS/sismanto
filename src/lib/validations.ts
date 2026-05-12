@@ -131,7 +131,14 @@ export const signInSchema = z.object({
   password: z.string().min(1, "Contraseña requerida"),
 });
 
-const userRoleEnum = z.enum(["OVEM", "ADMIN", "REGULACION", "GERENCIAL", "MANTENIMIENTO"]);
+const userRoleEnum = z.enum([
+  "OVEM",
+  "ADMIN",
+  "REGULACION",
+  "GERENCIAL",
+  "MANTENIMIENTO",
+  "COORDINACION",
+]);
 
 export const createUserAsAdminSchema = z.object({
   email: z.string().email("Email inválido"),

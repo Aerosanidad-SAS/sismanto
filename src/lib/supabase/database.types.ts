@@ -782,6 +782,204 @@ export type Database = {
           }
         ]
       }
+      trainings: {
+        Row: {
+          id: number
+          titulo: string
+          descripcion: string | null
+          contenido_texto: string | null
+          video_url: string | null
+          duracion_estimada_minutos: number | null
+          mes_ciclo: number | null
+          tiempo_limite_minutos: number
+          activo: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          titulo: string
+          descripcion?: string | null
+          contenido_texto?: string | null
+          video_url?: string | null
+          duracion_estimada_minutos?: number | null
+          mes_ciclo?: number | null
+          tiempo_limite_minutos?: number
+          activo?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          titulo?: string
+          descripcion?: string | null
+          contenido_texto?: string | null
+          video_url?: string | null
+          duracion_estimada_minutos?: number | null
+          mes_ciclo?: number | null
+          tiempo_limite_minutos?: number
+          activo?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      training_questions: {
+        Row: {
+          id: number
+          training_id: number
+          orden: number
+          tipo: 'SELECCION_MULTIPLE' | 'RESPUESTA_ABIERTA' | 'JUSTIFICACION'
+          pregunta: string
+          puntaje: number
+          activo: boolean
+        }
+        Insert: {
+          id?: number
+          training_id: number
+          orden: number
+          tipo: 'SELECCION_MULTIPLE' | 'RESPUESTA_ABIERTA' | 'JUSTIFICACION'
+          pregunta: string
+          puntaje?: number
+          activo?: boolean
+        }
+        Update: {
+          id?: number
+          training_id?: number
+          orden?: number
+          tipo?: 'SELECCION_MULTIPLE' | 'RESPUESTA_ABIERTA' | 'JUSTIFICACION'
+          pregunta?: string
+          puntaje?: number
+          activo?: boolean
+        }
+        Relationships: []
+      }
+      training_question_options: {
+        Row: {
+          id: number
+          question_id: number
+          orden: number
+          texto: string
+          es_correcta: boolean
+        }
+        Insert: {
+          id?: number
+          question_id: number
+          orden: number
+          texto: string
+          es_correcta?: boolean
+        }
+        Update: {
+          id?: number
+          question_id?: number
+          orden?: number
+          texto?: string
+          es_correcta?: boolean
+        }
+        Relationships: []
+      }
+      training_assignments: {
+        Row: {
+          id: number
+          training_id: number
+          user_id: string
+          fecha_asignacion: string
+          fecha_limite: string | null
+          completado: boolean
+          asignado_por: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          training_id: number
+          user_id: string
+          fecha_asignacion?: string
+          fecha_limite?: string | null
+          completado?: boolean
+          asignado_por?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          training_id?: number
+          user_id?: string
+          fecha_asignacion?: string
+          fecha_limite?: string | null
+          completado?: boolean
+          asignado_por?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      training_sessions: {
+        Row: {
+          id: number
+          assignment_id: number
+          fecha_inicio: string
+          fecha_fin: string | null
+          estado: 'EN_CURSO' | 'COMPLETADA' | 'CALIFICADA'
+          puntaje_mc: number | null
+          puntaje_final: number | null
+          calificado_por: string | null
+          fecha_calificacion: string | null
+          observaciones: string | null
+        }
+        Insert: {
+          id?: number
+          assignment_id: number
+          fecha_inicio?: string
+          fecha_fin?: string | null
+          estado?: 'EN_CURSO' | 'COMPLETADA' | 'CALIFICADA'
+          puntaje_mc?: number | null
+          puntaje_final?: number | null
+          calificado_por?: string | null
+          fecha_calificacion?: string | null
+          observaciones?: string | null
+        }
+        Update: {
+          id?: number
+          assignment_id?: number
+          fecha_inicio?: string
+          fecha_fin?: string | null
+          estado?: 'EN_CURSO' | 'COMPLETADA' | 'CALIFICADA'
+          puntaje_mc?: number | null
+          puntaje_final?: number | null
+          calificado_por?: string | null
+          fecha_calificacion?: string | null
+          observaciones?: string | null
+        }
+        Relationships: []
+      }
+      training_responses: {
+        Row: {
+          id: number
+          session_id: number
+          question_id: number
+          opcion_id: number | null
+          respuesta_texto: string | null
+          es_correcta: boolean | null
+        }
+        Insert: {
+          id?: number
+          session_id: number
+          question_id: number
+          opcion_id?: number | null
+          respuesta_texto?: string | null
+          es_correcta?: boolean | null
+        }
+        Update: {
+          id?: number
+          session_id?: number
+          question_id?: number
+          opcion_id?: number | null
+          respuesta_texto?: string | null
+          es_correcta?: boolean | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       vehicle_maintenance_alerts: {

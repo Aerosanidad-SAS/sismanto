@@ -1,3 +1,8 @@
+---
+description: 
+alwaysApply: true
+---
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -76,6 +81,8 @@ scripts/migrations/
   008_fleet_vencimientos_checklist.sql  # Aplicada en Supabase
   009_vehicle_fds_desde.sql             # ADD COLUMN fds_desde + datos iniciales FDS
   010_vehicle_status_history.sql        # Historial OPERATIVO↔FDS + corrección estados
+  012_preventive_maintenance_plan.sql   # Plan de mantenimiento preventivo + alertas
+  013_coordinacion_capacitaciones.sql   # Rol COORDINACION + módulo Capacitaciones (6 tablas)
   011_suppliers_fields.sql              # ADD COLUMNS telefono, ciudad, servicio, direccion a suppliers
   012_preventive_maintenance_plan.sql   # Plan preventivo: maintenance_plan_items, vehicle_maintenance_log, view alerts
 ```

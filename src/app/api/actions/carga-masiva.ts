@@ -53,6 +53,31 @@ function normNitKey(n: string | undefined) {
   return d === "" ? null : d;
 }
 
+function buildMantenimientoDedupeKey(input: {
+  vehicleId: string;
+  fecha: string;
+  numeroFactura?: string | null;
+  kilometraje: number;
+  valor: number;
+  tipo: string;
+  descripcion?: string | null;
+}) {
+  const fecha = String(input.fecha).slice(0, 10);
+  const factura = String(input.numeroFactura || "").trim().toUpperCase();
+  if (factura) return `${input.vehicleId}|${fecha}|FAC|${factura}`;
+
+  const km = Math.round(Number(input.kilometraje || 0));
+  const valor = Math.round(Number(input.valor || 0));
+  const tipo = String(input.tipo || "").trim().toUpperCase();
+  const descripcion = String(input.descripcion || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase()
+    .slice(0, 120);
+
+  return `${input.vehicleId}|${fecha}|NOFAC|${km}|${valor}|${tipo}|${descripcion}`;
+}
+
 export async function importarMantenimientos(
   filas: FilaMantenimiento[]
 ): Promise<ResultadoCarga> {
@@ -67,6 +92,27 @@ export async function importarMantenimientos(
 
   const vehicleMap = new Map((vehicles || []).map((v) => [v.placa.toUpperCase(), v.id]));
   const categoriaMap = new Map((categorias || []).map((c) => [c.nombre.toUpperCase(), c.id]));
+  const seenKeysInFile = new Set<string>();
+
+  // Claves ya existentes en DB para detectar duplicados antes de insertar.
+  const { data: existingMantenimientos } = await supabase
+    .from("maintenance_records")
+    .select(
+      "vehicle_id, fecha, numero_factura, kilometraje_actual, valor, tipo, descripcion_trabajo"
+    );
+  const existingKeys = new Set<string>();
+  for (const e of existingMantenimientos || []) {
+    const key = buildMantenimientoDedupeKey({
+      vehicleId: String(e.vehicle_id),
+      fecha: String(e.fecha),
+      numeroFactura: e.numero_factura,
+      kilometraje: Number(e.kilometraje_actual || 0),
+      valor: Number(e.valor || 0),
+      tipo: String(e.tipo || ""),
+      descripcion: e.descripcion_trabajo,
+    });
+    existingKeys.add(key);
+  }
 
   const loteSize = 50;
   for (let i = 0; i < filas.length; i += loteSize) {
@@ -116,6 +162,33 @@ export async function importarMantenimientos(
         const categoriaNombre = String(r.categoria ?? "").trim().toUpperCase();
         const categoriaId = categoriaMap.get(categoriaNombre) || null;
         const tfds = r.tiempo_fuera_servicio ?? 0;
+        const numeroFactura = r.numero_factura ? String(r.numero_factura).trim() : null;
+        const descripcionTrabajo = String(r.descripcion ?? "").trim() || null;
+
+        const dedupeKey = buildMantenimientoDedupeKey({
+          vehicleId,
+          fecha: fechaStr,
+          numeroFactura,
+          kilometraje: r.kilometraje,
+          valor: r.valor,
+          tipo: r.tipo,
+          descripcion: descripcionTrabajo,
+        });
+        if (seenKeysInFile.has(dedupeKey)) {
+          resultado.omitidos.push({
+            fila: filaNum,
+            motivo: "Posible duplicado dentro del archivo de importación",
+          });
+          continue;
+        }
+        if (existingKeys.has(dedupeKey)) {
+          resultado.omitidos.push({
+            fila: filaNum,
+            motivo: "Posible duplicado: ya existe en la base de datos",
+          });
+          continue;
+        }
+        seenKeysInFile.add(dedupeKey);
 
         registros.push({
           vehicle_id: vehicleId,
@@ -123,10 +196,10 @@ export async function importarMantenimientos(
           kilometraje_actual: r.kilometraje,
           tipo: r.tipo,
           categoria_id: categoriaId,
-          descripcion_trabajo: String(r.descripcion ?? "").trim() || null,
+          descripcion_trabajo: descripcionTrabajo,
           proveedor: String(r.proveedor ?? "").trim() || null,
           valor: r.valor,
-          numero_factura: r.numero_factura ? String(r.numero_factura).trim() : null,
+          numero_factura: numeroFactura,
           tiempo_fuera_servicio_horas: tfds,
         });
       } catch {

@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getUserProfile } from "@/lib/auth-utils";
+import { getProfile } from "@/app/api/actions/auth";
 import { z } from "zod";
 import type { MaintenanceAlert, MaintenancePlanItem } from "@/types";
 
@@ -83,9 +83,9 @@ export async function registrarCumplimiento(input: LogPlanItemInput) {
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
-  const profile = await getUserProfile();
+  const profile = await getProfile();
   if (!profile) return { error: "No autenticado" };
-  if (!["ADMIN", "MANTENIMIENTO"].includes(profile.role))
+  if (!["ADMIN", "MANTENIMIENTO"].includes(profile.role_codigo))
     return { error: "Sin permisos" };
 
   const supabase = createAdminClient();

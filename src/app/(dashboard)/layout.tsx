@@ -14,6 +14,7 @@ import {
   Settings,
   Fuel,
   ClipboardCheck,
+  GraduationCap,
   Radio,
   Users,
   LogOut,
@@ -39,6 +40,13 @@ const ALL_NAV: {
     icon: LayoutDashboard,
     roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO"],
     hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
+  },
+  {
+    name: "Coordinación",
+    href: "/coordinacion",
+    icon: Users,
+    roles: ["ADMIN", "COORDINACION"],
+    hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
   },
   {
     name: "Vehículos",
@@ -90,6 +98,13 @@ const ALL_NAV: {
     hint: "Preoperacional, checklist y kilometraje del conductor asignado.",
   },
   {
+    name: "Capacitaciones",
+    href: "/capacitaciones",
+    icon: GraduationCap,
+    roles: ["ADMIN", "OVEM", "COORDINACION"],
+    hint: "Cursos, evaluaciones, resultados y evidencias de entrenamiento.",
+  },
+  {
     name: "Configuración",
     href: "/configuracion",
     icon: Settings,
@@ -111,6 +126,7 @@ const ROLE_BADGE_STYLES: Record<UserRole, string> = {
   GERENCIAL: "bg-[#1B6368] text-white",
   OVEM: "bg-[#9C9B99] text-white",
   MANTENIMIENTO: "bg-[#B45309] text-white",
+  COORDINACION: "bg-[#0E7490] text-white",
 };
 
 const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
@@ -175,6 +191,14 @@ export default function DashboardLayout({
           !pathname.startsWith("/admin")
         ) {
           router.replace("/");
+        }
+        if (
+          p.role_codigo === "COORDINACION" &&
+          !["/coordinacion", "/capacitaciones"].includes(pathname) &&
+          !pathname.startsWith("/coordinacion/") &&
+          !pathname.startsWith("/capacitaciones/")
+        ) {
+          router.replace("/coordinacion");
         }
       }
     });
