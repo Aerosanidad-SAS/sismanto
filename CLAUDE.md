@@ -82,6 +82,7 @@ profile.role_codigo  // ✓ campo correcto
 ### Backlog / notas de producto
 
 - **OVEM - tanqueo (pendiente)**: añadir en Portal OVEM una opción para registrar tanqueo con campos requeridos: `placa`, `fecha`, `km`, `galones`, `valor_total` (y persistir en `fuel_logs` o tabla equivalente según el flujo).
+- **Consumo eléctricos vs Kia Picanto (pendiente)**: cargar datos de consumo de la flota eléctrica actual y compararlos directamente con el historial de los 4 Kia Picanto 2021 de Bogotá (KYV199, KZO779, KYV219, KOS929) que reemplazaron.
 
 ### Database Migrations
 
@@ -105,6 +106,7 @@ scripts/migrations/
   015_vencimientos_soat_tecnicomecanica.sql  # UPDATE vencimiento_soat + tecnicomecanica para 36 vehículos
   016_historial_mantenimientos.sql      # INSERT 1417 mantenimientos históricos (CONTROL_VEH_INTERASSIST V2 2026)
   017_historial_combustible.sql         # INSERT 2858 registros combustible (detailed_consumption); anomalías en notas
+  018_kia_picanto_bogota.sql            # INSERT 4 Kia Picanto 2021 (KYV199/KZO779/KYV219/KOS929) + 414 fuel logs + LSN265→LSN367 fix (6 registros)
 ```
 
 Migrations are idempotent. RLS policies must live in migration files, not be set via the Supabase dashboard UI.

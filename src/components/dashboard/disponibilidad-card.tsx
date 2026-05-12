@@ -206,22 +206,6 @@ export function DisponibilidadCard({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex flex-wrap gap-1">
-              <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => periodoMes(-1)}>
-                −Mes
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => periodoMes("now")} title="Mes calendario según fecha inicial o hoy">
-                Mes
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => periodoMes(1)}>
-                +Mes
-              </Button>
-              {[yearNow, yearNow - 1].map((y) => (
-                <Button key={y} type="button" variant="secondary" size="sm" className="h-7 px-2 text-[10px]" onClick={() => periodoAnio(y)}>
-                  {y}
-                </Button>
-              ))}
-            </div>
             <Button type="button" size="sm" className="h-8 w-full text-xs" disabled={pending} onClick={aplicar}>
               {pending ? "Aplicando…" : "Aplicar período"}
             </Button>
