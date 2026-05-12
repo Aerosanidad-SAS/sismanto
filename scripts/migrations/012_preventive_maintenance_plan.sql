@@ -52,6 +52,13 @@ WITH latest_log AS (
     km_realizado
   FROM vehicle_maintenance_log
   ORDER BY vehicle_id, plan_item_id, fecha_realizado DESC, created_at DESC
+),
+latest_km AS (
+  SELECT DISTINCT ON (vehicle_id)
+    vehicle_id,
+    lectura_kilometraje
+  FROM mileage_logs
+  ORDER BY vehicle_id, fecha DESC, created_at DESC
 )
 SELECT
   v.id                                                    AS vehicle_id,
@@ -65,8 +72,8 @@ SELECT
   mpi.aplica_a,
   ll.fecha_realizado                                      AS ultimo_mantenimiento,
   ll.km_realizado                                         AS km_ultimo,
-  CASE WHEN mpi.intervalo_km > 0
-    THEN (ll.km_realizado + mpi.intervalo_km) - v.kilometraje_actual
+  CASE WHEN mpi.intervalo_km > 0 AND lk.lectura_kilometraje IS NOT NULL
+    THEN (ll.km_realizado + mpi.intervalo_km) - lk.lectura_kilometraje
     ELSE NULL
   END                                                     AS km_restantes,
   CASE WHEN mpi.intervalo_dias > 0
@@ -75,11 +82,11 @@ SELECT
     ELSE NULL
   END                                                     AS dias_restantes,
   CASE
-    WHEN mpi.intervalo_km > 0 THEN
+    WHEN mpi.intervalo_km > 0 AND lk.lectura_kilometraje IS NOT NULL THEN
       CASE
-        WHEN (ll.km_realizado + mpi.intervalo_km) - v.kilometraje_actual
+        WHEN (ll.km_realizado + mpi.intervalo_km) - lk.lectura_kilometraje
              < mpi.alerta_roja_km    THEN 'ROJA'
-        WHEN (ll.km_realizado + mpi.intervalo_km) - v.kilometraje_actual
+        WHEN (ll.km_realizado + mpi.intervalo_km) - lk.lectura_kilometraje
              < mpi.alerta_naranja_km THEN 'NARANJA'
         ELSE 'OK'
       END
@@ -94,6 +101,7 @@ SELECT
     ELSE 'OK'
   END                                                     AS nivel_alerta
 FROM vehicles v
+LEFT JOIN latest_km lk ON lk.vehicle_id = v.id
 JOIN maintenance_plan_items mpi
   ON  mpi.activo = TRUE
   AND (mpi.aplica_a = 'TODOS'
