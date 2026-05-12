@@ -121,21 +121,16 @@ CREATE POLICY "mpi_select" ON maintenance_plan_items
 
 CREATE POLICY "mpi_insert" ON maintenance_plan_items
   FOR INSERT TO authenticated
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-  );
+  WITH CHECK (get_user_role() = 'ADMIN');
 
 CREATE POLICY "mpi_update" ON maintenance_plan_items
   FOR UPDATE TO authenticated
-  USING (
-    EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-  );
+  USING  (get_user_role() = 'ADMIN')
+  WITH CHECK (get_user_role() = 'ADMIN');
 
 CREATE POLICY "mpi_delete" ON maintenance_plan_items
   FOR DELETE TO authenticated
-  USING (
-    EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-  );
+  USING (get_user_role() = 'ADMIN');
 
 -- Log: todos leen; ADMIN y MANTENIMIENTO insertan
 CREATE POLICY "vml_select" ON vehicle_maintenance_log
@@ -143,24 +138,16 @@ CREATE POLICY "vml_select" ON vehicle_maintenance_log
 
 CREATE POLICY "vml_insert" ON vehicle_maintenance_log
   FOR INSERT TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE user_id = auth.uid() AND role IN ('ADMIN','MANTENIMIENTO')
-    )
-  );
+  WITH CHECK (get_user_role() IN ('ADMIN', 'MANTENIMIENTO'));
 
 CREATE POLICY "vml_update" ON vehicle_maintenance_log
   FOR UPDATE TO authenticated
-  USING (
-    EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-  );
+  USING  (get_user_role() = 'ADMIN')
+  WITH CHECK (get_user_role() = 'ADMIN');
 
 CREATE POLICY "vml_delete" ON vehicle_maintenance_log
   FOR DELETE TO authenticated
-  USING (
-    EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-  );
+  USING (get_user_role() = 'ADMIN');
 
 -- ─── 6. DATOS — PLAN GENERAL (TODOS LOS VEHÍCULOS) ──────────────────────────
 -- Filas 6-36 del archivo 'plan de manto.xlsx' (excluye filas 1-5, inspección diaria)
