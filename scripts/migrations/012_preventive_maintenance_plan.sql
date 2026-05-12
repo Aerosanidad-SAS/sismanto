@@ -97,7 +97,7 @@ FROM vehicles v
 JOIN maintenance_plan_items mpi
   ON  mpi.activo = TRUE
   AND (mpi.aplica_a = 'TODOS'
-       OR mpi.aplica_a = v.centro_operativo
+       OR mpi.aplica_a = v.centro_operativo::text
        OR mpi.aplica_a = v.placa)
 JOIN latest_log ll
   ON  ll.vehicle_id   = v.id
