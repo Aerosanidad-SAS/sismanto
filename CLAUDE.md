@@ -102,6 +102,9 @@ scripts/migrations/
   012_preventive_maintenance_plan.sql   # Plan de mantenimiento preventivo + alertas
   013_coordinacion_capacitaciones.sql   # Rol COORDINACION + módulo Capacitaciones (6 tablas)
   011_suppliers_fields.sql              # ADD COLUMNS telefono, ciudad, servicio, direccion a suppliers
+  015_vencimientos_soat_tecnicomecanica.sql  # UPDATE vencimiento_soat + tecnicomecanica para 36 vehículos
+  016_historial_mantenimientos.sql      # INSERT 1417 mantenimientos históricos (CONTROL_VEH_INTERASSIST V2 2026)
+  017_historial_combustible.sql         # INSERT 2858 registros combustible (detailed_consumption); anomalías en notas
 ```
 
 Migrations are idempotent. RLS policies must live in migration files, not be set via the Supabase dashboard UI.

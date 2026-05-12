@@ -1,0 +1,39 @@
+-- Migration 015: Vencimientos SOAT + Tecnicomecanica (importados de Excel)
+
+UPDATE vehicles SET vencimiento_soat = '2027-04-16', vencimiento_tecnicomecanica = '2026-06-08' WHERE placa = 'TRG549';
+UPDATE vehicles SET vencimiento_soat = '2027-01-25', vencimiento_tecnicomecanica = '2026-08-28' WHERE placa = 'EQR890';
+UPDATE vehicles SET vencimiento_soat = '2027-02-22', vencimiento_tecnicomecanica = '2027-02-24' WHERE placa = 'JRN202';
+UPDATE vehicles SET vencimiento_soat = '2026-02-25', vencimiento_tecnicomecanica = '2026-07-30' WHERE placa = 'JQS528';
+UPDATE vehicles SET vencimiento_soat = '2026-02-27', vencimiento_tecnicomecanica = '2026-02-26' WHERE placa = 'JQS239';
+UPDATE vehicles SET vencimiento_soat = '2027-03-06', vencimiento_tecnicomecanica = '2027-02-24' WHERE placa = 'JQS366';
+UPDATE vehicles SET vencimiento_soat = '2026-11-28', vencimiento_tecnicomecanica = '2027-11-30' WHERE placa = 'LTN715';
+UPDATE vehicles SET vencimiento_soat = '2026-09-13', vencimiento_tecnicomecanica = '2026-09-14' WHERE placa = 'TRG540';
+UPDATE vehicles SET vencimiento_soat = '2026-09-02', vencimiento_tecnicomecanica = '2027-09-06' WHERE placa = 'LHV349';
+UPDATE vehicles SET vencimiento_soat = '2026-12-05', vencimiento_tecnicomecanica = '2026-12-01' WHERE placa = 'IEQ524';
+UPDATE vehicles SET vencimiento_soat = '2026-12-24', vencimiento_tecnicomecanica = '2027-01-16' WHERE placa = 'IEW789';
+UPDATE vehicles SET vencimiento_soat = '2027-04-02', vencimiento_tecnicomecanica = '2027-04-08' WHERE placa = 'KQX040';
+UPDATE vehicles SET vencimiento_soat = '2027-04-06', vencimiento_tecnicomecanica = '2026-09-29' WHERE placa = 'FCX141';
+UPDATE vehicles SET vencimiento_soat = '2027-04-18', vencimiento_tecnicomecanica = '2027-04-15' WHERE placa = 'HXL665';
+UPDATE vehicles SET vencimiento_soat = '2026-05-02', vencimiento_tecnicomecanica = '2026-06-20' WHERE placa = 'MVV483';
+UPDATE vehicles SET vencimiento_soat = '2026-07-10', vencimiento_tecnicomecanica = '2026-10-15' WHERE placa = 'HXY015';
+UPDATE vehicles SET vencimiento_soat = '2026-07-27', vencimiento_tecnicomecanica = '2026-11-27' WHERE placa = 'MOW931';
+UPDATE vehicles SET vencimiento_soat = '2026-07-27', vencimiento_tecnicomecanica = '2026-06-04' WHERE placa = 'OKL227';
+UPDATE vehicles SET vencimiento_soat = '2026-09-29', vencimiento_tecnicomecanica = '2026-09-09' WHERE placa = 'TRG544';
+UPDATE vehicles SET vencimiento_soat = '2026-10-11', vencimiento_tecnicomecanica = '2025-10-09' WHERE placa = 'TRG542';
+UPDATE vehicles SET vencimiento_soat = '2026-11-23', vencimiento_tecnicomecanica = '2026-09-11' WHERE placa = 'DRU893';
+UPDATE vehicles SET vencimiento_soat = '2026-05-27', vencimiento_tecnicomecanica = '2026-06-01' WHERE placa = 'JZO514';
+UPDATE vehicles SET vencimiento_soat = '2026-05-26', vencimiento_tecnicomecanica = '2028-01-12' WHERE placa = 'LSN367';
+UPDATE vehicles SET vencimiento_soat = '2026-11-23', vencimiento_tecnicomecanica = '2026-09-18' WHERE placa = 'OSK397';
+UPDATE vehicles SET vencimiento_soat = '2027-01-06', vencimiento_tecnicomecanica = '2027-01-06' WHERE placa = 'OSK398';
+UPDATE vehicles SET vencimiento_soat = '2026-11-23', vencimiento_tecnicomecanica = '2026-09-18' WHERE placa = 'OSK399';
+UPDATE vehicles SET vencimiento_soat = '2027-02-23', vencimiento_tecnicomecanica = '2028-02-28' WHERE placa = 'LTP476';
+UPDATE vehicles SET vencimiento_soat = '2026-09-05', vencimiento_tecnicomecanica = '2026-12-01' WHERE placa = 'IVK968';
+UPDATE vehicles SET vencimiento_soat = '2026-11-21', vencimiento_tecnicomecanica = NULL WHERE placa = 'LQW155';
+UPDATE vehicles SET vencimiento_soat = '2026-07-24', vencimiento_tecnicomecanica = '2026-06-05' WHERE placa = 'OJG594';
+UPDATE vehicles SET vencimiento_soat = '2026-07-23', vencimiento_tecnicomecanica = '2027-03-19' WHERE placa = 'MOU057';
+UPDATE vehicles SET vencimiento_soat = '2026-07-23', vencimiento_tecnicomecanica = '2026-10-29' WHERE placa = 'OMH169';
+UPDATE vehicles SET vencimiento_soat = '2026-07-23', vencimiento_tecnicomecanica = '2026-07-04' WHERE placa = 'OIL657';
+UPDATE vehicles SET vencimiento_soat = '2026-07-24', vencimiento_tecnicomecanica = '2026-06-12' WHERE placa = 'OJG629';
+UPDATE vehicles SET vencimiento_soat = '2026-07-24', vencimiento_tecnicomecanica = '2026-08-14' WHERE placa = 'OBE862';
+UPDATE vehicles SET vencimiento_soat = NULL, vencimiento_tecnicomecanica = NULL WHERE placa = 'KIF071';
+

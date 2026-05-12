@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -66,8 +67,14 @@ export function MantenimientoFiltrosForm({ inicial }: { inicial: MantenimientoFi
       </p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Input placeholder="Placa" value={placa} onChange={(e) => setPlaca(e.target.value)} className="h-9" />
-        <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9" />
-        <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9" />
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Desde</Label>
+          <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Hasta</Label>
+          <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9" />
+        </div>
         <Input
           placeholder="Categoría"
           value={categoria}

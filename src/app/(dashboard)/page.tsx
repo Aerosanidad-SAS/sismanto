@@ -19,6 +19,8 @@ import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge"
 import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { EstadoFlotaDetalle, type NovedadAbiertaResumen } from "@/components/dashboard/estado-flota-detalle";
 import { DashboardGlobalFiltros } from "@/components/dashboard/dashboard-global-filters";
+import { AssignOvemButton } from "@/components/dashboard/assign-ovem-button";
+import { getOvemUsers } from "@/app/api/actions/regulacion";
 
 const DEFAULT_DATA = {
   totalOperativos: 0,
@@ -221,6 +223,31 @@ export default async function DashboardPage({
   const hideFinanceKpis =
     profile?.role_codigo === "REGULACION" || profile?.role_codigo === "MANTENIMIENTO";
   const puedeToggleEstadoEnTabla = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
+  const canAssignOvem = profile?.role_codigo === "ADMIN" || profile?.role_codigo === "REGULACION";
+
+  let ovemUsers: Awaited<ReturnType<typeof getOvemUsers>> = [];
+  let vehicleAssignmentMap: Record<string, { id: number; ovemName: string }> = {};
+
+  if (canAssignOvem) {
+    const supabaseDash = createClient();
+    const hoyIso = new Date().toISOString().split("T")[0];
+    const [ousers, assignments] = await Promise.all([
+      getOvemUsers(),
+      supabaseDash
+        .from("vehicle_assignments")
+        .select("id, vehicle_id, user_id, user_profiles(nombre_completo, email)")
+        .eq("activo", true)
+        .or(`fecha_fin.is.null,fecha_fin.gte.${hoyIso}`),
+    ]);
+    ovemUsers = ousers;
+    for (const a of assignments.data ?? []) {
+      const up = (a as any).user_profiles;
+      vehicleAssignmentMap[a.vehicle_id] = {
+        id: a.id,
+        ovemName: up?.nombre_completo || up?.email || "OVEM",
+      };
+    }
+  }
 
   const placasFueraServicio = (data.vehicles as { placa?: string; estado_actual?: string }[])
     .filter((v) => v.estado_actual === "FUERA_DE_SERVICIO")
@@ -424,6 +451,14 @@ export default async function DashboardPage({
                           ultimoMantenimientoFecha={data.ultimoMantenimientoPorVehicleId[vehicle.id] ?? null}
                           novedadesAbiertas={data.novedadesAbiertasPorVehicleId[vehicle.id] ?? []}
                         />
+                        {canAssignOvem && (
+                          <AssignOvemButton
+                            vehicleId={vehicle.id}
+                            vehiclePlaca={vehicle.placa}
+                            ovemUsers={ovemUsers}
+                            currentAssignment={vehicleAssignmentMap[vehicle.id] ?? null}
+                          />
+                        )}
                         <VehicleStatusCard vehicle={vehicle} readOnly={isReadOnly} />
                       </div>
                     </TableCell>
