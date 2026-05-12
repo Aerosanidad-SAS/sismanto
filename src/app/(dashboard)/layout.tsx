@@ -44,8 +44,8 @@ const ALL_NAV: {
   {
     name: "Coordinación",
     href: "/coordinacion",
+    roles: ["COORDINACION"],
     icon: Users,
-    roles: ["ADMIN", "COORDINACION"],
     hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
   },
   {

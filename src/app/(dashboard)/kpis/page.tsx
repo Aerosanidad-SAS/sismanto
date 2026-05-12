@@ -210,12 +210,13 @@ export default async function KPIsPage({
   };
 }) {
   const hoy = new Date();
-  const inicioMes = new Date();
-  inicioMes.setDate(1);
-  inicioMes.setHours(0, 0, 0, 0);
+  const inicio3Meses = new Date();
+  inicio3Meses.setMonth(inicio3Meses.getMonth() - 3);
+  inicio3Meses.setDate(1);
+  inicio3Meses.setHours(0, 0, 0, 0);
 
   const fechaInicio =
-    searchParams.inicio || inicioMes.toISOString().split("T")[0];
+    searchParams.inicio || inicio3Meses.toISOString().split("T")[0];
   const fechaFin = searchParams.fin || hoy.toISOString().split("T")[0];
 
   const kCentroParsed = searchParams.kCentro ? parseInt(searchParams.kCentro, 10) : NaN;

@@ -136,11 +136,12 @@ export default async function DashboardPage({
   };
 }) {
   const hoy = new Date();
-  const inicioMes = new Date();
-  inicioMes.setDate(1);
-  inicioMes.setHours(0, 0, 0, 0);
+  const inicio3Meses = new Date();
+  inicio3Meses.setMonth(inicio3Meses.getMonth() - 3);
+  inicio3Meses.setDate(1);
+  inicio3Meses.setHours(0, 0, 0, 0);
 
-  const defaultInicio = inicioMes.toISOString().split("T")[0];
+  const defaultInicio = inicio3Meses.toISOString().split("T")[0];
   const defaultFin = hoy.toISOString().split("T")[0];
 
   const parseDashDate = (s?: string): string | null => {
