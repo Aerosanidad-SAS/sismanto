@@ -329,3 +329,49 @@ export interface PreoperacionalResumen {
   hayFallas: boolean;
   cantidadFallas: number;
 }
+
+// Plan de mantenimiento preventivo
+export interface MaintenancePlanItem {
+  id: number;
+  descripcion: string;
+  categoria: string;
+  intervalo_km: number;
+  intervalo_dias: number;
+  aplica_a: string;
+  alerta_naranja_km: number;
+  alerta_roja_km: number;
+  alerta_naranja_dias: number;
+  alerta_roja_dias: number;
+  activo: boolean;
+}
+
+export interface VehicleMaintenanceLog {
+  id: number;
+  vehicle_id: string;
+  plan_item_id: number;
+  fecha_realizado: string;
+  km_realizado: number | null;
+  maintenance_record_id: number | null;
+  registrado_por: string | null;
+  notas: string | null;
+  created_at: string;
+}
+
+export type AlertLevel = 'ROJA' | 'NARANJA' | 'OK';
+
+export interface MaintenanceAlert {
+  vehicle_id: string;
+  placa: string;
+  centro_operativo: string | null;
+  plan_item_id: number;
+  descripcion: string;
+  categoria: string;
+  intervalo_km: number;
+  intervalo_dias: number;
+  aplica_a: string;
+  ultimo_mantenimiento: string;
+  km_ultimo: number | null;
+  km_restantes: number | null;
+  dias_restantes: number | null;
+  nivel_alerta: AlertLevel;
+}

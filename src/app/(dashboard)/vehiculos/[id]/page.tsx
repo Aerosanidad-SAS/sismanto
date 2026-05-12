@@ -12,6 +12,8 @@ import { ElectricVehicleInsight } from "@/components/vehiculos/electric-vehicle-
 import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
 import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
 import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
+import { VehicleMaintenanceAlertsPanel } from "@/components/vehiculos/vehicle-maintenance-alerts-panel";
+import { getAlertsForVehicle } from "@/app/api/actions/plan-mantenimiento";
 
 async function getVehicle(id: string) {
   try {
@@ -97,12 +99,14 @@ export default async function VehicleDetailPage({
     );
   }
 
-  const [mantenimientos, incidentes, kilometrajes, profile] = await Promise.all([
-    getVehicleMaintenances(params.id),
-    getVehicleIncidents(params.id),
-    getVehicleMileage(params.id),
-    getProfile(),
-  ]);
+  const [mantenimientos, incidentes, kilometrajes, profile, maintenanceAlerts] =
+    await Promise.all([
+      getVehicleMaintenances(params.id),
+      getVehicleIncidents(params.id),
+      getVehicleMileage(params.id),
+      getProfile(),
+      getAlertsForVehicle(params.id),
+    ]);
 
   const showRevenue =
     profile?.role_codigo === "ADMIN" || profile?.role_codigo === "GERENCIAL";
@@ -111,6 +115,9 @@ export default async function VehicleDetailPage({
     profile?.role_codigo === "ADMIN" ||
     profile?.role_codigo === "REGULACION" ||
     profile?.role_codigo === "MANTENIMIENTO";
+
+  const canLogMaintenance =
+    profile?.role_codigo === "ADMIN" || profile?.role_codigo === "MANTENIMIENTO";
 
   const esElectricoFlota = ELECTRIC_VEHICLE_PLACAS.has(String(vehicle.placa || "").toUpperCase());
 
@@ -272,6 +279,14 @@ export default async function VehicleDetailPage({
           </CardContent>
         </Card>
       )}
+
+      {/* Plan de Mantenimiento Preventivo */}
+      <VehicleMaintenanceAlertsPanel
+        vehicleId={vehicle.id}
+        placa={vehicle.placa}
+        alerts={maintenanceAlerts}
+        canLog={canLogMaintenance}
+      />
 
       {/* Mantenimientos Recientes */}
       <Card>

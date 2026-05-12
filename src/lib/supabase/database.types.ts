@@ -686,9 +686,122 @@ export type Database = {
           }
         ]
       }
+      maintenance_plan_items: {
+        Row: {
+          id: number
+          descripcion: string
+          categoria: string
+          intervalo_km: number
+          intervalo_dias: number
+          aplica_a: string
+          alerta_naranja_km: number
+          alerta_roja_km: number
+          alerta_naranja_dias: number
+          alerta_roja_dias: number
+          activo: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          descripcion: string
+          categoria: string
+          intervalo_km?: number
+          intervalo_dias?: number
+          aplica_a?: string
+          alerta_naranja_km?: number
+          alerta_roja_km?: number
+          alerta_naranja_dias?: number
+          alerta_roja_dias?: number
+          activo?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          descripcion?: string
+          categoria?: string
+          intervalo_km?: number
+          intervalo_dias?: number
+          aplica_a?: string
+          alerta_naranja_km?: number
+          alerta_roja_km?: number
+          alerta_naranja_dias?: number
+          alerta_roja_dias?: number
+          activo?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      vehicle_maintenance_log: {
+        Row: {
+          id: number
+          vehicle_id: string
+          plan_item_id: number
+          fecha_realizado: string
+          km_realizado: number | null
+          maintenance_record_id: number | null
+          registrado_por: string | null
+          notas: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          vehicle_id: string
+          plan_item_id: number
+          fecha_realizado: string
+          km_realizado?: number | null
+          maintenance_record_id?: number | null
+          registrado_por?: string | null
+          notas?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          vehicle_id?: string
+          plan_item_id?: number
+          fecha_realizado?: string
+          km_realizado?: number | null
+          maintenance_record_id?: number | null
+          registrado_por?: string | null
+          notas?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_maintenance_log_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_log_plan_item_id_fkey"
+            columns: ["plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_plan_items"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      vehicle_maintenance_alerts: {
+        Row: {
+          vehicle_id: string
+          placa: string
+          centro_operativo: string | null
+          plan_item_id: number
+          descripcion: string
+          categoria: string
+          intervalo_km: number
+          intervalo_dias: number
+          aplica_a: string
+          ultimo_mantenimiento: string
+          km_ultimo: number | null
+          km_restantes: number | null
+          dias_restantes: number | null
+          nivel_alerta: 'ROJA' | 'NARANJA' | 'OK'
+        }
+      }
     }
     Functions: {
       get_user_role: {

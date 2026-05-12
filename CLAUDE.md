@@ -76,6 +76,8 @@ scripts/migrations/
   008_fleet_vencimientos_checklist.sql  # Aplicada en Supabase
   009_vehicle_fds_desde.sql             # ADD COLUMN fds_desde + datos iniciales FDS
   010_vehicle_status_history.sql        # Historial OPERATIVO↔FDS + corrección estados
+  011_suppliers_fields.sql              # ADD COLUMNS telefono, ciudad, servicio, direccion a suppliers
+  012_preventive_maintenance_plan.sql   # Plan preventivo: maintenance_plan_items, vehicle_maintenance_log, view alerts
 ```
 
 Migrations are idempotent. RLS policies must live in migration files, not be set via the Supabase dashboard UI.
