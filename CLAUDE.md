@@ -82,7 +82,9 @@ profile.role_codigo  // ✓ campo correcto
 ### Backlog / notas de producto
 
 - **OVEM - tanqueo (pendiente)**: añadir en Portal OVEM una opción para registrar tanqueo con campos requeridos: `placa`, `fecha`, `km`, `galones`, `valor_total` (y persistir en `fuel_logs` o tabla equivalente según el flujo).
-- **Consumo eléctricos vs Kia Picanto (pendiente)**: cargar datos de consumo de la flota eléctrica actual y compararlos directamente con el historial de los 4 Kia Picanto 2021 de Bogotá (KYV199, KZO779, KYV219, KOS929) que reemplazaron. **Nota de diseño**: los Picanto NO van como vehículos de flota — diseñar estructura de datos separada para datos históricos de referencia.
+- **Consumo eléctricos vs Kia Picanto (pendiente)**: comparar COP/km eléctricos actuales vs historial Kia Picanto 2021 (KYV199/KZO779/KYV219/KOS929). Los Picanto NO son vehículos de flota — usar tabla separada de referencia histórica.
+- **AI — Análisis automático de flota (pendiente)**: modelo IA que detecte patrones, tendencias, correlaciones daños↔conductor. Claude API + datos de maintenance_records/incidents/vehicle_assignments/fuel_logs.
+- **AI — Chat interactivo (pendiente)**: chat en lenguaje natural sobre datos del sistema, con contexto de Supabase inyectado dinámicamente. RBAC por rol.
 
 ### Database Migrations
 
