@@ -82,7 +82,7 @@ profile.role_codigo  // ✓ campo correcto
 ### Backlog / notas de producto
 
 - **OVEM - tanqueo (pendiente)**: añadir en Portal OVEM una opción para registrar tanqueo con campos requeridos: `placa`, `fecha`, `km`, `galones`, `valor_total` (y persistir en `fuel_logs` o tabla equivalente según el flujo).
-- **Consumo eléctricos vs Kia Picanto (pendiente)**: cargar datos de consumo de la flota eléctrica actual y compararlos directamente con el historial de los 4 Kia Picanto 2021 de Bogotá (KYV199, KZO779, KYV219, KOS929) que reemplazaron.
+- **Consumo eléctricos vs Kia Picanto (pendiente)**: cargar datos de consumo de la flota eléctrica actual y compararlos directamente con el historial de los 4 Kia Picanto 2021 de Bogotá (KYV199, KZO779, KYV219, KOS929) que reemplazaron. **Nota de diseño**: los Picanto NO van como vehículos de flota — diseñar estructura de datos separada para datos históricos de referencia.
 
 ### Database Migrations
 
@@ -104,9 +104,9 @@ scripts/migrations/
   013_coordinacion_capacitaciones.sql   # Rol COORDINACION + módulo Capacitaciones (6 tablas)
   011_suppliers_fields.sql              # ADD COLUMNS telefono, ciudad, servicio, direccion a suppliers
   015_vencimientos_soat_tecnicomecanica.sql  # UPDATE vencimiento_soat + tecnicomecanica para 36 vehículos
-  016_historial_mantenimientos.sql      # INSERT 1417 mantenimientos históricos (CONTROL_VEH_INTERASSIST V2 2026)
-  017_historial_combustible.sql         # INSERT 2858 registros combustible (detailed_consumption); anomalías en notas
-  018_kia_picanto_bogota.sql            # INSERT 4 Kia Picanto 2021 (KYV199/KZO779/KYV219/KOS929) + 414 fuel logs + LSN265→LSN367 fix (6 registros)
+  016_historial_mantenimientos.sql      # INSERT 1417 mantenimientos históricos — datos borrados, cargar manualmente
+  017_historial_combustible.sql         # INSERT 2858 registros combustible (detailed_consumption); anomalías en notas — datos borrados, cargar manualmente
+  018_kia_picanto_bogota.sql            # SUPERSEDED — no ejecutar; Kia Picanto no son vehículos de flota; datos de consumo cargados manualmente
 ```
 
 Migrations are idempotent. RLS policies must live in migration files, not be set via the Supabase dashboard UI.
