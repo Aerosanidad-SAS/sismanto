@@ -1,14 +1,45 @@
 /**
- * Aplica en orden: schema.sql → 002_iteracion2.sql → 003_rbac.sql → 004_reserved_rls.sql
- * y opcionalmente crea rol SUPERADMIN + perfil ADMIN para ADMIN_SETUP_EMAIL.
+ * Aplica migraciones en orden usando la tabla schema_migrations como tracker.
  *
- * Requiere DATABASE_URL en .env.local o .env, o en el entorno (Supabase: Connect → URI, o Project settings → Database).
+ * Primera ejecución en una DB existente: crea el tracker y marca las migraciones
+ * ya aplicadas sin re-ejecutarlas. Las nuevas se ejecutan y se registran.
+ *
+ * Requiere DATABASE_URL en .env.local o .env.
  * Uso: npm run db:apply
  */
 import * as fs from "fs";
 import * as path from "path";
 import pg from "pg";
 
+// ─── Migraciones en orden canónico ───────────────────────────────────────────
+// Excluidos permanentemente:
+//   004_reserved_rls.sql        → placeholder vacío, reemplazado por 004_rls_roles.sql
+//   013_coordinacion_role_access.sql → duplicado parcial de 013_coordinacion_capacitaciones.sql
+//   018_kia_picanto_bogota.sql  → SUPERSEDED (Kia Picanto no son vehículos de flota)
+//   021_reset_fuel_logs_manual_reload.sql → TRUNCATE destructivo, no repetir
+const MIGRATIONS: { name: string; file: string }[] = [
+  { name: "schema.sql",                              file: "scripts/schema.sql" },
+  { name: "002_iteracion2.sql",                      file: "scripts/migrations/002_iteracion2.sql" },
+  { name: "003_rbac.sql",                            file: "scripts/migrations/003_rbac.sql" },
+  { name: "004_rls_roles.sql",                       file: "scripts/migrations/004_rls_roles.sql" },
+  { name: "005_maintenance_items_checklist.sql",     file: "scripts/migrations/005_maintenance_items_checklist.sql" },
+  { name: "006_mantenimiento_flota_ovem.sql",        file: "scripts/migrations/006_mantenimiento_flota_ovem.sql" },
+  { name: "007_daily_check_items_cantidad_ok.sql",   file: "scripts/migrations/007_daily_check_items_cantidad_ok.sql" },
+  { name: "008_fleet_vencimientos_checklist.sql",    file: "scripts/migrations/008_fleet_vencimientos_checklist.sql" },
+  { name: "009_vehicle_fds_desde.sql",               file: "scripts/migrations/009_vehicle_fds_desde.sql" },
+  { name: "010_vehicle_status_history.sql",          file: "scripts/migrations/010_vehicle_status_history.sql" },
+  { name: "011_suppliers_fields.sql",                file: "scripts/migrations/011_suppliers_fields.sql" },
+  { name: "012_preventive_maintenance_plan.sql",     file: "scripts/migrations/012_preventive_maintenance_plan.sql" },
+  { name: "013_coordinacion_capacitaciones.sql",     file: "scripts/migrations/013_coordinacion_capacitaciones.sql" },
+  { name: "015_vencimientos_soat_tecnicomecanica.sql", file: "scripts/migrations/015_vencimientos_soat_tecnicomecanica.sql" },
+  { name: "016_historial_mantenimientos.sql",        file: "scripts/migrations/016_historial_mantenimientos.sql" },
+  { name: "017_historial_combustible.sql",           file: "scripts/migrations/017_historial_combustible.sql" },
+  { name: "019_security_perf_hardening.sql",         file: "scripts/migrations/019_security_perf_hardening.sql" },
+  { name: "020_reference_spark_2021.sql",            file: "scripts/migrations/020_reference_spark_2021.sql" },
+  { name: "022_vehicle_specs_required.sql",          file: "scripts/migrations/022_vehicle_specs_required.sql" },
+];
+
+// ─── Env loading ──────────────────────────────────────────────────────────────
 function loadEnvFile(filePath: string) {
   if (!fs.existsSync(filePath)) return;
   for (const line of fs.readFileSync(filePath, "utf-8").split(/\r?\n/)) {
@@ -22,63 +53,84 @@ function loadEnvFile(filePath: string) {
   }
 }
 
-/** Orden: `.env` y luego `.env.local` (este último pisa claves). La shell puede aportar DATABASE_URL si no está en archivos. */
 function loadEnv() {
   const root = process.cwd();
   loadEnvFile(path.join(root, ".env"));
   loadEnvFile(path.join(root, ".env.local"));
 }
 
-/** Si solo existe como comentario, muchos equipos olvidan quitar el `#`. */
 function hintIfDatabaseUrlCommented(): string | undefined {
   const root = process.cwd();
   for (const name of [".env.local", ".env"] as const) {
     const filePath = path.join(root, name);
     if (!fs.existsSync(filePath)) continue;
-    const lines = fs.readFileSync(filePath, "utf-8").split(/\r?\n/);
-    for (const line of lines) {
+    for (const line of fs.readFileSync(filePath, "utf-8").split(/\r?\n/)) {
       if (/^\s*#\s*DATABASE_URL\s*=/.test(line)) {
-        return `En ${name} la línea DATABASE_URL está comentada (empieza con #). Quita el # y sustituye el placeholder de la contraseña por la contraseña real de la base en Supabase.`;
+        return `En ${name} la línea DATABASE_URL está comentada. Quita el # y reemplaza el placeholder por la contraseña real.`;
       }
     }
   }
   return undefined;
 }
 
-/** Evita intentar conectar con plantillas típicas (mensaje más claro que ENOTFOUND o 28P01). */
 function databaseUrlConfigError(url: string): string | undefined {
   if (/\bTU_PASSWORD\b|\[YOUR-PASSWORD\]/i.test(url)) {
     return (
-      "DATABASE_URL sigue con un marcador de contraseña (p. ej. TU_PASSWORD). " +
-      "Sustitúyelo por la contraseña real de la base en Supabase (Connect → URI o Database → reset password). " +
-      "En Windows conviene pegar la URI completa de Session pooler si db.*.supabase.co no resuelve (IPv6)."
+      "DATABASE_URL tiene un marcador de contraseña. " +
+      "Reemplázalo por la contraseña real en Supabase (Connect → URI)."
     );
   }
   return undefined;
 }
 
-async function runSql(client: pg.Client, label: string, sql: string) {
-  console.log(`\n→ Ejecutando: ${label} ...`);
-  await client.query(sql);
-  console.log(`   ✓ OK`);
+// ─── Tracker ─────────────────────────────────────────────────────────────────
+async function ensureTracker(client: pg.Client): Promise<boolean> {
+  const { rows } = await client.query<{ exists: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'schema_migrations'
+    ) AS exists
+  `);
+  const existed = rows[0]?.exists ?? false;
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.schema_migrations (
+      name       TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  return existed; // false = primera vez (necesita seed)
 }
 
+async function isApplied(client: pg.Client, name: string): Promise<boolean> {
+  const { rows } = await client.query(
+    "SELECT 1 FROM public.schema_migrations WHERE name = $1",
+    [name]
+  );
+  return rows.length > 0;
+}
+
+async function markApplied(client: pg.Client, name: string) {
+  await client.query(
+    "INSERT INTO public.schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING",
+    [name]
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
   loadEnv();
   const databaseUrl = process.env.DATABASE_URL;
+
   if (!databaseUrl) {
     console.error(`
-❌ Falta DATABASE_URL (no está en .env, ni en .env.local, ni en la variable de entorno DATABASE_URL)
+❌ Falta DATABASE_URL (no está en .env, .env.local, ni en la variable de entorno)
 
-Cómo obtenerla (Supabase, UI actual):
-1. Abre tu proyecto en https://supabase.com/dashboard
-2. Arriba, botón "Connect" → elige "Direct connection" o "Session pooler" (recomendado si no tienes IPv6) y copia la URI
-   O bien: engranaje "Project settings" (abajo del menú lateral) → Database → Connection string / Connection info
-3. Sustituye [YOUR-PASSWORD] por la contraseña de la base (URL-encode si tiene @, #, etc.)
-4. Añade en la raíz del proyecto, en .env.local (o .env):
-   DATABASE_URL=postgresql://...
-
-(No mezcles modo Transaction pooler para migraciones largas sin saberlo; Direct o Session suelen ir bien con este script.)
+Cómo obtenerla (Supabase):
+1. Abre tu proyecto → botón "Connect"
+2. Elige "Session pooler" y copia la URI
+3. En .env.local: DATABASE_URL=postgresql://...
 `);
     const commented = hintIfDatabaseUrlCommented();
     if (commented) console.error(`\n💡 ${commented}\n`);
@@ -102,59 +154,87 @@ Cómo obtenerla (Supabase, UI actual):
     const code = e?.code as string | undefined;
     const msg = (e?.message ?? String(e)) as string;
     console.error("\n❌ No se pudo conectar a Postgres.");
-    if (
-      code === "ENOTFOUND" ||
-      /ENOTFOUND|getaddrinfo/i.test(msg)
-    ) {
+    if (code === "ENOTFOUND" || /ENOTFOUND|getaddrinfo/i.test(msg)) {
       console.error(`   ${msg}
-   Si usas el host "db.<proyecto>.supabase.co" (conexión directa), muchas veces solo hay registro IPv6 y en este equipo Node puede fallar antes de conectar.
-   Prueba la URI de "Session pooler" en Supabase → Connect (host tipo aws-0-<región>.pooler.supabase.com, usuario postgres.<ref>, puerto 5432).
-   También: internet, VPN y que DATABASE_URL no siga con el literal TU_PASSWORD.`);
+   Prueba la URI de "Session pooler" en Supabase → Connect (host tipo aws-0-<región>.pooler.supabase.com).`);
     } else if (/Tenant or user not found/i.test(msg)) {
       console.error(`   ${msg}
-   Suele indicar usuario/host del pooler distinto al del proyecto: abre Supabase → Connect → Session pooler
-   y pega la URI completa (usuario postgres.<ref> y host tipo aws-*-<región>.pooler..., copiados tal cual).
-   También revisa la contraseña: un fallo de credenciales a veces se reporta así.`);
-    } else if (
-      code === "28P01" ||
-      /password authentication failed/i.test(msg)
-    ) {
+   Abre Supabase → Connect → Session pooler y pega la URI completa.`);
+    } else if (code === "28P01" || /password authentication failed/i.test(msg)) {
       console.error(`   ${msg}
-   Contraseña rechazada: usa la de la base en Supabase (Connect / Database), no anon ni service_role.
-   Caracteres especiales en la contraseña → codificar en la URL (p. ej. @ como %40).`);
+   Contraseña rechazada. Caracteres especiales en la contraseña deben estar URL-encoded.`);
     } else {
       console.error(`   ${msg}`);
     }
     process.exit(1);
   }
-  console.log("Conectado a Postgres.");
 
-  const files = [
-    ["schema.sql", path.join(process.cwd(), "scripts", "schema.sql")],
-    ["002_iteracion2.sql", path.join(process.cwd(), "scripts", "migrations", "002_iteracion2.sql")],
-    ["003_rbac.sql", path.join(process.cwd(), "scripts", "migrations", "003_rbac.sql")],
-    ["004_rls_roles.sql", path.join(process.cwd(), "scripts", "migrations", "004_rls_roles.sql")],
-    ["005_maintenance_items_checklist.sql", path.join(process.cwd(), "scripts", "migrations", "005_maintenance_items_checklist.sql")],
-    ["006_mantenimiento_flota_ovem.sql", path.join(process.cwd(), "scripts", "migrations", "006_mantenimiento_flota_ovem.sql")],
-    ["007_daily_check_items_cantidad_ok.sql", path.join(process.cwd(), "scripts", "migrations", "007_daily_check_items_cantidad_ok.sql")],
-  ] as const;
+  console.log("✓ Conectado a Postgres\n");
 
-  try {
-    for (const [label, filePath] of files) {
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`No se encontró el archivo: ${filePath}`);
-      }
-      const sql = fs.readFileSync(filePath, "utf-8");
-      await runSql(client, label, sql);
+  const trackerExisted = await ensureTracker(client);
+
+  if (!trackerExisted) {
+    // Primera vez: el tracker no existía → DB ya tiene migraciones aplicadas sin él.
+    // Marcamos todas como aplicadas para que no se re-ejecuten.
+    console.log("ℹ  Tracker nuevo detectado — sembrando migraciones previas como ya aplicadas...");
+    for (const m of MIGRATIONS) {
+      await markApplied(client, m.name);
+    }
+    console.log(`   ${MIGRATIONS.length} migraciones marcadas. Futuras migraciones se ejecutarán normalmente.\n`);
+
+    // Igual ejecutamos el bloque de ADMIN por si acaso (idempotente).
+    await ensureAdminProfile(client);
+    console.log("\n✅ Tracker inicializado.");
+    await client.end();
+    return;
+  }
+
+  // Ejecución normal: aplicar solo las pendientes
+  let applied = 0;
+  let skipped = 0;
+
+  for (const m of MIGRATIONS) {
+    if (await isApplied(client, m.name)) {
+      console.log(`  ⏭  ${m.name}`);
+      skipped++;
+      continue;
     }
 
-    const adminEmail =
-      process.env.ADMIN_SETUP_EMAIL?.trim() ||
-      "innovizar@aerosanidadsas.com";
+    const filePath = path.join(process.cwd(), m.file);
+    if (!fs.existsSync(filePath)) {
+      console.error(`\n❌ Archivo no encontrado: ${filePath}`);
+      await client.end();
+      process.exit(1);
+    }
 
-    console.log(`\n→ Post-migración: perfil ADMIN para "${adminEmail}" (si el usuario existe en Auth) ...`);
-    const r = await client.query(
-      `
+    const sql = fs.readFileSync(filePath, "utf-8");
+    console.log(`  →  Aplicando: ${m.name} ...`);
+    try {
+      await client.query(sql);
+      await markApplied(client, m.name);
+      console.log(`  ✓  ${m.name}`);
+      applied++;
+    } catch (e: any) {
+      console.error(`\n❌ Error en ${m.name}:\n   ${e.message}`);
+      await client.end();
+      process.exit(1);
+    }
+  }
+
+  console.log(`\n  ${applied} aplicadas, ${skipped} ya al día.`);
+
+  await ensureAdminProfile(client);
+
+  console.log("\n✅ Base de datos al día.\n");
+  await client.end();
+}
+
+async function ensureAdminProfile(client: pg.Client) {
+  const adminEmail =
+    process.env.ADMIN_SETUP_EMAIL?.trim() || "innovizar@aerosanidadsas.com";
+
+  const r = await client.query(
+    `
 INSERT INTO user_profiles (user_id, role_id, nombre_completo, email, activo)
 SELECT
   u.id,
@@ -165,42 +245,18 @@ SELECT
 FROM auth.users u
 WHERE u.email = $1
 ON CONFLICT (user_id) DO UPDATE SET
-  role_id = EXCLUDED.role_id,
+  role_id        = EXCLUDED.role_id,
   nombre_completo = EXCLUDED.nombre_completo,
-  email = EXCLUDED.email,
-  activo = true,
-  updated_at = NOW();
+  email          = EXCLUDED.email,
+  activo         = true,
+  updated_at     = NOW()
 `,
-      [adminEmail]
-    );
-    console.log(`   ✓ Perfil actualizado o insertado (filas: ${r.rowCount ?? 0})`);
+    [adminEmail]
+  );
 
-    if ((r.rowCount ?? 0) === 0) {
-      console.log(`
-   ⚠️  Si no había fila en auth.users con ese email, no se insertó perfil.
-       Crea el usuario en Authentication → Users y vuelve a ejecutar solo el bloque SQL
-       o cambia ADMIN_SETUP_EMAIL en .env.local y ejecuta de nuevo npm run db:apply
-`);
-    }
-  } catch (e: any) {
-    console.error("\n❌ Error:", e.message || e);
-    console.error(`
-Si el error es por "already exists" / duplicado, puede que el esquema ya esté parcialmente creado.
-En ese caso usa el SQL Editor de Supabase para revisar qué falta, o restaura un proyecto limpio.
-`);
-    process.exit(1);
-  } finally {
-    await client.end();
+  if ((r.rowCount ?? 0) > 0) {
+    console.log(`\n  ✓ Perfil ADMIN actualizado para "${adminEmail}"`);
   }
-
-  console.log(`
-✅ Migraciones aplicadas.
-
-Siguientes pasos (solo si hace falta):
-1. Supabase Dashboard → Settings → API → si PostgREST no ve tablas nuevas, espera 1–2 min o reinicia el proyecto.
-2. Ejecuta: npx tsx scripts/verify-user-profiles.ts
-3. Inicia sesión en la app con el usuario de Auth que enlazaste.
-`);
 }
 
 main().catch((e) => {

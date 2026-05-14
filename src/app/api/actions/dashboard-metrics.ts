@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { dateRangeSchema, tipoFiltroMantenimientoSchema } from "@/lib/validations";
 import type { CostoPorVehiculoKPI, DisponibilidadVehiculo } from "@/types";
+import { isReferenceSparkCombustionPlaca, normalizePlaca } from "@/lib/fleet-reference-plates";
 
 type TipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
 
@@ -18,7 +19,7 @@ function normalizarPlacas(csv: string | undefined): Set<string> | null {
   if (!csv || !csv.trim()) return null;
   const parts = csv
     .split(/[,;\s]+/)
-    .map((p) => p.trim().toUpperCase())
+    .map((p) => normalizePlaca(p))
     .filter(Boolean);
   return parts.length ? new Set(parts) : null;
 }
@@ -66,32 +67,41 @@ export async function getCostosPorVehiculo(
 
     const supabase = createClient();
 
-    let query = supabase
+    const { data: vehiclesRaw } = await supabase
+      .from("vehicles")
+      .select(
+        "id, placa, marca, centro_operativo_id, costo_soat_anual, costo_tecnomecanica_anual, costo_poliza_anual"
+      )
+      .order("placa");
+    if (!vehiclesRaw) return [];
+
+    let vehicles = (vehiclesRaw as any[]).filter(
+      (v) => !isReferenceSparkCombustionPlaca(v.placa)
+    );
+    if (centroId != null && Number.isFinite(centroId)) {
+      vehicles = vehicles.filter((v) => v.centro_operativo_id === centroId);
+    }
+    if (placasSet && placasSet.size > 0) {
+      vehicles = vehicles.filter((v) => placasSet.has(normalizePlaca(v.placa)));
+    }
+    if (vehicles.length === 0) return [];
+
+    const vehicleIds = vehicles.map((v) => v.id as string);
+
+    let mantQuery = supabase
       .from("maintenance_records")
       .select(
-        `id_manto, vehicle_id, tipo, valor, descripcion_trabajo,
-         maintenance_categories(nombre),
-         vehicles!inner(placa, marca, centro_operativo_id)`
+        `id_manto, vehicle_id, tipo, valor, descripcion_trabajo, maintenance_categories(nombre)`
       )
+      .in("vehicle_id", vehicleIds)
       .gte("fecha", fi)
       .lte("fecha", ff);
 
     if (tipoF !== "AMBOS") {
-      query = query.eq("tipo", tipoF);
+      mantQuery = mantQuery.eq("tipo", tipoF);
     }
 
-    const { data: registrosRaw } = await query;
-    if (!registrosRaw) return [];
-
-    let registros = registrosRaw as any[];
-
-    if (centroId != null && Number.isFinite(centroId)) {
-      registros = registros.filter((r) => r.vehicles?.centro_operativo_id === centroId);
-    }
-    if (placasSet && placasSet.size > 0) {
-      registros = registros.filter((r) => placasSet.has(String(r.vehicles?.placa || "").toUpperCase()));
-    }
-
+    let registros = ((await mantQuery).data || []) as any[];
     let itemsByManto: Record<number, string[]> = {};
     if (textoQ && registros.length > 0) {
       const ids = [...new Set(registros.map((r) => r.id_manto as number))];
@@ -107,28 +117,55 @@ export async function getCostosPorVehiculo(
       registros = registros.filter((r) => coincideTextoTrabajo(r, itemsByManto, textoQ));
     }
 
-    const map: Record<string, CostoPorVehiculoKPI> = {};
-    registros.forEach((r: any) => {
-      const vid = r.vehicle_id;
-      if (!map[vid]) {
-        map[vid] = {
-          vehicleId: vid,
-          placa: r.vehicles?.placa || "",
-          marca: r.vehicles?.marca || null,
-          costoPreventivo: 0,
-          costoCorrectivo: 0,
-          costoTotal: 0,
-          cantidadMantenimientos: 0,
-        };
-      }
-      const valor = r.valor || 0;
-      map[vid].costoTotal += valor;
-      map[vid].cantidadMantenimientos += 1;
-      if (r.tipo === "PREVENTIVO") map[vid].costoPreventivo += valor;
-      else map[vid].costoCorrectivo += valor;
-    });
+    const { data: fuelRows } = await supabase
+      .from("fuel_logs")
+      .select("vehicle_id, costo")
+      .in("vehicle_id", vehicleIds)
+      .gte("fecha", fi)
+      .lte("fecha", ff);
 
-    return Object.values(map).sort((a, b) => b.costoTotal - a.costoTotal);
+    const map: Record<string, CostoPorVehiculoKPI> = {};
+    for (const v of vehicles) {
+      const costoFijoAnual =
+        Number(v.costo_soat_anual || 0) +
+        Number(v.costo_tecnomecanica_anual || 0) +
+        Number(v.costo_poliza_anual || 0);
+      map[v.id] = {
+        vehicleId: v.id,
+        placa: v.placa || "",
+        marca: v.marca || null,
+        costoPreventivo: 0,
+        costoCorrectivo: 0,
+        costoCombustible: 0,
+        costoFijoAnual,
+        costoMantenimientoTotal: 0,
+        costoTotal: costoFijoAnual,
+        cantidadMantenimientos: 0,
+      };
+    }
+
+    for (const r of registros) {
+      const reg = map[r.vehicle_id];
+      if (!reg) continue;
+      const valor = Number(r.valor || 0);
+      reg.costoMantenimientoTotal += valor;
+      reg.cantidadMantenimientos += 1;
+      if (r.tipo === "PREVENTIVO") reg.costoPreventivo += valor;
+      else reg.costoCorrectivo += valor;
+    }
+
+    for (const f of fuelRows || []) {
+      const reg = map[f.vehicle_id];
+      if (!reg) continue;
+      reg.costoCombustible += Number(f.costo || 0);
+    }
+
+    const out = Object.values(map).map((r) => ({
+      ...r,
+      costoTotal: r.costoMantenimientoTotal + r.costoCombustible + r.costoFijoAnual,
+    }));
+
+    return out.sort((a, b) => b.costoTotal - a.costoTotal);
   } catch {
     return [];
   }
@@ -156,6 +193,8 @@ export async function getDisponibilidadPorVehiculo(
     }
     const { data: vehicles } = await vehQuery;
     if (!vehicles) return [];
+    const vehiclesOperativos = vehicles.filter((v) => !isReferenceSparkCombustionPlaca(v.placa));
+    if (vehiclesOperativos.length === 0) return [];
 
     const horasTotales =
       (new Date(ff).getTime() - new Date(fi).getTime()) /
@@ -175,7 +214,7 @@ export async function getDisponibilidadPorVehiculo(
       .eq("afecta_operatividad", true)
       .gte("fecha_reporte", fi);
 
-    return vehicles.map((v) => {
+    return vehiclesOperativos.map((v) => {
       // TFDS de mantenimientos
       const tfdsMantos = (mantos || [])
         .filter((m) => m.vehicle_id === v.id)
@@ -245,9 +284,12 @@ export async function getResolucionNovedades(
       .order("fecha_reporte", { ascending: false });
 
     if (!data) return { novedades: [], resumen: null };
+    const dataOperativa = data.filter(
+      (n: any) => !isReferenceSparkCombustionPlaca(n.vehicles?.placa)
+    );
 
-    const cerradas = data.filter((n: any) => n.estado === "CERRADO");
-    const abiertas = data.filter((n: any) => n.estado !== "CERRADO");
+    const cerradas = dataOperativa.filter((n: any) => n.estado === "CERRADO");
+    const abiertas = dataOperativa.filter((n: any) => n.estado !== "CERRADO");
 
     const promedioResolucion =
       cerradas.length > 0
@@ -258,12 +300,12 @@ export async function getResolucionNovedades(
         : 0;
 
     const pctResueltas =
-      data.length > 0 ? (cerradas.length / data.length) * 100 : 0;
+      dataOperativa.length > 0 ? (cerradas.length / dataOperativa.length) * 100 : 0;
 
     return {
-      novedades: data,
+      novedades: dataOperativa,
       resumen: {
-        total: data.length,
+        total: dataOperativa.length,
         cerradas: cerradas.length,
         abiertas: abiertas.length,
         promedioHorasResolucion: promedioResolucion,

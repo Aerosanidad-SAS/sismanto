@@ -42,6 +42,7 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
     estado_nuevo: parsed.data.nuevoEstado,
     estado_anterior: estadoAnterior,
     registrado_por: profile.user_id,
+    fecha_cambio: new Date().toISOString(),
   });
 
   revalidatePath("/regulacion");

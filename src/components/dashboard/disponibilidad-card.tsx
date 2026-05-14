@@ -48,15 +48,31 @@ interface DisponibilidadCardProps {
   puedeToggleEstado?: boolean;
 }
 
-function DisponibilidadBadge({ pct, cumple }: { pct: number; cumple: boolean }) {
+function DisponibilidadBadge({ pct }: { pct: number }) {
+  const tone =
+    pct >= 95
+      ? {
+          wrap: "bg-green-100 text-green-800",
+          dot: "bg-green-600",
+        }
+      : pct >= 85
+        ? {
+            wrap: "bg-amber-100 text-amber-800",
+            dot: "bg-amber-600",
+          }
+        : {
+            wrap: "bg-red-100 text-red-800",
+            dot: "bg-red-600",
+          };
+
   return (
     <span
       className={cn(
         "flex w-full min-w-0 max-w-full items-center justify-center gap-1 rounded-full px-1.5 py-0.5 text-center text-[10px] font-semibold leading-tight sm:text-xs",
-        cumple ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+        tone.wrap
       )}
     >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cumple ? "bg-green-600" : "bg-red-600"}`} />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} />
       <span className="min-w-0 truncate tabular-nums">{pct.toFixed(2)}%</span>
     </span>
   );
@@ -144,12 +160,12 @@ export function DisponibilidadCard({
 
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader className="space-y-3 pb-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
+      <CardHeader className="space-y-2 pb-2">
+        <div className="flex flex-col gap-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span title="Indicador de disponibilidad de la flota en el período seleccionado" className="inline-flex shrink-0">
-                <Activity className="h-5 w-5 text-muted-foreground" aria-hidden />
+              <span className="inline-flex shrink-0 text-muted-foreground">
+                <Activity className="h-5 w-5" aria-hidden />
               </span>
               <CardTitle className="text-lg leading-tight">Disponibilidad de Flota</CardTitle>
               <HelpTrigger text={HELP_SECCION} />
@@ -175,43 +191,62 @@ export function DisponibilidadCard({
             </div>
           </div>
 
-          <div className="w-full shrink-0 space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3 lg:max-w-[min(100%,20rem)]">
+          <div className="w-full space-y-2 rounded-lg border border-border/70 bg-muted/20 p-2.5">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Filtros</p>
               <HelpTrigger text="Período y centro aplican solo a esta tarjeta salvo que use filtros globales del encabezado." />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-[10px]">Desde</Label>
-                <Input type="date" value={fi} onChange={(e) => setFi(e.target.value)} className="mt-0.5 h-8 text-xs" />
+            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+              <div className="min-w-[13rem] flex-1">
+                <Label className="text-[10px]">Centro operativo</Label>
+                <Select value={cen || SELECT_ALL} onValueChange={(v) => setCen(v === SELECT_ALL ? "" : v)}>
+                  <SelectTrigger className="mt-0.5 h-8 text-xs">
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SELECT_ALL}>Todos</SelectItem>
+                    {centros.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div>
-                <Label className="text-[10px]">Hasta</Label>
-                <Input type="date" value={ff} onChange={(e) => setFf(e.target.value)} className="mt-0.5 h-8 text-xs" />
+
+              <div className="min-w-[18rem] flex-1">
+                <Label className="text-[10px]">Período</Label>
+                <div className="mt-0.5 grid grid-cols-2 gap-2">
+                  <Input
+                    type="date"
+                    aria-label="Fecha desde"
+                    value={fi}
+                    onChange={(e) => setFi(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Input
+                    type="date"
+                    aria-label="Fecha hasta"
+                    value={ff}
+                    onChange={(e) => setFf(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
               </div>
+
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0 px-4 text-xs"
+                disabled={pending}
+                onClick={aplicar}
+              >
+                {pending ? "Aplicando…" : "Aplicar"}
+              </Button>
             </div>
-            <div>
-              <Label className="text-[10px]">Centro</Label>
-              <Select value={cen || SELECT_ALL} onValueChange={(v) => setCen(v === SELECT_ALL ? "" : v)}>
-                <SelectTrigger className="mt-0.5 h-8 text-xs">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SELECT_ALL}>Todos</SelectItem>
-                  {centros.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="button" size="sm" className="h-8 w-full text-xs" disabled={pending} onClick={aplicar}>
-              {pending ? "Aplicando…" : "Aplicar período"}
-            </Button>
             {puedeToggleEstado ? (
               <p className="text-[10px] text-muted-foreground leading-tight">
-                Puede alternar disponible / fuera de servicio en cada tarjeta inferior.
+                Puede alternar OPERATIVO / FDS en cada tarjeta inferior.
               </p>
             ) : null}
             {toggleErr ? (
@@ -251,8 +286,8 @@ export function DisponibilidadCard({
                             onClick={() => alternarEstado(d.vehicleId, disp)}
                             title={
                               disp
-                                ? "Clic para marcar fuera de servicio (despacho)"
-                                : "Clic para marcar disponible (operativo)"
+                                ? "Clic para marcar FDS"
+                                : "Clic para marcar OPERATIVO"
                             }
                             className={cn(
                               "inline-flex w-full min-w-0 max-w-full justify-center rounded-md border px-1 py-0.5 text-[10px] font-semibold leading-tight transition-colors",
@@ -262,29 +297,23 @@ export function DisponibilidadCard({
                               togglingId === d.vehicleId && "pointer-events-none opacity-60"
                             )}
                           >
-                            {togglingId === d.vehicleId ? "…" : disp ? "Disponible" : "Fuera de servicio"}
+                            {togglingId === d.vehicleId ? "…" : disp ? "OPERATIVO" : "FDS"}
                           </button>
                         ) : (
                           <Badge variant={disp ? "success" : "destructive"} className="max-w-full px-1.5 py-0 text-[10px]">
-                            {disp ? "Disponible" : "Fuera de servicio"}
+                            {disp ? "OPERATIVO" : "FDS"}
                           </Badge>
                         )}
                       </p>
-                      <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground">
-                        <span className="text-[10px]">TFD</span>
-                        <HelpTrigger text={HELP_TFD} className="scale-90" />
+                      <div className="mt-1.5">
+                        <DisponibilidadBadge pct={d.disponibilidadPct} />
                       </div>
-                      <DisponibilidadBadge pct={d.disponibilidadPct} cumple={d.cumpleMeta} />
                       <div className="mt-1.5 flex items-baseline justify-between gap-1">
                         <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
                           TFDS
                           <HelpTrigger text={HELP_TFDS} className="scale-90" />
                         </span>
                         <span className="font-medium tabular-nums">{d.tfdsHoras.toFixed(1)} h</span>
-                      </div>
-                      <div className="mt-0.5 flex items-baseline justify-between gap-1">
-                        <span className="text-[10px] text-muted-foreground">Meta</span>
-                        <span className="tabular-nums font-semibold">{d.cumpleMeta ? `${META}% ✓` : `<${META}%`}</span>
                       </div>
                     </div>
                   );

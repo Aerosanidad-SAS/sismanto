@@ -31,6 +31,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, Trash2 } from "lucide-react";
 import type { OperationalCenter } from "@/types";
 
@@ -43,6 +52,7 @@ export function CentrosTab({ centros: initialCentros }: CentrosTabProps) {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [deactivateId, setDeactivateId] = useState<number | null>(null);
 
   const {
     register,
@@ -65,9 +75,11 @@ export function CentrosTab({ centros: initialCentros }: CentrosTabProps) {
     }
   };
 
-  const handleEliminar = async (id: number) => {
-    if (!confirm("¿Desea desactivar este centro de operaciones?")) return;
+  const confirmDeactivate = () => {
+    if (deactivateId == null) return;
+    const id = deactivateId;
     startTransition(async () => {
+      setDeactivateId(null);
       const result = await eliminarCentroOperaciones(id);
       if (result.error) {
         alert(result.error);
@@ -160,7 +172,7 @@ export function CentrosTab({ centros: initialCentros }: CentrosTabProps) {
             <TableBody>
               {initialCentros.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-gray-500 py-6">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
                     No hay centros registrados
                   </TableCell>
                 </TableRow>
@@ -181,7 +193,7 @@ export function CentrosTab({ centros: initialCentros }: CentrosTabProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleEliminar(centro.id)}
+                          onClick={() => setDeactivateId(centro.id)}
                           disabled={isPending}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
@@ -196,6 +208,23 @@ export function CentrosTab({ centros: initialCentros }: CentrosTabProps) {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={deactivateId != null} onOpenChange={(o) => !o && setDeactivateId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Desactivar centro de operaciones?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El centro dejará de estar disponible para nuevas asignaciones. Los datos existentes se conservan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <Button type="button" variant="destructive" disabled={isPending} onClick={confirmDeactivate}>
+              {isPending ? "Procesando…" : "Desactivar"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

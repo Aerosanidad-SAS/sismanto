@@ -1,9 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDateShort, formatCurrency } from "@/lib/utils";
-import { VehicleStatusCard } from "@/components/dashboard/vehicle-status-card";
+import { formatCurrency } from "@/lib/utils";
 import { getProfile } from "@/app/api/actions/auth";
 import { CostoPorVehiculoCard } from "@/components/dashboard/costo-por-vehiculo-card";
 import { DisponibilidadCard } from "@/components/dashboard/disponibilidad-card";
@@ -13,14 +11,15 @@ import {
   getDisponibilidadPorVehiculo,
   getResolucionNovedades,
 } from "@/app/api/actions/dashboard-metrics";
-import { AlertTriangle, Calendar, DollarSign, Truck } from "lucide-react";
+import { AlertTriangle, DollarSign, Truck } from "lucide-react";
 import { HelpTrigger } from "@/components/ui/help-trigger";
-import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
 import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
-import { EstadoFlotaDetalle, type NovedadAbiertaResumen } from "@/components/dashboard/estado-flota-detalle";
+import { type NovedadAbiertaResumen } from "@/components/dashboard/estado-flota-detalle";
 import { DashboardGlobalFiltros } from "@/components/dashboard/dashboard-global-filters";
-import { AssignOvemButton } from "@/components/dashboard/assign-ovem-button";
 import { getOvemUsers } from "@/app/api/actions/regulacion";
+import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
+import { ProximosVencimientosModal } from "@/components/dashboard/proximos-vencimientos-modal";
+import { EstadoFlotaTablaPaginada } from "@/components/dashboard/estado-flota-tabla-paginada";
 
 const DEFAULT_DATA = {
   totalOperativos: 0,
@@ -28,54 +27,134 @@ const DEFAULT_DATA = {
   costoMesActual: 0,
   novedadesAbiertas: 0,
   proximosVencimientos: 0,
+  vencimientosSoat: [] as { placa: string; fecha: string; diasRestantes: number }[],
+  vencimientosTecnicomecanica: [] as { placa: string; fecha: string; diasRestantes: number }[],
+  vencimientosPolizas: [] as { placa: string; costoPolizaAnual: number }[],
   vehicles: [] as any[],
   ultimoMantenimientoPorVehicleId: {} as Record<string, string>,
   novedadesAbiertasPorVehicleId: {} as Record<string, NovedadAbiertaResumen[]>,
 };
 
+const BOGOTA_TIME_ZONE = "America/Bogota";
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+const getDateIsoInTimeZone = (date: Date, timeZone: string): string => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  if (!year || !month || !day) return "";
+  return `${year}-${month}-${day}`;
+};
+
+const getDiffDays = (targetIso: string, fromIso: string): number =>
+  Math.max(
+    0,
+    Math.ceil(
+      (Date.parse(`${targetIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / DAY_MS
+    )
+  );
+
 async function getDashboardData() {
   try {
     const supabase = createClient();
-    const { data: vehicles = [] } = await supabase.from("vehicles").select("*");
+    const { data: vehiclesRaw = [] } = await supabase.from("vehicles").select("*");
+    const vehicles = (vehiclesRaw ?? []).filter((v: any) => !isReferenceSparkCombustionPlaca(v.placa));
+    const vehicleIds = new Set(vehicles.map((v: any) => v.id));
+    const vehicleIdList = Array.from(vehicleIds);
 
-    const totalOperativos = (vehicles ?? []).filter((v: any) => v.estado_actual === "OPERATIVO").length;
-    const totalFueraServicio = (vehicles ?? []).filter((v: any) => v.estado_actual === "FUERA_DE_SERVICIO").length;
+    const totalOperativos = vehicles.filter((v: any) => v.estado_actual === "OPERATIVO").length;
+    const totalFueraServicio = vehicles.filter((v: any) => v.estado_actual === "FUERA_DE_SERVICIO").length;
 
-    const inicioMes = new Date();
-    inicioMes.setDate(1);
-    inicioMes.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const hoyBogota = getDateIsoInTimeZone(now, BOGOTA_TIME_ZONE);
+    const en30Dias = new Date(now);
+    en30Dias.setDate(en30Dias.getDate() + 30);
+    const limiteBogota = getDateIsoInTimeZone(en30Dias, BOGOTA_TIME_ZONE);
+    const [year = "", month = ""] = hoyBogota.split("-");
+    const inicioMesBogota = year && month ? `${year}-${month}-01` : hoyBogota;
 
-    const { data: mantenimientosMes = [] } = await supabase
-      .from("maintenance_records")
-      .select("valor")
-      .gte("fecha", inicioMes.toISOString().split("T")[0]);
+    const isInNext30Days = (dateIso: string | null | undefined): dateIso is string => {
+      if (!dateIso) return false;
+      return dateIso >= hoyBogota && dateIso <= limiteBogota;
+    };
 
-    const costoMesActual = (mantenimientosMes ?? []).reduce((sum: number, m: any) => sum + (m.valor || 0), 0);
+    const mantenimientosMes = vehicleIdList.length
+      ? (
+          await supabase
+            .from("maintenance_records")
+            .select("valor, vehicle_id")
+            .in("vehicle_id", vehicleIdList)
+            .gte("fecha", inicioMesBogota)
+        ).data ?? []
+      : [];
 
-    const { count: novedadesAbiertas } = await supabase
-      .from("incidents")
-      .select("*", { count: "exact", head: true })
-      .eq("estado", "ABIERTO");
+    const costoMesActual = (mantenimientosMes ?? []).reduce(
+      (sum: number, m: any) => sum + (m.valor || 0),
+      0
+    );
 
-    const hoy = new Date();
-    const en30Dias = new Date();
-    en30Dias.setDate(hoy.getDate() + 30);
+    const vencimientosSoat = vehicles
+      .flatMap((v: any) =>
+        isInNext30Days(v.vencimiento_soat)
+          ? [
+              {
+                placa: String(v.placa || ""),
+                fecha: v.vencimiento_soat,
+                diasRestantes: getDiffDays(v.vencimiento_soat, hoyBogota),
+              },
+            ]
+          : []
+      )
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.placa.localeCompare(b.placa));
 
-    const proximosVencimientos = (vehicles ?? []).filter((v: any) => {
-      const vencSoat = v.vencimiento_soat ? new Date(v.vencimiento_soat) : null;
-      const vencRtm = v.vencimiento_rtm ? new Date(v.vencimiento_rtm) : null;
-      const vencTm = v.vencimiento_tecnicomecanica ? new Date(v.vencimiento_tecnicomecanica) : null;
-      return (
-        (vencSoat && vencSoat >= hoy && vencSoat <= en30Dias) ||
-        (vencRtm && vencRtm >= hoy && vencRtm <= en30Dias) ||
-        (vencTm && vencTm >= hoy && vencTm <= en30Dias)
-      );
-    }).length;
+    const vencimientosTecnicomecanica = vehicles
+      .flatMap((v: any) => {
+        const fecha = v.vencimiento_tecnicomecanica || v.vencimiento_rtm;
+        if (!isInNext30Days(fecha)) return [];
+        return [
+          {
+            placa: String(v.placa || ""),
+            fecha,
+            diasRestantes: getDiffDays(fecha, hoyBogota),
+          },
+        ];
+      })
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.placa.localeCompare(b.placa));
 
-    const { data: ultimosMantenimientos = [] } = await supabase
-      .from("maintenance_records")
-      .select("fecha, vehicle_id")
-      .order("fecha", { ascending: false });
+    const vencimientosPolizas = vehicles
+      .flatMap((v: any) =>
+        typeof v.costo_poliza_anual === "number"
+          ? [
+              {
+                placa: String(v.placa || ""),
+                costoPolizaAnual: v.costo_poliza_anual,
+              },
+            ]
+          : []
+      )
+      .sort((a, b) => a.placa.localeCompare(b.placa));
+
+    const placasConVencimiento = new Set([
+      ...vencimientosSoat.map((v) => v.placa),
+      ...vencimientosTecnicomecanica.map((v) => v.placa),
+    ]);
+    const proximosVencimientos = placasConVencimiento.size;
+
+    const ultimosMantenimientos = vehicleIdList.length
+      ? (
+          await supabase
+            .from("maintenance_records")
+            .select("fecha, vehicle_id")
+            .in("vehicle_id", vehicleIdList)
+            .order("fecha", { ascending: false })
+        ).data ?? []
+      : [];
 
     const ultimoMantenimientoPorVehicleId: Record<string, string> = {};
     (ultimosMantenimientos ?? []).forEach((m: any) => {
@@ -84,11 +163,17 @@ async function getDashboardData() {
       }
     });
 
-    const { data: incAbiertos = [] } = await supabase
-      .from("incidents")
-      .select("id, vehicle_id, descripcion, fecha_reporte, estado")
-      .in("estado", ["ABIERTO", "EN_PROCESO"])
-      .order("fecha_reporte", { ascending: false });
+    const incAbiertos = vehicleIdList.length
+      ? (
+          await supabase
+            .from("incidents")
+            .select("id, vehicle_id, descripcion, fecha_reporte, estado")
+            .in("estado", ["ABIERTO", "EN_PROCESO"])
+            .in("vehicle_id", vehicleIdList)
+            .order("fecha_reporte", { ascending: false })
+        ).data ?? []
+      : [];
+    const novedadesAbiertas = incAbiertos.filter((inc: any) => inc.estado === "ABIERTO").length;
 
     const novedadesAbiertasPorVehicleId: Record<string, NovedadAbiertaResumen[]> = {};
     for (const inc of incAbiertos as any[]) {
@@ -106,9 +191,12 @@ async function getDashboardData() {
       totalOperativos,
       totalFueraServicio,
       costoMesActual,
-      novedadesAbiertas: novedadesAbiertas ?? 0,
+      novedadesAbiertas,
       proximosVencimientos,
-      vehicles: vehicles ?? [],
+      vencimientosSoat,
+      vencimientosTecnicomecanica,
+      vencimientosPolizas,
+      vehicles,
       ultimoMantenimientoPorVehicleId,
       novedadesAbiertasPorVehicleId,
     };
@@ -283,9 +371,7 @@ export default async function DashboardPage({
               <CardTitle className="text-sm font-medium">Vehículos</CardTitle>
               <HelpTrigger text="Conteo de unidades en estado operativo frente a fuera de servicio (despacho). Las placas en rojo corresponden al FDS actual en inventario." />
             </div>
-            <span title="Estado de despacho de la flota" className="inline-flex shrink-0">
-              <Truck className="h-4 w-4 text-muted-foreground" aria-hidden />
-            </span>
+            <Truck className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3">
@@ -320,14 +406,12 @@ export default async function DashboardPage({
         >
           {!hideFinanceKpis && (
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-sm font-medium">Costo mes actual</CardTitle>
                   <HelpTrigger text="Suma de valores de mantenimientos registrados desde el día 1 del mes calendario en curso hasta hoy." />
                 </div>
-                <span title="Costo de mantenimiento" className="inline-flex shrink-0">
-                  <DollarSign className="h-4 w-4 text-muted-foreground" aria-hidden />
-                </span>
+                <DollarSign className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(data.costoMesActual)}</div>
@@ -337,14 +421,12 @@ export default async function DashboardPage({
           )}
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium">Novedades abiertas</CardTitle>
                 <HelpTrigger text="Incidencias en estado ABIERTO que aún no se cierran en el sistema." />
               </div>
-              <span title="Alertas operativas" className="inline-flex shrink-0">
-                <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden />
-              </span>
+              <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{data.novedadesAbiertas}</div>
@@ -352,21 +434,12 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium">Próximos vencimientos</CardTitle>
-                <HelpTrigger text="Cantidad de vehículos con SOAT, RTM o técnico-mecánica que vencen en los próximos 30 días." />
-              </div>
-              <span title="Documentación y vencimientos" className="inline-flex shrink-0">
-                <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden />
-              </span>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{data.proximosVencimientos}</div>
-              <p className="text-xs text-muted-foreground">SOAT / técnico-mec. en 30 días</p>
-            </CardContent>
-          </Card>
+          <ProximosVencimientosModal
+            total={data.proximosVencimientos}
+            soat={data.vencimientosSoat}
+            tecnicomecanica={data.vencimientosTecnicomecanica}
+            polizas={data.vencimientosPolizas}
+          />
         </div>
       </div>
 
@@ -418,55 +491,16 @@ export default async function DashboardPage({
               No hay vehículos registrados. Vaya a Configuración para crear el primero.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Placa</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Centro Operativo</TableHead>
-                  <TableHead>Último Mantenimiento</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.vehicles.map((vehicle: any) => (
-                  <TableRow key={vehicle.id}>
-                    <TableCell className="font-medium">{vehicle.placa}</TableCell>
-                    <TableCell>
-                      <VehicleEstadoBadge
-                        vehicleId={vehicle.id}
-                        estado={vehicle.estado_actual}
-                        puedeEditar={puedeToggleEstadoEnTabla}
-                      />
-                    </TableCell>
-                    <TableCell>{vehicle.centro_operativo}</TableCell>
-                    <TableCell>
-                      {data.ultimoMantenimientoPorVehicleId[vehicle.id]
-                        ? formatDateShort(data.ultimoMantenimientoPorVehicleId[vehicle.id])
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="inline-flex flex-wrap justify-end gap-2">
-                        <EstadoFlotaDetalle
-                          placa={vehicle.placa}
-                          ultimoMantenimientoFecha={data.ultimoMantenimientoPorVehicleId[vehicle.id] ?? null}
-                          novedadesAbiertas={data.novedadesAbiertasPorVehicleId[vehicle.id] ?? []}
-                        />
-                        {canAssignOvem && (
-                          <AssignOvemButton
-                            vehicleId={vehicle.id}
-                            vehiclePlaca={vehicle.placa}
-                            ovemUsers={ovemUsers}
-                            currentAssignment={vehicleAssignmentMap[vehicle.id] ?? null}
-                          />
-                        )}
-                        <VehicleStatusCard vehicle={vehicle} readOnly={isReadOnly} />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <EstadoFlotaTablaPaginada
+              vehicles={data.vehicles}
+              ultimoMantenimientoPorVehicleId={data.ultimoMantenimientoPorVehicleId}
+              novedadesAbiertasPorVehicleId={data.novedadesAbiertasPorVehicleId}
+              canAssignOvem={canAssignOvem}
+              ovemUsers={ovemUsers}
+              vehicleAssignmentMap={vehicleAssignmentMap}
+              puedeToggleEstadoEnTabla={puedeToggleEstadoEnTabla}
+              isReadOnly={isReadOnly}
+            />
           )}
         </CardContent>
       </Card>

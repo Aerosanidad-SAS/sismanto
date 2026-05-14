@@ -47,11 +47,16 @@ export interface Vehicle {
   combustible?: string | null;
   tipo_combustible?: string | null;
   tipo_bombillos?: string | null;
+  bombilleria_farolas?: string | null;
+  bombilleria_stops?: string | null;
+  bombilleria_direccionales?: string | null;
   tipo_refrigerante?: string | null;
   aceite_usado?: string | null;
   ref_filtro_aire_motor?: string | null;
   ref_filtro_aceite?: string | null;
   ref_filtro_combustible?: string | null;
+  bateria_principal?: string | null;
+  bateria_auxiliar?: string | null;
   notas?: string | null;
   vencimiento_rtm?: string | null;
   vencimiento_soat?: string | null;
@@ -172,6 +177,8 @@ export interface TCOKPI {
   centroOperativo?: string | null;
   costoPreventivo: number;
   costoCorrectivo: number;
+  costoCombustible?: number;
+  costoFijoAnual?: number;
   costoTotal: number;
   cantidadMantenimientos: number;
 }
@@ -197,6 +204,9 @@ export interface CostoPorVehiculoKPI {
   marca?: string | null;
   costoPreventivo: number;
   costoCorrectivo: number;
+  costoCombustible: number;
+  costoFijoAnual: number;
+  costoMantenimientoTotal: number;
   costoTotal: number;
   cantidadMantenimientos: number;
 }

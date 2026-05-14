@@ -14,6 +14,8 @@ import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge"
 import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { VehicleMaintenanceAlertsPanel } from "@/components/vehiculos/vehicle-maintenance-alerts-panel";
 import { getAlertsForVehicle } from "@/app/api/actions/plan-mantenimiento";
+import { VehicleSpecsEditor } from "@/components/vehiculos/vehicle-specs-editor";
+import { VehicleGeneralEditor } from "@/components/vehiculos/vehicle-general-editor";
 
 async function getVehicle(id: string) {
   try {
@@ -81,6 +83,20 @@ async function getVehicleMileage(vehicleId: string) {
   }
 }
 
+async function getCentrosOperativos() {
+  try {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("operational_centers")
+      .select("id, nombre")
+      .eq("activo", true)
+      .order("nombre");
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function VehicleDetailPage({
   params,
 }: {
@@ -99,13 +115,14 @@ export default async function VehicleDetailPage({
     );
   }
 
-  const [mantenimientos, incidentes, kilometrajes, profile, maintenanceAlerts] =
+  const [mantenimientos, incidentes, kilometrajes, profile, maintenanceAlerts, centrosOperativos] =
     await Promise.all([
       getVehicleMaintenances(params.id),
       getVehicleIncidents(params.id),
       getVehicleMileage(params.id),
       getProfile(),
       getAlertsForVehicle(params.id),
+      getCentrosOperativos(),
     ]);
 
   const showRevenue =
@@ -153,7 +170,18 @@ export default async function VehicleDetailPage({
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between space-y-0">
             <CardTitle className="text-lg">Información General</CardTitle>
-            {canRegistrarKm ? <VehicleKilometrajeForm vehicleId={vehicle.id} placa={vehicle.placa} /> : null}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <VehicleGeneralEditor
+                vehicle={vehicle}
+                centros={centrosOperativos}
+                canEdit={
+                  profile?.role_codigo === "ADMIN" ||
+                  profile?.role_codigo === "REGULACION" ||
+                  profile?.role_codigo === "MANTENIMIENTO"
+                }
+              />
+              {canRegistrarKm ? <VehicleKilometrajeForm vehicleId={vehicle.id} placa={vehicle.placa} /> : null}
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             <div>
@@ -182,14 +210,6 @@ export default async function VehicleDetailPage({
                 <span className="text-[11px] text-muted-foreground">Clic en la etiqueta para alternar operativo / FDS.</span>
               ) : null}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Documentos</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
             <div>
               <span className="font-medium">Vencimiento SOAT:</span>{" "}
               {vehicle.vencimiento_soat
@@ -208,35 +228,70 @@ export default async function VehicleDetailPage({
                 ? formatDateShort(vehicle.vencimiento_tecnicomecanica)
                 : "N/A"}
             </div>
-            {(vehicle.costo_soat_anual != null ||
-              vehicle.costo_tecnomecanica_anual != null ||
-              vehicle.costo_poliza_anual != null) && (
-              <>
-                <div>
-                  <span className="font-medium">Costo anual SOAT:</span>{" "}
-                  {vehicle.costo_soat_anual != null
-                    ? formatCurrency(vehicle.costo_soat_anual)
-                    : "—"}
-                </div>
-                <div>
-                  <span className="font-medium">Costo anual técnico-mecánica:</span>{" "}
-                  {vehicle.costo_tecnomecanica_anual != null
-                    ? formatCurrency(vehicle.costo_tecnomecanica_anual)
-                    : "—"}
-                </div>
-                <div>
-                  <span className="font-medium">Costo anual póliza:</span>{" "}
-                  {vehicle.costo_poliza_anual != null ? formatCurrency(vehicle.costo_poliza_anual) : "—"}
-                </div>
-              </>
-            )}
+            <div>
+              <span className="font-medium">Costo SOAT anual:</span>{" "}
+              {vehicle.costo_soat_anual != null ? formatCurrency(vehicle.costo_soat_anual) : "N/A"}
+            </div>
+            <div>
+              <span className="font-medium">Costo RTM anual:</span>{" "}
+              {vehicle.costo_tecnomecanica_anual != null
+                ? formatCurrency(vehicle.costo_tecnomecanica_anual)
+                : "N/A"}
+            </div>
+            <div>
+              <span className="font-medium">Costo póliza anual:</span>{" "}
+              {vehicle.costo_poliza_anual != null ? formatCurrency(vehicle.costo_poliza_anual) : "N/A"}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Especificaciones</CardTitle>
+            <VehicleSpecsEditor
+              vehicle={vehicle}
+              canEdit={
+                profile?.role_codigo === "ADMIN" ||
+                profile?.role_codigo === "REGULACION" ||
+                profile?.role_codigo === "MANTENIMIENTO"
+              }
+            />
+          </CardHeader>
+          <CardContent className="space-y-2">
             <div>
               <span className="font-medium">Tipo de Llantas:</span>{" "}
               {vehicle.tipo_llantas || "N/A"}
             </div>
             <div>
-              <span className="font-medium">Combustible:</span>{" "}
-              {vehicle.combustible || "N/A"}
+              <span className="font-medium">Aceite de motor:</span>{" "}
+              {vehicle.aceite_usado || "N/A"}
+            </div>
+            <div>
+              <span className="font-medium">Filtro Aceite:</span>{" "}
+              {vehicle.ref_filtro_aceite || "N/A"}
+            </div>
+            <div>
+              <span className="font-medium">Filtro Aire:</span>{" "}
+              {vehicle.ref_filtro_aire_motor || "N/A"}
+            </div>
+            <div className="space-y-1">
+              <span className="font-medium">Bombillería</span>
+              <div className="space-y-1 pl-4 text-sm">
+                <p><span className="text-muted-foreground">Farolas:</span> {vehicle.bombilleria_farolas || "N/A"}</p>
+                <p><span className="text-muted-foreground">Stops:</span> {vehicle.bombilleria_stops || "N/A"}</p>
+                <p><span className="text-muted-foreground">Direccionales:</span> {vehicle.bombilleria_direccionales || "N/A"}</p>
+              </div>
+            </div>
+            <div>
+              <span className="font-medium">Refrigerante:</span>{" "}
+              {vehicle.tipo_refrigerante || "N/A"}
+            </div>
+            <div className="space-y-1">
+              <span className="font-medium">Batería</span>
+              <div className="space-y-1 pl-4 text-sm">
+                <p><span className="text-muted-foreground">Ppal:</span> {vehicle.bateria_principal || "N/A"}</p>
+                <p><span className="text-muted-foreground">Aux:</span> {vehicle.bateria_auxiliar || "N/A"}</p>
+              </div>
             </div>
           </CardContent>
         </Card>

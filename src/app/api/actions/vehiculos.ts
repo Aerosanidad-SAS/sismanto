@@ -3,7 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { VehicleFormData } from "@/lib/validations";
-import { vehicleSchema } from "@/lib/validations";
+import {
+  vehicleSchema,
+  vehicleSpecsSchema,
+  vehicleGeneralSchema,
+  type VehicleSpecsFormData,
+  type VehicleGeneralFormData,
+} from "@/lib/validations";
 import { z } from "zod";
 import { requireRole } from "@/app/api/actions/auth";
 
@@ -98,11 +104,16 @@ export async function crearVehiculo(formData: VehicleFormData) {
     tipo_combustible: fd.tipo_combustible || null,
     tipo_llantas: fd.tipo_llantas || null,
     tipo_bombillos: fd.tipo_bombillos || null,
+    bombilleria_farolas: fd.bombilleria_farolas || null,
+    bombilleria_stops: fd.bombilleria_stops || null,
+    bombilleria_direccionales: fd.bombilleria_direccionales || null,
     tipo_refrigerante: fd.tipo_refrigerante || null,
     aceite_usado: fd.aceite_usado || null,
     ref_filtro_aire_motor: fd.ref_filtro_aire_motor || null,
     ref_filtro_aceite: fd.ref_filtro_aceite || null,
     ref_filtro_combustible: fd.ref_filtro_combustible || null,
+    bateria_principal: fd.bateria_principal || null,
+    bateria_auxiliar: fd.bateria_auxiliar || null,
     notas: fd.notas || null,
     vencimiento_soat: fd.vencimiento_soat || null,
     vencimiento_tecnicomecanica: fd.vencimiento_tecnicomecanica || null,
@@ -147,11 +158,16 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
       tipo_combustible: fd.tipo_combustible || null,
       tipo_llantas: fd.tipo_llantas || null,
       tipo_bombillos: fd.tipo_bombillos || null,
+      bombilleria_farolas: fd.bombilleria_farolas || null,
+      bombilleria_stops: fd.bombilleria_stops || null,
+      bombilleria_direccionales: fd.bombilleria_direccionales || null,
       tipo_refrigerante: fd.tipo_refrigerante || null,
       aceite_usado: fd.aceite_usado || null,
       ref_filtro_aire_motor: fd.ref_filtro_aire_motor || null,
       ref_filtro_aceite: fd.ref_filtro_aceite || null,
       ref_filtro_combustible: fd.ref_filtro_combustible || null,
+      bateria_principal: fd.bateria_principal || null,
+      bateria_auxiliar: fd.bateria_auxiliar || null,
       notas: fd.notas || null,
       vencimiento_soat: fd.vencimiento_soat || null,
       vencimiento_tecnicomecanica: fd.vencimiento_tecnicomecanica || null,
@@ -168,6 +184,77 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   revalidatePath(`/vehiculos/${idParsed.data}`);
+  return { success: true };
+}
+
+export async function actualizarEspecificacionesVehiculo(formData: VehicleSpecsFormData) {
+  await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
+  const parsed = vehicleSpecsSchema.safeParse(formData);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = createClient();
+  const fd = parsed.data;
+  const { error } = await supabase
+    .from("vehicles")
+    .update({
+      tipo_llantas: fd.tipo_llantas.trim(),
+      aceite_usado: fd.aceite_usado.trim(),
+      ref_filtro_aceite: fd.ref_filtro_aceite.trim(),
+      ref_filtro_aire_motor: fd.ref_filtro_aire_motor.trim(),
+      bombilleria_farolas: fd.bombilleria_farolas.trim(),
+      bombilleria_stops: fd.bombilleria_stops.trim(),
+      bombilleria_direccionales: fd.bombilleria_direccionales.trim(),
+      tipo_refrigerante: fd.tipo_refrigerante.trim(),
+      bateria_principal: fd.bateria_principal.trim(),
+      bateria_auxiliar: fd.bateria_auxiliar.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", fd.vehicleId);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/vehiculos/${fd.vehicleId}`);
+  revalidatePath("/vehiculos");
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function actualizarInformacionGeneralVehiculo(formData: VehicleGeneralFormData) {
+  await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
+  const parsed = vehicleGeneralSchema.safeParse(formData);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = createClient();
+  const fd = parsed.data;
+  const { data: centro } = await supabase
+    .from("operational_centers")
+    .select("codigo")
+    .eq("id", fd.centro_operativo_id)
+    .single();
+
+  const { error } = await supabase
+    .from("vehicles")
+    .update({
+      marca: fd.marca || null,
+      modelo: fd.modelo || null,
+      linea: fd.linea || null,
+      tipo_combustible: fd.tipo_combustible || null,
+      combustible: fd.tipo_combustible || null,
+      centro_operativo: centro?.codigo || "OTRO",
+      centro_operativo_id: fd.centro_operativo_id,
+      vencimiento_soat: fd.vencimiento_soat || null,
+      vencimiento_rtm: fd.vencimiento_rtm || null,
+      vencimiento_tecnicomecanica: fd.vencimiento_tecnicomecanica || null,
+      costo_soat_anual: fd.costo_soat_anual ?? null,
+      costo_tecnomecanica_anual: fd.costo_tecnomecanica_anual ?? null,
+      costo_poliza_anual: fd.costo_poliza_anual ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", fd.vehicleId);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/vehiculos/${fd.vehicleId}`);
+  revalidatePath("/vehiculos");
+  revalidatePath("/");
   return { success: true };
 }
 

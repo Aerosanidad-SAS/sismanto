@@ -2,10 +2,10 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Activity,
   LayoutDashboard,
   Truck,
   Wrench,
@@ -74,7 +74,7 @@ const ALL_NAV: {
     href: "/kpis",
     icon: BarChart3,
     roles: ["ADMIN", "GERENCIAL"],
-    hint: "Indicadores agregados: disponibilidad, TCO, ratio P/C y tiempos de resolución.",
+    hint: "Indicadores agregados: disponibilidad, CTO, ratio P/C y tiempos de resolución.",
   },
   {
     name: "Combustible",
@@ -125,7 +125,7 @@ const ROLE_BADGE_STYLES: Record<UserRole, string> = {
   REGULACION: "bg-[#2BB6C7] text-white",
   GERENCIAL: "bg-[#1B6368] text-white",
   OVEM: "bg-[#9C9B99] text-white",
-  MANTENIMIENTO: "bg-[#B45309] text-white",
+  MANTENIMIENTO: "bg-[#666564] text-white",
   COORDINACION: "bg-[#0E7490] text-white",
 };
 
@@ -275,8 +275,15 @@ export default function DashboardLayout({
           {mobileNavOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="h-9 w-9 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-            <Activity className="h-4 w-4" aria-hidden />
+          <div className="relative h-9 w-28 shrink-0 overflow-hidden rounded">
+            <Image
+              src="/brand/alianza.png"
+              alt="Aerosanidad e Inter Assist"
+              fill
+              className="object-contain object-left"
+              sizes="112px"
+              priority
+            />
           </div>
           <div className="min-w-0 leading-tight">
             <p className="font-[var(--font-bebas-neue)] truncate text-lg uppercase tracking-wide text-primary">Aero</p>
@@ -305,14 +312,27 @@ export default function DashboardLayout({
             showCollapsedChrome ? "h-auto flex-col items-stretch gap-1 px-2 py-3" : "h-20 items-center px-6"
           )}
         >
-          <div className={cn("flex items-center gap-3", showCollapsedChrome && "justify-center flex-col px-0")}>
-            <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <Activity className="h-5 w-5" aria-hidden />
-            </div>
-            {!showCollapsedChrome && (
-              <div className="leading-none min-w-0">
-                <p className="font-[var(--font-bebas-neue)] uppercase tracking-[0.02em] text-xl text-primary">Aero</p>
-                <p className="font-[var(--font-bebas-neue)] uppercase tracking-[0.02em] text-xl text-accent">Manto</p>
+          <div className={cn("flex items-center gap-3 min-w-0", showCollapsedChrome && "justify-center flex-col px-0")}>
+            {showCollapsedChrome ? (
+              <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded">
+                <Image
+                  src="/brand/aerosanidad.png"
+                  alt=""
+                  fill
+                  className="object-contain"
+                  sizes="40px"
+                />
+              </div>
+            ) : (
+              <div className="relative h-10 w-44 shrink-0 overflow-hidden rounded">
+                <Image
+                  src="/brand/alianza.png"
+                  alt="Aerosanidad e Inter Assist"
+                  fill
+                  className="object-contain object-left"
+                  sizes="176px"
+                  priority
+                />
               </div>
             )}
           </div>

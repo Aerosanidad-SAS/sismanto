@@ -59,9 +59,7 @@ export function ResolucionNovedadesCard({
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <span title="Listado de novedades en el período" className="inline-flex shrink-0">
-            <ClipboardList className="h-5 w-5 text-muted-foreground" aria-hidden />
-          </span>
+          <ClipboardList className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle>Resolución de novedades</CardTitle>
@@ -71,18 +69,18 @@ export function ResolucionNovedadesCard({
           </div>
         </div>
         {resumen && (
-          <div className="grid grid-cols-4 gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-4">
             <div>
               <p className="text-xl font-bold">{resumen.total}</p>
-              <p className="text-xs text-gray-500">Total</p>
+              <p className="text-xs text-muted-foreground">Total</p>
             </div>
             <div>
               <p className="text-xl font-bold text-green-600">{resumen.cerradas}</p>
-              <p className="text-xs text-gray-500">Resueltas</p>
+              <p className="text-xs text-muted-foreground">Resueltas</p>
             </div>
             <div>
               <p className="text-xl font-bold text-red-600">{resumen.abiertas}</p>
-              <p className="text-xs text-gray-500">Abiertas</p>
+              <p className="text-xs text-muted-foreground">Abiertas</p>
             </div>
             <div>
               <p className="text-xl font-bold">
@@ -90,18 +88,18 @@ export function ResolucionNovedadesCard({
                   ? formatHoras(resumen.promedioHorasResolucion)
                   : "—"}
               </p>
-              <p className="text-xs text-gray-500">Prom. resolución</p>
+              <p className="text-xs text-muted-foreground">Prom. resolución</p>
             </div>
           </div>
         )}
       </CardHeader>
       <CardContent>
         {novedades.length === 0 ? (
-          <p className="text-center text-gray-500 py-4 text-sm">
+          <p className="text-center text-muted-foreground py-4 text-sm">
             No hay novedades en el período
           </p>
         ) : (
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-80 overflow-x-auto overflow-y-auto">
             <Table>
               <TableHeader>
                 <TableRow>

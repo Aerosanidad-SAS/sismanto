@@ -15,33 +15,14 @@
 ```
 src/
   app/
-    (dashboard)/          # Authenticated routes, layout with sidebar
-      dashboard/          # Executive dashboard (F-04)
-      vehicles/           # Vehicle CRUD, detail, history (F-05)
-      maintenance/        # Maintenance records (F-07)
-      novedades/          # Incidents/novelties (F-08)
-      fuel/               # Fuel consumption logs (F-10)
-      kpis/               # KPI panel with charts (F-09)
-      regulation/         # Fleet regulation view (F-11)
-      configuration/      # Centers, providers, bulk upload (F-06, F-13)
-      admin/              # User management (F-14)
-    (auth)/               # Login, pending user flow (F-01, F-03)
-    api/
-      actions/            # Server Actions organized by module
-    portal/               # OVEM portal: checklist, km, novedades (F-12)
-  components/             # Shared and module-specific UI components
+    (dashboard)/          # Rutas autenticadas + sidebar (vehiculos, mantenimientos, regulacion, kpis, …)
+      ovem/               # Portal OVEM (F-12) — URL pública `/ovem`
+    login/, pending/      # Auth y cuenta sin rol
+    api/actions/          # Server Actions por dominio
+  components/
   lib/
-    supabase/             # Supabase client helpers (browser + server)
-    validations.ts        # Zod schemas
-    utils.ts              # Shared utilities, cn() helper
-  types/                  # TypeScript types and database.types.ts
+  types/
 scripts/
-  schema.sql              # Base schema
-  migrations/
-    002_iteracion2.sql    # Iteration 2 migration
-    003_rbac.sql          # RBAC migration
-    # Next migration: 004_*.sql
-  seed-categorias.ts      # Maintenance category seed
 ```
 
 ## Coding Conventions

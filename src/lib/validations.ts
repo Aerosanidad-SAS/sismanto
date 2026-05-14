@@ -44,13 +44,18 @@ export const vehicleSchema = z.object({
   modelo: z.string().optional(),
   linea: z.string().optional(),
   tipo_combustible: z.string().optional(),
-  tipo_llantas: z.string().optional(),
+  tipo_llantas: z.string().min(1, 'Tipo de llantas es obligatorio'),
   tipo_bombillos: z.string().optional(),
-  tipo_refrigerante: z.string().optional(),
-  aceite_usado: z.string().optional(),
-  ref_filtro_aire_motor: z.string().optional(),
-  ref_filtro_aceite: z.string().optional(),
+  bombilleria_farolas: z.string().min(1, 'Bombillería farolas es obligatoria'),
+  bombilleria_stops: z.string().min(1, 'Bombillería stops es obligatoria'),
+  bombilleria_direccionales: z.string().min(1, 'Bombillería direccionales es obligatoria'),
+  tipo_refrigerante: z.string().min(1, 'Refrigerante es obligatorio'),
+  aceite_usado: z.string().min(1, 'Aceite de motor es obligatorio'),
+  ref_filtro_aire_motor: z.string().min(1, 'Filtro de aire es obligatorio'),
+  ref_filtro_aceite: z.string().min(1, 'Filtro de aceite es obligatorio'),
   ref_filtro_combustible: z.string().optional(),
+  bateria_principal: z.string().min(1, 'Batería principal es obligatoria'),
+  bateria_auxiliar: z.string().min(1, 'Batería auxiliar es obligatoria'),
   notas: z.string().optional(),
   vencimiento_soat: z.string().optional().nullable(),
   vencimiento_tecnicomecanica: z.string().optional().nullable(),
@@ -61,6 +66,39 @@ export const vehicleSchema = z.object({
 });
 
 export type VehicleFormData = z.infer<typeof vehicleSchema>;
+
+export const vehicleGeneralSchema = z.object({
+  vehicleId: z.string().uuid("ID de vehículo inválido"),
+  marca: z.string().optional(),
+  modelo: z.string().optional(),
+  linea: z.string().optional(),
+  tipo_combustible: z.string().optional(),
+  centro_operativo_id: z.number().int().positive("Debe seleccionar un centro de operaciones"),
+  vencimiento_soat: z.string().optional().nullable(),
+  vencimiento_rtm: z.string().optional().nullable(),
+  vencimiento_tecnicomecanica: z.string().optional().nullable(),
+  costo_soat_anual: z.coerce.number().nonnegative().optional().nullable(),
+  costo_tecnomecanica_anual: z.coerce.number().nonnegative().optional().nullable(),
+  costo_poliza_anual: z.coerce.number().nonnegative().optional().nullable(),
+});
+
+export type VehicleGeneralFormData = z.infer<typeof vehicleGeneralSchema>;
+
+export const vehicleSpecsSchema = z.object({
+  vehicleId: z.string().uuid("ID de vehículo inválido"),
+  tipo_llantas: z.string().min(1, 'Tipo de llantas es obligatorio'),
+  aceite_usado: z.string().min(1, 'Aceite de motor es obligatorio'),
+  ref_filtro_aceite: z.string().min(1, 'Filtro de aceite es obligatorio'),
+  ref_filtro_aire_motor: z.string().min(1, 'Filtro de aire es obligatorio'),
+  bombilleria_farolas: z.string().min(1, 'Bombillería farolas es obligatoria'),
+  bombilleria_stops: z.string().min(1, 'Bombillería stops es obligatoria'),
+  bombilleria_direccionales: z.string().min(1, 'Bombillería direccionales es obligatoria'),
+  tipo_refrigerante: z.string().min(1, 'Refrigerante es obligatorio'),
+  bateria_principal: z.string().min(1, 'Batería principal es obligatoria'),
+  bateria_auxiliar: z.string().min(1, 'Batería auxiliar es obligatoria'),
+});
+
+export type VehicleSpecsFormData = z.infer<typeof vehicleSpecsSchema>;
 
 // Schema para centro de operaciones
 export const operationalCenterSchema = z.object({
@@ -269,11 +307,16 @@ export const filaVehiculoImportSchema = z
     tipo_combustible: z.unknown().optional(),
     tipo_llantas: z.unknown().optional(),
     tipo_bombillos: z.unknown().optional(),
+    bombilleria_farolas: z.unknown().optional(),
+    bombilleria_stops: z.unknown().optional(),
+    bombilleria_direccionales: z.unknown().optional(),
     tipo_refrigerante: z.unknown().optional(),
     aceite_usado: z.unknown().optional(),
     ref_filtro_aire_motor: z.unknown().optional(),
     ref_filtro_aceite: z.unknown().optional(),
     ref_filtro_combustible: z.unknown().optional(),
+    bateria_principal: z.unknown().optional(),
+    bateria_auxiliar: z.unknown().optional(),
     notas: z.unknown().optional(),
     vencimiento_soat: z.unknown().optional(),
     vencimiento_tecnicomecanica: z.unknown().optional(),
@@ -287,11 +330,16 @@ export const filaVehiculoImportSchema = z
     tipo_combustible: cleanImportString(raw.tipo_combustible),
     tipo_llantas: cleanImportString(raw.tipo_llantas),
     tipo_bombillos: cleanImportString(raw.tipo_bombillos),
+    bombilleria_farolas: cleanImportString(raw.bombilleria_farolas),
+    bombilleria_stops: cleanImportString(raw.bombilleria_stops),
+    bombilleria_direccionales: cleanImportString(raw.bombilleria_direccionales),
     tipo_refrigerante: cleanImportString(raw.tipo_refrigerante),
     aceite_usado: cleanImportString(raw.aceite_usado),
     ref_filtro_aire_motor: cleanImportString(raw.ref_filtro_aire_motor),
     ref_filtro_aceite: cleanImportString(raw.ref_filtro_aceite),
     ref_filtro_combustible: cleanImportString(raw.ref_filtro_combustible),
+    bateria_principal: cleanImportString(raw.bateria_principal),
+    bateria_auxiliar: cleanImportString(raw.bateria_auxiliar),
     notas: cleanImportString(raw.notas),
     vencimiento_soat: cleanImportString(raw.vencimiento_soat),
     vencimiento_tecnicomecanica: cleanImportString(raw.vencimiento_tecnicomecanica),

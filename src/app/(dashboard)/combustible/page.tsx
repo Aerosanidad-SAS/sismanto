@@ -31,9 +31,16 @@ export default async function CombustiblePage({
 
   const [{ vehicles, centros }, metricas, serieRendimientoMensual] = await Promise.all([
     getInitialData(),
-    getMetricasConsumo(fechaInicio, fechaFin, vehicleId, centroId),
-    getRendimientoCombustibleSerieMensual(fechaInicio, fechaFin, vehicleId, centroId),
+    getMetricasConsumo(fechaInicio, fechaFin, vehicleId, centroId, "operativa"),
+    getRendimientoCombustibleSerieMensual(fechaInicio, fechaFin, vehicleId, centroId, "operativa"),
   ]);
+  const metricasReferencia = await getMetricasConsumo(
+    fechaInicio,
+    fechaFin,
+    vehicleId,
+    centroId,
+    "referencia"
+  );
 
   return (
     <div className="space-y-6">
@@ -46,6 +53,7 @@ export default async function CombustiblePage({
 
       <ConsumoCliente
         metricas={metricas}
+        metricasReferencia={metricasReferencia}
         serieRendimientoMensual={serieRendimientoMensual}
         vehicles={vehicles}
         centros={centros}

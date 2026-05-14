@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "@/app/api/actions/auth";
+import { signIn, getProfile } from "@/app/api/actions/auth";
+import { getDefaultRoute } from "@/lib/auth-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,7 +26,12 @@ export default function LoginPage() {
       if (result?.error) {
         setError(result.error);
       } else {
-        router.push("/");
+        const profile = await getProfile();
+        if (!profile) {
+          router.push("/pending");
+        } else {
+          router.push(getDefaultRoute(profile.role_codigo));
+        }
         router.refresh();
       }
     } catch {
@@ -39,9 +46,21 @@ export default function LoginPage() {
       className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-muted/40 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))]"
     >
       <Card className="w-full max-w-md shadow-md border-border">
-        <CardHeader>
-          <CardTitle className="text-2xl">Aeromanto</CardTitle>
-          <CardDescription>Inicie sesión con su cuenta</CardDescription>
+        <CardHeader className="space-y-4">
+          <div className="relative mx-auto h-14 w-full max-w-[16rem] overflow-hidden rounded-md bg-black px-3 py-2">
+            <Image
+              src="/brand/alianza.png"
+              alt="Aerosanidad e Inter Assist"
+              fill
+              className="object-contain"
+              sizes="256px"
+              priority
+            />
+          </div>
+          <div>
+            <CardTitle className="text-2xl">Aeromanto</CardTitle>
+            <CardDescription>Inicie sesión con su cuenta corporativa</CardDescription>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

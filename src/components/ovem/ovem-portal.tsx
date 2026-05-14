@@ -271,7 +271,7 @@ export function OvemPortal({
                 <SelectItem key={v.id} value={v.id}>
                   {v.placa}
                   {v.marca ? ` — ${v.marca}` : ""}{" "}
-                  {v.estado_actual === "FUERA_DE_SERVICIO" ? "(Fuera de servicio)" : ""}
+                  {v.estado_actual === "FUERA_DE_SERVICIO" ? "(FDS)" : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -321,8 +321,8 @@ export function OvemPortal({
 
               {checklistFiltrado.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No hay ítems activos del preoperacional. Aplique la migración 005 o verifique la tabla{" "}
-                  <code className="text-xs bg-muted px-1 rounded">checklist_items</code>.
+                  No hay ítems activos del checklist en este momento. Comuníquese con coordinación o administración
+                  para que configuren el preoperacional de su centro.
                 </p>
               )}
 

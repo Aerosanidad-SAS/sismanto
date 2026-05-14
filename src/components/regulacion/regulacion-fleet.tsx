@@ -26,6 +26,15 @@ import {
 import { CheckCircle2, XCircle, UserPlus, UserMinus } from "lucide-react";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
 interface RegulacionFleetProps {
@@ -38,14 +47,14 @@ function VehicleTile({
   tone,
   onToggle,
   onAssignClick,
-  onUnassign,
+  requestUnassign,
   loading,
 }: {
   v: any;
   tone: "available" | "fds";
   onToggle: (id: string, estado: string) => void;
   onAssignClick: (id: string) => void;
-  onUnassign: (assignmentId: number) => void;
+  requestUnassign: (assignmentId: number) => void;
   loading: boolean;
 }) {
   return (
@@ -63,9 +72,9 @@ function VehicleTile({
         <VehicleEstadoBadge
           vehicleId={v.id}
           estado={v.estado_actual}
-          puedeEditar
-          etiqueta={v.estado_actual === "OPERATIVO" ? "Disp." : "FDS"}
-          className="shrink-0 text-[10px] px-1.5 py-0"
+          puedeEditar={false}
+          etiqueta={v.estado_actual === "OPERATIVO" ? "OPERATIVO" : "FDS"}
+          className="shrink-0 text-[10px] px-1.5 py-0 pointer-events-none"
         />
       </div>
       <div className="mt-1.5 min-h-[2.25rem] flex-1 text-[11px] text-muted-foreground">
@@ -78,7 +87,7 @@ function VehicleTile({
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 shrink-0 p-0 text-red-600"
-                  onClick={() => onUnassign(a.id)}
+                  onClick={() => requestUnassign(a.id)}
                   disabled={loading}
                   aria-label="Desasignar OVEM"
                   title="Quitar asignación de conductor"
@@ -104,9 +113,9 @@ function VehicleTile({
           )}
           onClick={() => onToggle(v.id, v.estado_actual)}
           disabled={loading}
-          title={v.estado_actual === "OPERATIVO" ? "Pasar a fuera de servicio" : "Marcar operativo / disponible"}
+          title={v.estado_actual === "OPERATIVO" ? "Clic para marcar FDS" : "Clic para marcar OPERATIVO"}
         >
-          {v.estado_actual === "OPERATIVO" ? "→ FDS" : "→ Disp."}
+          {v.estado_actual === "OPERATIVO" ? "OPERATIVO" : "FDS"}
         </Button>
         <Button
           variant="ghost"
@@ -130,7 +139,12 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
   const [selectedOvem, setSelectedOvem] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unassignAssignmentId, setUnassignAssignmentId] = useState<number | null>(null);
   const hoy = new Date().toISOString().split("T")[0];
+
+  const openUnassignDialog = (assignmentId: number) => {
+    setUnassignAssignmentId(assignmentId);
+  };
 
   const disponibles = fleet.filter((v) => v.estado_actual === "OPERATIVO");
   const fueraServicio = fleet.filter((v) => v.estado_actual === "FUERA_DE_SERVICIO");
@@ -167,11 +181,13 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
     setLoading(false);
   };
 
-  const handleUnassign = async (assignmentId: number) => {
-    if (!confirm("¿Desasignar este conductor del vehículo?")) return;
+  const confirmUnassign = async () => {
+    const id = unassignAssignmentId;
+    if (id == null) return;
     setLoading(true);
     setError(null);
-    const result = await unassignVehicle(assignmentId);
+    const result = await unassignVehicle(id);
+    setUnassignAssignmentId(null);
     if (result?.error) setError(result.error);
     else router.refresh();
     setLoading(false);
@@ -239,7 +255,8 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
                 <HelpTrigger text="Vista operativa: a la izquierda, disponibles separados por si tienen conductor OVEM asignado hoy (en operación) o no (disponibles pero sin despacho). A la derecha, unidades fuera de servicio en tarjetas compactas." />
               </CardTitle>
               <CardDescription className="mt-1 max-w-3xl text-xs leading-relaxed">
-                Izquierda: disponibles en dos bloques (con OVEM hoy / sin OVEM). Derecha: FDS. Use los botones de cada tarjeta para estado y asignación.
+                Izquierda: disponibles en dos bloques (con OVEM hoy / sin OVEM). Derecha: fuera de servicio. Use el botón de estado en cada tarjeta para
+                operativo / FDS y el botón OVEM para asignación.
               </CardDescription>
             </div>
           </div>
@@ -268,7 +285,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
                         tone="available"
                         onToggle={handleToggle}
                         onAssignClick={setAssigningVehicle}
-                        onUnassign={handleUnassign}
+                        requestUnassign={openUnassignDialog}
                         loading={loading}
                       />
                     ))}
@@ -297,7 +314,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
                         tone="available"
                         onToggle={handleToggle}
                         onAssignClick={setAssigningVehicle}
-                        onUnassign={handleUnassign}
+                        requestUnassign={openUnassignDialog}
                         loading={loading}
                       />
                     ))}
@@ -327,7 +344,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
                       tone="fds"
                       onToggle={handleToggle}
                       onAssignClick={setAssigningVehicle}
-                      onUnassign={handleUnassign}
+                      requestUnassign={openUnassignDialog}
                       loading={loading}
                     />
                   ))}
@@ -338,11 +355,33 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
         </CardContent>
       </Card>
 
+      <AlertDialog open={unassignAssignmentId != null} onOpenChange={(o) => !o && setUnassignAssignmentId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Desasignar conductor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El conductor dejará de estar asignado a esta unidad para la vigencia actual. Puede asignar otro OVEM después.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={loading}
+              onClick={() => void confirmUnassign()}
+            >
+              {loading ? "Procesando…" : "Desasignar"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={!!assigningVehicle} onOpenChange={() => setAssigningVehicle(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Asignar conductor (OVEM)</DialogTitle>
-            <p className="text-sm text-gray-500">Seleccione el conductor para el vehículo</p>
+            <p className="text-sm text-muted-foreground">Seleccione el conductor para el vehículo</p>
           </DialogHeader>
           <div className="space-y-4">
             <div>

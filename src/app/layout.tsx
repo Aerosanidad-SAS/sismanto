@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, Inter } from "next/font/google";
 import "./globals.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const inter = Inter({ subsets: ["latin"] });
 const bebasNeue = Bebas_Neue({
@@ -10,8 +11,9 @@ const bebasNeue = Bebas_Neue({
 });
 
 export const metadata: Metadata = {
-  title: "Sistema de Gestión de Flotas - Aeromanto",
-  description: "Sistema de control de mantenimientos para flota de ambulancias",
+  title: "Aeromanto — Gestión de flota | Aerosanidad e Inter Assist",
+  description:
+    "Sistema de gestión de flota y mantenimiento para ambulancias. Operación alineada con Aerosanidad e Inter Assist.",
 };
 
 export const viewport = {
@@ -27,7 +29,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${inter.className} ${bebasNeue.variable}`}>{children}</body>
+      <body className={`${inter.className} ${bebasNeue.variable}`}>
+        <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+      </body>
     </html>
   );
 }

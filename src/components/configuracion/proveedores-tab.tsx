@@ -29,6 +29,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, Trash2, Pencil } from "lucide-react";
 import type { Supplier } from "@/types";
 
@@ -42,6 +51,7 @@ export function ProveedoresTab({ proveedores: initialProveedores }: ProveedoresT
   const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [deactivateId, setDeactivateId] = useState<number | null>(null);
 
   const {
     register,
@@ -84,9 +94,11 @@ export function ProveedoresTab({ proveedores: initialProveedores }: ProveedoresT
     setError(null);
   };
 
-  const handleEliminar = (id: number) => {
-    if (!confirm("¿Desea desactivar este proveedor?")) return;
+  const confirmDeactivate = () => {
+    if (deactivateId == null) return;
+    const id = deactivateId;
     startTransition(async () => {
+      setDeactivateId(null);
       const result = await eliminarProveedor(id);
       if (result.error) alert(result.error);
       else router.refresh();
@@ -201,7 +213,7 @@ export function ProveedoresTab({ proveedores: initialProveedores }: ProveedoresT
               <TableBody>
                 {initialProveedores.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-gray-500 py-6">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-6">
                       No hay proveedores registrados
                     </TableCell>
                   </TableRow>
@@ -227,7 +239,7 @@ export function ProveedoresTab({ proveedores: initialProveedores }: ProveedoresT
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleEliminar(p.id)}
+                            onClick={() => setDeactivateId(p.id)}
                             disabled={isPending}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
@@ -243,6 +255,23 @@ export function ProveedoresTab({ proveedores: initialProveedores }: ProveedoresT
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={deactivateId != null} onOpenChange={(o) => !o && setDeactivateId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Desactivar proveedor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El proveedor dejará de mostrarse como activo. Los registros históricos asociados se conservan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <Button type="button" variant="destructive" disabled={isPending} onClick={confirmDeactivate}>
+              {isPending ? "Procesando…" : "Desactivar"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

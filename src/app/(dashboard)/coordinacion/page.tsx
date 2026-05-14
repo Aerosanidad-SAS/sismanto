@@ -169,7 +169,7 @@ export default async function CoordinacionPage() {
                     <TableCell className="font-medium">{a.placa}</TableCell>
                     <TableCell>
                       <Badge variant={a.estadoVehiculo === "OPERATIVO" ? "success" : "destructive"}>
-                        {a.estadoVehiculo}
+                        {a.estadoVehiculo === "OPERATIVO" ? "OPERATIVO" : "FDS"}
                       </Badge>
                     </TableCell>
                     <TableCell>{a.inicio ? formatDateShort(a.inicio) : "N/A"}</TableCell>

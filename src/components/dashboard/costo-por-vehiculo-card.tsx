@@ -99,6 +99,9 @@ export function CostoPorVehiculoCard({
   const aplicarGrupo2 = () => pushParams(tipo, centro, placas, txt);
 
   const totalFlota = datos.reduce((s, d) => s + d.costoTotal, 0);
+  const totalMantenimiento = datos.reduce((s, d) => s + d.costoMantenimientoTotal, 0);
+  const totalCombustible = datos.reduce((s, d) => s + d.costoCombustible, 0);
+  const totalFijo = datos.reduce((s, d) => s + d.costoFijoAnual, 0);
   const tiposBtn: { id: TipoFiltro; label: string }[] = [
     { id: "AMBOS", label: "Todos" },
     { id: "PREVENTIVO", label: "Preventivo" },
@@ -106,19 +109,17 @@ export function CostoPorVehiculoCard({
   ];
 
   return (
-    <Card>
+    <Card className="min-w-0 overflow-hidden">
       <CardHeader className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-center gap-2">
-            <span title="Costos de mantenimiento" className="inline-flex shrink-0">
-              <DollarSign className="h-5 w-5 text-muted-foreground" aria-hidden />
-            </span>
+          <div className="flex min-w-0 items-start gap-2">
+            <DollarSign className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle>Costo por vehículo</CardTitle>
-                <HelpTrigger text="Suma de mantenimientos por unidad en el período seleccionado (respeta filtros globales si están activos). Use tipo, centro, placas CSV o búsqueda en descripción de trabajo." />
+                <CardTitle>CTO por vehículo</CardTitle>
+                <HelpTrigger text="CTO = mantenimiento + combustible + costos anuales (SOAT, RTM/TM y póliza). El filtro por tipo aplica al componente de mantenimiento." />
               </div>
-              <CardDescription>Sumatoria de mantenimientos en el período (orden: mayor a menor)</CardDescription>
+              <CardDescription>Costo total de operación en el período (orden: mayor a menor)</CardDescription>
             </div>
           </div>
           <div className="space-y-1">
@@ -189,9 +190,12 @@ export function CostoPorVehiculoCard({
           </Button>
         </div>
 
-        <div>
+        <div className="space-y-1">
           <p className="text-2xl font-bold">{formatCurrency(totalFlota)}</p>
-          <p className="text-xs text-muted-foreground">Total resultados — {datos.length} vehículos</p>
+          <p className="text-xs text-muted-foreground">CTO total — {datos.length} vehículos</p>
+          <p className="text-[11px] text-muted-foreground">
+            Mantto {formatCurrency(totalMantenimiento)} · Combustible {formatCurrency(totalCombustible)} · Fijos {formatCurrency(totalFijo)}
+          </p>
         </div>
       </CardHeader>
       <CardContent>
@@ -200,14 +204,17 @@ export function CostoPorVehiculoCard({
             No hay registros con estos filtros en el período
           </p>
         ) : (
-          <div className="max-h-72 overflow-y-auto">
-            <Table>
+          <div className="max-h-72 overflow-y-auto overflow-x-auto rounded-md border">
+            <Table className="min-w-[840px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Placa</TableHead>
+                  <TableHead className="text-right">Mantto</TableHead>
                   <TableHead className="text-right">Preventivo</TableHead>
                   <TableHead className="text-right">Correctivo</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Combustible</TableHead>
+                  <TableHead className="text-right">SOAT+RTM+Póliza</TableHead>
+                  <TableHead className="text-right">CTO</TableHead>
                   <TableHead className="text-right">Mantos</TableHead>
                 </TableRow>
               </TableHeader>
@@ -215,8 +222,11 @@ export function CostoPorVehiculoCard({
                 {datos.map((d) => (
                   <TableRow key={d.vehicleId}>
                     <TableCell className="font-medium">{d.placa}</TableCell>
+                    <TableCell className="text-right text-sm">{formatCurrency(d.costoMantenimientoTotal)}</TableCell>
                     <TableCell className="text-right text-sm">{formatCurrency(d.costoPreventivo)}</TableCell>
                     <TableCell className="text-right text-sm">{formatCurrency(d.costoCorrectivo)}</TableCell>
+                    <TableCell className="text-right text-sm">{formatCurrency(d.costoCombustible)}</TableCell>
+                    <TableCell className="text-right text-sm">{formatCurrency(d.costoFijoAnual)}</TableCell>
                     <TableCell className="text-right font-semibold">{formatCurrency(d.costoTotal)}</TableCell>
                     <TableCell className="text-right text-sm text-muted-foreground">
                       {d.cantidadMantenimientos}

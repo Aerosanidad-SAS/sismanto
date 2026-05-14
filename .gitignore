@@ -37,3 +37,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# archivos locales / datos / assets de diseño
+*.xlsx
+*.xls
+install-log.txt
+Imagen corporativa/
+ui-ux-pro-max-skill/

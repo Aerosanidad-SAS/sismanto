@@ -28,6 +28,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, Trash2, Pencil } from "lucide-react";
 import { formatDateShort } from "@/lib/utils";
 import type { OperationalCenter, Vehicle } from "@/types";
@@ -41,12 +50,17 @@ export function VehiculosTab({ vehicles, centros }: VehiculosTabProps) {
   const router = useRouter();
   const [openDialog, setOpenDialog] = useState<"new" | string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const handleEliminar = (id: string) => {
-    if (!confirm("¿Está seguro de eliminar este vehículo?")) return;
+  const runEliminar = () => {
+    const id = deleteId;
+    if (!id) return;
+    setDeleteError(null);
     startTransition(async () => {
       const result = await eliminarVehiculo(id);
-      if (result.error) alert(result.error);
+      setDeleteId(null);
+      if (result.error) setDeleteError(result.error);
       else router.refresh();
     });
   };
@@ -86,6 +100,11 @@ export function VehiculosTab({ vehicles, centros }: VehiculosTabProps) {
           </Dialog>
         </CardHeader>
         <CardContent>
+          {deleteError ? (
+            <p className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {deleteError}
+            </p>
+          ) : null}
           <Table>
             <TableHeader>
               <TableRow>
@@ -102,7 +121,7 @@ export function VehiculosTab({ vehicles, centros }: VehiculosTabProps) {
             <TableBody>
               {vehicles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-gray-500 py-6">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-6">
                     No hay vehículos registrados. Cree el primero.
                   </TableCell>
                 </TableRow>
@@ -122,7 +141,6 @@ export function VehiculosTab({ vehicles, centros }: VehiculosTabProps) {
                         vehicleId={v.id}
                         estado={v.estado_actual}
                         puedeEditar
-                        etiqueta={v.estado_actual === "OPERATIVO" ? "Operativo" : "Fuera de Serv."}
                       />
                     </TableCell>
                     <TableCell className="text-sm">
@@ -162,7 +180,10 @@ export function VehiculosTab({ vehicles, centros }: VehiculosTabProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleEliminar(v.id)}
+                        onClick={() => {
+                          setDeleteError(null);
+                          setDeleteId(v.id);
+                        }}
                         disabled={isPending}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
@@ -176,6 +197,24 @@ export function VehiculosTab({ vehicles, centros }: VehiculosTabProps) {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={deleteId != null} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar vehículo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción elimina el registro del vehículo en el sistema. Si tiene historial vinculado, la operación puede
+              fallar según las reglas de la base de datos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <Button type="button" variant="destructive" disabled={isPending} onClick={() => runEliminar()}>
+              {isPending ? "Eliminando…" : "Eliminar"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

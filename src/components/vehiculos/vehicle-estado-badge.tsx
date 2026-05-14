@@ -29,7 +29,8 @@ export function VehicleEstadoBadge({
   const [err, setErr] = useState<string | null>(null);
 
   const variant = estado === "OPERATIVO" ? "success" : "destructive";
-  const texto = etiqueta ?? estado;
+  const textoEstado = estado === "OPERATIVO" ? "OPERATIVO" : "FDS";
+  const texto = etiqueta ?? textoEstado;
 
   const ejecutarToggle = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -63,8 +64,8 @@ export function VehicleEstadoBadge({
         onClick={ejecutarToggle}
         title={
           estado === "OPERATIVO"
-            ? "Clic para marcar fuera de servicio (FDS)"
-            : "Clic para marcar operativo"
+            ? "Clic para marcar FDS"
+            : "Clic para marcar OPERATIVO"
         }
         className={cn(
           badgeVariants({ variant }),

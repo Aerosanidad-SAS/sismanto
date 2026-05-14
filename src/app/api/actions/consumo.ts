@@ -2,12 +2,18 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { fuelLogSchema, metricasConsumoParamsSchema } from "@/lib/validations";
+import { isReferenceSparkCombustionPlaca, normalizePlaca } from "@/lib/fleet-reference-plates";
+
+type ConsumoScope = "operativa" | "referencia" | "todas";
+const DEFAULT_OSK397_KM_PER_GAL = 35;
+const MAX_REASONABLE_KM_PER_GAL = 80;
 
 export async function getMetricasConsumo(
   fechaInicio: string,
   fechaFin: string,
   vehicleId?: string,
-  centroId?: number
+  centroId?: number,
+  scope: ConsumoScope = "operativa"
 ) {
   try {
     const validated = metricasConsumoParamsSchema.safeParse({
@@ -28,8 +34,15 @@ export async function getMetricasConsumo(
       .select("id, placa, marca, centro_operativo_id");
     if (vid) vehiclesQuery = vehiclesQuery.eq("id", vid);
     if (cid !== undefined) vehiclesQuery = vehiclesQuery.eq("centro_operativo_id", cid);
-    const { data: vehicles } = await vehiclesQuery;
-    if (!vehicles || vehicles.length === 0) return [];
+    const { data: vehiclesRaw } = await vehiclesQuery;
+    if (!vehiclesRaw || vehiclesRaw.length === 0) return [];
+    const vehicles = vehiclesRaw.filter((vehicle) => {
+      const isReference = isReferenceSparkCombustionPlaca(vehicle.placa);
+      if (scope === "referencia") return isReference;
+      if (scope === "operativa") return !isReference;
+      return true;
+    });
+    if (vehicles.length === 0) return [];
 
     const vehicleIds = vehicles.map((v) => v.id);
 
@@ -151,6 +164,16 @@ export async function getMetricasConsumo(
         cantidadCargas = 1;
       }
 
+      const placaNormalizada = normalizePlaca(vehicle.placa);
+      if (
+        placaNormalizada === "OSK397" &&
+        (consumoPromedioKmGal === null ||
+          consumoPromedioKmGal <= 0 ||
+          consumoPromedioKmGal > MAX_REASONABLE_KM_PER_GAL)
+      ) {
+        consumoPromedioKmGal = DEFAULT_OSK397_KM_PER_GAL;
+      }
+
       return {
         vehicleId: vehicle.id,
         placa: vehicle.placa,
@@ -173,7 +196,8 @@ export async function getRendimientoCombustibleSerieMensual(
   fechaInicio: string,
   fechaFin: string,
   vehicleId?: string,
-  centroId?: number
+  centroId?: number,
+  scope: ConsumoScope = "operativa"
 ) {
   try {
     const validated = metricasConsumoParamsSchema.safeParse({
@@ -191,10 +215,18 @@ export async function getRendimientoCombustibleSerieMensual(
     let vehiclesQuery = supabase.from("vehicles").select("id, placa, marca, centro_operativo_id");
     if (vid) vehiclesQuery = vehiclesQuery.eq("id", vid);
     if (cid !== undefined) vehiclesQuery = vehiclesQuery.eq("centro_operativo_id", cid);
-    const { data: vehicles } = await vehiclesQuery;
-    if (!vehicles || vehicles.length === 0) return [];
+    const { data: vehiclesRaw } = await vehiclesQuery;
+    if (!vehiclesRaw || vehiclesRaw.length === 0) return [];
+    const vehicles = vehiclesRaw.filter((vehicle) => {
+      const isReference = isReferenceSparkCombustionPlaca(vehicle.placa);
+      if (scope === "referencia") return isReference;
+      if (scope === "operativa") return !isReference;
+      return true;
+    });
+    if (vehicles.length === 0) return [];
 
     const vehicleIds = vehicles.map((v) => v.id);
+    const plateByVehicleId = new Map(vehicles.map((v) => [v.id, normalizePlaca(v.placa)]));
 
     const { data: fuelLogs } = await supabase
       .from("fuel_logs")
@@ -222,15 +254,23 @@ export async function getRendimientoCombustibleSerieMensual(
       const inMonth = logs
         .filter((l) => l.vehicle_id === vehicleIdRow && String(l.fecha).slice(0, 7) === yyyymm)
         .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
-      if (inMonth.length < 2) return null;
+      if (inMonth.length < 2) {
+        return plateByVehicleId.get(vehicleIdRow) === "OSK397" ? DEFAULT_OSK397_KM_PER_GAL : null;
+      }
       const vals: number[] = [];
       for (let i = 1; i < inMonth.length; i++) {
         const kmDelta = inMonth[i].kilometraje - inMonth[i - 1].kilometraje;
         const gal = inMonth[i].galones;
         if (kmDelta > 0 && gal > 0) vals.push(kmDelta / gal);
       }
-      if (vals.length === 0) return null;
-      return vals.reduce((a, b) => a + b, 0) / vals.length;
+      if (vals.length === 0) {
+        return plateByVehicleId.get(vehicleIdRow) === "OSK397" ? DEFAULT_OSK397_KM_PER_GAL : null;
+      }
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      if (plateByVehicleId.get(vehicleIdRow) === "OSK397" && avg > MAX_REASONABLE_KM_PER_GAL) {
+        return DEFAULT_OSK397_KM_PER_GAL;
+      }
+      return avg;
     };
 
     return monthKeys.map((mes) => {

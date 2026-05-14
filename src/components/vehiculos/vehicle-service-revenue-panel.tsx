@@ -25,6 +25,15 @@ import {
   upsertVehicleServiceRevenue,
   deleteVehicleServiceRevenue,
 } from "@/app/api/actions/service-revenue";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ServiceTypeOpt {
   id: number;
@@ -60,6 +69,7 @@ export function VehicleServiceRevenuePanel({
   const [monto, setMonto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rowToDelete, setRowToDelete] = useState<number | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,19 +95,21 @@ export function VehicleServiceRevenuePanel({
     }
   };
 
-  const remove = async (rowId: number) => {
-    if (!confirm("¿Eliminar este registro de ingreso?")) return;
+  const confirmRemove = async () => {
+    const id = rowToDelete;
+    if (id == null) return;
     setBusy(true);
-    const res = await deleteVehicleServiceRevenue(rowId, vehicleId);
+    setRowToDelete(null);
+    const res = await deleteVehicleServiceRevenue(id, vehicleId);
     setBusy(false);
-    if ("error" in res && res.error) alert(res.error);
+    if ("error" in res && res.error) setError(res.error);
     else router.refresh();
   };
 
   if (serviceTypes.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No hay tipos de servicio. Créelos en Configuración → Servicios prestados (o ejecute la migración 006).
+        No hay tipos de servicio. Créelos en Configuración → Servicios prestados. Si acaba de desplegar el sistema, pida al administrador que verifique el catálogo de servicios.
       </p>
     );
   }
@@ -172,7 +184,7 @@ export function VehicleServiceRevenuePanel({
               <TableCell className="text-right font-medium">{formatCurrency(r.monto)}</TableCell>
               {canEdit && (
                 <TableCell>
-                  <Button variant="ghost" size="sm" type="button" onClick={() => remove(r.id)} disabled={busy}>
+                  <Button variant="ghost" size="sm" type="button" onClick={() => setRowToDelete(r.id)} disabled={busy}>
                     Eliminar
                   </Button>
                 </TableCell>
@@ -186,6 +198,23 @@ export function VehicleServiceRevenuePanel({
           Sin ingresos registrados por servicio para este vehículo.
         </p>
       )}
+
+      <AlertDialog open={rowToDelete != null} onOpenChange={(o) => !o && setRowToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar registro de ingreso?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borrará la fila de ingresos por servicio seleccionada. Esta acción no se puede deshacer desde la interfaz.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+            <Button type="button" variant="destructive" disabled={busy} onClick={() => void confirmRemove()}>
+              {busy ? "Eliminando…" : "Eliminar"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

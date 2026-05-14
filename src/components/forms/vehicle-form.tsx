@@ -53,11 +53,16 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
           tipo_combustible: vehicle.tipo_combustible || vehicle.combustible || "",
           tipo_llantas: vehicle.tipo_llantas || "",
           tipo_bombillos: vehicle.tipo_bombillos || "",
+          bombilleria_farolas: vehicle.bombilleria_farolas || "",
+          bombilleria_stops: vehicle.bombilleria_stops || "",
+          bombilleria_direccionales: vehicle.bombilleria_direccionales || "",
           tipo_refrigerante: vehicle.tipo_refrigerante || "",
           aceite_usado: vehicle.aceite_usado || "",
           ref_filtro_aire_motor: vehicle.ref_filtro_aire_motor || "",
           ref_filtro_aceite: vehicle.ref_filtro_aceite || "",
           ref_filtro_combustible: vehicle.ref_filtro_combustible || "",
+          bateria_principal: vehicle.bateria_principal || "",
+          bateria_auxiliar: vehicle.bateria_auxiliar || "",
           notas: vehicle.notas || "",
           vencimiento_soat: vehicle.vencimiento_soat || "",
           vencimiento_tecnicomecanica: vehicle.vencimiento_tecnicomecanica || vehicle.vencimiento_rtm || "",
@@ -74,11 +79,16 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
           tipo_combustible: "",
           tipo_llantas: "",
           tipo_bombillos: "",
+          bombilleria_farolas: "",
+          bombilleria_stops: "",
+          bombilleria_direccionales: "",
           tipo_refrigerante: "",
           aceite_usado: "",
           ref_filtro_aire_motor: "",
           ref_filtro_aceite: "",
           ref_filtro_combustible: "",
+          bateria_principal: "",
+          bateria_auxiliar: "",
           notas: "",
           vencimiento_soat: "",
           vencimiento_tecnicomecanica: "",
@@ -197,7 +207,7 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
             </div>
           </div>
           <div>
-            <Label htmlFor="tipo_refrigerante">Tipo de Refrigerante</Label>
+            <Label htmlFor="tipo_refrigerante">Refrigerante *</Label>
             <div className="mt-1">
               <CatalogCombobox
                 id="tipo_refrigerante"
@@ -207,9 +217,12 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
                 placeholder="Buscar o escribir refrigerante…"
               />
             </div>
+            {errors.tipo_refrigerante && (
+              <p className="text-xs text-red-600 mt-1">{errors.tipo_refrigerante.message}</p>
+            )}
           </div>
           <div>
-            <Label htmlFor="aceite_usado">Aceite Usado</Label>
+            <Label htmlFor="aceite_usado">Aceite de motor *</Label>
             <div className="mt-1">
               <CatalogCombobox
                 id="aceite_usado"
@@ -219,24 +232,33 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
                 placeholder="Buscar o escribir aceite…"
               />
             </div>
+            {errors.aceite_usado && (
+              <p className="text-xs text-red-600 mt-1">{errors.aceite_usado.message}</p>
+            )}
           </div>
           <div>
-            <Label htmlFor="ref_filtro_aire_motor">Ref. Filtro de Aire Motor</Label>
+            <Label htmlFor="ref_filtro_aire_motor">Filtro Aire *</Label>
             <Input
               id="ref_filtro_aire_motor"
               {...register("ref_filtro_aire_motor")}
               className="mt-1"
               placeholder="Ej: SA-6709"
             />
+            {errors.ref_filtro_aire_motor && (
+              <p className="text-xs text-red-600 mt-1">{errors.ref_filtro_aire_motor.message}</p>
+            )}
           </div>
           <div>
-            <Label htmlFor="ref_filtro_aceite">Ref. Filtro de Aceite</Label>
+            <Label htmlFor="ref_filtro_aceite">Filtro Aceite *</Label>
             <Input
               id="ref_filtro_aceite"
               {...register("ref_filtro_aceite")}
               className="mt-1"
               placeholder="Ej: PH3614"
             />
+            {errors.ref_filtro_aceite && (
+              <p className="text-xs text-red-600 mt-1">{errors.ref_filtro_aceite.message}</p>
+            )}
           </div>
           <div>
             <Label htmlFor="ref_filtro_combustible">Ref. Filtro de Combustible</Label>
@@ -257,13 +279,16 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
         </h3>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <Label htmlFor="tipo_llantas">Tipo de Llantas</Label>
+            <Label htmlFor="tipo_llantas">Tipo de Llantas *</Label>
             <Input
               id="tipo_llantas"
               {...register("tipo_llantas")}
               className="mt-1"
               placeholder="Ej: 215/75 R17.5"
             />
+            {errors.tipo_llantas && (
+              <p className="text-xs text-red-600 mt-1">{errors.tipo_llantas.message}</p>
+            )}
           </div>
           <div>
             <Label htmlFor="tipo_bombillos">Tipo de Bombillos</Label>
@@ -273,6 +298,66 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
               className="mt-1"
               placeholder="Ej: LED / H4 55W"
             />
+          </div>
+          <div>
+            <Label htmlFor="bombilleria_farolas">Bombillería: Farolas *</Label>
+            <Input
+              id="bombilleria_farolas"
+              {...register("bombilleria_farolas")}
+              className="mt-1"
+              placeholder="Ej: H7 / LED"
+            />
+            {errors.bombilleria_farolas && (
+              <p className="text-xs text-red-600 mt-1">{errors.bombilleria_farolas.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="bombilleria_stops">Bombillería: Stops *</Label>
+            <Input
+              id="bombilleria_stops"
+              {...register("bombilleria_stops")}
+              className="mt-1"
+              placeholder="Ej: P21/5W"
+            />
+            {errors.bombilleria_stops && (
+              <p className="text-xs text-red-600 mt-1">{errors.bombilleria_stops.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="bombilleria_direccionales">Bombillería: Direccionales *</Label>
+            <Input
+              id="bombilleria_direccionales"
+              {...register("bombilleria_direccionales")}
+              className="mt-1"
+              placeholder="Ej: PY21W"
+            />
+            {errors.bombilleria_direccionales && (
+              <p className="text-xs text-red-600 mt-1">{errors.bombilleria_direccionales.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="bateria_principal">Batería ppal *</Label>
+            <Input
+              id="bateria_principal"
+              {...register("bateria_principal")}
+              className="mt-1"
+              placeholder="Ej: 12V 100Ah"
+            />
+            {errors.bateria_principal && (
+              <p className="text-xs text-red-600 mt-1">{errors.bateria_principal.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="bateria_auxiliar">Batería aux *</Label>
+            <Input
+              id="bateria_auxiliar"
+              {...register("bateria_auxiliar")}
+              className="mt-1"
+              placeholder="Ej: 12V 75Ah"
+            />
+            {errors.bateria_auxiliar && (
+              <p className="text-xs text-red-600 mt-1">{errors.bateria_auxiliar.message}</p>
+            )}
           </div>
         </div>
       </div>

@@ -53,6 +53,13 @@ interface KPIDashboardProps {
   tcoTipoInicial: "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
   tcoPlacaInicial: string;
   dispCentroIdInicial?: number;
+  fuelResumen: {
+    kmTotales: number;
+    galonesTotales: number;
+    consumoPromedioFlota: number | null;
+    vehiculosConDatos: number;
+    vehiculosAnalizados: number;
+  };
 }
 
 const COLORS = [
@@ -76,13 +83,14 @@ export function KPIDashboard({
   tcoTipoInicial,
   tcoPlacaInicial,
   dispCentroIdInicial,
+  fuelResumen,
 }: KPIDashboardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  // Filtros TCO
+  // Filtros CTO
   const [kCen, setKCen] = useState(tcoCentroIdInicial ? String(tcoCentroIdInicial) : "");
   const [kTipo, setKTipo] = useState(tcoTipoInicial);
   const [kPlaca, setKPlaca] = useState(tcoPlacaInicial);
@@ -139,6 +147,8 @@ export function KPIDashboard({
     nombre: item.placa || item.centroOperativo || "Total",
     preventivo: item.costoPreventivo,
     correctivo: item.costoCorrectivo,
+    combustible: item.costoCombustible || 0,
+    fijos: item.costoFijoAnual || 0,
     total: item.costoTotal,
   }));
 
@@ -209,11 +219,11 @@ export function KPIDashboard({
           </CardContent>
         </Card>
 
-        {/* Card TCO Total */}
+        {/* Card CTO Total */}
         <Card className="md:col-span-1">
           <CardHeader className="pb-2 space-y-1">
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-sm font-medium">TCO Total</CardTitle>
+              <CardTitle className="text-sm font-medium">CTO Total</CardTitle>
               {tcoFiltrosActivos && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                   Filtro activo
@@ -234,9 +244,11 @@ export function KPIDashboard({
             <div className="text-2xl font-bold">
               {formatCurrency(tcoData.reduce((sum, item) => sum + item.costoTotal, 0))}
             </div>
-            <div className="flex gap-3 text-[11px] text-muted-foreground">
+            <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
               <span>Prev. {formatCurrency(tcoData.reduce((s, i) => s + i.costoPreventivo, 0))}</span>
               <span>Corr. {formatCurrency(tcoData.reduce((s, i) => s + i.costoCorrectivo, 0))}</span>
+              <span>Comb. {formatCurrency(tcoData.reduce((s, i) => s + (i.costoCombustible || 0), 0))}</span>
+              <span>Fijos {formatCurrency(tcoData.reduce((s, i) => s + (i.costoFijoAnual || 0), 0))}</span>
             </div>
             <p className="text-[10px] text-muted-foreground">Use filtros abajo para cambiar vista</p>
           </CardContent>
@@ -248,7 +260,7 @@ export function KPIDashboard({
               Ratio P/C
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <div className="text-2xl font-bold">
               {ratioPC.ratio.toFixed(2)}
             </div>
@@ -256,6 +268,26 @@ export function KPIDashboard({
               {ratioPC.cantidadPreventivo} preventivos /{" "}
               {ratioPC.cantidadCorrectivo} correctivos
             </p>
+            <div className="h-24">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={ratioPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={22}
+                    outerRadius={36}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {ratioPieData.map((_, index) => (
+                      <Cell key={`ratio-mini-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
 
@@ -293,9 +325,20 @@ export function KPIDashboard({
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={uptimeChartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="placa" />
-              <YAxis />
-              <Tooltip />
+              <XAxis
+                dataKey="placa"
+                angle={-38}
+                textAnchor="end"
+                height={78}
+                interval={0}
+                tick={{ fontSize: 10 }}
+                tickFormatter={(p: string) => (p.length > 9 ? `${p.slice(0, 8)}…` : p)}
+              />
+              <YAxis tickFormatter={(v) => `${v}%`} />
+              <Tooltip
+                formatter={(value: number) => [`${value}%`, "Disponibilidad"]}
+                labelFormatter={(label) => `Placa: ${label}`}
+              />
               <Legend />
               <Bar dataKey="disponibilidad" fill={COLORS[0]} radius={[6, 6, 0, 0]} />
             </BarChart>
@@ -303,12 +346,12 @@ export function KPIDashboard({
         </CardContent>
       </Card>
 
-      {/* Gráfico 2: TCO por Centro Operativo */}
+      {/* Gráfico 2: CTO por Centro Operativo */}
       <Card>
         <CardHeader>
-          <CardTitle>TCO por Vehículo/Centro</CardTitle>
+          <CardTitle>CTO por Vehículo/Centro</CardTitle>
           <CardDescription>
-            Costo total de mantenimiento desglosado por tipo. Los filtros siguientes aplican a esta gráfica y al
+            Costo total de operación desglosado por componente. Los filtros siguientes aplican a esta gráfica y al
             ratio preventivo/correctivo del mismo subconjunto de órdenes.
           </CardDescription>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end">
@@ -376,45 +419,44 @@ export function KPIDashboard({
               <Legend />
               <Bar dataKey="preventivo" stackId="a" fill={COLORS[1]} radius={[6, 6, 0, 0]} />
               <Bar dataKey="correctivo" stackId="a" fill={COLORS[2]} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="combustible" stackId="a" fill={COLORS[3]} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="fijos" stackId="a" fill={COLORS[4]} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
 
-      {/* Gráfico 3: Ratio Preventivo vs Correctivo */}
+      {/* Gráfico 3: KPIs de combustible + tiempo de resolución */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Ratio Preventivo vs Correctivo</CardTitle>
+            <CardTitle>KPIs de combustible</CardTitle>
             <CardDescription>
-              Distribución de costos por tipo de mantenimiento
+              Mismo criterio de la sección de combustible en el rango seleccionado.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={ratioPieData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) =>
-                    `${name}: ${(percent * 100).toFixed(0)}%`
-                  }
-                  outerRadius={80}
-                  fill={COLORS[0]}
-                  dataKey="value"
-                >
-                  {ratioPieData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Km totales</p>
+                <p className="text-2xl font-bold tabular-nums">{fuelResumen.kmTotales.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">km recorridos</p>
+              </div>
+              <div className="rounded-md border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Consumo promedio</p>
+                <p className="text-2xl font-bold tabular-nums">
+                  {fuelResumen.consumoPromedioFlota !== null
+                    ? `${fuelResumen.consumoPromedioFlota.toFixed(2)}`
+                    : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">km/gal · {fuelResumen.galonesTotales.toFixed(1)} gal</p>
+              </div>
+              <div className="rounded-md border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Vehículos con datos</p>
+                <p className="text-2xl font-bold tabular-nums">{fuelResumen.vehiculosConDatos}</p>
+                <p className="text-xs text-muted-foreground">de {fuelResumen.vehiculosAnalizados}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

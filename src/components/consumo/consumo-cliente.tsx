@@ -43,12 +43,14 @@ import { Fuel, MapPin, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
+import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 
 /** Radix Select no permite SelectItem value=""; usar centinela para “Todos”. */
 const SELECT_ALL = "__all__";
 
 interface ConsumoClienteProps {
   metricas: ConsumoVehiculo[];
+  metricasReferencia: ConsumoVehiculo[];
   /** Promedio mensual km/gal en el alcance de los filtros (flota, centro o una placa). */
   serieRendimientoMensual: RendimientoCombustibleMes[];
   vehicles: { id: string; placa: string; marca?: string | null }[];
@@ -73,6 +75,7 @@ function labelAlcanceRendimiento(centroId: string, vehiculoId: string, centros: 
 
 export function ConsumoCliente({
   metricas,
+  metricasReferencia,
   serieRendimientoMensual,
   vehicles,
   centros,
@@ -89,6 +92,7 @@ export function ConsumoCliente({
   const [fechaFin, setFechaFin] = useState(initialFechaFin);
   const [vehiculoId, setVehiculoId] = useState(vehicleIdFiltro || "");
   const [centroId, setCentroId] = useState(centroIdFiltro ? String(centroIdFiltro) : "");
+  const vehiclesOperativos = vehicles.filter((v) => !isReferenceSparkCombustionPlaca(v.placa));
 
   const aplicarFiltros = () => {
     const params = new URLSearchParams();
@@ -112,7 +116,6 @@ export function ConsumoCliente({
   const chartDataKm = metricas
     .filter((m) => m.kmRecorridos > 0)
     .sort((a, b) => b.kmRecorridos - a.kmRecorridos)
-    .slice(0, 15)
     .map((m) => ({ placa: m.placa, km: m.kmRecorridos }));
 
   const chartDataConsumo = metricas
@@ -156,7 +159,7 @@ export function ConsumoCliente({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={SELECT_ALL}>Todos</SelectItem>
-              {vehicles.map((v) => (
+              {vehiclesOperativos.map((v) => (
                 <SelectItem key={v.id} value={v.id}>
                   {v.placa}
                   {v.marca ? ` (${v.marca})` : ""}
@@ -355,21 +358,78 @@ export function ConsumoCliente({
       {chartDataKm.length > 0 && (
         <Card>
           <CardHeader className="py-3">
-            <CardTitle className="text-base">Km recorridos (ranking corto)</CardTitle>
+            <CardTitle className="text-base">Km recorridos por vehículo</CardTitle>
+            <CardDescription>
+              Eje X: placa · Eje Y: km recorridos en el rango seleccionado.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartDataKm} layout="vertical" margin={{ left: 8 }}>
+              <BarChart data={chartDataKm} margin={{ top: 8, right: 12, left: 4, bottom: 64 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={(v) => v.toLocaleString()} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="placa" width={70} tick={{ fontSize: 11 }} />
+                <XAxis
+                  dataKey="placa"
+                  tick={{ fontSize: 11 }}
+                  angle={-30}
+                  textAnchor="end"
+                  height={62}
+                  interval={0}
+                />
+                <YAxis tickFormatter={(v) => v.toLocaleString()} tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v: number) => [`${v.toLocaleString()} km`, ""]} />
-                <Bar dataKey="km" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="km" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Referencia histórica Spark 2021</CardTitle>
+          <CardDescription>
+            Estas placas no cuentan en la flota operativa. Se muestran solo para comparar ahorro vs eléctricos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {metricasReferencia.length === 0 ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              No hay datos de combustible para KOS929, KYV199, KYV219 y KZO779 en el período seleccionado.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[140px]">Placa</TableHead>
+                  <TableHead>Marca</TableHead>
+                  <TableHead className="text-right">Km Recorridos</TableHead>
+                  <TableHead className="text-right">Consumo Prom. (km/gal)</TableHead>
+                  <TableHead className="text-right">Total Galones</TableHead>
+                  <TableHead className="text-right">Cargas</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {metricasReferencia.map((m) => (
+                  <TableRow key={m.vehicleId}>
+                    <TableCell className="font-bold">{m.placa}</TableCell>
+                    <TableCell className="text-muted-foreground">{m.marca || "Chevrolet Spark 2021"}</TableCell>
+                    <TableCell className="text-right">
+                      {m.kmRecorridos > 0 ? m.kmRecorridos.toLocaleString() : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {m.consumoPromedioKmGal !== null ? m.consumoPromedioKmGal.toFixed(2) : "Sin datos"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {m.totalGalones > 0 ? m.totalGalones.toFixed(1) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">{m.cantidadCargas}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

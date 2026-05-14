@@ -41,7 +41,7 @@ export default async function VehiculosPage() {
             Pulse la fila para desplegar opciones. En el detalle puede actualizar el kilometraje (obligatorio fecha y
             lectura).
             {puedeEditarEstado
-              ? " Si su rol lo permite, pulse el estado (OPERATIVO / FUERA_DE_SERVICIO) para alternarlo."
+              ? " Si su rol lo permite, pulse el estado (OPERATIVO / FDS) para alternarlo."
               : ""}
           </p>
           <VehiculosTablaExpandible vehicles={vehicles} puedeEditarEstado={puedeEditarEstado} />

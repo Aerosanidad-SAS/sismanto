@@ -1,8 +1,17 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { KPIDashboard } from "@/components/charts/kpi-dashboard";
+import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
+import { getMetricasConsumo } from "@/app/api/actions/consumo";
 
 type TcoTipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
+type FuelResumenKPI = {
+  kmTotales: number;
+  galonesTotales: number;
+  consumoPromedioFlota: number | null;
+  vehiculosConDatos: number;
+  vehiculosAnalizados: number;
+};
 
 async function getKPIData(
   fechaInicio: string,
@@ -33,7 +42,9 @@ async function getKPIData(
     .gte("fecha_reporte", fechaInicio)
     .lte("fecha_reporte", fechaFin);
 
-    let vehiclesFiltrados = vehicles || [];
+    let vehiclesFiltrados = (vehicles || []).filter(
+      (v: any) => !isReferenceSparkCombustionPlaca(v.placa)
+    );
     if (dispCentroId != null) {
       vehiclesFiltrados = vehiclesFiltrados.filter(
         (v: any) => Number(v.centro_operativo_id) === dispCentroId
@@ -65,59 +76,93 @@ async function getKPIData(
       };
     });
 
-    // KPI 2: TCO (Total Cost of Ownership)
-    const { data: mantenimientosRaw } = await supabase
-    .from("maintenance_records")
-    .select(`
-      tipo,
-      valor,
-      vehicles!inner(placa, centro_operativo, centro_operativo_id)
-    `)
-    .gte("fecha", fechaInicio)
-    .lte("fecha", fechaFin);
-
-    let mantenimientos = mantenimientosRaw || [];
-    if (tcoFiltros?.centroId != null && !Number.isNaN(tcoFiltros.centroId)) {
-      mantenimientos = mantenimientos.filter(
-        (m: any) => Number(m.vehicles?.centro_operativo_id) === tcoFiltros!.centroId
+    // KPI 2: CTO (Costo Total de Operación)
+    const { data: vehiclesCostRaw } = await supabase
+      .from("vehicles")
+      .select(
+        "id, placa, centro_operativo, centro_operativo_id, costo_soat_anual, costo_tecnomecanica_anual, costo_poliza_anual"
       );
-    }
-    if (tcoFiltros?.tipo && tcoFiltros.tipo !== "AMBOS") {
-      mantenimientos = mantenimientos.filter((m: any) => m.tipo === tcoFiltros!.tipo);
+    let vehiclesCost = (vehiclesCostRaw || []).filter(
+      (v: any) => !isReferenceSparkCombustionPlaca(v.placa)
+    );
+    if (tcoFiltros?.centroId != null && !Number.isNaN(tcoFiltros.centroId)) {
+      vehiclesCost = vehiclesCost.filter(
+        (v: any) => Number(v.centro_operativo_id) === tcoFiltros.centroId
+      );
     }
     if (tcoFiltros?.placaFragment?.trim()) {
       const q = tcoFiltros.placaFragment.trim().toUpperCase();
-      mantenimientos = mantenimientos.filter((m: any) =>
-        String(m.vehicles?.placa || "")
-          .toUpperCase()
-          .includes(q)
+      vehiclesCost = vehiclesCost.filter((v: any) =>
+        String(v.placa || "").toUpperCase().includes(q)
       );
     }
+    const vehicleIds = vehiclesCost.map((v: any) => v.id);
+
+    let mantenimientos: any[] = [];
+    if (vehicleIds.length > 0) {
+      let mantQuery = supabase
+        .from("maintenance_records")
+        .select(
+          `tipo, valor, vehicle_id, vehicles!inner(placa, centro_operativo, centro_operativo_id)`
+        )
+        .in("vehicle_id", vehicleIds)
+        .gte("fecha", fechaInicio)
+        .lte("fecha", fechaFin);
+      if (tcoFiltros?.tipo && tcoFiltros.tipo !== "AMBOS") {
+        mantQuery = mantQuery.eq("tipo", tcoFiltros.tipo);
+      }
+      mantenimientos = (await mantQuery).data || [];
+    }
+
+    const { data: fuelRows } = vehicleIds.length
+      ? await supabase
+          .from("fuel_logs")
+          .select("vehicle_id, costo")
+          .in("vehicle_id", vehicleIds)
+          .gte("fecha", fechaInicio)
+          .lte("fecha", fechaFin)
+      : { data: [] as any[] };
 
     const tcoData: Record<string, any> = {};
-    mantenimientos.forEach((m: any) => {
-      const key = `${m.vehicles.centro_operativo}_${m.vehicles.placa}`;
-      if (!tcoData[key]) {
-        tcoData[key] = {
-          placa: m.vehicles.placa,
-          centroOperativo: m.vehicles.centro_operativo,
-          costoPreventivo: 0,
-          costoCorrectivo: 0,
-          costoTotal: 0,
-          cantidadMantenimientos: 0,
-        };
-      }
-      const valor = m.valor || 0;
-      tcoData[key].costoTotal += valor;
-      tcoData[key].cantidadMantenimientos += 1;
-      if (m.tipo === "PREVENTIVO") {
-        tcoData[key].costoPreventivo += valor;
-      } else {
-        tcoData[key].costoCorrectivo += valor;
-      }
-    });
+    for (const v of vehiclesCost) {
+      const key = `${v.centro_operativo}_${v.placa}`;
+      const costoFijoAnual =
+        Number(v.costo_soat_anual || 0) +
+        Number(v.costo_tecnomecanica_anual || 0) +
+        Number(v.costo_poliza_anual || 0);
+      tcoData[key] = {
+        placa: v.placa,
+        centroOperativo: v.centro_operativo,
+        costoPreventivo: 0,
+        costoCorrectivo: 0,
+        costoCombustible: 0,
+        costoFijoAnual,
+        costoTotal: costoFijoAnual,
+        cantidadMantenimientos: 0,
+      };
+    }
 
-    // KPI 3: Ratio Preventivo/Correctivo (mismo subconjunto que TCO si hay filtros)
+    for (const m of mantenimientos) {
+      const key = `${m.vehicles.centro_operativo}_${m.vehicles.placa}`;
+      if (!tcoData[key]) continue;
+      const valor = Number(m.valor || 0);
+      tcoData[key].cantidadMantenimientos += 1;
+      if (m.tipo === "PREVENTIVO") tcoData[key].costoPreventivo += valor;
+      if (m.tipo === "CORRECTIVO") tcoData[key].costoCorrectivo += valor;
+      tcoData[key].costoTotal += valor;
+    }
+
+    for (const f of fuelRows || []) {
+      const vehicle = vehiclesCost.find((v: any) => v.id === f.vehicle_id);
+      if (!vehicle) continue;
+      const key = `${vehicle.centro_operativo}_${vehicle.placa}`;
+      if (!tcoData[key]) continue;
+      const costo = Number(f.costo || 0);
+      tcoData[key].costoCombustible += costo;
+      tcoData[key].costoTotal += costo;
+    }
+
+    // KPI 3: Ratio Preventivo/Correctivo (subconjunto de mantenimientos filtrado)
     const totalPreventivo = mantenimientos.reduce(
       (sum, m: any) => sum + (m.tipo === "PREVENTIVO" ? m.valor || 0 : 0),
       0
@@ -197,6 +242,21 @@ async function getKPIData(
   }
 }
 
+async function getFuelResumen(fechaInicio: string, fechaFin: string): Promise<FuelResumenKPI> {
+  const metricas = await getMetricasConsumo(fechaInicio, fechaFin, undefined, undefined, "operativa");
+  const conConsumo = metricas.filter((m) => m.consumoPromedioKmGal !== null);
+  return {
+    kmTotales: metricas.reduce((sum, m) => sum + m.kmRecorridos, 0),
+    galonesTotales: metricas.reduce((sum, m) => sum + m.totalGalones, 0),
+    consumoPromedioFlota:
+      conConsumo.length > 0
+        ? conConsumo.reduce((sum, m) => sum + (m.consumoPromedioKmGal || 0), 0) / conConsumo.length
+        : null,
+    vehiculosConDatos: conConsumo.length,
+    vehiculosAnalizados: metricas.length,
+  };
+}
+
 export default async function KPIsPage({
   searchParams,
 }: {
@@ -237,15 +297,22 @@ export default async function KPIsPage({
     supabase.from("vehicles").select("placa").order("placa"),
   ]);
   const placasKpi = Array.from(
-    new Set((vehiclesKpi || []).map((v: { placa: string }) => String(v.placa || "").trim()).filter(Boolean))
+    new Set(
+      (vehiclesKpi || [])
+        .map((v: { placa: string }) => String(v.placa || "").trim())
+        .filter((placa) => placa && !isReferenceSparkCombustionPlaca(placa))
+    )
   );
 
-  const kpiData = await getKPIData(
-    fechaInicio,
-    fechaFin,
-    { centroId: tcoCentroId, tipo: tcoTipo, placaFragment: tcoPlaca },
-    dispCentroId
-  );
+  const [kpiData, fuelResumen] = await Promise.all([
+    getKPIData(
+      fechaInicio,
+      fechaFin,
+      { centroId: tcoCentroId, tipo: tcoTipo, placaFragment: tcoPlaca },
+      dispCentroId
+    ),
+    getFuelResumen(fechaInicio, fechaFin),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -270,6 +337,7 @@ export default async function KPIsPage({
           tcoTipoInicial={tcoTipo}
           tcoPlacaInicial={tcoPlaca ?? ""}
           dispCentroIdInicial={dispCentroId}
+          fuelResumen={fuelResumen}
         />
       </Suspense>
     </div>
