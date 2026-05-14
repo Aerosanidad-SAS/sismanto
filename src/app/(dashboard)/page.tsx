@@ -224,12 +224,7 @@ export default async function DashboardPage({
   };
 }) {
   const hoy = new Date();
-  const inicio3Meses = new Date();
-  inicio3Meses.setMonth(inicio3Meses.getMonth() - 3);
-  inicio3Meses.setDate(1);
-  inicio3Meses.setHours(0, 0, 0, 0);
-
-  const defaultInicio = inicio3Meses.toISOString().split("T")[0];
+  const defaultInicio = "2021-01-01"; // covers full fleet history from first maintenance records
   const defaultFin = hoy.toISOString().split("T")[0];
 
   const parseDashDate = (s?: string): string | null => {

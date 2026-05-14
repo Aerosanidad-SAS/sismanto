@@ -90,7 +90,9 @@ export async function importarMantenimientos(
     .from("maintenance_categories")
     .select("id, nombre");
 
-  const vehicleMap = new Map((vehicles || []).map((v) => [v.placa.toUpperCase(), v.id]));
+  const vehicleMap = new Map(
+    (vehicles || []).map((v) => [v.placa.trim().toUpperCase().replace(/\s+/g, ""), v.id])
+  );
   const categoriaMap = new Map((categorias || []).map((c) => [c.nombre.toUpperCase(), c.id]));
   const seenKeysInFile = new Set<string>();
 
@@ -237,7 +239,9 @@ export async function importarCombustible(filas: FilaCombustible[]): Promise<Res
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
   const { data: vehicles } = await supabase.from("vehicles").select("id, placa");
-  const vehicleMap = new Map((vehicles || []).map((v) => [v.placa.toUpperCase(), v.id]));
+  const vehicleMap = new Map(
+    (vehicles || []).map((v) => [v.placa.trim().toUpperCase().replace(/\s+/g, ""), v.id])
+  );
 
   const loteSize = 50;
   for (let i = 0; i < filas.length; i += loteSize) {

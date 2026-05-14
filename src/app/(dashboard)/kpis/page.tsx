@@ -125,12 +125,11 @@ async function getKPIData(
 
     const tcoData: Record<string, any> = {};
     for (const v of vehiclesCost) {
-      const key = `${v.centro_operativo}_${v.placa}`;
       const costoFijoAnual =
         Number(v.costo_soat_anual || 0) +
         Number(v.costo_tecnomecanica_anual || 0) +
         Number(v.costo_poliza_anual || 0);
-      tcoData[key] = {
+      tcoData[v.id] = {
         placa: v.placa,
         centroOperativo: v.centro_operativo,
         costoPreventivo: 0,
@@ -143,23 +142,21 @@ async function getKPIData(
     }
 
     for (const m of mantenimientos) {
-      const key = `${m.vehicles.centro_operativo}_${m.vehicles.placa}`;
-      if (!tcoData[key]) continue;
+      const entry = tcoData[m.vehicle_id];
+      if (!entry) continue;
       const valor = Number(m.valor || 0);
-      tcoData[key].cantidadMantenimientos += 1;
-      if (m.tipo === "PREVENTIVO") tcoData[key].costoPreventivo += valor;
-      if (m.tipo === "CORRECTIVO") tcoData[key].costoCorrectivo += valor;
-      tcoData[key].costoTotal += valor;
+      entry.cantidadMantenimientos += 1;
+      if (m.tipo === "PREVENTIVO") entry.costoPreventivo += valor;
+      if (m.tipo === "CORRECTIVO") entry.costoCorrectivo += valor;
+      entry.costoTotal += valor;
     }
 
     for (const f of fuelRows || []) {
-      const vehicle = vehiclesCost.find((v: any) => v.id === f.vehicle_id);
-      if (!vehicle) continue;
-      const key = `${vehicle.centro_operativo}_${vehicle.placa}`;
-      if (!tcoData[key]) continue;
+      const entry = tcoData[f.vehicle_id];
+      if (!entry) continue;
       const costo = Number(f.costo || 0);
-      tcoData[key].costoCombustible += costo;
-      tcoData[key].costoTotal += costo;
+      entry.costoCombustible += costo;
+      entry.costoTotal += costo;
     }
 
     // KPI 3: Ratio Preventivo/Correctivo (subconjunto de mantenimientos filtrado)
@@ -270,13 +267,7 @@ export default async function KPIsPage({
   };
 }) {
   const hoy = new Date();
-  const inicio3Meses = new Date();
-  inicio3Meses.setMonth(inicio3Meses.getMonth() - 3);
-  inicio3Meses.setDate(1);
-  inicio3Meses.setHours(0, 0, 0, 0);
-
-  const fechaInicio =
-    searchParams.inicio || inicio3Meses.toISOString().split("T")[0];
+  const fechaInicio = searchParams.inicio || "2021-01-01";
   const fechaFin = searchParams.fin || hoy.toISOString().split("T")[0];
 
   const kCentroParsed = searchParams.kCentro ? parseInt(searchParams.kCentro, 10) : NaN;
