@@ -37,6 +37,8 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "019_security_perf_hardening.sql",         file: "scripts/migrations/019_security_perf_hardening.sql" },
   { name: "020_reference_spark_2021.sql",            file: "scripts/migrations/020_reference_spark_2021.sql" },
   { name: "022_vehicle_specs_required.sql",          file: "scripts/migrations/022_vehicle_specs_required.sql" },
+  { name: "023_normalize_placas.sql",               file: "scripts/migrations/023_normalize_placas.sql" },
+  { name: "024_maintenance_valor_review.sql",        file: "scripts/migrations/024_maintenance_valor_review.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

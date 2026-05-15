@@ -1,12 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDateShort, formatCurrency } from "@/lib/utils";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { MantenimientoFiltrosForm } from "@/components/mantenimientos/mantenimiento-filtros";
+import { MantenimientosTabla } from "@/components/mantenimientos/mantenimientos-tabla";
+
+async function fetchCategorias() {
+  try {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("maintenance_categories")
+      .select("id, nombre, grupo_padre")
+      .eq("activo", true)
+      .order("grupo_padre")
+      .order("nombre");
+    return (data || []) as { id: number; nombre: string; grupo_padre: string | null }[];
+  } catch {
+    return [];
+  }
+}
 
 async function fetchMantenimientos(searchParams: {
   mPlaca?: string;
@@ -80,7 +93,10 @@ export default async function MantenimientosPage({
     mFac?: string;
   };
 }) {
-  const mantenimientos = await fetchMantenimientos(searchParams);
+  const [mantenimientos, categories] = await Promise.all([
+    fetchMantenimientos(searchParams),
+    fetchCategorias(),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -91,12 +107,20 @@ export default async function MantenimientosPage({
             Historial completo — filtre por placa, fechas, categoría, tipo, proveedor y factura.
           </p>
         </div>
-        <Link href="/mantenimientos/nuevo">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo Mantenimiento
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/mantenimientos/cargar-facturas">
+            <Button variant="outline">
+              <Upload className="mr-2 h-4 w-4" />
+              Cargar Facturas
+            </Button>
+          </Link>
+          <Link href="/mantenimientos/nuevo">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo Mantenimiento
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <Card>
@@ -122,42 +146,15 @@ export default async function MantenimientosPage({
       <Card>
         <CardHeader>
           <CardTitle>Historial ({mantenimientos.length} registros)</CardTitle>
-          <CardDescription>Listado ordenado por fecha descendente</CardDescription>
+          <CardDescription>
+            Categoría, Tipo y Descripción son editables — haz clic sobre ellos para modificar.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Vehículo</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Kilometraje</TableHead>
-                <TableHead>Proveedor</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Factura</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mantenimientos.map((m: any) => (
-                <TableRow key={m.id_manto}>
-                  <TableCell>{formatDateShort(m.fecha)}</TableCell>
-                  <TableCell className="font-medium">{m.vehicles?.placa}</TableCell>
-                  <TableCell>{m.maintenance_categories?.nombre || "N/A"}</TableCell>
-                  <TableCell>
-                    <Badge variant={m.tipo === "PREVENTIVO" ? "default" : "secondary"}>{m.tipo}</Badge>
-                  </TableCell>
-                  <TableCell>{m.kilometraje_actual.toLocaleString()} km</TableCell>
-                  <TableCell>{m.proveedor || "N/A"}</TableCell>
-                  <TableCell>{m.valor ? formatCurrency(m.valor) : "N/A"}</TableCell>
-                  <TableCell>{m.numero_factura || "N/A"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {mantenimientos.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">No hay resultados con estos filtros.</p>
-          )}
+        <CardContent>
+          <MantenimientosTabla
+            mantenimientos={mantenimientos as any}
+            categories={categories}
+          />
         </CardContent>
       </Card>
     </div>

@@ -121,6 +121,41 @@ export async function getUltimoKilometrajeVehiculo(vehicleId: string) {
   return await getUltimoKilometraje(vehicleId);
 }
 
+export async function actualizarMantenimientoCampo(
+  idManto: number,
+  campos: {
+    tipo?: "PREVENTIVO" | "CORRECTIVO";
+    categoriaId?: number | null;
+    descripcionTrabajo?: string;
+  }
+): Promise<{ success?: boolean; error?: string }> {
+  await requireRole(["ADMIN", "MANTENIMIENTO"]);
+
+  if (!idManto) return { error: "ID inválido" };
+
+  const payload: Record<string, unknown> = {};
+  if (campos.tipo !== undefined) payload.tipo = campos.tipo;
+  if (campos.categoriaId !== undefined) payload.categoria_id = campos.categoriaId;
+  if (campos.descripcionTrabajo !== undefined) {
+    if (campos.descripcionTrabajo.trim().length < 3) return { error: "Descripción muy corta" };
+    payload.descripcion_trabajo = campos.descripcionTrabajo.trim();
+  }
+
+  if (Object.keys(payload).length === 0) return { error: "Sin campos para actualizar" };
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("maintenance_records")
+    .update(payload)
+    .eq("id_manto", idManto);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/mantenimientos");
+  revalidatePath("/");
+  return { success: true };
+}
+
 export async function getNovedadesAbiertasPorVehiculo(vehicleId: string) {
   const supabase = createClient();
   const { data } = await supabase
