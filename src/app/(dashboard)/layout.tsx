@@ -22,6 +22,8 @@ import {
   X,
   PanelLeftClose,
   PanelLeft,
+  MessageSquareText,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
@@ -117,6 +119,20 @@ const ALL_NAV: {
     icon: Users,
     roles: ["ADMIN"],
     hint: "Alta, roles y estado de cuentas del personal.",
+  },
+  {
+    name: "Chat IA",
+    href: "/ai-chat",
+    icon: MessageSquareText,
+    roles: ["ADMIN", "GERENCIAL"],
+    hint: "Consulta y registra operaciones de flota en lenguaje natural con IA.",
+  },
+  {
+    name: "AI Insights",
+    href: "/ai-insights",
+    icon: Sparkles,
+    roles: ["ADMIN", "GERENCIAL", "COORDINACION"],
+    hint: "Análisis inteligente: patrones de combustible, novedades y disponibilidad.",
   },
 ];
 

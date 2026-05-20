@@ -995,6 +995,39 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_usage_log: {
+        Row: {
+          id: number
+          created_at: string
+          feature: string
+          modelo: string
+          tokens_in: number
+          tokens_out: number
+          cost_usd: number
+          usuario_id: string | null
+        }
+        Insert: {
+          id?: number
+          created_at?: string
+          feature: string
+          modelo: string
+          tokens_in?: number
+          tokens_out?: number
+          cost_usd?: number
+          usuario_id?: string | null
+        }
+        Update: {
+          id?: number
+          created_at?: string
+          feature?: string
+          modelo?: string
+          tokens_in?: number
+          tokens_out?: number
+          cost_usd?: number
+          usuario_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       vehicle_maintenance_alerts: {
