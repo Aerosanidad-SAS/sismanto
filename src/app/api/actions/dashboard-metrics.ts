@@ -124,12 +124,19 @@ export async function getCostosPorVehiculo(
       .gte("fecha", fi)
       .lte("fecha", ff);
 
+    const diasPeriodo = Math.max(
+      1,
+      Math.round((new Date(ff).getTime() - new Date(fi).getTime()) / (1000 * 60 * 60 * 24)) + 1
+    );
+    const factorPeriodo = diasPeriodo / 365;
+
     const map: Record<string, CostoPorVehiculoKPI> = {};
     for (const v of vehicles) {
       const costoFijoAnual =
-        Number(v.costo_soat_anual || 0) +
-        Number(v.costo_tecnomecanica_anual || 0) +
-        Number(v.costo_poliza_anual || 0);
+        (Number(v.costo_soat_anual || 0) +
+          Number(v.costo_tecnomecanica_anual || 0) +
+          Number(v.costo_poliza_anual || 0)) *
+        factorPeriodo;
       map[v.id] = {
         vehicleId: v.id,
         placa: v.placa || "",

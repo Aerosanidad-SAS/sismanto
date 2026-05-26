@@ -123,12 +123,21 @@ async function getKPIData(
           .lte("fecha", fechaFin)
       : { data: [] as any[] };
 
+    const diasPeriodo = Math.max(
+      1,
+      Math.round(
+        (new Date(fechaFin).getTime() - new Date(fechaInicio).getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1
+    );
+    const factorPeriodo = diasPeriodo / 365;
+
     const tcoData: Record<string, any> = {};
     for (const v of vehiclesCost) {
       const costoFijoAnual =
-        Number(v.costo_soat_anual || 0) +
-        Number(v.costo_tecnomecanica_anual || 0) +
-        Number(v.costo_poliza_anual || 0);
+        (Number(v.costo_soat_anual || 0) +
+          Number(v.costo_tecnomecanica_anual || 0) +
+          Number(v.costo_poliza_anual || 0)) *
+        factorPeriodo;
       tcoData[v.id] = {
         placa: v.placa,
         centroOperativo: v.centro_operativo,

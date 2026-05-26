@@ -149,6 +149,7 @@ export type Database = {
           centro_operativo_id: number | null
           /** Inicio operativo fuera de servicio (negocio); ver migración 009. */
           fds_desde: string | null
+          onedrive_folder_id: string | null
           created_at: string
           updated_at: string
         }
@@ -183,6 +184,7 @@ export type Database = {
           centro_operativo: string
           centro_operativo_id?: number | null
           fds_desde?: string | null
+          onedrive_folder_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -217,6 +219,7 @@ export type Database = {
           centro_operativo?: string
           centro_operativo_id?: number | null
           fds_desde?: string | null
+          onedrive_folder_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -311,6 +314,7 @@ export type Database = {
           tiempo_fuera_servicio_horas: number | null
           notas_adicionales: string | null
           incident_id: number | null
+          invoice_job_id: string | null
           created_at: string
           created_by: string | null
         }
@@ -329,6 +333,7 @@ export type Database = {
           tiempo_fuera_servicio_horas?: number | null
           notas_adicionales?: string | null
           incident_id?: number | null
+          invoice_job_id?: string | null
           created_at?: string
           created_by?: string | null
         }
@@ -347,6 +352,7 @@ export type Database = {
           tiempo_fuera_servicio_horas?: number | null
           notas_adicionales?: string | null
           incident_id?: number | null
+          invoice_job_id?: string | null
           created_at?: string
           created_by?: string | null
         }
@@ -1027,6 +1033,86 @@ export type Database = {
           usuario_id?: string | null
         }
         Relationships: []
+      }
+      onedrive_subscriptions: {
+        Row: {
+          id: string
+          resource: string
+          notification_url: string
+          expiration_datetime: string
+          created_at: string
+        }
+        Insert: {
+          id: string
+          resource: string
+          notification_url: string
+          expiration_datetime: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          resource?: string
+          notification_url?: string
+          expiration_datetime?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      invoice_jobs: {
+        Row: {
+          id: string
+          created_at: string
+          status: 'pending' | 'processing' | 'completed' | 'needs_review' | 'error'
+          source_file_name: string | null
+          source_file_path: string | null
+          onedrive_item_id: string | null
+          extracted_data: Json | null
+          vehicle_plate: string | null
+          vehicle_id: string | null
+          error_message: string | null
+          processed_at: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          status?: 'pending' | 'processing' | 'completed' | 'needs_review' | 'error'
+          source_file_name?: string | null
+          source_file_path?: string | null
+          onedrive_item_id?: string | null
+          extracted_data?: Json | null
+          vehicle_plate?: string | null
+          vehicle_id?: string | null
+          error_message?: string | null
+          processed_at?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          status?: 'pending' | 'processing' | 'completed' | 'needs_review' | 'error'
+          source_file_name?: string | null
+          source_file_path?: string | null
+          onedrive_item_id?: string | null
+          extracted_data?: Json | null
+          vehicle_plate?: string | null
+          vehicle_id?: string | null
+          error_message?: string | null
+          processed_at?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_jobs_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {
