@@ -39,6 +39,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "022_vehicle_specs_required.sql",          file: "scripts/migrations/022_vehicle_specs_required.sql" },
   { name: "023_normalize_placas.sql",               file: "scripts/migrations/023_normalize_placas.sql" },
   { name: "024_maintenance_valor_review.sql",        file: "scripts/migrations/024_maintenance_valor_review.sql" },
+  { name: "025_invoice_jobs.sql",                    file: "scripts/migrations/025_invoice_jobs.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
