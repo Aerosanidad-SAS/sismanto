@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/app/api/actions/auth";
 import { revalidatePath } from "next/cache";
-import { moveAndRenameFile } from "@/lib/graph/client";
+import { moveAndRenameFile, getReviewFolderId } from "@/lib/graph/client";
 import { buildFileName } from "@/lib/invoice/extractor";
 import type { ExtractedInvoice } from "@/lib/invoice/extractor";
 
@@ -104,7 +104,7 @@ export async function approveInvoiceJob(
       const ext       = (job.source_file_name ?? "invoice.pdf").split(".").pop() ?? "pdf";
       const newName   = buildFileName(plate, data.fecha, data.descripcionTrabajo, ext);
       const targetFolderId =
-        vehicle?.onedrive_folder_id ?? process.env.ONEDRIVE_REVIEW_FOLDER_ID!;
+        vehicle?.onedrive_folder_id ?? await getReviewFolderId();
       await moveAndRenameFile(job.onedrive_item_id, targetFolderId, newName);
     } catch {
       // File move failure is non-fatal — the record is already saved

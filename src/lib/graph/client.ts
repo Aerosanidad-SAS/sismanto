@@ -5,6 +5,8 @@ const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 // OneDrive subscriptions expire after at most 4230 minutes (~2.9 days)
 const SUBSCRIPTION_TTL_MS = 4200 * 60 * 1000;
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
 interface TokenCache {
   token: string;
   expiresAt: number;
@@ -17,14 +19,14 @@ export async function getAccessToken(): Promise<string> {
     return _tokenCache.token;
   }
 
-  const tenantId  = process.env.AZURE_TENANT_ID!;
-  const clientId  = process.env.AZURE_CLIENT_ID!;
+  const tenantId     = process.env.AZURE_TENANT_ID!;
+  const clientId     = process.env.AZURE_CLIENT_ID!;
   const clientSecret = process.env.AZURE_CLIENT_SECRET!;
 
   const res = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type:    "client_credentials",
@@ -48,26 +50,109 @@ export async function getAccessToken(): Promise<string> {
   return _tokenCache.token;
 }
 
-async function graphFetch(
-  path: string,
-  options: RequestInit = {}
-): Promise<Response> {
+async function graphFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = await getAccessToken();
   return fetch(`${GRAPH_BASE}${path}`, {
     ...options,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization:  `Bearer ${token}`,
       "Content-Type": "application/json",
       ...(options.headers ?? {}),
     },
   });
 }
 
+// ── Folder path resolution ────────────────────────────────────────────────────
+// Graph supports UPN (email) directly in /users/{upn}/drive paths.
+// Folder paths are resolved once and cached for the lifetime of the process.
+
+const _folderIdCache = new Map<string, string>();
+
+export async function resolveFolderPath(folderPath: string): Promise<string> {
+  if (_folderIdCache.has(folderPath)) {
+    return _folderIdCache.get(folderPath)!;
+  }
+
+  const user       = process.env.ONEDRIVE_USER!;
+  const encodedPath = encodeURIComponent(folderPath);
+  const res = await graphFetch(`/users/${user}/drive/root:/${encodedPath}`);
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Cannot resolve OneDrive path "${folderPath}" (${res.status}): ${text}`);
+  }
+
+  const json = await res.json();
+  const id: string = json.id;
+  _folderIdCache.set(folderPath, id);
+  return id;
+}
+
+export async function getInputFolderId(): Promise<string> {
+  const path = process.env.ONEDRIVE_INPUT_FOLDER!;
+  return resolveFolderPath(path);
+}
+
+export async function getReviewFolderId(): Promise<string> {
+  const path = process.env.ONEDRIVE_REVIEW_FOLDER!;
+  return resolveFolderPath(path);
+}
+
+// ── File listing ──────────────────────────────────────────────────────────────
+
+export interface OneDriveFile {
+  id:       string;
+  name:     string;
+  size:     number;
+  mimeType: string;
+  webUrl:   string;
+}
+
+const PDF_AND_IMAGE_MIMES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+export async function listFolderFiles(folderId: string): Promise<OneDriveFile[]> {
+  const user = process.env.ONEDRIVE_USER!;
+  const res  = await graphFetch(
+    `/users/${user}/drive/items/${folderId}/children` +
+    `?$select=id,name,size,file,webUrl&$top=100`
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to list folder ${folderId} (${res.status}): ${text}`);
+  }
+
+  const json = await res.json();
+  const items: Array<{
+    id: string;
+    name: string;
+    size: number;
+    webUrl: string;
+    file?: { mimeType: string };
+  }> = json.value ?? [];
+
+  return items
+    .filter((item) => item.file && PDF_AND_IMAGE_MIMES.has(item.file.mimeType))
+    .map((item) => ({
+      id:       item.id,
+      name:     item.name,
+      size:     item.size,
+      mimeType: item.file!.mimeType,
+      webUrl:   item.webUrl,
+    }));
+}
+
+// ── File operations ───────────────────────────────────────────────────────────
+
 export async function downloadFile(itemId: string): Promise<Buffer> {
-  const userId = process.env.ONEDRIVE_USER_ID!;
-  const res = await graphFetch(
-    `/users/${userId}/drive/items/${itemId}/content`,
-    // Follow redirect to the actual download URL
+  const user = process.env.ONEDRIVE_USER!;
+  const res  = await graphFetch(
+    `/users/${user}/drive/items/${itemId}/content`,
     { redirect: "follow" }
   );
   if (!res.ok) {
@@ -78,21 +163,18 @@ export async function downloadFile(itemId: string): Promise<Buffer> {
 }
 
 export async function moveAndRenameFile(
-  itemId: string,
+  itemId:        string,
   targetFolderId: string,
-  newName: string
+  newName:       string
 ): Promise<void> {
-  const userId = process.env.ONEDRIVE_USER_ID!;
-  const res = await graphFetch(
-    `/users/${userId}/drive/items/${itemId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({
-        name: newName,
-        parentReference: { id: targetFolderId },
-      }),
-    }
-  );
+  const user = process.env.ONEDRIVE_USER!;
+  const res  = await graphFetch(`/users/${user}/drive/items/${itemId}`, {
+    method: "PATCH",
+    body:   JSON.stringify({
+      name:            newName,
+      parentReference: { id: targetFolderId },
+    }),
+  });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Failed to move/rename item ${itemId}: ${res.status} ${text}`);
@@ -100,35 +182,33 @@ export async function moveAndRenameFile(
 }
 
 export async function renameFile(itemId: string, newName: string): Promise<void> {
-  const userId = process.env.ONEDRIVE_USER_ID!;
-  const res = await graphFetch(
-    `/users/${userId}/drive/items/${itemId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ name: newName }),
-    }
-  );
+  const user = process.env.ONEDRIVE_USER!;
+  const res  = await graphFetch(`/users/${user}/drive/items/${itemId}`, {
+    method: "PATCH",
+    body:   JSON.stringify({ name: newName }),
+  });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Failed to rename item ${itemId}: ${res.status} ${text}`);
   }
 }
 
+// ── Webhook subscriptions ─────────────────────────────────────────────────────
+
 export async function registerWebhookSubscription(
   notificationUrl: string
 ): Promise<{ id: string; expirationDateTime: string }> {
-  const userId  = process.env.ONEDRIVE_USER_ID!;
-  const folderId = process.env.ONEDRIVE_INPUT_FOLDER_ID!;
-  const secret  = process.env.GRAPH_WEBHOOK_SECRET!;
-
+  const user             = process.env.ONEDRIVE_USER!;
+  const folderId         = await getInputFolderId();
+  const secret           = process.env.GRAPH_WEBHOOK_SECRET!;
   const expirationDateTime = new Date(Date.now() + SUBSCRIPTION_TTL_MS).toISOString();
 
   const res = await graphFetch("/subscriptions", {
     method: "POST",
-    body: JSON.stringify({
+    body:   JSON.stringify({
       changeType:          "created",
       notificationUrl,
-      resource:            `/users/${userId}/drive/items/${folderId}/children`,
+      resource:            `/users/${user}/drive/items/${folderId}/children`,
       expirationDateTime,
       clientState:         secret,
     }),
@@ -143,14 +223,12 @@ export async function registerWebhookSubscription(
   return { id: json.id, expirationDateTime: json.expirationDateTime };
 }
 
-export async function renewWebhookSubscription(
-  subscriptionId: string
-): Promise<string> {
+export async function renewWebhookSubscription(subscriptionId: string): Promise<string> {
   const expirationDateTime = new Date(Date.now() + SUBSCRIPTION_TTL_MS).toISOString();
 
   const res = await graphFetch(`/subscriptions/${subscriptionId}`, {
     method: "PATCH",
-    body: JSON.stringify({ expirationDateTime }),
+    body:   JSON.stringify({ expirationDateTime }),
   });
 
   if (!res.ok) {

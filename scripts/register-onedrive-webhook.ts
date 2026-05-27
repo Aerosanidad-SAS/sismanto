@@ -7,7 +7,9 @@
  *
  * Requires these env vars in .env.local:
  *   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
- *   ONEDRIVE_USER_ID, ONEDRIVE_INPUT_FOLDER_ID, GRAPH_WEBHOOK_SECRET,
+ *   ONEDRIVE_USER (UPN / email del usuario OneDrive),
+ *   ONEDRIVE_INPUT_FOLDER (ruta relativa, e.g. "Facturas/Entrada"),
+ *   GRAPH_WEBHOOK_SECRET,
  *   NEXT_PUBLIC_APP_URL (e.g. https://aeromanto.vercel.app),
  *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
@@ -17,7 +19,7 @@ import path from "path";
 
 config({ path: path.resolve(process.cwd(), ".env.local") });
 
-import { registerWebhookSubscription } from "../src/lib/graph/client";
+import { registerWebhookSubscription, getInputFolderId } from "../src/lib/graph/client";
 import { createClient } from "@supabase/supabase-js";
 
 async function main() {
@@ -26,6 +28,10 @@ async function main() {
 
   const notificationUrl = `${appUrl}/api/webhooks/onedrive`;
   console.log(`Registering webhook → ${notificationUrl}`);
+
+  const user     = process.env.ONEDRIVE_USER!;
+  const folderId = await getInputFolderId();
+  const resource = `/users/${user}/drive/items/${folderId}/children`;
 
   const { id, expirationDateTime } = await registerWebhookSubscription(notificationUrl);
   console.log(`✓ Subscription ID: ${id}`);
@@ -41,7 +47,7 @@ async function main() {
   const { error } = await supabase.from("onedrive_subscriptions").upsert(
     {
       id,
-      resource:             `/users/${process.env.ONEDRIVE_USER_ID}/drive/items/${process.env.ONEDRIVE_INPUT_FOLDER_ID}/children`,
+      resource,
       notification_url:     notificationUrl,
       expiration_datetime:  expirationDateTime,
     },

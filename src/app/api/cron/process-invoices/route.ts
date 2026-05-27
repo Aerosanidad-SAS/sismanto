@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { downloadFile, moveAndRenameFile } from "@/lib/graph/client";
+import { downloadFile, moveAndRenameFile, getReviewFolderId } from "@/lib/graph/client";
 import { extractInvoice, buildFileName } from "@/lib/invoice/extractor";
 
 export const maxDuration = 300; // Vercel Pro max; cap at 60 on Hobby
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
       if (!extracted || lowConfidence) {
         // Move to review folder
-        const reviewFolderId = process.env.ONEDRIVE_REVIEW_FOLDER_ID!;
+        const reviewFolderId = await getReviewFolderId();
         const plate = extracted?.vehicle_plate ?? "SINPLACA";
         const newName = `REVISAR_${plate}_${fileName}`;
         await moveAndRenameFile(itemId, reviewFolderId, newName);
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       );
 
       const targetFolderId =
-        vehicle?.onedrive_folder_id ?? process.env.ONEDRIVE_REVIEW_FOLDER_ID!;
+        vehicle?.onedrive_folder_id ?? await getReviewFolderId();
 
       await moveAndRenameFile(itemId, targetFolderId, newName);
 

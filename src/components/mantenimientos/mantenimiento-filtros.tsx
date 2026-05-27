@@ -65,39 +65,54 @@ export function MantenimientoFiltrosForm({ inicial }: { inicial: MantenimientoFi
       <p className="text-xs font-medium text-muted-foreground">
         Filtros compuestos (se combinan todos los que llene).
       </p>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <Input placeholder="Placa" value={placa} onChange={(e) => setPlaca(e.target.value)} className="h-9" />
-        <div className="space-y-1">
+      <div className="grid gap-2 grid-cols-2 md:grid-cols-4 lg:grid-cols-7 items-end">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Placa</Label>
+          <Input placeholder="Placa" value={placa} onChange={(e) => setPlaca(e.target.value)} className="h-9" />
+        </div>
+        <div className="flex flex-col gap-1">
           <Label className="text-xs text-muted-foreground">Desde</Label>
           <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9" />
         </div>
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <Label className="text-xs text-muted-foreground">Hasta</Label>
           <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9" />
         </div>
-        <Input
-          placeholder="Categoría"
-          value={categoria}
-          onChange={(e) => setCategoria(e.target.value)}
-          className="h-9"
-        />
-        <Select value={tipo || TIPOS_ALL} onValueChange={(v) => setTipo(v === TIPOS_ALL ? "" : v)}>
-          <SelectTrigger className="h-9">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TIPOS_ALL}>Todos los tipos</SelectItem>
-            <SelectItem value="PREVENTIVO">Preventivo</SelectItem>
-            <SelectItem value="CORRECTIVO">Correctivo</SelectItem>
-          </SelectContent>
-        </Select>
-        <Input
-          placeholder="Proveedor"
-          value={proveedor}
-          onChange={(e) => setProveedor(e.target.value)}
-          className="h-9"
-        />
-        <Input placeholder="Factura" value={factura} onChange={(e) => setFactura(e.target.value)} className="h-9" />
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Categoría</Label>
+          <Input
+            placeholder="Categoría"
+            value={categoria}
+            onChange={(e) => setCategoria(e.target.value)}
+            className="h-9"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Tipo</Label>
+          <Select value={tipo || TIPOS_ALL} onValueChange={(v) => setTipo(v === TIPOS_ALL ? "" : v)}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TIPOS_ALL}>Todos los tipos</SelectItem>
+              <SelectItem value="PREVENTIVO">Preventivo</SelectItem>
+              <SelectItem value="CORRECTIVO">Correctivo</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Proveedor</Label>
+          <Input
+            placeholder="Proveedor"
+            value={proveedor}
+            onChange={(e) => setProveedor(e.target.value)}
+            className="h-9"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Factura</Label>
+          <Input placeholder="Factura" value={factura} onChange={(e) => setFactura(e.target.value)} className="h-9" />
+        </div>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" onClick={aplicar} disabled={pending}>
