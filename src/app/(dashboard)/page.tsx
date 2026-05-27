@@ -52,6 +52,14 @@ const getDateIsoInTimeZone = (date: Date, timeZone: string): string => {
   return `${year}-${month}-${day}`;
 };
 
+// "2026-01-15" → "15 ene 2026"
+const MESES_CORTOS = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"] as const;
+const formatFechaCortaPeriodo = (iso: string): string => {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${d} ${MESES_CORTOS[m - 1]} ${y}`;
+};
+
 const getDiffDays = (targetIso: string, fromIso: string): number =>
   Math.max(
     0,
@@ -403,14 +411,18 @@ export default async function DashboardPage({
             <Card>
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="flex items-center gap-2">
-                  <CardTitle className="text-sm font-medium">Costo mes actual</CardTitle>
-                  <HelpTrigger text="Suma de valores de mantenimientos registrados desde el día 1 del mes calendario en curso hasta hoy." />
+                  <CardTitle className="text-sm font-medium">Costo</CardTitle>
+                  <HelpTrigger text="Costo total de operación (mantenimiento + combustible + costos fijos prorrateados) para el período del filtro global." />
                 </div>
                 <DollarSign className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(data.costoMesActual)}</div>
-                <p className="text-xs text-muted-foreground">Mantenimientos del mes</p>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(costos.reduce((sum, c) => sum + c.costoTotal, 0))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {formatFechaCortaPeriodo(fechaInicio)} – {formatFechaCortaPeriodo(fechaFin)}
+                </p>
               </CardContent>
             </Card>
           )}
