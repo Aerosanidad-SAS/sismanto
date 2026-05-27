@@ -40,9 +40,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     return new Response(null, { status: 202 });
   }
 
-  // Validate clientState on all notifications
+  // Reject if secret is missing (misconfigured deployment) or clientState doesn't match
   const invalid = notifications.some(
-    (n) => secret && n.clientState !== secret
+    (n) => !secret || n.clientState !== secret
   );
   if (invalid) {
     return new Response(null, { status: 401 });
@@ -60,7 +60,14 @@ export async function POST(request: NextRequest): Promise<Response> {
     }));
 
   if (rows.length > 0) {
-    await supabase.from("invoice_jobs").insert(rows);
+    // ignoreDuplicates guards against Graph at-least-once redelivery
+    const { error: insertErr } = await supabase
+      .from("invoice_jobs")
+      .upsert(rows, { onConflict: "onedrive_item_id", ignoreDuplicates: true });
+    if (insertErr) {
+      console.error("[webhook] invoice_jobs insert failed:", insertErr.message);
+      return new Response(null, { status: 500 });
+    }
   }
 
   // 202 must be returned quickly — actual processing happens in the cron

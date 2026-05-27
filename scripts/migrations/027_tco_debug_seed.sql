@@ -1,5 +1,6 @@
 -- Migration 027: Datos semilla de debug para verificar cálculo TCO
--- EJECUTAR MANUALMENTE en Supabase SQL Editor.
+-- !! SOLO DESARROLLO — NO EJECUTAR EN PRODUCCIÓN !!
+-- EJECUTAR MANUALMENTE en Supabase SQL Editor (dev/staging).
 --
 -- Valores semilla (uno por vehículo):
 --   mantenimiento      = 1     fecha 2026-01-15
@@ -50,9 +51,14 @@ SELECT
   'DEBUG_TCO_SEED'
 FROM vehicles;
 
--- ── 4. Costos fijos anuales por vehículo ─────────────────────────────────────
+-- ── 4. Costos fijos anuales — solo vehículos con seed de debug ───────────────
+-- WHERE evita sobrescribir costos reales si se ejecuta accidentalmente en prod.
 UPDATE vehicles
 SET
   costo_soat_anual            = 0.1,
   costo_tecnomecanica_anual   = 0.2,
-  costo_poliza_anual          = 0.3;
+  costo_poliza_anual          = 0.3
+WHERE id IN (
+  SELECT DISTINCT vehicle_id FROM maintenance_records
+  WHERE descripcion_trabajo = 'DEBUG_TCO_SEED'
+);

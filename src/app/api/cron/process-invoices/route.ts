@@ -21,12 +21,14 @@ function getMimeType(fileName: string): string {
 
 export async function POST(request: NextRequest): Promise<Response> {
   // Vercel cron sends: Authorization: Bearer {CRON_SECRET}
+  // Fail-closed: if the secret is not configured, reject all requests.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!cronSecret) {
+    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
+  }
+  const auth = request.headers.get("authorization");
+  if (auth !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = createAdminClient();
@@ -162,5 +164,3 @@ export async function POST(request: NextRequest): Promise<Response> {
   return NextResponse.json({ processed: results.length, results });
 }
 
-// Allow Vercel cron to call via GET as well
-export const GET = POST;

@@ -73,8 +73,9 @@ export async function resolveFolderPath(folderPath: string): Promise<string> {
     return _folderIdCache.get(folderPath)!;
   }
 
-  const user       = process.env.ONEDRIVE_USER!;
-  const encodedPath = encodeURIComponent(folderPath);
+  const user = process.env.ONEDRIVE_USER!;
+  // Encode each segment individually so '/' separators are preserved for Graph's root: path syntax
+  const encodedPath = folderPath.split("/").map(encodeURIComponent).join("/");
   const res = await graphFetch(`/users/${user}/drive/root:/${encodedPath}`);
 
   if (!res.ok) {
@@ -84,6 +85,9 @@ export async function resolveFolderPath(folderPath: string): Promise<string> {
 
   const json = await res.json();
   const id: string = json.id;
+  if (!id) {
+    throw new Error(`Cannot resolve OneDrive path "${folderPath}": Graph response missing 'id' field`);
+  }
   _folderIdCache.set(folderPath, id);
   return id;
 }
@@ -200,7 +204,10 @@ export async function registerWebhookSubscription(
 ): Promise<{ id: string; expirationDateTime: string }> {
   const user             = process.env.ONEDRIVE_USER!;
   const folderId         = await getInputFolderId();
-  const secret           = process.env.GRAPH_WEBHOOK_SECRET!;
+  const secret           = process.env.GRAPH_WEBHOOK_SECRET;
+  if (!secret) {
+    throw new Error("GRAPH_WEBHOOK_SECRET is not configured — cannot register webhook subscription");
+  }
   const expirationDateTime = new Date(Date.now() + SUBSCRIPTION_TTL_MS).toISOString();
 
   const res = await graphFetch("/subscriptions", {
