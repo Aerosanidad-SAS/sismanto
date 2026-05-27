@@ -1,6 +1,6 @@
 {
   "crons": [
-    { "path": "/api/cron/process-invoices", "schedule": "0 8,18 * * *" },
+    { "path": "/api/cron/process-invoices", "schedule": "0 8 * * *" },
     { "path": "/api/cron/renew-webhook",    "schedule": "0 8 * * *"   }
   ]
 }
