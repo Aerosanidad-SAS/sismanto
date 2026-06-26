@@ -4,6 +4,22 @@ import { KPIDashboard } from "@/components/charts/kpi-dashboard";
 import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 import { getMetricasConsumo } from "@/app/api/actions/consumo";
 
+function calcularRtmPeriodoKpi(
+  fi: string,
+  ff: string,
+  rtmByYear: Record<number, number>
+): number {
+  const anioInicio = new Date(fi).getFullYear();
+  const anioFin = new Date(ff).getFullYear();
+  const aniosConocidos = Object.keys(rtmByYear).map(Number);
+  const ultimoAnio = aniosConocidos.length ? Math.max(...aniosConocidos) : anioFin;
+  let total = 0;
+  for (let anio = anioInicio; anio <= anioFin; anio++) {
+    total += rtmByYear[anio] ?? rtmByYear[ultimoAnio] ?? 0;
+  }
+  return total;
+}
+
 type TcoTipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
 type FuelResumenKPI = {
   kmTotales: number;
@@ -80,8 +96,15 @@ async function getKPIData(
     const { data: vehiclesCostRaw } = await supabase
       .from("vehicles")
       .select(
-        "id, placa, centro_operativo, centro_operativo_id, costo_soat_anual, costo_tecnomecanica_anual, costo_poliza_anual"
+        "id, placa, centro_operativo, centro_operativo_id, costo_soat_anual, costo_poliza_anual"
       );
+    const { data: rtmRowsKpi } = await supabase
+      .from("rtm_historico")
+      .select("anio, valor");
+    const rtmByYearKpi: Record<number, number> = {};
+    for (const r of rtmRowsKpi || []) {
+      rtmByYearKpi[r.anio] = Number(r.valor);
+    }
     let vehiclesCost = (vehiclesCostRaw || []).filter(
       (v: any) => !isReferenceSparkCombustionPlaca(v.placa)
     );
@@ -130,14 +153,14 @@ async function getKPIData(
       ) + 1
     );
     const factorPeriodo = diasPeriodo / 365;
+    const rtmPeriodoKpi = calcularRtmPeriodoKpi(fechaInicio, fechaFin, rtmByYearKpi);
 
     const tcoData: Record<string, any> = {};
     for (const v of vehiclesCost) {
       const costoFijoAnual =
-        (Number(v.costo_soat_anual || 0) +
-          Number(v.costo_tecnomecanica_anual || 0) +
-          Number(v.costo_poliza_anual || 0)) *
-        factorPeriodo;
+        (Number(v.costo_soat_anual || 0) + Number(v.costo_poliza_anual || 0)) *
+          factorPeriodo +
+        rtmPeriodoKpi;
       tcoData[v.id] = {
         placa: v.placa,
         centroOperativo: v.centro_operativo,
@@ -276,7 +299,7 @@ export default async function KPIsPage({
   };
 }) {
   const hoy = new Date();
-  const fechaInicio = searchParams.inicio || "2021-01-01";
+  const fechaInicio = searchParams.inicio || "2024-01-01";
   const fechaFin = searchParams.fin || hoy.toISOString().split("T")[0];
 
   const kCentroParsed = searchParams.kCentro ? parseInt(searchParams.kCentro, 10) : NaN;

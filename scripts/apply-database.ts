@@ -40,6 +40,12 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "023_normalize_placas.sql",               file: "scripts/migrations/023_normalize_placas.sql" },
   { name: "024_maintenance_valor_review.sql",        file: "scripts/migrations/024_maintenance_valor_review.sql" },
   { name: "025_invoice_jobs.sql",                    file: "scripts/migrations/025_invoice_jobs.sql" },
+  { name: "028_costos_fijos_reales.sql",             file: "scripts/migrations/028_costos_fijos_reales.sql" },
+  { name: "029_schema_migrations_rls.sql",           file: "scripts/migrations/029_schema_migrations_rls.sql" },
+  { name: "030_fuel_logs_numero_venta.sql",          file: "scripts/migrations/030_fuel_logs_numero_venta.sql" },
+  { name: "031_vehiculos_ivk968_lqw155.sql",         file: "scripts/migrations/031_vehiculos_ivk968_lqw155.sql" },
+  { name: "032_rtm_historico.sql",                   file: "scripts/migrations/032_rtm_historico.sql" },
+  { name: "033_rtm_solo_desde_2024.sql",             file: "scripts/migrations/033_rtm_solo_desde_2024.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

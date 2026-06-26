@@ -7,6 +7,22 @@ import { isReferenceSparkCombustionPlaca, normalizePlaca } from "@/lib/fleet-ref
 
 type TipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
 
+function calcularRtmPeriodo(
+  fi: string,
+  ff: string,
+  rtmByYear: Record<number, number>
+): number {
+  const anioInicio = new Date(fi).getFullYear();
+  const anioFin = new Date(ff).getFullYear();
+  const aniosConocidos = Object.keys(rtmByYear).map(Number);
+  const ultimoAnio = aniosConocidos.length ? Math.max(...aniosConocidos) : anioFin;
+  let total = 0;
+  for (let anio = anioInicio; anio <= anioFin; anio++) {
+    total += rtmByYear[anio] ?? rtmByYear[ultimoAnio] ?? 0;
+  }
+  return total;
+}
+
 export type CostosPorVehiculoOpciones = {
   centroOperativoId?: number;
   /** Placas separadas por coma; vacío no filtra */
@@ -70,10 +86,18 @@ export async function getCostosPorVehiculo(
     const { data: vehiclesRaw } = await supabase
       .from("vehicles")
       .select(
-        "id, placa, marca, centro_operativo_id, costo_soat_anual, costo_tecnomecanica_anual, costo_poliza_anual"
+        "id, placa, marca, centro_operativo_id, costo_soat_anual, costo_poliza_anual"
       )
       .order("placa");
     if (!vehiclesRaw) return [];
+
+    const { data: rtmRows } = await supabase
+      .from("rtm_historico")
+      .select("anio, valor");
+    const rtmByYear: Record<number, number> = {};
+    for (const r of rtmRows || []) {
+      rtmByYear[r.anio] = Number(r.valor);
+    }
 
     let vehicles = (vehiclesRaw as any[]).filter(
       (v) => !isReferenceSparkCombustionPlaca(v.placa)
@@ -129,14 +153,14 @@ export async function getCostosPorVehiculo(
       Math.round((new Date(ff).getTime() - new Date(fi).getTime()) / (1000 * 60 * 60 * 24)) + 1
     );
     const factorPeriodo = diasPeriodo / 365;
+    const rtmPeriodo = calcularRtmPeriodo(fi, ff, rtmByYear);
 
     const map: Record<string, CostoPorVehiculoKPI> = {};
     for (const v of vehicles) {
       const costoFijoAnual =
-        (Number(v.costo_soat_anual || 0) +
-          Number(v.costo_tecnomecanica_anual || 0) +
-          Number(v.costo_poliza_anual || 0)) *
-        factorPeriodo;
+        (Number(v.costo_soat_anual || 0) + Number(v.costo_poliza_anual || 0)) *
+          factorPeriodo +
+        rtmPeriodo;
       map[v.id] = {
         vehicleId: v.id,
         placa: v.placa || "",

@@ -1114,6 +1114,21 @@ export type Database = {
           }
         ]
       }
+      rtm_historico: {
+        Row: {
+          anio: number
+          valor: number
+        }
+        Insert: {
+          anio: number
+          valor: number
+        }
+        Update: {
+          anio?: number
+          valor?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       vehicle_maintenance_alerts: {

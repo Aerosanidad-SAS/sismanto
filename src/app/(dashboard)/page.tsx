@@ -232,7 +232,7 @@ export default async function DashboardPage({
   };
 }) {
   const hoy = new Date();
-  const defaultInicio = "2021-01-01"; // covers full fleet history from first maintenance records
+  const defaultInicio = "2024-01-01"; // inicio del historial real de combustible y mantenimientos
   const defaultFin = hoy.toISOString().split("T")[0];
 
   const parseDashDate = (s?: string): string | null => {
