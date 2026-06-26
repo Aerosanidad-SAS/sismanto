@@ -227,52 +227,62 @@ export async function getDisponibilidadPorVehiculo(
     const vehiclesOperativos = vehicles.filter((v) => !isReferenceSparkCombustionPlaca(v.placa));
     if (vehiclesOperativos.length === 0) return [];
 
-    const horasTotales =
-      (new Date(ff).getTime() - new Date(fi).getTime()) /
-      (1000 * 60 * 60);
+    // Período en ms — incluye el último día completo (hasta las 23:59:59)
+    const periodStartMs = new Date(fi).getTime();
+    const periodEndMs = new Date(ff).getTime() + 24 * 60 * 60 * 1000 - 1;
+    const horasTotales = (periodEndMs - periodStartMs + 1) / (1000 * 60 * 60);
 
-    // TFDS desde mantenimientos (tiempo_fuera_servicio_horas)
-    const { data: mantos } = await supabase
-      .from("maintenance_records")
-      .select("vehicle_id, tiempo_fuera_servicio_horas")
-      .gte("fecha", fi)
-      .lte("fecha", ff);
+    // Historial de cambios de estado: fuente de verdad para TFDS
+    const { data: statusHistory } = await supabase
+      .from("vehicle_status_history")
+      .select("vehicle_id, estado_nuevo, estado_anterior, fecha_cambio")
+      .order("fecha_cambio", { ascending: true });
 
-    // TFDS desde incidentes con afecta_operatividad=true
-    const { data: incidents } = await supabase
-      .from("incidents")
-      .select("vehicle_id, fecha_reporte, fecha_cierre, afecta_operatividad")
-      .eq("afecta_operatividad", true)
-      .gte("fecha_reporte", fi);
+    const history = statusHistory ?? [];
 
     return vehiclesOperativos.map((v) => {
-      // TFDS de mantenimientos
-      const tfdsMantos = (mantos || [])
-        .filter((m) => m.vehicle_id === v.id)
-        .reduce((sum, m) => sum + (m.tiempo_fuera_servicio_horas || 0), 0);
+      // Entradas de este vehículo ordenadas cronológicamente
+      const vHistory = history.filter((h) => h.vehicle_id === v.id);
 
-      // TFDS de incidentes (intersección con el período)
-      const tfdsIncidentes = (incidents || [])
-        .filter((i) => i.vehicle_id === v.id)
-        .reduce((sum, inc) => {
-          const inicio = Math.max(
-            new Date(inc.fecha_reporte).getTime(),
-            new Date(fi).getTime()
-          );
-          const fin = inc.fecha_cierre
-            ? Math.min(
-                new Date(inc.fecha_cierre).getTime(),
-                new Date(ff).getTime()
-              )
-            : new Date(ff).getTime();
-          const horas = Math.max(0, (fin - inicio) / (1000 * 60 * 60));
-          return sum + horas;
-        }, 0);
+      // Estado del vehículo al inicio del período: última entrada ANTES de fi
+      const beforePeriod = vHistory.filter((h) => new Date(h.fecha_cambio).getTime() <= periodStartMs);
+      let stateAtStart: string;
+      if (beforePeriod.length > 0) {
+        stateAtStart = beforePeriod[beforePeriod.length - 1].estado_nuevo;
+      } else {
+        // Sin historial previo: usar estado_anterior de la primera entrada, o OPERATIVO
+        const firstEntry = vHistory.find((h) => new Date(h.fecha_cambio).getTime() <= periodEndMs);
+        stateAtStart = firstEntry?.estado_anterior ?? "OPERATIVO";
+      }
 
-      const tfdsHoras = tfdsMantos + tfdsIncidentes;
+      // Entradas dentro del período
+      const withinPeriod = vHistory.filter((h) => {
+        const t = new Date(h.fecha_cambio).getTime();
+        return t > periodStartMs && t <= periodEndMs;
+      });
+
+      // Acumular horas FDS recorriendo las transiciones
+      let tfdsMs = 0;
+      let segStart = periodStartMs;
+      let segState = stateAtStart;
+
+      for (const entry of withinPeriod) {
+        const entryMs = Math.min(new Date(entry.fecha_cambio).getTime(), periodEndMs);
+        if (segState === "FUERA_DE_SERVICIO") {
+          tfdsMs += entryMs - segStart;
+        }
+        segState = entry.estado_nuevo;
+        segStart = entryMs;
+      }
+      // Tramo final hasta el cierre del período
+      if (segState === "FUERA_DE_SERVICIO") {
+        tfdsMs += periodEndMs - segStart;
+      }
+
+      const tfdsHoras = tfdsMs / (1000 * 60 * 60);
       const disponibilidadPct =
         horasTotales > 0
-          ? Math.max(0, ((horasTotales - tfdsHoras) / horasTotales) * 100)
+          ? Math.max(0, Math.min(100, ((horasTotales - tfdsHoras) / horasTotales) * 100))
           : 100;
 
       const estadoOp =

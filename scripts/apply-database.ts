@@ -46,6 +46,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "031_vehiculos_ivk968_lqw155.sql",         file: "scripts/migrations/031_vehiculos_ivk968_lqw155.sql" },
   { name: "032_rtm_historico.sql",                   file: "scripts/migrations/032_rtm_historico.sql" },
   { name: "033_rtm_solo_desde_2024.sql",             file: "scripts/migrations/033_rtm_solo_desde_2024.sql" },
+  { name: "034_corregir_historial_fds.sql",          file: "scripts/migrations/034_corregir_historial_fds.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
