@@ -30,7 +30,7 @@ Hoy Aeromanto tiene un solo proyecto de Supabase y un solo proyecto de Vercel (p
 
 ### 2.1 Supabase — proyecto de staging nuevo
 
-- Crear un segundo proyecto Supabase, ej. `aeromanto-staging` (el plan free de Supabase permite varios proyectos gratuitos por organización — sin costo adicional).
+- Crear un segundo proyecto Supabase, `SISMANTO_Staging` (el plan free de Supabase permite varios proyectos gratuitos por organización — sin costo adicional).
 - Aplicarle `scripts/schema.sql` + todas las migraciones existentes vía `npm run db:apply` (mismo mecanismo que ya usa el repo).
 - **No copiar datos reales de pacientes/servicios ahí.** Es un entorno compartido entre dos personas y no debe contener PII/datos clínicos reales. Poblar con datos sintéticos (nombres/cédulas ficticias, servicios de prueba) — más abajo, en la Fase 1, se define un seed sintético a partir de la forma de los datos reales (columnas, rangos, distribución de `etapaServicio`, etc.) pero sin usar los valores reales.
 - Variables de entorno de staging (Anthropic, Microsoft Graph, WhatsApp Cloud API, ProTrack365): usar credenciales de **sandbox/test** de cada proveedor, nunca las de producción — así nadie manda un WhatsApp real a un paciente mientras prueba. Esto es parte de lo que hay que pedirle a León (¿existen credenciales de prueba para WhatsApp/ProTrack, o hay que gestionarlas?).
@@ -38,7 +38,7 @@ Hoy Aeromanto tiene un solo proyecto de Supabase y un solo proyecto de Vercel (p
 ### 2.2 Vercel — despliegue de staging
 
 - Aeromanto ya usa Vercel; cada rama/PR genera automáticamente un **Preview Deployment** (incluido sin costo extra en el plan actual).
-- Configurar las **Preview Environment Variables** de Vercel para que apunten al proyecto `aeromanto-staging` (distintas de las de Production) — así cualquier rama que se despliegue como preview usa la base de staging, no la real.
+- Configurar las **Preview Environment Variables** de Vercel para que apunten al proyecto `SISMANTO_Staging` (distintas de las de Production) — así cualquier rama que se despliegue como preview usa la base de staging, no la real.
 - Además de los previews efímeros por PR, conviene una **URL de staging estable**: apuntar el dominio/alias de preview de la rama larga `integration/sisres` (ver §3) como el entorno "de referencia" que ambos usan para probar el estado acumulado de la integración, sin depender de que cada PR individual siga vivo.
 
 ### 2.3 Qué NO hace falta
@@ -118,7 +118,7 @@ Esta es la primera pregunta que le hago a León en el prompt de §7 — no avanz
 
 | Fase | Contenido | Depende de |
 |---|---|---|
-| **0. Fundaciones** | Alta de León en Aeromanto (repo, Supabase, Vercel), lectura de `CLAUDE.md`/`PRD.md`/`ROLES_AND_FLOWS.md` (avisarle que estos dos últimos están desactualizados — ver `AUDIT_aeromanto.md` §7 — y corregirlos de paso), creación de `aeromanto-staging` (Supabase) + variables de Preview en Vercel, creación de rama `integration/sisres`. | — |
+| **0. Fundaciones** | Alta de León en Aeromanto (repo, Supabase, Vercel), lectura de `CLAUDE.md`/`PRD.md`/`ROLES_AND_FLOWS.md` (avisarle que estos dos últimos están desactualizados — ver `AUDIT_aeromanto.md` §7 — y corregirlos de paso), creación de `SISMANTO_Staging` (Supabase) + variables de Preview en Vercel, creación de rama `integration/sisres`. | — |
 | **1. Roles + reconciliación de vehículos/placas** | Resolver el mapeo de roles (§5) y crear las migraciones de roles nuevos + políticas RLS base. En paralelo: normalizar `movil.placa` con el mismo criterio que la migración `023_normalize_placas.sql` de Aeromanto, y decidir la fuente de verdad de vehículo (recomendación: `vehicles` de Aeromanto pasa a ser la autoritativa desde ahora, con un import **único** — no sincronización continua — de los campos que solo tiene `movil`: motor, chasis, carrocería, pase aeroportuario, multas). Confirmar con León qué tan seguido se edita `movil` hoy — si son ediciones raras (renovación anual de SOAT/RTM), no hace falta sync continuo durante la convivencia; si son frecuentes, sí. | Fase 0 |
 | **2. Notificaciones (WhatsApp/SMS/correo)** | León porta el cliente de WhatsApp Cloud API y el envío de correo a Server Actions/Route Handlers de Next.js, como servicio reutilizable (no atado todavía a Pacientes/Servicios) — mismo patrón arquitectónico que ya usa Aeromanto para Microsoft Graph (`src/lib/graph/client.ts`). | Fase 0 |
 | **3. Pacientes + Servicios** | El módulo más grande y sensible. León lo lleva de punta a punta: modelo de datos, formularios con comportamiento condicional por rol/tipo de servicio, cálculos automáticos de tiempos, y conexión con el módulo de notificaciones de la Fase 2. | Fases 1 y 2 |
@@ -232,7 +232,7 @@ Hay varias cosas que solo León sabe (o que su Claude Code puede investigar más
 
 | Fase | Se considera lista cuando... |
 |---|---|
-| 0 | León puede correr `npm run dev` localmente contra `aeromanto-staging` y loguearse; `integration/sisres` existe y protegida igual que `main` (CI en verde obligatorio para mergear). |
+| 0 | León puede correr `npm run dev` localmente contra `SISMANTO_Staging` y loguearse; `integration/sisres` existe y protegida igual que `main` (CI en verde obligatorio para mergear). |
 | 1 | Existe una migración de roles nuevos + políticas RLS documentadas; `vehicles` tiene los campos que antes solo estaban en `movil`; hay un mapeo 1:1 (o un reporte de huérfanos) entre placas de ambos sistemas. |
 | 2 | Un mensaje de WhatsApp de prueba (a un número de pruebas, no real) se envía correctamente desde Aeromanto en staging. |
 | 3 | Un servicio de prueba se puede registrar, editar y pasar por sus etapas desde Aeromanto en staging, replicando el comportamiento condicional por rol que hoy tiene SISRES (validado por León contra su conocimiento del sistema original). |
