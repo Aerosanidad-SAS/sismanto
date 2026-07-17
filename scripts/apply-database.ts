@@ -113,6 +113,16 @@ async function ensureTracker(client: pg.Client): Promise<boolean> {
   return existed; // false = primera vez (necesita seed)
 }
 
+async function hasExistingSchema(client: pg.Client): Promise<boolean> {
+  const { rows } = await client.query<{ exists: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'vehicles'
+    ) AS exists
+  `);
+  return rows[0]?.exists ?? false;
+}
+
 async function isApplied(client: pg.Client, name: string): Promise<boolean> {
   const { rows } = await client.query(
     "SELECT 1 FROM public.schema_migrations WHERE name = $1",
@@ -184,19 +194,26 @@ Cómo obtenerla (Supabase):
   const trackerExisted = await ensureTracker(client);
 
   if (!trackerExisted) {
-    // Primera vez: el tracker no existía → DB ya tiene migraciones aplicadas sin él.
-    // Marcamos todas como aplicadas para que no se re-ejecuten.
-    console.log("ℹ  Tracker nuevo detectado — sembrando migraciones previas como ya aplicadas...");
-    for (const m of MIGRATIONS) {
-      await markApplied(client, m.name);
-    }
-    console.log(`   ${MIGRATIONS.length} migraciones marcadas. Futuras migraciones se ejecutarán normalmente.\n`);
+    // El tracker no existía. Dos escenarios posibles:
+    //  a) DB ya tiene el esquema aplicado (p.ej. producción) sin el tracker → sembrar sin re-ejecutar.
+    //  b) DB recién creada y completamente vacía (p.ej. nuevo proyecto Supabase de staging)
+    //     → sembrar la marcaría como "al día" sin haber corrido ni una migración.
+    if (await hasExistingSchema(client)) {
+      console.log("ℹ  Tracker nuevo detectado — sembrando migraciones previas como ya aplicadas...");
+      for (const m of MIGRATIONS) {
+        await markApplied(client, m.name);
+      }
+      console.log(`   ${MIGRATIONS.length} migraciones marcadas. Futuras migraciones se ejecutarán normalmente.\n`);
 
-    // Igual ejecutamos el bloque de ADMIN por si acaso (idempotente).
-    await ensureAdminProfile(client);
-    console.log("\n✅ Tracker inicializado.");
-    await client.end();
-    return;
+      // Igual ejecutamos el bloque de ADMIN por si acaso (idempotente).
+      await ensureAdminProfile(client);
+      console.log("\n✅ Tracker inicializado.");
+      await client.end();
+      return;
+    }
+
+    console.log("ℹ  Base de datos vacía detectada — se ejecutarán todas las migraciones desde cero.\n");
+    // No hacemos return: cae al loop normal de abajo, que aplicará las 29 migraciones en orden.
   }
 
   // Ejecución normal: aplicar solo las pendientes

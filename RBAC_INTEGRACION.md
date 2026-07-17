@@ -1,6 +1,6 @@
 # RBAC — integración de roles SISRES → Aeromanto
 
-**Estado:** 🔴 bloqueado en la pregunta 1 del prompt a León (`PLAN_INTEGRACION_SISRES.md` §7) — no se crea ninguna política RLS nueva ni se decide el mapeo final hasta tener esa respuesta. Este documento es el worksheet para cuando llegue, no una decisión ya tomada.
+**Estado:** 🟡 en verificación final — León respondió (`RESPUESTAS_LEON.md`, 2026-07-17) con su hipótesis de que Regulador/Despachador↔REGULACION, Coordinador↔COORDINACION y OVEM↔OVEM son las mismas personas reales, y dejó las cédulas reales de los 24 usuarios de esos 3 cargos para verificarlo empíricamente (no solo asumirlo). **Falta un solo paso para cerrar esto:** que Daniel cruce esos nombres contra los usuarios actuales de Aeromanto — ver §1.1. Aeromanto no guarda cédula en `user_profiles`, así que el cruce es por nombre completo, no por número de documento. Hasta que ese cruce se confirme, no se crea ninguna política RLS nueva ni se arranca `feature/sisres-roles-permisos`.
 
 ## 1. Punto de partida
 
@@ -16,6 +16,30 @@
 | — (sin rol equivalente) | Médico | Rol nuevo a crear: `MEDICO` |
 | — (sin rol equivalente) | Auxiliar de Enfermería | Rol nuevo a crear: `AUXILIAR_ENFERMERIA` |
 | — (sin rol equivalente) | Vista | Rol nuevo a crear: `VISTA` |
+
+## 1.1. Cómo cerrar la verificación (paso pendiente de Daniel)
+
+León dejó, en `sisres/RESPUESTAS_LEON.md` §1, las cédulas y nombres completos reales de los usuarios activos de 3 cargos:
+- **Cargo 2 (Coordinador):** 2 usuarios
+- **Cargo 4 (Regulador/Despachador):** 5 usuarios
+- **Cargo 7 (OVEM):** 17 usuarios (16 activos, 1 inactivo)
+
+Para cruzarlos, corré esto en el **SQL Editor de producción de Aeromanto** (no en staging, que todavía no tiene usuarios reales) y compará los nombres contra la lista de `RESPUESTAS_LEON.md`:
+
+```sql
+SELECT up.nombre_completo, up.email, r.codigo AS rol
+FROM user_profiles up
+JOIN roles r ON r.id = up.role_id
+WHERE r.codigo IN ('REGULACION', 'COORDINACION', 'OVEM')
+  AND up.activo = true
+ORDER BY r.codigo, up.nombre_completo;
+```
+
+- **Si los nombres coinciden** (aunque sea con variaciones de mayúsculas/orden, ej. "Yecica Mosquera Mosquera" vs "PAOLA MOSQUERA MOSQUERA" del lado SISRES) para la mayoría de los 24 → hipótesis confirmada, seguir el camino de §2 "Si son la misma persona".
+- **Si no hay solapamiento real de personas** → seguir el camino de §2 "Si son personas distintas".
+- Zona gris esperable: es normal que no sea un 100% exacto (alguien pudo cambiarse de cargo, o hay personal en un sistema que no usa el otro todavía) — la pregunta relevante es si la **mayoría** de cada cargo coincide, no si coinciden los 24 exactos.
+
+---
 
 ## 2. Las dos ramas posibles según la respuesta de León
 
