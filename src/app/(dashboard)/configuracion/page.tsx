@@ -10,6 +10,7 @@ async function getConfiguracionData() {
       { data: vehicles },
       { data: centros },
       { data: proveedores },
+      { data: clientes },
     ] = await Promise.all([
       supabase
         .from("vehicles")
@@ -23,6 +24,11 @@ async function getConfiguracionData() {
         .from("suppliers")
         .select("*")
         .order("nombre"),
+      supabase
+        .from("clients")
+        .select("*")
+        .eq("activo", true)
+        .order("nombre"),
     ]);
 
     const serviceTypesRes = await supabase.from("service_types").select("*").order("orden");
@@ -32,10 +38,11 @@ async function getConfiguracionData() {
       vehicles: vehicles || [],
       centros: centros || [],
       proveedores: proveedores || [],
+      clientes: clientes || [],
       serviceTypes,
     };
   } catch {
-    return { vehicles: [], centros: [], proveedores: [], serviceTypes: [] };
+    return { vehicles: [], centros: [], proveedores: [], clientes: [], serviceTypes: [] };
   }
 }
 
@@ -60,6 +67,7 @@ export default async function ConfiguracionPage() {
         vehicles={data.vehicles}
         centros={data.centros}
         proveedores={data.proveedores}
+        clientes={data.clientes}
         serviceTypes={(data.serviceTypes || []) as any}
       />
     </div>

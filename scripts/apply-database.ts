@@ -47,6 +47,14 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "032_rtm_historico.sql",                   file: "scripts/migrations/032_rtm_historico.sql" },
   { name: "033_rtm_solo_desde_2024.sql",             file: "scripts/migrations/033_rtm_solo_desde_2024.sql" },
   { name: "034_corregir_historial_fds.sql",          file: "scripts/migrations/034_corregir_historial_fds.sql" },
+  // ─── Integración SISRES (PLAN_INTEGRACION_SISRES.md) ──────────────────────
+  { name: "035_sisres_roles.sql",                    file: "scripts/migrations/035_sisres_roles.sql" },
+  { name: "036_vehicles_campos_sisres.sql",          file: "scripts/migrations/036_vehicles_campos_sisres.sql" },
+  { name: "037_sisres_clientes_cie10.sql",           file: "scripts/migrations/037_sisres_clientes_cie10.sql" },
+  { name: "038_sisres_pacientes.sql",                file: "scripts/migrations/038_sisres_pacientes.sql" },
+  { name: "039_sisres_servicios_valoraciones.sql",   file: "scripts/migrations/039_sisres_servicios_valoraciones.sql" },
+  { name: "040_sisres_inventario_biomedico.sql",     file: "scripts/migrations/040_sisres_inventario_biomedico.sql" },
+  { name: "041_sisres_campanas.sql",                 file: "scripts/migrations/041_sisres_campanas.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

@@ -4,7 +4,12 @@ export type UserRole =
   | "REGULACION"
   | "GERENCIAL"
   | "MANTENIMIENTO"
-  | "COORDINACION";
+  | "COORDINACION"
+  // Roles de la integración SISRES (migración 035)
+  | "ANALISTA"
+  | "MEDICO"
+  | "AUXILIAR_ENFERMERIA"
+  | "VISTA";
 
 export function isAdminLike(role: UserRole): boolean {
   return role === "ADMIN";
@@ -35,6 +40,10 @@ export function getDefaultRoute(role: UserRole): string {
     case "GERENCIAL":      return "/";
     case "MANTENIMIENTO":  return "/vehiculos";
     case "COORDINACION":   return "/coordinacion";
+    case "ANALISTA":       return "/estadisticas";
+    case "MEDICO":         return "/pacientes";
+    case "AUXILIAR_ENFERMERIA": return "/pacientes";
+    case "VISTA":          return "/servicios";
     default:               return "/login";
   }
 }

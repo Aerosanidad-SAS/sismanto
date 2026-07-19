@@ -413,3 +413,198 @@ export type FilaProveedorImport = z.output<typeof filaProveedorImportSchema>;
 export const operationalCenterUpdateNombreSchema = z.object({
   nombre: z.string().min(3, "Mínimo 3 caracteres").max(200),
 });
+
+// ============================================================
+// Integración SISRES — módulos clínicos y biomédicos
+// ============================================================
+
+const optStr = z.string().trim().max(255).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
+const optText = z.string().trim().max(5000).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
+
+export const patientSchema = z.object({
+  cedula: z.string().trim().min(4, "Documento inválido").max(20),
+  tipo_documento: z.string().trim().min(1, "Tipo de documento requerido").max(20),
+  nombre1: z.string().trim().min(2, "Nombre requerido").max(60),
+  nombre2: optStr,
+  apellido1: z.string().trim().min(2, "Apellido requerido").max(60),
+  apellido2: optStr,
+  fecha_nacimiento: optStr,
+  direccion: optStr,
+  barrio: optStr,
+  localidad: optStr,
+  departamento: optStr,
+  ciudad: optStr,
+  rh: optStr,
+  sexo: optStr,
+  estatura: optStr,
+  eps: optStr,
+  celular: optStr,
+  correo: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+});
+export type PatientFormData = z.input<typeof patientSchema>;
+
+export const ETAPAS_SERVICIO = ["PROGRAMADO", "CURSO", "FINALIZADO", "CANCELADO", "FALLIDO", "NO_EFECTIVO"] as const;
+export type EtapaServicio = (typeof ETAPAS_SERVICIO)[number];
+
+export const medicalServiceSchema = z.object({
+  patient_id: z.number().int().positive().optional(),
+  nombre_completo: z.string().trim().min(3, "Nombre del paciente requerido").max(200),
+  tipo_servicio: z.string().trim().min(2, "Tipo de servicio requerido").max(60),
+  vehicle_id: z.string().uuid().optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+  fecha_hora_programacion: optStr,
+  turno_programacion: optStr,
+  autorizacion: optStr,
+  asesor: optStr,
+  prestador: optStr,
+  cie_codigo: optStr,
+  requiere_aislamiento: optStr,
+  soporte: optStr,
+  departamento_origen: optStr,
+  ciudad_origen: optStr,
+  departamento_destino: optStr,
+  ciudad_destino: optStr,
+  perimetro: optStr,
+  direccion_origen: optStr,
+  fecha_hora_llegada_origen: optStr,
+  fecha_hora_salida_origen: optStr,
+  direccion_intermedia: optStr,
+  fecha_hora_llegada_intermedia: optStr,
+  fecha_hora_salida_intermedia: optStr,
+  direccion_destino: optStr,
+  fecha_hora_llegada_destino: optStr,
+  fecha_hora_salida_destino: optStr,
+  finalidad_traslado: optStr,
+  acepta_ips: optStr,
+  valor_servicio: z.number().nonnegative().optional(),
+  metodo_pago: optStr,
+  cliente: optStr,
+  proveedor: optStr,
+  medico: optStr,
+  auxiliar: optStr,
+  ovem: optStr,
+  usuario_recibe: optStr,
+  usuario_despacha: optStr,
+  novedad_servicio: optText,
+  observaciones: optText,
+  motivo_externo: optStr,
+  motivo_interno: optStr,
+  estado_servicio: optStr,
+  ciudad_registro: optStr,
+});
+export type MedicalServiceFormData = z.input<typeof medicalServiceSchema>;
+
+export const assessmentSchema = z.object({
+  cedula: z.string().trim().min(4, "Documento inválido").max(20),
+  nombre_completo: z.string().trim().min(3, "Nombre requerido").max(200),
+  fecha_nacimiento: optStr,
+  genero: optStr,
+  aerolinea: optStr,
+  fecha_hora_vuelo: optStr,
+  acompanante: optStr,
+  origen: optStr,
+  destino: optStr,
+  hc: optText,
+  concepto_medico: optText,
+  tiempo_estimado: optStr,
+  recomendaciones: optText,
+  valoracion: optStr,
+  medico: optStr,
+  pasajero: optStr,
+  estado: optStr,
+});
+export type AssessmentFormData = z.input<typeof assessmentSchema>;
+
+export const clientSchema = z.object({
+  tipo_documento: z.string().trim().min(1).max(20),
+  numero: z.string().trim().min(3, "NIT/documento requerido").max(30),
+  digito_verificacion: optStr,
+  nombre: z.string().trim().min(3, "Nombre requerido").max(200),
+  sector: optStr,
+  direccion: optStr,
+  departamento: optStr,
+  ciudad: optStr,
+  telefono1: optStr,
+  telefono2: optStr,
+  telefono3: optStr,
+  correo: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+});
+export type ClientFormData = z.input<typeof clientSchema>;
+
+export const biomedicalEquipmentSchema = z.object({
+  placa_equipo: z.string().trim().min(2, "Placa del equipo requerida").max(30),
+  equipo: z.string().trim().min(2, "Nombre del equipo requerido").max(150),
+  marca: optStr,
+  modelo: optStr,
+  serie: optStr,
+  registro_invima: optStr,
+  riesgo: optStr,
+  ultimo_mantenimiento: optStr,
+  proximo_mantenimiento: optStr,
+  ultima_calibracion: optStr,
+  proxima_calibracion: optStr,
+  frec_mantenimiento: optStr,
+  frec_calibracion: optStr,
+  ubicacion_interna: optStr,
+  aeropuerto: optStr,
+  departamento: optStr,
+  ciudad: optStr,
+  adquisicion: optStr,
+  area: optStr,
+  observaciones: optText,
+  voltaje: optStr,
+  corriente: optStr,
+  potencia: optStr,
+  frecuencia: optStr,
+  humedad: optStr,
+  dimensiones: optStr,
+  peso: optStr,
+  temperatura: optStr,
+  fecha_compra: optStr,
+  proveedor_nombre: optStr,
+  proveedor_contacto: optStr,
+  operador: optStr,
+});
+export type BiomedicalEquipmentFormData = z.input<typeof biomedicalEquipmentSchema>;
+
+export const biomedicalMaintenanceSchema = z.object({
+  equipment_id: z.number().int().positive("Equipo requerido"),
+  orden_numero: optStr,
+  fecha_mantenimiento: z.string().trim().min(8, "Fecha requerida"),
+  tipo_mantenimiento: optStr,
+  codigo_institucional: optStr,
+  ubicacion: optStr,
+  sanidad: optStr,
+  descripcion_falla: optText,
+  obs_apto: z.boolean().default(true),
+  obs_averiado: z.boolean().default(false),
+  obs_reparacion: z.boolean().default(false),
+  obs_baja: z.boolean().default(false),
+  obs_partes: z.boolean().default(true),
+  observaciones: optText,
+  repuesto: optStr,
+  referencia_serial: optStr,
+  cantidad: z.number().int().nonnegative().optional(),
+  obs_reparaciones: optText,
+  realizo_nombre: z.string().trim().min(3, "Quién realizó es requerido").max(150),
+  realizo_cargo: optStr,
+  reviso_nombre: optStr,
+  reviso_cargo: optStr,
+});
+export type BiomedicalMaintenanceFormData = z.input<typeof biomedicalMaintenanceSchema>;
+
+export const waCampaignSchema = z.object({
+  nombre: z.string().trim().min(3, "Nombre de campaña requerido").max(150),
+  plantilla: z.string().trim().min(2, "Nombre de plantilla de Meta requerido").max(120),
+  idioma: z.string().trim().min(2).max(10).default("es_CO"),
+  destinatarios: z
+    .array(
+      z.object({
+        telefono: z.string().trim().min(7, "Teléfono inválido").max(20),
+        nombre: optStr,
+        parametros: z.array(z.string().max(500)).default([]),
+      })
+    )
+    .min(1, "Agrega al menos un destinatario")
+    .max(2000, "Máximo 2000 destinatarios por campaña"),
+});
+export type WaCampaignFormData = z.input<typeof waCampaignSchema>;

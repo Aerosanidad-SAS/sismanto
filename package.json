@@ -12,7 +12,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:apply": "tsx scripts/apply-database.ts",
-    "fuel:load": "tsx scripts/load-fuel-logs.ts"
+    "fuel:load": "tsx scripts/load-fuel-logs.ts",
+    "etl:sisres": "tsx scripts/etl-sisres.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

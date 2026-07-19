@@ -1,0 +1,153 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import type { BiomedicalEquipmentFormData, BiomedicalMaintenanceFormData } from "@/lib/validations";
+import { biomedicalEquipmentSchema, biomedicalMaintenanceSchema } from "@/lib/validations";
+import { z } from "zod";
+
+function fechasNulas(d: Record<string, unknown>, campos: string[]) {
+  const out: Record<string, unknown> = { ...d };
+  for (const c of campos) out[c] = out[c] || null;
+  return out;
+}
+
+const CAMPOS_FECHA_EQUIPO = [
+  "ultimo_mantenimiento",
+  "proximo_mantenimiento",
+  "ultima_calibracion",
+  "proxima_calibracion",
+  "fecha_compra",
+];
+
+export async function getEquiposBiomedicos() {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("biomedical_equipment")
+    .select("*")
+    .eq("activo", true)
+    .order("equipo");
+  return data || [];
+}
+
+export async function crearEquipoBiomedico(formData: BiomedicalEquipmentFormData) {
+  const parsed = biomedicalEquipmentSchema.safeParse(formData);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = createClient();
+  const { data: existente } = await supabase
+    .from("biomedical_equipment")
+    .select("id")
+    .eq("placa_equipo", parsed.data.placa_equipo)
+    .maybeSingle();
+  if (existente) return { error: "Ya existe un equipo con esa placa" };
+
+  const { data: userData } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from("biomedical_equipment")
+    .insert({
+      ...(fechasNulas(parsed.data, CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
+      created_by: userData.user?.id ?? null,
+      activo: true,
+    })
+    .select()
+    .single();
+  if (error) return { error: error.message };
+  revalidatePath("/equipos");
+  return { success: true, data };
+}
+
+export async function actualizarEquipoBiomedico(id: number, formData: BiomedicalEquipmentFormData) {
+  const idParsed = z.number().int().positive().safeParse(id);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const parsed = biomedicalEquipmentSchema.safeParse(formData);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("biomedical_equipment")
+    .update({
+      ...(fechasNulas(parsed.data, CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", idParsed.data);
+  if (error) return { error: error.message };
+  revalidatePath("/equipos");
+  return { success: true };
+}
+
+export async function eliminarEquipoBiomedico(id: number) {
+  const idParsed = z.number().int().positive().safeParse(id);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const supabase = createClient();
+  // Soft delete — la hoja de vida (mantenimientos) se conserva
+  const { error } = await supabase
+    .from("biomedical_equipment")
+    .update({ activo: false })
+    .eq("id", idParsed.data);
+  if (error) return { error: error.message };
+  revalidatePath("/equipos");
+  return { success: true };
+}
+
+// ── Mantenimientos biomédicos ────────────────────────────────
+
+export async function getMantenimientosBiomedicos(equipmentId?: number) {
+  const supabase = createClient();
+  let query = supabase
+    .from("biomedical_maintenance")
+    .select("*, biomedical_equipment(placa_equipo, equipo, marca, modelo, serie)")
+    .order("fecha_mantenimiento", { ascending: false })
+    .limit(500);
+  if (equipmentId) query = query.eq("equipment_id", equipmentId);
+  const { data } = await query;
+  return data || [];
+}
+
+export async function crearMantenimientoBiomedico(formData: BiomedicalMaintenanceFormData) {
+  const parsed = biomedicalMaintenanceSchema.safeParse(formData);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from("biomedical_maintenance")
+    .insert({
+      ...parsed.data,
+      cantidad: parsed.data.cantidad ?? null,
+      created_by: userData.user?.id ?? null,
+    })
+    .select()
+    .single();
+  if (error) return { error: error.message };
+
+  // Igual que SISRES: registrar mantenimiento actualiza la fecha de último
+  // mantenimiento del equipo (la hoja de vida se arma con este historial)
+  await supabase
+    .from("biomedical_equipment")
+    .update({ ultimo_mantenimiento: parsed.data.fecha_mantenimiento, updated_at: new Date().toISOString() })
+    .eq("id", parsed.data.equipment_id);
+
+  revalidatePath("/equipos");
+  return { success: true, data };
+}
+
+/** Hoja de vida: ficha del equipo + historial completo de mantenimientos. */
+export async function getHojaDeVida(equipmentId: number) {
+  const idParsed = z.number().int().positive().safeParse(equipmentId);
+  if (!idParsed.success) return null;
+
+  const supabase = createClient();
+  const [{ data: equipo }, { data: mantenimientos }] = await Promise.all([
+    supabase.from("biomedical_equipment").select("*").eq("id", idParsed.data).single(),
+    supabase
+      .from("biomedical_maintenance")
+      .select("*")
+      .eq("equipment_id", idParsed.data)
+      .order("fecha_mantenimiento", { ascending: false }),
+  ]);
+  if (!equipo) return null;
+  return { equipo, mantenimientos: mantenimientos || [] };
+}

@@ -24,115 +24,218 @@ import {
   PanelLeft,
   MessageSquareText,
   Sparkles,
+  Ambulance,
+  HeartPulse,
+  Stethoscope,
+  Activity,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getDefaultRoute } from "@/lib/auth-utils";
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
 import { Button } from "@/components/ui/button";
 
-const ALL_NAV: {
+type NavItem = {
   name: string;
   href: string;
   icon: typeof LayoutDashboard;
   roles: UserRole[];
   hint: string;
-}[] = [
+};
+
+// Navegación unificada Aeromanto + SISRES — jerarquía por dominio de trabajo
+// (ver NAVEGACION_UNIFICADA.md). Cada grupo solo se muestra si el rol del
+// usuario tiene al menos un ítem visible dentro.
+const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   {
-    name: "Dashboard",
-    href: "/",
-    icon: LayoutDashboard,
-    roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO"],
-    hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
+    label: null, // Inicio no lleva encabezado de grupo
+    items: [
+      {
+        name: "Dashboard",
+        href: "/",
+        icon: LayoutDashboard,
+        roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO"],
+        hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
+      },
+      {
+        name: "Coordinación",
+        href: "/coordinacion",
+        roles: ["COORDINACION"],
+        icon: Users,
+        hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
+      },
+    ],
   },
   {
-    name: "Coordinación",
-    href: "/coordinacion",
-    roles: ["COORDINACION"],
-    icon: Users,
-    hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
+    label: "Operación",
+    items: [
+      {
+        name: "Regulación",
+        href: "/regulacion",
+        icon: Radio,
+        roles: ["ADMIN", "REGULACION"],
+        hint: "Despacho de flota: disponibles vs fuera de servicio y asignación de conductores OVEM.",
+      },
+      {
+        name: "Servicios médicos",
+        href: "/servicios",
+        icon: Ambulance,
+        roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"],
+        hint: "Despacho y seguimiento de traslados asistenciales por etapas (origen SISRES).",
+      },
+    ],
   },
   {
-    name: "Vehículos",
-    href: "/vehiculos",
-    icon: Truck,
-    roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"],
-    hint: "Inventario y fichas de ambulancias; kilometraje y datos técnicos.",
+    label: "Pacientes",
+    items: [
+      {
+        name: "Pacientes",
+        href: "/pacientes",
+        icon: HeartPulse,
+        roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "COORDINACION", "VISTA"],
+        hint: "Registro maestro de pacientes para servicios y valoraciones (origen SISRES).",
+      },
+      {
+        name: "Valoraciones",
+        href: "/valoraciones",
+        icon: Stethoscope,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Conceptos de aptitud médica para vuelo (origen SISRES).",
+      },
+    ],
   },
   {
-    name: "Mantenimientos",
-    href: "/mantenimientos",
-    icon: Wrench,
-    roles: ["ADMIN", "MANTENIMIENTO"],
-    hint: "Registro e importación de órdenes de mantenimiento preventivo y correctivo.",
+    label: "Flota",
+    items: [
+      {
+        name: "Vehículos",
+        href: "/vehiculos",
+        icon: Truck,
+        roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"],
+        hint: "Inventario y fichas de ambulancias; kilometraje y datos técnicos.",
+      },
+      {
+        name: "Mantenimientos",
+        href: "/mantenimientos",
+        icon: Wrench,
+        roles: ["ADMIN", "MANTENIMIENTO"],
+        hint: "Registro e importación de órdenes de mantenimiento preventivo y correctivo.",
+      },
+      {
+        name: "Novedades",
+        href: "/novedades",
+        icon: AlertTriangle,
+        roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"],
+        hint: "Incidencias y seguimiento hasta cierre; impacto en operatividad.",
+      },
+      {
+        name: "Combustible",
+        href: "/combustible",
+        icon: Fuel,
+        roles: ["ADMIN", "GERENCIAL"],
+        hint: "Consumo, rendimiento km/gal y cargas por vehículo y centro.",
+      },
+    ],
   },
   {
-    name: "Novedades",
-    href: "/novedades",
-    icon: AlertTriangle,
-    roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"],
-    hint: "Incidencias y seguimiento hasta cierre; impacto en operatividad.",
+    label: "Equipos Biomédicos",
+    items: [
+      {
+        name: "Inventario y hoja de vida",
+        href: "/equipos",
+        icon: Activity,
+        roles: ["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"],
+        hint: "Inventario, mantenimientos y hoja de vida de equipos médicos (origen SISRES).",
+      },
+    ],
   },
   {
-    name: "KPIs",
-    href: "/kpis",
-    icon: BarChart3,
-    roles: ["ADMIN", "GERENCIAL"],
-    hint: "Indicadores agregados: disponibilidad, CTO, ratio P/C y tiempos de resolución.",
+    label: "Comunicaciones",
+    items: [
+      {
+        name: "Campañas WhatsApp",
+        href: "/comunicaciones",
+        icon: MessageCircle,
+        roles: ["ADMIN", "COORDINACION"],
+        hint: "Campañas masivas con plantillas aprobadas de Meta (origen SISRES).",
+      },
+    ],
   },
   {
-    name: "Combustible",
-    href: "/combustible",
-    icon: Fuel,
-    roles: ["ADMIN", "GERENCIAL"],
-    hint: "Consumo, rendimiento km/gal y cargas por vehículo y centro.",
+    label: "Formación",
+    items: [
+      {
+        name: "Capacitaciones",
+        href: "/capacitaciones",
+        icon: GraduationCap,
+        roles: ["ADMIN", "OVEM", "COORDINACION"],
+        hint: "Cursos, evaluaciones, resultados y evidencias de entrenamiento.",
+      },
+    ],
   },
   {
-    name: "Regulación",
-    href: "/regulacion",
-    icon: Radio,
-    roles: ["ADMIN", "REGULACION"],
-    hint: "Despacho: disponibles vs fuera de servicio y asignación de conductores OVEM.",
+    label: "Reportes",
+    items: [
+      {
+        name: "KPIs de flota",
+        href: "/kpis",
+        icon: BarChart3,
+        roles: ["ADMIN", "GERENCIAL"],
+        hint: "Indicadores agregados: disponibilidad, CTO, ratio P/C y tiempos de resolución.",
+      },
+      {
+        name: "Estadísticas de servicios",
+        href: "/estadisticas",
+        icon: BarChart3,
+        roles: ["ADMIN", "GERENCIAL", "ANALISTA", "COORDINACION"],
+        hint: "Volumen, etapas, tipos y tiempos de los servicios médicos (origen SISRES).",
+      },
+      {
+        name: "AI Insights",
+        href: "/ai-insights",
+        icon: Sparkles,
+        roles: ["ADMIN", "GERENCIAL", "COORDINACION"],
+        hint: "Análisis inteligente: patrones de combustible, novedades y disponibilidad.",
+      },
+      {
+        name: "Chat IA",
+        href: "/ai-chat",
+        icon: MessageSquareText,
+        roles: ["ADMIN", "GERENCIAL"],
+        hint: "Consulta y registra operaciones de flota en lenguaje natural con IA.",
+      },
+    ],
   },
   {
-    name: "Portal OVEM",
-    href: "/ovem",
-    icon: ClipboardCheck,
-    roles: ["ADMIN", "OVEM"],
-    hint: "Preoperacional, checklist y kilometraje del conductor asignado.",
+    label: "Portal OVEM",
+    items: [
+      {
+        name: "Portal OVEM",
+        href: "/ovem",
+        icon: ClipboardCheck,
+        roles: ["ADMIN", "OVEM"],
+        hint: "Preoperacional, checklist y kilometraje del conductor asignado.",
+      },
+    ],
   },
   {
-    name: "Capacitaciones",
-    href: "/capacitaciones",
-    icon: GraduationCap,
-    roles: ["ADMIN", "OVEM", "COORDINACION"],
-    hint: "Cursos, evaluaciones, resultados y evidencias de entrenamiento.",
-  },
-  {
-    name: "Configuración",
-    href: "/configuracion",
-    icon: Settings,
-    roles: ["ADMIN"],
-    hint: "Parámetros generales y catálogos administrados por administración.",
-  },
-  {
-    name: "Usuarios",
-    href: "/admin/usuarios",
-    icon: Users,
-    roles: ["ADMIN"],
-    hint: "Alta, roles y estado de cuentas del personal.",
-  },
-  {
-    name: "Chat IA",
-    href: "/ai-chat",
-    icon: MessageSquareText,
-    roles: ["ADMIN", "GERENCIAL"],
-    hint: "Consulta y registra operaciones de flota en lenguaje natural con IA.",
-  },
-  {
-    name: "AI Insights",
-    href: "/ai-insights",
-    icon: Sparkles,
-    roles: ["ADMIN", "GERENCIAL", "COORDINACION"],
-    hint: "Análisis inteligente: patrones de combustible, novedades y disponibilidad.",
+    label: "Administración",
+    items: [
+      {
+        name: "Configuración",
+        href: "/configuracion",
+        icon: Settings,
+        roles: ["ADMIN"],
+        hint: "Parámetros generales y catálogos: proveedores, clientes, centros y carga masiva.",
+      },
+      {
+        name: "Usuarios",
+        href: "/admin/usuarios",
+        icon: Users,
+        roles: ["ADMIN"],
+        hint: "Alta, roles y estado de cuentas del personal.",
+      },
+    ],
   },
 ];
 
@@ -143,6 +246,10 @@ const ROLE_BADGE_STYLES: Record<UserRole, string> = {
   OVEM: "bg-[#9C9B99] text-white",
   MANTENIMIENTO: "bg-[#666564] text-white",
   COORDINACION: "bg-[#0E7490] text-white",
+  ANALISTA: "bg-[#8B5CF6] text-white",
+  MEDICO: "bg-[#16A34A] text-white",
+  AUXILIAR_ENFERMERIA: "bg-[#65A30D] text-white",
+  VISTA: "bg-[#94A3B8] text-white",
 };
 
 const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
@@ -203,18 +310,25 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "GERENCIAL" &&
-          !["/", "/kpis", "/consumo", "/combustible"].includes(pathname) &&
+          !["/", "/kpis", "/consumo", "/combustible", "/estadisticas", "/ai-chat", "/ai-insights"].includes(pathname) &&
           !pathname.startsWith("/admin")
         ) {
           router.replace("/");
         }
         if (
           p.role_codigo === "COORDINACION" &&
-          !["/coordinacion", "/capacitaciones"].includes(pathname) &&
-          !pathname.startsWith("/coordinacion/") &&
-          !pathname.startsWith("/capacitaciones/")
+          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights"].some(
+            (b) => pathname === b || pathname.startsWith(`${b}/`)
+          )
         ) {
           router.replace("/coordinacion");
+        }
+        // Roles clínicos de la integración SISRES: llevarlos a su pantalla de trabajo
+        if (
+          ["MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"].includes(p.role_codigo) &&
+          pathname === "/"
+        ) {
+          router.replace(getDefaultRoute(p.role_codigo));
         }
       }
     });
@@ -238,7 +352,12 @@ export default function DashboardLayout({
     };
   }, [mobileNavOpen]);
 
-  const navItems = profile ? ALL_NAV.filter((n) => n.roles.includes(profile.role_codigo)) : [];
+  const navGroups = profile
+    ? NAV_GROUPS.map((g) => ({
+        ...g,
+        items: g.items.filter((n) => n.roles.includes(profile.role_codigo)),
+      })).filter((g) => g.items.length > 0)
+    : [];
 
   if (loading) {
     return (
@@ -429,31 +548,47 @@ export default function DashboardLayout({
             showCollapsedChrome && "lg:px-2"
           )}
         >
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                title={showCollapsedChrome ? `${item.name}: ${item.hint}` : item.hint}
-                className={cn(
-                  "flex items-center rounded-lg transition-colors touch-manipulation min-h-[44px] lg:min-h-10",
-                  showCollapsedChrome
-                    ? "lg:justify-center lg:px-2 lg:py-3"
-                    : "px-4 py-3.5 lg:py-3",
-                  isActive ? "bg-[#2BB6C7] text-white" : "text-[#666564] active:bg-muted hover:bg-[#F4EFE6] lg:hover:bg-[#F4EFE6]"
-                )}
-                onClick={() => setMobileNavOpen(false)}
-              >
-                <Icon className={cn("h-5 w-5 shrink-0", !showCollapsedChrome && "mr-3")} aria-hidden />
-                <span className={cn("text-sm font-medium truncate", showCollapsedChrome && "lg:sr-only")}>
-                  {item.name}
-                </span>
-              </Link>
-            );
-          })}
+          {navGroups.map((group, gi) => (
+            <div key={group.label ?? `grupo-${gi}`} className={cn(gi > 0 && "pt-3")}>
+              {group.label && (
+                <p
+                  className={cn(
+                    "px-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
+                    showCollapsedChrome && "lg:sr-only"
+                  )}
+                >
+                  {group.label}
+                </p>
+              )}
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive =
+                    pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      title={showCollapsedChrome ? `${item.name}: ${item.hint}` : item.hint}
+                      className={cn(
+                        "flex items-center rounded-lg transition-colors touch-manipulation min-h-[44px] lg:min-h-10",
+                        showCollapsedChrome
+                          ? "lg:justify-center lg:px-2 lg:py-3"
+                          : "px-4 py-3.5 lg:py-3",
+                        isActive ? "bg-[#2BB6C7] text-white" : "text-[#666564] active:bg-muted hover:bg-[#F4EFE6] lg:hover:bg-[#F4EFE6]"
+                      )}
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      <Icon className={cn("h-5 w-5 shrink-0", !showCollapsedChrome && "mr-3")} aria-hidden />
+                      <span className={cn("text-sm font-medium truncate", showCollapsedChrome && "lg:sr-only")}>
+                        {item.name}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div
