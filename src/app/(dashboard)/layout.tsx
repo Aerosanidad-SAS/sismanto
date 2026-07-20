@@ -60,7 +60,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
       {
         name: "Coordinación",
         href: "/coordinacion",
-        roles: ["COORDINACION"],
+        roles: ["ADMIN", "COORDINACION"],
         icon: Users,
         hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
       },
