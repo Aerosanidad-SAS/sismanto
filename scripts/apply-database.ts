@@ -55,6 +55,8 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "039_sisres_servicios_valoraciones.sql",   file: "scripts/migrations/039_sisres_servicios_valoraciones.sql" },
   { name: "040_sisres_inventario_biomedico.sql",     file: "scripts/migrations/040_sisres_inventario_biomedico.sql" },
   { name: "041_sisres_campanas.sql",                 file: "scripts/migrations/041_sisres_campanas.sql" },
+  { name: "042_centro_operativo_ado.sql",             file: "scripts/migrations/042_centro_operativo_ado.sql" },
+  { name: "043_user_profiles_cedula.sql",              file: "scripts/migrations/043_user_profiles_cedula.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

@@ -1,6 +1,8 @@
 # RBAC — integración de roles SISRES → Aeromanto
 
-**Estado:** 🟡 en verificación final — León respondió (`RESPUESTAS_LEON.md`, 2026-07-17) con su hipótesis de que Regulador/Despachador↔REGULACION, Coordinador↔COORDINACION y OVEM↔OVEM son las mismas personas reales, y dejó las cédulas reales de los 24 usuarios de esos 3 cargos para verificarlo empíricamente (no solo asumirlo). **Falta un solo paso para cerrar esto:** que Daniel cruce esos nombres contra los usuarios actuales de Aeromanto — ver §1.1. Aeromanto no guarda cédula en `user_profiles`, así que el cruce es por nombre completo, no por número de documento. Hasta que ese cruce se confirme, no se crea ninguna política RLS nueva ni se arranca `feature/sisres-roles-permisos`.
+**Estado:** 🟡 en verificación final — León respondió (`RESPUESTAS_LEON.md`, 2026-07-17) con su hipótesis de que Regulador/Despachador↔REGULACION, Coordinador↔COORDINACION y OVEM↔OVEM son las mismas personas reales, y dejó las cédulas reales de los 24 usuarios de esos 3 cargos para verificarlo empíricamente (no solo asumirlo). **Falta un solo paso para cerrar esto:** que Daniel cruce esas cédulas contra los usuarios actuales de Aeromanto — ver §1.1. Hasta que ese cruce se confirme, no se crea ninguna política RLS nueva ni se arranca `feature/sisres-roles-permisos`.
+
+**2026-07-20 — decisión de Daniel:** el cruce se hace por **cédula** (exacto), no por nombre (aproximado). Aeromanto nunca capturaba cédula de sus usuarios — se agregó la columna en la migración `043_user_profiles_cedula.sql` (`user_profiles.cedula`, nullable, único). Los usuarios existentes de Aeromanto la tienen vacía hasta que Daniel la complete manualmente (editando cada usuario, o vía SQL si tiene el mapeo a mano) — no hay fuente previa de la que importarla automáticamente. Además, Daniel confirmó que **todos** los usuarios (de ambos sistemas) van a terminar siendo usuarios de un único sistema final — no es solo un cruce de 3 cargos para decidir RLS, es la base para migrar de verdad las cuentas de SISRES al sistema unificado. Ver Ronda 2 de preguntas a León (`PREGUNTAS_LEON_RONDA2.md`) — hay que pedirle las cédulas de **todos** los cargos, no solo los 3 que se sospechaba que se solapaban.
 
 ## 1. Punto de partida
 
@@ -24,10 +26,14 @@ León dejó, en `sisres/RESPUESTAS_LEON.md` §1, las cédulas y nombres completo
 - **Cargo 4 (Regulador/Despachador):** 5 usuarios
 - **Cargo 7 (OVEM):** 17 usuarios (16 activos, 1 inactivo)
 
-Para cruzarlos, corré esto en el **SQL Editor de producción de Aeromanto** (no en staging, que todavía no tiene usuarios reales) y compará los nombres contra la lista de `RESPUESTAS_LEON.md`:
+Primero hay que completar la cédula de los usuarios actuales de Aeromanto — no existe hasta ahora. Dos formas:
+- Manual: **Configuración → Usuarios** → editar cada usuario de los roles REGULACION/COORDINACION/OVEM (probablemente son pocos) y completar su cédula.
+- Si tienes un Excel/planilla de RR.HH. con cédula + email, se puede armar un `UPDATE` masivo — avisame y lo armamos.
+
+Una vez completadas, corré esto en el **SQL Editor de producción de Aeromanto** (no en staging) para cruzar por cédula exacta contra la lista de `RESPUESTAS_LEON.md` §1:
 
 ```sql
-SELECT up.nombre_completo, up.email, r.codigo AS rol
+SELECT up.nombre_completo, up.email, up.cedula, r.codigo AS rol
 FROM user_profiles up
 JOIN roles r ON r.id = up.role_id
 WHERE r.codigo IN ('REGULACION', 'COORDINACION', 'OVEM')
@@ -35,9 +41,9 @@ WHERE r.codigo IN ('REGULACION', 'COORDINACION', 'OVEM')
 ORDER BY r.codigo, up.nombre_completo;
 ```
 
-- **Si los nombres coinciden** (aunque sea con variaciones de mayúsculas/orden, ej. "Yecica Mosquera Mosquera" vs "PAOLA MOSQUERA MOSQUERA" del lado SISRES) para la mayoría de los 24 → hipótesis confirmada, seguir el camino de §2 "Si son la misma persona".
-- **Si no hay solapamiento real de personas** → seguir el camino de §2 "Si son personas distintas".
-- Zona gris esperable: es normal que no sea un 100% exacto (alguien pudo cambiarse de cargo, o hay personal en un sistema que no usa el otro todavía) — la pregunta relevante es si la **mayoría** de cada cargo coincide, no si coinciden los 24 exactos.
+- **Si la cédula coincide** con la de León para la mayoría de los 24 → hipótesis confirmada, seguir el camino de §2 "Si son la misma persona". A diferencia del cruce por nombre, este es exacto — no hay zona gris de variaciones de mayúsculas/orden.
+- **Si no coincide** → seguir el camino de §2 "Si son personas distintas".
+- Si prefieres no completar cédula a mano todavía, el cruce por nombre (versión anterior de este documento) sigue siendo válido como aproximación rápida — pero cédula es la fuente de verdad para cuando se migren las cuentas de SISRES de verdad (ver nota del 2026-07-20 arriba).
 
 ---
 

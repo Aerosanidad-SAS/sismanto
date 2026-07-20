@@ -42,6 +42,7 @@ interface AdminUsuariosProps {
     user_id: string;
     nombre_completo: string | null;
     email: string | null;
+    cedula: string | null;
     activo: boolean;
     role_codigo: string;
     role_nombre: string;
@@ -59,6 +60,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nombreCompleto, setNombreCompleto] = useState("");
+  const [cedula, setCedula] = useState("");
   const [roleCodigo, setRoleCodigo] = useState<UserRole>("OVEM");
 
   const handleCreate = async () => {
@@ -69,6 +71,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
       email,
       password,
       nombreCompleto,
+      cedula,
       roleCodigo,
     });
     if (result?.error) setError(result.error);
@@ -78,6 +81,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
       setEmail("");
       setPassword("");
       setNombreCompleto("");
+      setCedula("");
       setRoleCodigo("OVEM");
       router.refresh();
     }
@@ -131,6 +135,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
               <TableRow>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Cédula</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
@@ -141,6 +146,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
                 <TableRow key={u.user_id}>
                   <TableCell className="font-medium">{u.nombre_completo || "—"}</TableCell>
                   <TableCell>{u.email || "—"}</TableCell>
+                  <TableCell>{u.cedula || "—"}</TableCell>
                   <TableCell>
                     <Select
                       value={u.role_codigo}
@@ -219,6 +225,19 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
                 placeholder="Juan Pérez"
                 className="mt-1"
               />
+            </div>
+            <div>
+              <Label>Cédula</Label>
+              <Input
+                value={cedula}
+                onChange={(e) => setCedula(e.target.value)}
+                placeholder="Documento de identidad"
+                className="mt-1"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Identifica al usuario si también existe en SISRES — permite cruzar cuentas por
+                cédula en vez de por nombre.
+              </p>
             </div>
             <div>
               <Label>Rol *</Label>

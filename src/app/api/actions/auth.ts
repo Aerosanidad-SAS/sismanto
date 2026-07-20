@@ -106,6 +106,7 @@ export async function createUserAsAdmin(data: {
   email: string;
   password: string;
   nombreCompleto: string;
+  cedula?: string;
   roleCodigo: UserRole;
 }) {
   await requireRole(["ADMIN"]);
@@ -134,6 +135,7 @@ export async function createUserAsAdmin(data: {
     role_id: role.id,
     nombre_completo: parsed.data.nombreCompleto,
     email: parsed.data.email,
+    cedula: parsed.data.cedula || null,
     activo: true,
   });
 

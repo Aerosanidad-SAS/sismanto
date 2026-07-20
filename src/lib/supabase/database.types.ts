@@ -542,9 +542,9 @@ export type Database = {
         ]
       }
       user_profiles: {
-        Row: { id: number; user_id: string; role_id: number; nombre_completo: string | null; email: string | null; activo: boolean; operational_center_id: number | null; created_at: string; updated_at: string }
-        Insert: { id?: number; user_id: string; role_id: number; nombre_completo?: string | null; email?: string | null; activo?: boolean; operational_center_id?: number | null; created_at?: string; updated_at?: string }
-        Update: { id?: number; user_id?: string; role_id?: number; nombre_completo?: string | null; email?: string | null; activo?: boolean; operational_center_id?: number | null; created_at?: string; updated_at?: string }
+        Row: { id: number; user_id: string; role_id: number; nombre_completo: string | null; email: string | null; cedula: string | null; activo: boolean; operational_center_id: number | null; created_at: string; updated_at: string }
+        Insert: { id?: number; user_id: string; role_id: number; nombre_completo?: string | null; email?: string | null; cedula?: string | null; activo?: boolean; operational_center_id?: number | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; user_id?: string; role_id?: number; nombre_completo?: string | null; email?: string | null; cedula?: string | null; activo?: boolean; operational_center_id?: number | null; created_at?: string; updated_at?: string }
         Relationships: [
           {
             foreignKeyName: "user_profiles_operational_center_id_fkey"

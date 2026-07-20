@@ -182,6 +182,7 @@ export const createUserAsAdminSchema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
   nombreCompleto: z.string().min(2, "Nombre demasiado corto"),
+  cedula: z.string().trim().min(4, "Documento inválido").max(20).optional().or(z.literal("")),
   roleCodigo: userRoleEnum,
 });
 

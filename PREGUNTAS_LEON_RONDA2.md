@@ -63,6 +63,16 @@ sistema real de SISRES:
    (hojaVidaEquipo.php usa TCPDF). ¿Qué columnas/formato exacto necesita ese PDF? ¿Hay una
    plantilla con membrete/logo institucional que deba replicar?
 
+7. CÉDULAS DE TODOS LOS USUARIOS DE SISRES — Cambio de alcance: ya no es solo para confirmar
+   la hipótesis de los 3 cargos que se sospechaba se solapaban con Aeromanto (Regulador,
+   Coordinador, OVEM). Todos los usuarios de SISRES van a terminar siendo usuarios del sistema
+   único final, así que necesito la cédula + nombre completo + email + cargo de TODOS los
+   usuarios activos de SISRES (los 8 cargos: Administrador, Regulador/Despachador, Coordinador,
+   OVEM, Analista, Médico, Auxiliar de Enfermería, Vista) — no solo los 3 de la Ronda 1. Con
+   `SELECT` a la tabla de usuarios de SISRES alcanza. Aeromanto ya tiene una columna `cedula`
+   en `user_profiles` (migración 043) para poder cruzar por documento exacto en vez de por
+   nombre aproximado.
+
 Escribí las respuestas en sisres/RESPUESTAS_LEON.md, sección nueva "## Ronda 2" al final del
 archivo, misma rama audit/integration-analysis.
 ```
