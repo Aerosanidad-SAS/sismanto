@@ -2,8 +2,12 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { renderToBuffer } from "@react-pdf/renderer";
+import { createElement } from "react";
 import type { BiomedicalEquipmentFormData, BiomedicalMaintenanceFormData } from "@/lib/validations";
 import { biomedicalEquipmentSchema, biomedicalMaintenanceSchema } from "@/lib/validations";
+import { HojaVidaBiomedicaPdf } from "@/lib/pdf/hoja-vida-biomedica";
+import { getProfile } from "@/app/api/actions/auth";
 import { z } from "zod";
 
 function fechasNulas(d: Record<string, unknown>, campos: string[]) {
@@ -150,4 +154,30 @@ export async function getHojaDeVida(equipmentId: number) {
   ]);
   if (!equipo) return null;
   return { equipo, mantenimientos: mantenimientos || [] };
+}
+
+/**
+ * Genera el PDF de hoja de vida del equipo — ficha técnica + historial de
+ * mantenimientos. Formato provisional (ver PREGUNTAS_LEON_RONDA2.md §6):
+ * pendiente de confirmar si SISRES exige un membrete/formato específico.
+ * Devuelve el PDF en base64 (mismo patrón {data,error}, sin Route Handler).
+ */
+export async function generarHojaVidaPdf(equipmentId: number) {
+  const hoja = await getHojaDeVida(equipmentId);
+  if (!hoja) return { error: "Equipo no encontrado" };
+
+  const profile = await getProfile();
+
+  try {
+    const buffer = await renderToBuffer(
+      createElement(HojaVidaBiomedicaPdf, {
+        equipo: hoja.equipo,
+        mantenimientos: hoja.mantenimientos,
+        generadoPor: profile?.nombre_completo || profile?.email || "Usuario Aeromanto",
+      })
+    );
+    return { success: true, data: buffer.toString("base64"), filename: `hoja-vida-${hoja.equipo.placa_equipo}.pdf` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo generar el PDF" };
+  }
 }

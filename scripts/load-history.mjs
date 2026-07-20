@@ -380,17 +380,19 @@ async function main() {
   // 3. Leer archivos Excel
   console.log("📂 Leyendo archivos Excel...");
   const wbManto = XLSX.readFile(MANTO_FILE);
-  const wbCombProv = XLSX.readFile(COMB_PROVEEDOR_FILE);
+  // El archivo de combustible del proveedor solo hace falta si vamos a insertar
+  // combustible — con --solo-manto, ni se lee (evita exigir un archivo que no se usa).
+  const wbCombProv = SOLO_MANTO ? null : XLSX.readFile(COMB_PROVEEDOR_FILE);
 
   const shManto = wbManto.Sheets[MANTO_SHEET];
   const shCombInterna = wbManto.Sheets[COMB_INTERNA_SHEET];
-  const shCombProv = wbCombProv.Sheets[COMB_PROVEEDOR_SHEET];
+  const shCombProv = wbCombProv ? wbCombProv.Sheets[COMB_PROVEEDOR_SHEET] : null;
 
   if (!shManto) { console.error(`❌ Hoja "${MANTO_SHEET}" no encontrada en ${MANTO_FILE}`); process.exit(1); }
 
   // 4. Parsear combustible (ambas fuentes)
-  const combInternas = parseCombInternaSheet(shCombInterna || {});
-  const combProveedor = parseCombProveedorSheet(shCombProv || {});
+  const combInternas = SOLO_MANTO ? [] : parseCombInternaSheet(shCombInterna || {});
+  const combProveedor = SOLO_MANTO ? [] : parseCombProveedorSheet(shCombProv || {});
   console.log(`Combustible interno (Tabla_Combustibles): ${combInternas.length} filas`);
   console.log(`Combustible proveedor (detailed_consumption): ${combProveedor.length} filas`);
 

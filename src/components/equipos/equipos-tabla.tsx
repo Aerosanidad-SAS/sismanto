@@ -31,6 +31,7 @@ import {
   crearEquipoBiomedico,
   actualizarEquipoBiomedico,
   crearMantenimientoBiomedico,
+  generarHojaVidaPdf,
 } from "@/app/api/actions/inventario-biomedico";
 
 export interface EquipoRow {
@@ -116,6 +117,7 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
   const [editando, setEditando] = useState<EquipoRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [descargandoPdf, setDescargandoPdf] = useState(false);
 
   const formEquipo = useForm<BiomedicalEquipmentFormData>({
     resolver: zodResolver(biomedicalEquipmentSchema),
@@ -201,6 +203,25 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
     router.refresh();
   };
 
+  const handleDescargarPdf = async (equipmentId: number) => {
+    setDescargandoPdf(true);
+    const res = await generarHojaVidaPdf(equipmentId);
+    setDescargandoPdf(false);
+    if ("error" in res && res.error) {
+      alert(res.error);
+      return;
+    }
+    if (!("data" in res) || !res.data) return;
+    const bytes = Uint8Array.from(atob(res.data), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = res.filename ?? "hoja-vida.pdf";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const estadoMantenimiento = (e: EquipoRow) => {
     if (!e.proximo_mantenimiento) return <Badge variant="outline">Sin programar</Badge>;
     const hoy = new Date().toISOString().slice(0, 10);
@@ -279,11 +300,22 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
       {/* Hoja de vida — ficha + historial */}
       <Dialog open={Boolean(hojaDeVida)} onOpenChange={(open) => !open && setHojaDeVida(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
-              Hoja de vida — {hojaDeVida?.equipo} ({hojaDeVida?.placa_equipo})
-            </DialogTitle>
-            <DialogDescription>Ficha técnica e historial de mantenimientos del equipo.</DialogDescription>
+          <DialogHeader className="flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <DialogTitle>
+                Hoja de vida — {hojaDeVida?.equipo} ({hojaDeVida?.placa_equipo})
+              </DialogTitle>
+              <DialogDescription>Ficha técnica e historial de mantenimientos del equipo.</DialogDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={descargandoPdf}
+              onClick={() => hojaDeVida && handleDescargarPdf(hojaDeVida.id)}
+            >
+              {descargandoPdf ? "Generando…" : "Descargar PDF"}
+            </Button>
           </DialogHeader>
           {hojaDeVida && (
             <Tabs defaultValue="ficha">
