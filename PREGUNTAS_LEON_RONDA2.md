@@ -20,7 +20,7 @@ conocimiento y marcalo como "no verificado en código".
 ```
 Ya se construyó en Aeromanto (rama integration/sisres) el módulo completo de servicios médicos,
 pacientes, equipos biomédicos y comunicaciones, portado desde SISRES. Antes de que yo revise el
-código a fondo, necesito que resuelvas 6 dudas puntuales que solo vos podés verificar contra el
+código a fondo, necesito que resuelvas 7 dudas puntuales que solo vos podés verificar contra el
 sistema real de SISRES:
 
 1. ROL ANALISTA — En aeromanto/scripts/migrations/035_sisres_roles.sql lo definí como
