@@ -444,7 +444,9 @@ export const patientSchema = z.object({
 });
 export type PatientFormData = z.input<typeof patientSchema>;
 
-export const ETAPAS_SERVICIO = ["PROGRAMADO", "CURSO", "FINALIZADO", "CANCELADO", "FALLIDO", "NO_EFECTIVO"] as const;
+// Verificado contra SISRES real (Ronda 2, pregunta 3): "NO EFECTIVO" lleva
+// espacio, no guion bajo, y DUPLICADO es una etapa terminal viva hoy.
+export const ETAPAS_SERVICIO = ["PROGRAMADO", "CURSO", "FINALIZADO", "CANCELADO", "FALLIDO", "NO EFECTIVO", "DUPLICADO"] as const;
 export type EtapaServicio = (typeof ETAPAS_SERVICIO)[number];
 
 export const medicalServiceSchema = z.object({

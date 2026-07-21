@@ -63,24 +63,29 @@ const ETAPA_BADGE: Record<string, "default" | "secondary" | "destructive" | "out
   FINALIZADO: "success",
   CANCELADO: "destructive",
   FALLIDO: "destructive",
-  NO_EFECTIVO: "outline",
+  "NO EFECTIVO": "outline",
+  DUPLICADO: "outline",
 };
 
-// Transiciones válidas (espejo de TRANSICIONES en servicios-medicos.ts)
-const SIGUIENTES: Record<string, EtapaServicio[]> = {
-  PROGRAMADO: ["CURSO", "CANCELADO", "FALLIDO", "NO_EFECTIVO"],
-  CURSO: ["FINALIZADO", "CANCELADO", "FALLIDO", "NO_EFECTIVO"],
-};
+// SISRES no restringe a qué etapa se puede mover un servicio (Ronda 2,
+// pregunta 3) — cualquier etapa distinta a la actual es una opción válida.
+const ETAPAS_DESTINO = (etapaActual: string): EtapaServicio[] =>
+  (Object.keys(ETAPA_BADGE) as EtapaServicio[]).filter((e) => e !== etapaActual);
 
-// Tipos de servicio reales de SISRES
+// Tipos de servicio reales — verificados contra los 20.101 registros de
+// producción de SISRES (Ronda 2, pregunta 2). MEDICINA DOMICILIARIA es el
+// 84% del total; TAB SIMPLE y TAB SENCILLO son variantes de captura
+// distintas pero ambas viven en datos reales, no se puede descartar ninguna.
 const TIPOS_SERVICIO = [
-  "TRASLADO ASISTENCIAL BASICO",
-  "TRASLADO ASISTENCIAL MEDICALIZADO",
-  "ATENCION PREHOSPITALARIA",
-  "AREA PROTEGIDA",
-  "EVENTO",
-  "VALORACION",
-  "OTRO",
+  "MEDICINA DOMICILIARIA",
+  "TAB SIMPLE",
+  "TAB DOBLE",
+  "TAB SENCILLO",
+  "TAM SIMPLE",
+  "TAM DOBLE",
+  "TELEMEDICINA",
+  "ENFERMERIA DOMICILIARIA",
+  "TRASLADO AEREO",
 ];
 
 const CAMPOS_PROGRAMACION: { name: keyof MedicalServiceFormData; label: string; type?: string }[] = [
@@ -286,7 +291,7 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
               <SelectItem value="TODAS">Todas las etapas</SelectItem>
               {Object.keys(ETAPA_BADGE).map((etapa) => (
                 <SelectItem key={etapa} value={etapa}>
-                  {etapa.replace("_", " ")}
+                  {etapa}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -332,30 +337,26 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
                   {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa.replace("_", " ")}</Badge>
+                  <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa}</Badge>
                 </TableCell>
                 {puedeEditar && (
                   <TableCell className="min-w-[10rem]">
-                    {SIGUIENTES[s.etapa] ? (
-                      <Select
-                        disabled={busyId === s.id}
-                        onValueChange={(v) => handleEtapa(s, v)}
-                        value=""
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={busyId === s.id ? "Guardando…" : "Mover a…"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SIGUIENTES[s.etapa].map((etapa) => (
-                            <SelectItem key={etapa} value={etapa}>
-                              {etapa.replace("_", " ")}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Etapa final</span>
-                    )}
+                    <Select
+                      disabled={busyId === s.id}
+                      onValueChange={(v) => handleEtapa(s, v)}
+                      value=""
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={busyId === s.id ? "Guardando…" : "Mover a…"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ETAPAS_DESTINO(s.etapa).map((etapa) => (
+                          <SelectItem key={etapa} value={etapa}>
+                            {etapa}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                 )}
                 {puedeEditar && (

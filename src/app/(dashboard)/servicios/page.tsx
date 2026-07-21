@@ -32,7 +32,7 @@ export default async function ServiciosPage() {
   const enCurso = servicios.filter((s) => s.etapa === "CURSO").length;
   const finalizados = servicios.filter((s) => s.etapa === "FINALIZADO").length;
   const cerradosSinExito = servicios.filter((s) =>
-    ["CANCELADO", "FALLIDO", "NO_EFECTIVO"].includes(s.etapa)
+    ["CANCELADO", "FALLIDO", "NO EFECTIVO"].includes(s.etapa)
   ).length;
 
   return (

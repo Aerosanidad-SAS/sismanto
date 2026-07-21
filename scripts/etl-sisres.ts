@@ -94,12 +94,18 @@ const normalizarPlaca = (v: string | undefined): string | null => {
   const t = s(v);
   return t ? t.toUpperCase().replace(/\s+/g, "") : null;
 };
-// Etapas SISRES → CHECK de medical_services (NO EFECTIVO lleva guion bajo)
+// Etapas SISRES → CHECK de medical_services. Verificado contra datos reales
+// (Ronda 2, pregunta 3): "NO EFECTIVO" lleva espacio (no guion bajo),
+// DUPLICADO es una etapa terminal viva, y hay 3 etapas legacy que ya no son
+// seleccionables en SISRES pero sí existen en el histórico: SOLUCIONADO
+// (alias pre-2026-07-16 de CANCELADO) y REPROGRAMADO/RE-PROGRAMADO (sin
+// equivalente vivo — se tratan como PROGRAMADO, el estado más cercano).
 const normalizarEtapa = (v: string | undefined): string => {
-  const t = (s(v) ?? "PROGRAMADO").toUpperCase().replace(/\s+/g, "_");
-  return ["PROGRAMADO", "CURSO", "FINALIZADO", "CANCELADO", "FALLIDO", "NO_EFECTIVO"].includes(t)
-    ? t
-    : "PROGRAMADO";
+  const t = (s(v) ?? "PROGRAMADO").toUpperCase().trim();
+  if (t === "SOLUCIONADO") return "CANCELADO";
+  if (t === "REPROGRAMADO" || t === "RE-PROGRAMADO") return "PROGRAMADO";
+  const validas = ["PROGRAMADO", "CURSO", "FINALIZADO", "CANCELADO", "FALLIDO", "NO EFECTIVO", "DUPLICADO"];
+  return validas.includes(t) ? t : "PROGRAMADO";
 };
 
 function leerCsv(dir: string, nombre: string): Record<string, string>[] | null {

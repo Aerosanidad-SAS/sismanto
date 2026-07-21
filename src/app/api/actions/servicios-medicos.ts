@@ -2,21 +2,57 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import type { MedicalServiceFormData, EtapaServicio } from "@/lib/validations";
+import type { MedicalServiceFormData } from "@/lib/validations";
 import { medicalServiceSchema, ETAPAS_SERVICIO } from "@/lib/validations";
+import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
 import { z } from "zod";
 
-// Transiciones de etapa válidas — mismas reglas que SISRES:
-// PROGRAMADO puede pasar a CURSO o cerrarse directo (cancelado/fallido/no efectivo);
-// CURSO solo puede cerrarse; las etapas de cierre son terminales.
-const TRANSICIONES: Record<EtapaServicio, EtapaServicio[]> = {
-  PROGRAMADO: ["CURSO", "CANCELADO", "FALLIDO", "NO_EFECTIVO"],
-  CURSO: ["FINALIZADO", "CANCELADO", "FALLIDO", "NO_EFECTIVO"],
-  FINALIZADO: [],
-  CANCELADO: [],
-  FALLIDO: [],
-  NO_EFECTIVO: [],
+// SISRES no tiene una máquina de estados fija (Ronda 2, pregunta 3 en
+// sisres/RESPUESTAS_LEON.md): el dropdown de etapa está gobernado por
+// permisos por cargo (`etapa_ver_*`), no por la etapa actual — cualquier
+// cargo con permiso puede mover un servicio a cualquier etapa, incluso
+// "hacia atrás". Aeromanto no replica permisos dinámicos en runtime (ver
+// PLAN_INTEGRACION_SISRES.md §5), así que aquí el control de acceso es el
+// mismo RLS estático de la tabla (quién puede hacer UPDATE) — no se valida
+// una transición específica.
+
+// Plantillas reales de WhatsApp por etapa (Ronda 2, pregunta 5) — solo se
+// disparan para MEDICINA DOMICILIARIA, igual que en SISRES.
+const PLANTILLA_POR_ETAPA: Partial<Record<string, string>> = {
+  PROGRAMADO: "servicio_programado",
+  CURSO: "servicio_en_curso",
+  FINALIZADO: "servicio_terminado",
 };
+const IDIOMA_PLANTILLA = "es_CO";
+
+async function notificarEtapaServicio(
+  supabase: ReturnType<typeof createClient>,
+  servicioId: number,
+  etapa: string,
+  tipoServicio: string,
+  patientId: number | null
+) {
+  const plantilla = PLANTILLA_POR_ETAPA[etapa];
+  if (!plantilla || tipoServicio !== "MEDICINA DOMICILIARIA" || !patientId) return;
+
+  const { data: paciente } = await supabase
+    .from("patients")
+    .select("celular")
+    .eq("id", patientId)
+    .maybeSingle();
+  const telefono = paciente?.celular ? sanitizarTelefono(paciente.celular) : null;
+  if (!telefono) return;
+
+  const resultado = await enviarPlantilla(telefono, plantilla, IDIOMA_PLANTILLA);
+  await supabase.from("notification_log").insert({
+    canal: "WHATSAPP",
+    destinatario: telefono,
+    plantilla,
+    referencia: `servicio:${servicioId}`,
+    ok: resultado.ok,
+    error: resultado.error,
+  });
+}
 
 /** Minutos entre dos timestamps ISO; null si falta alguno o el resultado es negativo. */
 function minutosEntre(desde?: string | null, hasta?: string | null): number | null {
@@ -108,6 +144,7 @@ export async function crearServicioMedico(formData: MedicalServiceFormData) {
     .select()
     .single();
   if (error) return { error: error.message };
+  await notificarEtapaServicio(supabase, data.id, "PROGRAMADO", data.tipo_servicio, data.patient_id);
   revalidatePath("/servicios");
   return { success: true, data };
 }
@@ -132,7 +169,9 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
 /**
  * Cambio de etapa con guarda optimista — port de cambiarEtapaRapido.php:
  * el UPDATE incluye la etapa actual esperada en el WHERE, así dos usuarios
- * simultáneos no pisan la transición del otro.
+ * simultáneos no pisan la transición del otro. No valida una transición
+ * específica (ver nota arriba de PLANTILLA_POR_ETAPA) — cualquier etapa
+ * destino válida es aceptada, igual que en SISRES.
  */
 export async function cambiarEtapaServicio(id: number, etapaActual: string, etapaNueva: string) {
   const idParsed = z.number().int().positive().safeParse(id);
@@ -141,9 +180,6 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
   const actual = ETAPAS_SERVICIO.find((e) => e === etapaActual);
   const nueva = ETAPAS_SERVICIO.find((e) => e === etapaNueva);
   if (!actual || !nueva) return { error: "Etapa inválida" };
-  if (!TRANSICIONES[actual].includes(nueva)) {
-    return { error: `No se puede pasar de ${actual} a ${nueva}` };
-  }
 
   const supabase = createClient();
   const { data, error } = await supabase
@@ -151,11 +187,12 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
     .update({ etapa: nueva, updated_at: new Date().toISOString() })
     .eq("id", idParsed.data)
     .eq("etapa", actual)
-    .select("id");
+    .select("id, tipo_servicio, patient_id");
   if (error) return { error: error.message };
   if (!data || data.length === 0) {
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
+  await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
   revalidatePath("/servicios");
   return { success: true };
 }
