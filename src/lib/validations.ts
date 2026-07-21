@@ -422,9 +422,41 @@ export const operationalCenterUpdateNombreSchema = z.object({
 const optStr = z.string().trim().max(255).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
 const optText = z.string().trim().max(5000).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
 
+// Catálogo real — verificado contra el <select> de sisres/registroPacientes.php
+// (Ronda de QA, 2026-07-21). No son valores inventados.
+export const TIPOS_DOCUMENTO = [
+  "REGISTRO DE NACIMIENTO",
+  "TARJETA DE IDENTIDAD",
+  "CEDULA CIUDADANIA",
+  "CEDULA EXTRAJERIA",
+  "NIT",
+  "PASAPORTE",
+  "DOCUMENTO EXTRAJERO",
+  "CERTIFICADO NACIDO VIVO",
+  "MENOR SIN IDENTIFICACION",
+  "CARNET DIPLOMATICO",
+  "ADULTO SIN IDENTIFICACION",
+  "PERMISO ESPECIAL PERMANENCIA",
+] as const;
+
+// Documentos exclusivos de mayores de edad — mismo criterio que el hallazgo
+// de QA de Daniel ("si es menor de edad no puede permitir cédula").
+export const TIPOS_DOCUMENTO_SOLO_ADULTO = ["CEDULA CIUDADANIA", "CEDULA EXTRAJERIA"] as const;
+// Documentos exclusivos de menores de edad.
+export const TIPOS_DOCUMENTO_SOLO_MENOR = [
+  "REGISTRO DE NACIMIENTO",
+  "TARJETA DE IDENTIDAD",
+  "CERTIFICADO NACIDO VIVO",
+  "MENOR SIN IDENTIFICACION",
+] as const;
+
+export const SEXO_OPCIONES = ["HOMBRE", "MUJER", "NO BINARIO", "TRANSGENERO", "TRANSEXUAL", "GÉNERO FLUIDO"] as const;
+
+export const RH_OPCIONES = ["A+", "A-", "O+", "O-", "B+", "B-", "AB+", "AB-"] as const;
+
 export const patientSchema = z.object({
   cedula: z.string().trim().min(4, "Documento inválido").max(20),
-  tipo_documento: z.string().trim().min(1, "Tipo de documento requerido").max(20),
+  tipo_documento: z.enum(TIPOS_DOCUMENTO, { errorMap: () => ({ message: "Selecciona un tipo de documento válido" }) }),
   nombre1: z.string().trim().min(2, "Nombre requerido").max(60),
   nombre2: optStr,
   apellido1: z.string().trim().min(2, "Apellido requerido").max(60),

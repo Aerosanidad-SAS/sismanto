@@ -10,6 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,8 +34,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { patientSchema, type PatientFormData } from "@/lib/validations";
+import { CatalogCombobox } from "@/components/forms/catalog-combobox";
+import {
+  patientSchema,
+  type PatientFormData,
+  TIPOS_DOCUMENTO,
+  TIPOS_DOCUMENTO_SOLO_ADULTO,
+  TIPOS_DOCUMENTO_SOLO_MENOR,
+  SEXO_OPCIONES,
+  RH_OPCIONES,
+} from "@/lib/validations";
+import { DEPARTAMENTOS_COLOMBIA } from "@/lib/colombia-geo";
 import { crearPaciente, actualizarPaciente, eliminarPaciente } from "@/app/api/actions/pacientes";
+
+/** null = no se pudo determinar (sin fecha de nacimiento o fecha inválida) */
+function calcularEdadNumero(fechaNacimiento: string | undefined): number | null {
+  if (!fechaNacimiento) return null;
+  const nacimiento = new Date(fechaNacimiento);
+  if (Number.isNaN(nacimiento.getTime())) return null;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  const m = hoy.getMonth() - nacimiento.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) edad--;
+  return edad;
+}
 
 export interface PacienteRow {
   id: number;
@@ -67,22 +96,21 @@ function calcularEdad(fechaNacimiento: string | null): string {
   return `${edad}`;
 }
 
-// Campos de texto simples del formulario (los obligatorios van aparte)
+// Campos de texto simples del formulario (los que tienen catálogo real —
+// tipo_documento, sexo, rh, departamento — se renderizan aparte más abajo).
+// Ciudad y EPS quedan como texto libre: SISRES sí las tiene como catálogo
+// (tabla subregiones / eps), pero requieren el export real de León para no
+// inventar datos — ver QA_HALLAZGOS.md.
 const CAMPOS_OPCIONALES: { name: keyof PatientFormData; label: string; type?: string }[] = [
   { name: "nombre2", label: "Segundo nombre" },
   { name: "apellido2", label: "Segundo apellido" },
-  { name: "fecha_nacimiento", label: "Fecha de nacimiento", type: "date" },
-  { name: "sexo", label: "Sexo" },
-  { name: "rh", label: "RH" },
-  { name: "estatura", label: "Estatura" },
-  { name: "eps", label: "EPS" },
+  { name: "eps", label: "EPS (catálogo pendiente — ver bolsa de QA)" },
   { name: "celular", label: "Celular" },
   { name: "correo", label: "Correo", type: "email" },
   { name: "direccion", label: "Dirección" },
   { name: "barrio", label: "Barrio" },
   { name: "localidad", label: "Localidad" },
-  { name: "departamento", label: "Departamento" },
-  { name: "ciudad", label: "Ciudad" },
+  { name: "ciudad", label: "Ciudad (catálogo pendiente — ver bolsa de QA)" },
 ];
 
 interface PacientesTablaProps {
@@ -99,8 +127,20 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
-  const { register, handleSubmit, reset, formState } = useForm<PatientFormData>({
+  const { register, handleSubmit, reset, setValue, watch, formState } = useForm<PatientFormData>({
     resolver: zodResolver(patientSchema),
+  });
+
+  const tipoDocumentoSeleccionado = watch("tipo_documento");
+  const sexoSeleccionado = watch("sexo");
+  const rhSeleccionado = watch("rh");
+  const departamentoSeleccionado = watch("departamento");
+  const edadCalculada = calcularEdadNumero(watch("fecha_nacimiento"));
+  const esMenorDeEdad = edadCalculada !== null && edadCalculada < 18;
+  const tiposDocumentoDisponibles = TIPOS_DOCUMENTO.filter((t) => {
+    if (edadCalculada === null) return true; // sin fecha de nacimiento, no se restringe
+    if (esMenorDeEdad) return !(TIPOS_DOCUMENTO_SOLO_ADULTO as readonly string[]).includes(t);
+    return !(TIPOS_DOCUMENTO_SOLO_MENOR as readonly string[]).includes(t);
   });
 
   const filtrados = useMemo(() => {
@@ -118,7 +158,7 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
   const abrirNuevo = () => {
     setEditando(null);
     setError(null);
-    reset({ tipo_documento: "CC" } as PatientFormData);
+    reset({ tipo_documento: "" } as unknown as PatientFormData);
     setDialogOpen(true);
   };
 
@@ -244,8 +284,37 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
+                <Label htmlFor="fecha_nacimiento_primero">Fecha de nacimiento</Label>
+                <Input
+                  id="fecha_nacimiento_primero"
+                  type="date"
+                  {...register("fecha_nacimiento")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {esMenorDeEdad
+                    ? "Menor de edad — cédula no disponible como tipo de documento."
+                    : edadCalculada !== null
+                      ? "Mayor de edad."
+                      : "Complétala primero: filtra qué tipos de documento aplican."}
+                </p>
+              </div>
+              <div className="space-y-1">
                 <Label htmlFor="tipo_documento">Tipo de documento *</Label>
-                <Input id="tipo_documento" placeholder="CC / TI / CE / PP" {...register("tipo_documento")} />
+                <Select
+                  value={tipoDocumentoSeleccionado ?? ""}
+                  onValueChange={(v) => setValue("tipo_documento", v as PatientFormData["tipo_documento"], { shouldValidate: true })}
+                >
+                  <SelectTrigger id="tipo_documento">
+                    <SelectValue placeholder="Selecciona el tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiposDocumentoDisponibles.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="cedula">Número de documento *</Label>
@@ -258,6 +327,62 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
               <div className="space-y-1">
                 <Label htmlFor="apellido1">Primer apellido *</Label>
                 <Input id="apellido1" {...register("apellido1")} />
+              </div>
+              <div className="space-y-1">
+                <Label>Sexo</Label>
+                <Select
+                  value={sexoSeleccionado ?? ""}
+                  onValueChange={(v) => setValue("sexo", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEXO_OPCIONES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>RH</Label>
+                <Select
+                  value={rhSeleccionado ?? ""}
+                  onValueChange={(v) => setValue("rh", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RH_OPCIONES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="estatura">Estatura</Label>
+                <div className="relative">
+                  <Input id="estatura" placeholder="Ej: 168" className="pr-12" {...register("estatura")} />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    cm
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="departamento">Departamento</Label>
+                <CatalogCombobox
+                  id="departamento"
+                  options={[...DEPARTAMENTOS_COLOMBIA]}
+                  value={departamentoSeleccionado ?? ""}
+                  onChange={(v) => setValue("departamento", v)}
+                  placeholder="Selecciona o busca…"
+                  allowCustom={false}
+                />
               </div>
               {CAMPOS_OPCIONALES.map((campo) => (
                 <div key={campo.name} className="space-y-1">
