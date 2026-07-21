@@ -1,0 +1,17 @@
+# Igual que deploy-dev.yml pero para la rama `staging` — ver ese archivo
+# para la explicación completa de por qué se usa un Deploy Hook.
+#
+# Requiere el secreto VERCEL_DEPLOY_HOOK_STAGING (la URL del Deploy Hook
+# apuntando a la rama `staging`).
+name: Deploy staging
+
+on:
+  push:
+    branches: [staging]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar Deploy Hook de Vercel (staging)
+        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_STAGING }}" --fail

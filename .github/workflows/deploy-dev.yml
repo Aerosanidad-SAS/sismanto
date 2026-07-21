@@ -1,0 +1,21 @@
+# Dispara el despliegue de Vercel para la rama `dev` vía un Deploy Hook,
+# en vez de depender del Git-integration nativo de Vercel (que en el plan
+# Hobby bloquea los pushes de cualquier autor que no sea el dueño del
+# proyecto en repos privados). El Deploy Hook no depende de quién hizo el
+# commit — solo reconstruye lo último que haya en la rama.
+#
+# Requiere el secreto VERCEL_DEPLOY_HOOK_DEV (la URL del Deploy Hook,
+# creado en Vercel → Project Settings → Git → Deploy Hooks, apuntando a
+# la rama `dev`).
+name: Deploy dev
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar Deploy Hook de Vercel (dev)
+        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_DEV }}" --fail
