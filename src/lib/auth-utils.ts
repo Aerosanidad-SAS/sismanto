@@ -12,7 +12,7 @@ export type UserRole =
   | "VISTA";
 
 export function isAdminLike(role: UserRole): boolean {
-  return role === "ADMIN";
+  return role === "ADMIN" || role === "ANALISTA";
 }
 
 /** Roles que pueden alternar OPERATIVO ↔ FUERA_DE_SERVICIO desde la UI (despacho). */

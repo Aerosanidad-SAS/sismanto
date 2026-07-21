@@ -64,7 +64,7 @@ export async function submitDailyCheck(data: {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const row = parsed.data;
 
-  const profile = await requireRole(["OVEM", "ADMIN"]);
+  const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
   if (profile.role_codigo === "OVEM" && profile.user_id !== row.userId) {
     return { error: "No autorizado" };
   }
@@ -146,7 +146,7 @@ export async function updateKilometrajeOdometer(
 
   const { userId: uid, vehicleId: vid, fecha: fechaVal, kilometraje: kmVal } = parsed.data;
 
-  const profile = await requireRole(["OVEM", "ADMIN"]);
+  const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
   const supabase = createClient();
   if (profile.role_codigo === "OVEM") {
     const { data: v } = await supabase.from("vehicles").select("id").eq("id", vid).maybeSingle();

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
+import { isAdminLike } from "@/lib/auth-utils";
 import { ConfiguracionTabs } from "@/components/configuracion/configuracion-tabs";
 
 async function getConfiguracionData() {
@@ -48,7 +49,7 @@ async function getConfiguracionData() {
 
 export default async function ConfiguracionPage() {
   const profile = await getProfile();
-  if (!profile || profile.role_codigo !== "ADMIN") {
+  if (!profile || !isAdminLike(profile.role_codigo)) {
     redirect("/");
   }
 

@@ -48,7 +48,7 @@ export async function createIncident(data: IncidentFormData) {
 
 /** Prioridad operativa BAJA/MEDIA/ALTA: solo administradores. */
 export async function updateIncidentPrioridad(incidentId: number, prioridad: "BAJA" | "MEDIA" | "ALTA" | null) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = updateIncidentPrioridadSchema.safeParse({ incidentId, prioridad });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 

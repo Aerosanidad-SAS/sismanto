@@ -23,7 +23,7 @@ export interface InvoiceJob {
 }
 
 export async function getJobsForReview(): Promise<{ data?: InvoiceJob[]; error?: string }> {
-  await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
 
   const supabase = createClient();
   const { data, error } = await supabase
@@ -54,7 +54,7 @@ export interface ApproveJobData {
 export async function approveInvoiceJob(
   data: ApproveJobData
 ): Promise<{ success?: boolean; idManto?: number; error?: string }> {
-  const profile = await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
 
   const supabase    = createClient();
   const adminClient = createAdminClient();
@@ -133,7 +133,7 @@ export async function dismissInvoiceJob(
   jobId: string,
   note?: string
 ): Promise<{ success?: boolean; error?: string }> {
-  const profile = await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
 
   const adminClient = createAdminClient();
   const { error } = await adminClient

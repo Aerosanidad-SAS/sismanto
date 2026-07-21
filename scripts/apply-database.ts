@@ -60,6 +60,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "044_enum_centro_operativo_ado.sql",          file: "scripts/migrations/044_enum_centro_operativo_ado.sql" },
   { name: "045_etapa_servicio_no_efectivo_duplicado.sql", file: "scripts/migrations/045_etapa_servicio_no_efectivo_duplicado.sql" },
   { name: "046_analista_paridad_admin.sql",               file: "scripts/migrations/046_analista_paridad_admin.sql" },
+  { name: "047_analista_paridad_admin_core.sql",          file: "scripts/migrations/047_analista_paridad_admin_core.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

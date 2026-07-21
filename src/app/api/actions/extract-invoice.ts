@@ -79,7 +79,7 @@ Responde ÚNICAMENTE con JSON válido sin texto adicional:
 export async function extractInvoiceAction(
   formData: FormData
 ): Promise<{ data?: ExtractedInvoiceData; error?: string }> {
-  await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
 
   const file = formData.get("file") as File | null;
   if (!file) return { error: "No se recibió ningún archivo" };
@@ -151,7 +151,7 @@ export async function aprobarFacturaMantenimiento(
   data: AprobarFacturaData,
   forzar = false
 ): Promise<{ success?: boolean; idManto?: number; error?: string; duplicado?: DuplicadoInfo }> {
-  await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
 
   if (!data.vehicleId) return { error: "Debe seleccionar un vehículo." };
   if (!data.fecha) return { error: "La fecha es requerida." };

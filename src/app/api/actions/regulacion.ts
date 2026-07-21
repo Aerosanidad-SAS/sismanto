@@ -7,7 +7,7 @@ import { toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/valida
 import { z } from "zod";
 
 export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERATIVO" | "FUERA_DE_SERVICIO") {
-  const profile = await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
 
   const parsed = toggleVehicleStatusSchema.safeParse({ vehicleId, nuevoEstado });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
@@ -59,7 +59,7 @@ export async function assignVehicleToOvem(
   fechaInicio: string,
   fechaFin?: string
 ) {
-  const profile = await requireRole(["ADMIN", "REGULACION", "OVEM"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "REGULACION", "OVEM"]);
 
   // OVEM solo puede asignarse a sí mismo
   if (profile.role_codigo === "OVEM" && userId !== profile.user_id) {
@@ -93,7 +93,7 @@ export async function assignVehicleToOvem(
 }
 
 export async function unassignVehicle(assignmentId: number) {
-  await requireRole(["ADMIN", "REGULACION"]);
+  await requireRole(["ADMIN", "ANALISTA", "REGULACION"]);
   const idParsed = z.number().int().positive().safeParse(assignmentId);
   if (!idParsed.success) return { error: idParsed.error.issues[0]?.message ?? "Datos inválidos" };
 

@@ -31,7 +31,7 @@ async function countNovedadesAbiertas(vehicleId: string): Promise<number> {
 }
 
 export async function crearMantenimiento(formData: MaintenanceFormData) {
-  await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
   const parsed = maintenanceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -129,7 +129,7 @@ export async function actualizarMantenimientoCampo(
     descripcionTrabajo?: string;
   }
 ): Promise<{ success?: boolean; error?: string }> {
-  await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
 
   if (!idManto) return { error: "ID inválido" };
 

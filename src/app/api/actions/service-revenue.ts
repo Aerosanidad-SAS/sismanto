@@ -24,7 +24,7 @@ const upsertRevenueSchema = z.object({
 });
 
 export async function listServiceTypesAdmin() {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const { data, error } = await supabase
     .from("service_types")
@@ -37,7 +37,7 @@ export async function listServiceTypesAdmin() {
 }
 
 export async function createServiceType(raw: z.infer<typeof createServiceTypeSchema>) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = createServiceTypeSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -56,7 +56,7 @@ export async function createServiceType(raw: z.infer<typeof createServiceTypeSch
 }
 
 export async function listVehicleServiceRevenue(vehicleId: string) {
-  await requireRole(["ADMIN", "GERENCIAL"]);
+  await requireRole(["ADMIN", "ANALISTA", "GERENCIAL"]);
   const idParsed = z.string().uuid().safeParse(vehicleId);
   if (!idParsed.success) return { error: "Vehículo inválido", data: [] };
 
@@ -72,7 +72,7 @@ export async function listVehicleServiceRevenue(vehicleId: string) {
 }
 
 export async function upsertVehicleServiceRevenue(raw: z.infer<typeof upsertRevenueSchema>) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = upsertRevenueSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -99,7 +99,7 @@ export async function upsertVehicleServiceRevenue(raw: z.infer<typeof upsertReve
 }
 
 export async function deleteVehicleServiceRevenue(id: number, vehicleId: string) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
   const vidParsed = z.string().uuid().safeParse(vehicleId);

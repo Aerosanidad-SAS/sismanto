@@ -81,7 +81,7 @@ function buildMantenimientoDedupeKey(input: {
 export async function importarMantenimientos(
   filas: FilaMantenimiento[]
 ): Promise<ResultadoCarga> {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
@@ -234,7 +234,7 @@ export async function importarMantenimientos(
 }
 
 export async function importarCombustible(filas: FilaCombustible[]): Promise<ResultadoCarga> {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
@@ -310,7 +310,7 @@ export async function importarCombustible(filas: FilaCombustible[]): Promise<Res
 }
 
 export async function importarVehiculos(filas: FilaVehiculo[]): Promise<ResultadoCarga> {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
@@ -454,7 +454,7 @@ export async function importarVehiculos(filas: FilaVehiculo[]): Promise<Resultad
 }
 
 export async function importarProveedores(filas: FilaProveedor[]): Promise<ResultadoCarga> {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
