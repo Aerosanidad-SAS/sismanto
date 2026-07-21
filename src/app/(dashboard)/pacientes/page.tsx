@@ -3,7 +3,7 @@ import { getPacientes } from "@/app/api/actions/pacientes";
 import { getProfile } from "@/app/api/actions/auth";
 import { PacientesTabla } from "@/components/pacientes/pacientes-tabla";
 
-const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA"];
+const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 
 export default async function PacientesPage() {
   const [profile, pacientes] = await Promise.all([getProfile(), getPacientes()]);

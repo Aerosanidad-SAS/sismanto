@@ -4,7 +4,7 @@ import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
 import { getProfile } from "@/app/api/actions/auth";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 
-const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA"];
+const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 
 async function getVehiculosActivos() {
   try {

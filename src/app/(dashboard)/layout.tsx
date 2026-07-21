@@ -54,7 +54,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Dashboard",
         href: "/",
         icon: LayoutDashboard,
-        roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO"],
+        roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO", "ANALISTA"],
         hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
       },
       {
@@ -156,7 +156,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Campañas WhatsApp",
         href: "/comunicaciones",
         icon: MessageCircle,
-        roles: ["ADMIN", "COORDINACION"],
+        roles: ["ADMIN", "COORDINACION", "ANALISTA"],
         hint: "Campañas masivas con plantillas aprobadas de Meta (origen SISRES).",
       },
     ],
@@ -323,9 +323,11 @@ export default function DashboardLayout({
         ) {
           router.replace("/coordinacion");
         }
-        // Roles clínicos de la integración SISRES: llevarlos a su pantalla de trabajo
+        // Roles clínicos de la integración SISRES: llevarlos a su pantalla de trabajo.
+        // ANALISTA queda fuera — tiene paridad con ADMIN (ver migración 046) y
+        // aterriza en el dashboard como cualquier otro rol con acceso completo.
         if (
-          ["MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"].includes(p.role_codigo) &&
+          ["MEDICO", "AUXILIAR_ENFERMERIA", "VISTA"].includes(p.role_codigo) &&
           pathname === "/"
         ) {
           router.replace(getDefaultRoute(p.role_codigo));

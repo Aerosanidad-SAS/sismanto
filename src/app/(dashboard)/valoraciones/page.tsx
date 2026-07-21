@@ -3,7 +3,7 @@ import { getValoraciones } from "@/app/api/actions/valoraciones";
 import { getProfile } from "@/app/api/actions/auth";
 import { ValoracionesTabla } from "@/components/pacientes/valoraciones-tabla";
 
-const ROLES_EDICION = ["ADMIN", "MEDICO"];
+const ROLES_EDICION = ["ADMIN", "MEDICO", "ANALISTA"];
 
 export default async function ValoracionesPage() {
   const [profile, valoraciones] = await Promise.all([getProfile(), getValoraciones()]);

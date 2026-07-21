@@ -59,6 +59,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "043_user_profiles_cedula.sql",              file: "scripts/migrations/043_user_profiles_cedula.sql" },
   { name: "044_enum_centro_operativo_ado.sql",          file: "scripts/migrations/044_enum_centro_operativo_ado.sql" },
   { name: "045_etapa_servicio_no_efectivo_duplicado.sql", file: "scripts/migrations/045_etapa_servicio_no_efectivo_duplicado.sql" },
+  { name: "046_analista_paridad_admin.sql",               file: "scripts/migrations/046_analista_paridad_admin.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

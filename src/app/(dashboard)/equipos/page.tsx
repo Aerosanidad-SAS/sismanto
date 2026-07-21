@@ -3,7 +3,7 @@ import { getEquiposBiomedicos, getMantenimientosBiomedicos } from "@/app/api/act
 import { getProfile } from "@/app/api/actions/auth";
 import { EquiposTabla } from "@/components/equipos/equipos-tabla";
 
-const ROLES_EDICION = ["ADMIN", "MANTENIMIENTO"];
+const ROLES_EDICION = ["ADMIN", "MANTENIMIENTO", "ANALISTA"];
 
 export default async function EquiposPage() {
   const [profile, equipos, mantenimientos] = await Promise.all([

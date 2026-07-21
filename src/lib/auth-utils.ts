@@ -40,7 +40,7 @@ export function getDefaultRoute(role: UserRole): string {
     case "GERENCIAL":      return "/";
     case "MANTENIMIENTO":  return "/vehiculos";
     case "COORDINACION":   return "/coordinacion";
-    case "ANALISTA":       return "/estadisticas";
+    case "ANALISTA":       return "/";
     case "MEDICO":         return "/pacientes";
     case "AUXILIAR_ENFERMERIA": return "/pacientes";
     case "VISTA":          return "/servicios";

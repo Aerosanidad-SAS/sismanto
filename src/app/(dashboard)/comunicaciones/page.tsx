@@ -3,7 +3,7 @@ import { getCampanas } from "@/app/api/actions/campanas";
 import { getProfile } from "@/app/api/actions/auth";
 import { CampanasPanel } from "@/components/comunicaciones/campanas-panel";
 
-const ROLES_EDICION = ["ADMIN", "COORDINACION"];
+const ROLES_EDICION = ["ADMIN", "COORDINACION", "ANALISTA"];
 
 export default async function ComunicacionesPage() {
   const [profile, campanas] = await Promise.all([getProfile(), getCampanas()]);
