@@ -1,0 +1,38 @@
+# Revisión automática de Pull Requests con Claude Code, actuando como Aegis
+# (ver .claude/agents/aegis.md para el checklist completo que sigue).
+#
+# Requiere el secreto ANTHROPIC_API_KEY configurado en:
+# GitHub → este repo → Settings → Secrets and variables → Actions.
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Actúa como Aegis, el agente de revisión de código de Aeromanto
+            (leé .claude/agents/aegis.md para tu rol y checklist completo).
+
+            Revisá el diff de este Pull Request contra el checklist de Aegis:
+            seguridad (secretos, RLS, validación de permisos en Server Actions),
+            convenciones del proyecto (CLAUDE.md), y calidad general.
+
+            Publicá tu revisión como comentario del PR siguiendo el formato de
+            salida de Aegis (BLOCK / CHANGE / NOTE + veredicto). No hagas
+            commits ni edites archivos — solo revisás y comentás.
