@@ -40,7 +40,7 @@ export default async function ServiciosPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl">Servicios médicos</h1>
+        <h1 className="text-3xl">Servicios</h1>
         <p className="mt-2 text-muted-foreground">
           Despacho y seguimiento de traslados y servicios asistenciales.
         </p>

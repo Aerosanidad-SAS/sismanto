@@ -77,7 +77,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         hint: "Despacho de flota: disponibles vs fuera de servicio y asignación de conductores OVEM.",
       },
       {
-        name: "Servicios médicos",
+        name: "Servicios",
         href: "/servicios",
         icon: Ambulance,
         roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"],
