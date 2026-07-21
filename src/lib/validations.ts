@@ -481,6 +481,47 @@ export type PatientFormData = z.input<typeof patientSchema>;
 export const ETAPAS_SERVICIO = ["PROGRAMADO", "CURSO", "FINALIZADO", "CANCELADO", "FALLIDO", "NO EFECTIVO", "DUPLICADO"] as const;
 export type EtapaServicio = (typeof ETAPAS_SERVICIO)[number];
 
+// Catálogos reales del formulario de servicios — verificados contra
+// sisres/registroServicios.php (QA, 2026-07-21). El de "Aislamiento" NO es
+// SI/NO como se había asumido: es el tipo de precaución de aislamiento.
+export const TURNO_OPCIONES = ["DIA", "NOCHE"] as const;
+
+export const AISLAMIENTO_OPCIONES = [
+  "CONTACTO",
+  "AEREO",
+  "AEROSOL",
+  "GOTAS",
+  "PROTECTOR",
+  "VECTORES",
+  "N/A",
+] as const;
+
+export const FINALIDAD_TRASLADO_OPCIONES = [
+  "REMISION POR ESPECIALIDAD",
+  "CITA MEDICA PROGRAMADA",
+  "EGRESO MEDICO",
+  "PRIMARIO",
+  "SIMULACRO",
+  "CITA MEDICA PROGRAMADA TELEMEDICINA",
+  "APLICACION MEDICAMENTO",
+  "MEDICO DOMICILIARIO",
+  "N/A",
+] as const;
+
+export const PERIMETRO_OPCIONES = ["METROPOLITANO", "URBANO", "RURAL"] as const;
+
+export const METODO_PAGO_OPCIONES = [
+  "N/A",
+  "QR BANCOLOMBIA",
+  "TRANSFERENCIA BANCOLOMBIA",
+  "TRANSFERENCIA DAVIVIENDA",
+  "TRANSFERENCIA NEQUI",
+  "EFECTIVO",
+  "QR DAVIVIENDA",
+  "QR NEQUI",
+  "WOMPI",
+] as const;
+
 export const medicalServiceSchema = z.object({
   patient_id: z.number().int().positive().optional(),
   nombre_completo: z.string().trim().min(3, "Nombre del paciente requerido").max(200),

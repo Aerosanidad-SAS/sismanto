@@ -26,17 +26,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDateShort } from "@/lib/utils";
+import { CatalogCombobox } from "@/components/forms/catalog-combobox";
+import { AsyncCombobox } from "@/components/forms/async-combobox";
+import { DEPARTAMENTOS_COLOMBIA } from "@/lib/colombia-geo";
 import {
   medicalServiceSchema,
   type MedicalServiceFormData,
   type EtapaServicio,
+  TURNO_OPCIONES,
+  AISLAMIENTO_OPCIONES,
+  FINALIDAD_TRASLADO_OPCIONES,
+  METODO_PAGO_OPCIONES,
+  PERIMETRO_OPCIONES,
 } from "@/lib/validations";
 import {
   crearServicioMedico,
   actualizarServicioMedico,
   cambiarEtapaServicio,
+  getCatalogoCie,
 } from "@/app/api/actions/servicios-medicos";
 import { buscarPacientePorCedula } from "@/app/api/actions/pacientes";
+
+const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 
 export interface ServicioRow {
   id: number;
@@ -88,58 +99,59 @@ const TIPOS_SERVICIO = [
   "TRASLADO AEREO",
 ];
 
-const CAMPOS_PROGRAMACION: { name: keyof MedicalServiceFormData; label: string; type?: string }[] = [
+// Campos con catálogo real (dropdown/combobox) se renderizan aparte, más
+// abajo — estas listas son solo los que quedan como texto libre.
+// Prestador queda como texto libre — en SISRES sale de la misma tabla
+// `proveedores` que "Proveedor" (ver nota en CAMPOS_CIERRE), pendiente del
+// export real de León.
+const CAMPOS_PROGRAMACION: { name: keyof MedicalServiceFormData; label: string; type?: string; placeholder?: string }[] = [
   { name: "fecha_hora_programacion", label: "Fecha/hora de programación", type: "datetime-local" },
-  { name: "turno_programacion", label: "Turno" },
-  { name: "autorizacion", label: "Autorización" },
-  { name: "asesor", label: "Asesor" },
-  { name: "prestador", label: "Prestador" },
-  { name: "cie_codigo", label: "Código CIE-10" },
-  { name: "requiere_aislamiento", label: "Requiere aislamiento (SI/NO)" },
-  { name: "soporte", label: "Soporte" },
-  { name: "finalidad_traslado", label: "Finalidad del traslado" },
-  { name: "acepta_ips", label: "IPS que acepta" },
+  { name: "autorizacion", label: "Autorización", placeholder: "Número de autorización" },
+  { name: "asesor", label: "Asesor", placeholder: "Nombre del asesor" },
+  { name: "prestador", label: "Prestador", placeholder: "Catálogo pendiente — ver bolsa de QA" },
+  { name: "soporte", label: "Soporte", placeholder: "Soporte adicional requerido" },
 ];
 
-const CAMPOS_RUTA: { name: keyof MedicalServiceFormData; label: string; type?: string }[] = [
-  { name: "departamento_origen", label: "Departamento origen" },
-  { name: "ciudad_origen", label: "Ciudad origen" },
-  { name: "direccion_origen", label: "Dirección origen" },
+// Ciudad origen/destino quedan como texto libre (catálogo pendiente — ver
+// QA_HALLAZGOS.md, requiere el export real de subregiones de León).
+const CAMPOS_RUTA: { name: keyof MedicalServiceFormData; label: string; type?: string; placeholder?: string }[] = [
+  { name: "ciudad_origen", label: "Ciudad origen", placeholder: "Catálogo pendiente — ver bolsa de QA" },
+  { name: "direccion_origen", label: "Dirección origen", placeholder: "Dirección exacta de origen" },
   { name: "fecha_hora_llegada_origen", label: "Llegada a origen", type: "datetime-local" },
   { name: "fecha_hora_salida_origen", label: "Salida de origen", type: "datetime-local" },
-  { name: "direccion_intermedia", label: "Dirección intermedia (opcional)" },
+  { name: "direccion_intermedia", label: "Dirección intermedia (opcional)", placeholder: "Solo si el traslado tiene punto intermedio" },
   { name: "fecha_hora_llegada_intermedia", label: "Llegada intermedia", type: "datetime-local" },
   { name: "fecha_hora_salida_intermedia", label: "Salida intermedia", type: "datetime-local" },
-  { name: "departamento_destino", label: "Departamento destino" },
-  { name: "ciudad_destino", label: "Ciudad destino" },
-  { name: "direccion_destino", label: "Dirección destino" },
+  { name: "ciudad_destino", label: "Ciudad destino", placeholder: "Catálogo pendiente — ver bolsa de QA" },
+  { name: "direccion_destino", label: "Dirección destino", placeholder: "Dirección exacta de destino" },
   { name: "fecha_hora_llegada_destino", label: "Llegada a destino", type: "datetime-local" },
   { name: "fecha_hora_salida_destino", label: "Salida de destino", type: "datetime-local" },
-  { name: "perimetro", label: "Perímetro" },
 ];
 
-const CAMPOS_CIERRE: { name: keyof MedicalServiceFormData; label: string; type?: string }[] = [
-  { name: "metodo_pago", label: "Método de pago" },
-  { name: "cliente", label: "Cliente / aseguradora" },
-  { name: "proveedor", label: "Proveedor" },
-  { name: "medico", label: "Médico" },
-  { name: "auxiliar", label: "Auxiliar" },
-  { name: "ovem", label: "OVEM (conductor)" },
-  { name: "usuario_recibe", label: "Usuario que recibe" },
-  { name: "usuario_despacha", label: "Usuario que despacha" },
-  { name: "motivo_externo", label: "Motivo externo" },
-  { name: "motivo_interno", label: "Motivo interno" },
-  { name: "estado_servicio", label: "Estado del servicio" },
-  { name: "ciudad_registro", label: "Ciudad de registro" },
+// Prestador/Proveedor quedan como texto libre: en SISRES ambos salen de la
+// misma tabla `proveedores`, que todavía no se migró a Aeromanto — hace
+// falta el export real de León (ver QA_HALLAZGOS.md), no un catálogo propio.
+const CAMPOS_CIERRE: { name: keyof MedicalServiceFormData; label: string; type?: string; placeholder?: string }[] = [
+  { name: "proveedor", label: "Proveedor", placeholder: "Catálogo pendiente — ver bolsa de QA" },
+  { name: "medico", label: "Médico", placeholder: "Nombre del médico" },
+  { name: "auxiliar", label: "Auxiliar", placeholder: "Nombre del auxiliar de enfermería" },
+  { name: "ovem", label: "OVEM (conductor)", placeholder: "Nombre del conductor" },
+  { name: "usuario_recibe", label: "Usuario que recibe", placeholder: "Quién recibe el servicio" },
+  { name: "usuario_despacha", label: "Usuario que despacha", placeholder: "Quién despacha el servicio" },
+  { name: "motivo_externo", label: "Motivo externo", placeholder: "Motivo externo (si aplica)" },
+  { name: "motivo_interno", label: "Motivo interno", placeholder: "Motivo interno (si aplica)" },
+  { name: "estado_servicio", label: "Estado del servicio", placeholder: "Estado del servicio" },
+  { name: "ciudad_registro", label: "Ciudad de registro", placeholder: "Ciudad donde se registra el servicio" },
 ];
 
 interface ServiciosTablaProps {
   servicios: ServicioRow[];
   vehiculos: { id: string; placa: string }[];
+  clientes: string[];
   puedeEditar: boolean;
 }
 
-export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosTablaProps) {
+export function ServiciosTabla({ servicios, vehiculos, clientes, puedeEditar }: ServiciosTablaProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
   const [filtroEtapa, setFiltroEtapa] = useState<string>("TODAS");
@@ -153,8 +165,25 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
   const { register, handleSubmit, reset, setValue, watch, formState } =
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
 
+  const [cieLabel, setCieLabel] = useState("");
+
   const tipoSeleccionado = watch("tipo_servicio");
   const vehiculoSeleccionado = watch("vehicle_id");
+  const turnoSeleccionado = watch("turno_programacion");
+  const cieSeleccionado = watch("cie_codigo");
+  const aislamientoSeleccionado = watch("requiere_aislamiento");
+  const finalidadSeleccionada = watch("finalidad_traslado");
+  const aceptaIpsSeleccionado = watch("acepta_ips");
+  const departamentoOrigenSeleccionado = watch("departamento_origen");
+  const departamentoDestinoSeleccionado = watch("departamento_destino");
+  const perimetroSeleccionado = watch("perimetro");
+  const metodoPagoSeleccionado = watch("metodo_pago");
+  const clienteSeleccionado = watch("cliente");
+
+  const buscarCie = async (q: string) => {
+    const resultados = await getCatalogoCie(q);
+    return resultados.map((r) => ({ value: r.codigo, label: `${r.codigo} — ${r.descripcion}` }));
+  };
 
   const filtrados = useMemo(() => {
     let lista = servicios;
@@ -192,6 +221,7 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
     setEditando(null);
     setError(null);
     setCedulaBusqueda("");
+    setCieLabel("");
     reset({ tipo_servicio: "" } as MedicalServiceFormData);
     setDialogOpen(true);
   };
@@ -200,6 +230,7 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
     setEditando(s);
     setError(null);
     setCedulaBusqueda(s.patients?.cedula ?? "");
+    setCieLabel("");
     const str = (k: string) => (s[k] ? String(s[k]) : "");
     const fecha = (k: string) => (s[k] ? String(s[k]).slice(0, 16) : "");
     reset({
@@ -401,7 +432,11 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor="nombre_completo">Nombre completo *</Label>
-                  <Input id="nombre_completo" {...register("nombre_completo")} />
+                  <Input
+                    id="nombre_completo"
+                    placeholder="Nombre completo del paciente"
+                    {...register("nombre_completo")}
+                  />
                 </div>
               </div>
             </section>
@@ -411,21 +446,13 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label>Tipo de servicio *</Label>
-                  <Select
+                  <CatalogCombobox
+                    options={TIPOS_SERVICIO}
                     value={tipoSeleccionado ?? ""}
-                    onValueChange={(v) => setValue("tipo_servicio", v, { shouldValidate: true })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona el tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_SERVICIO.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(v) => setValue("tipo_servicio", v, { shouldValidate: true })}
+                    placeholder="Escribe para buscar el tipo…"
+                    allowCustom={false}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label>Móvil (ambulancia)</Label>
@@ -446,24 +473,177 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
                     </SelectContent>
                   </Select>
                 </div>
-                {CAMPOS_PROGRAMACION.map((campo) => (
+                <div className="space-y-1">
+                  <Label htmlFor="fecha_hora_programacion">Fecha/hora de programación</Label>
+                  <Input
+                    id="fecha_hora_programacion"
+                    type="datetime-local"
+                    {...register("fecha_hora_programacion")}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Turno</Label>
+                  <Select
+                    value={turnoSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("turno_programacion", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TURNO_OPCIONES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t === "DIA" ? "Diurno" : "Nocturno"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {CAMPOS_PROGRAMACION.filter((c) => c.name !== "fecha_hora_programacion").map((campo) => (
                   <div key={campo.name} className="space-y-1">
                     <Label htmlFor={campo.name}>{campo.label}</Label>
-                    <Input id={campo.name} type={campo.type ?? "text"} {...register(campo.name)} />
+                    <Input
+                      id={campo.name}
+                      type={campo.type ?? "text"}
+                      placeholder={campo.placeholder}
+                      {...register(campo.name)}
+                    />
                   </div>
                 ))}
+                <div className="space-y-1">
+                  <Label>Código CIE-10</Label>
+                  <AsyncCombobox
+                    value={cieSeleccionado ?? ""}
+                    valueLabel={cieLabel || undefined}
+                    onChange={(v, label) => {
+                      setValue("cie_codigo", v);
+                      setCieLabel(label);
+                    }}
+                    search={buscarCie}
+                    placeholder="Escribe el código o diagnóstico…"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Requiere aislamiento</Label>
+                  <Select
+                    value={aislamientoSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("requiere_aislamiento", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AISLAMIENTO_OPCIONES.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          {a}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Finalidad del traslado</Label>
+                  <Select
+                    value={finalidadSeleccionada ?? ""}
+                    onValueChange={(v) => setValue("finalidad_traslado", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FINALIDAD_TRASLADO_OPCIONES.map((f) => (
+                        <SelectItem key={f} value={f}>
+                          {f}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Persona que recibe en IPS</Label>
+                  <CatalogCombobox
+                    options={[ENTREGA_DOMICILIO]}
+                    value={aceptaIpsSeleccionado ?? ""}
+                    onChange={(v) => setValue("acepta_ips", v)}
+                    placeholder="Nombre de quien recibe…"
+                    allowCustom
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Si el destino es el domicilio del paciente, selecciona &quot;{ENTREGA_DOMICILIO}&quot;.
+                  </p>
+                </div>
               </div>
             </section>
 
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground">Ruta y tiempos</h3>
               <div className="grid gap-4 sm:grid-cols-2">
-                {CAMPOS_RUTA.map((campo) => (
+                <div className="space-y-1">
+                  <Label>Departamento origen</Label>
+                  <CatalogCombobox
+                    options={[...DEPARTAMENTOS_COLOMBIA]}
+                    value={departamentoOrigenSeleccionado ?? ""}
+                    onChange={(v) => setValue("departamento_origen", v)}
+                    placeholder="Selecciona o busca…"
+                    allowCustom={false}
+                  />
+                </div>
+                {CAMPOS_RUTA.slice(0, 1).map((campo) => (
                   <div key={campo.name} className="space-y-1">
                     <Label htmlFor={campo.name}>{campo.label}</Label>
-                    <Input id={campo.name} type={campo.type ?? "text"} {...register(campo.name)} />
+                    <Input id={campo.name} placeholder={campo.placeholder} {...register(campo.name)} />
                   </div>
                 ))}
+                {CAMPOS_RUTA.slice(1, 7).map((campo) => (
+                  <div key={campo.name} className="space-y-1">
+                    <Label htmlFor={campo.name}>{campo.label}</Label>
+                    <Input
+                      id={campo.name}
+                      type={campo.type ?? "text"}
+                      placeholder={campo.placeholder}
+                      {...register(campo.name)}
+                    />
+                  </div>
+                ))}
+                <div className="space-y-1">
+                  <Label>Departamento destino</Label>
+                  <CatalogCombobox
+                    options={[...DEPARTAMENTOS_COLOMBIA]}
+                    value={departamentoDestinoSeleccionado ?? ""}
+                    onChange={(v) => setValue("departamento_destino", v)}
+                    placeholder="Selecciona o busca…"
+                    allowCustom={false}
+                  />
+                </div>
+                {CAMPOS_RUTA.slice(7).map((campo) => (
+                  <div key={campo.name} className="space-y-1">
+                    <Label htmlFor={campo.name}>{campo.label}</Label>
+                    <Input
+                      id={campo.name}
+                      type={campo.type ?? "text"}
+                      placeholder={campo.placeholder}
+                      {...register(campo.name)}
+                    />
+                  </div>
+                ))}
+                <div className="space-y-1">
+                  <Label>Perímetro</Label>
+                  <Select
+                    value={perimetroSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("perimetro", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PERIMETRO_OPCIONES.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </section>
 
@@ -476,23 +656,66 @@ export function ServiciosTabla({ servicios, vehiculos, puedeEditar }: ServiciosT
                     id="valor_servicio"
                     type="number"
                     step="0.01"
+                    placeholder="0"
                     {...register("valor_servicio", { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Método de pago</Label>
+                  <Select
+                    value={metodoPagoSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("metodo_pago", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {METODO_PAGO_OPCIONES.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Cliente / aseguradora</Label>
+                  <CatalogCombobox
+                    options={clientes}
+                    value={clienteSeleccionado ?? ""}
+                    onChange={(v) => setValue("cliente", v)}
+                    placeholder="Selecciona o busca…"
                   />
                 </div>
                 {CAMPOS_CIERRE.map((campo) => (
                   <div key={campo.name} className="space-y-1">
                     <Label htmlFor={campo.name}>{campo.label}</Label>
-                    <Input id={campo.name} type={campo.type ?? "text"} {...register(campo.name)} />
+                    <Input
+                      id={campo.name}
+                      type={campo.type ?? "text"}
+                      placeholder={campo.placeholder}
+                      {...register(campo.name)}
+                    />
                   </div>
                 ))}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="novedad_servicio">Novedad del servicio</Label>
-                <Textarea id="novedad_servicio" rows={2} {...register("novedad_servicio")} />
+                <Textarea
+                  id="novedad_servicio"
+                  rows={2}
+                  placeholder="Novedades presentadas durante el servicio"
+                  {...register("novedad_servicio")}
+                />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="observaciones">Observaciones</Label>
-                <Textarea id="observaciones" rows={2} {...register("observaciones")} />
+                <Textarea
+                  id="observaciones"
+                  rows={2}
+                  placeholder="Observaciones adicionales"
+                  {...register("observaciones")}
+                />
               </div>
             </section>
 

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
+import { getClientes } from "@/app/api/actions/clientes";
 import { getProfile } from "@/app/api/actions/auth";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 
@@ -21,10 +22,11 @@ async function getVehiculosActivos() {
 }
 
 export default async function ServiciosPage() {
-  const [profile, servicios, vehiculos] = await Promise.all([
+  const [profile, servicios, vehiculos, clientes] = await Promise.all([
     getProfile(),
     getServiciosMedicos(),
     getVehiculosActivos(),
+    getClientes(),
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
 
@@ -88,7 +90,12 @@ export default async function ServiciosPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ServiciosTabla servicios={servicios} vehiculos={vehiculos} puedeEditar={puedeEditar} />
+          <ServiciosTabla
+            servicios={servicios}
+            vehiculos={vehiculos}
+            clientes={clientes.map((c) => c.nombre)}
+            puedeEditar={puedeEditar}
+          />
         </CardContent>
       </Card>
     </div>
