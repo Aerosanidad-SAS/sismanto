@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   maintenanceSchema,
   supplierSchema,
@@ -51,6 +51,9 @@ export function MaintenanceForm({
   proveedores: initialProveedores = [],
 }: MaintenanceFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefillVehicleId = searchParams.get("vehicleId") || undefined;
+  const prefillIncidentId = searchParams.get("incidentId");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ultimoKm, setUltimoKm] = useState<number | null>(null);
@@ -83,6 +86,7 @@ export function MaintenanceForm({
       fecha: new Date(),
       tipo: "PREVENTIVO",
       tiempoFueraServicioHoras: 0,
+      vehicleId: prefillVehicleId,
     },
   });
 
@@ -114,11 +118,18 @@ export function MaintenanceForm({
   useEffect(() => {
     if (vehicleId) {
       getUltimoKilometrajeVehiculo(vehicleId).then(setUltimoKm);
-      getNovedadesAbiertasPorVehiculo(vehicleId).then(setNovedadesAbiertas);
+      getNovedadesAbiertasPorVehiculo(vehicleId).then((novedades) => {
+        setNovedadesAbiertas(novedades);
+        // Viene desde "Cerrar novedad" en /novedades: preseleccionar esa novedad
+        if (prefillIncidentId && novedades.some((n) => String(n.id) === prefillIncidentId)) {
+          setValue("incidentId", Number(prefillIncidentId));
+        }
+      });
     } else {
       setUltimoKm(null);
       setNovedadesAbiertas([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicleId]);
 
   const onSubmit = async (data: MaintenanceFormData) => {
@@ -461,6 +472,7 @@ export function MaintenanceForm({
             Cerrar Novedad (Opcional)
           </Label>
           <Select
+            value={watch("incidentId") ? String(watch("incidentId")) : ""}
             onValueChange={(value) =>
               setValue("incidentId", parseInt(value))
             }
