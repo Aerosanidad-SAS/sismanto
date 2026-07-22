@@ -78,6 +78,15 @@ export async function assignVehicleToOvem(
   const supabase = createClient();
   const fin = parsed.data.fechaFin?.trim() || null;
 
+  // El botón dice "Asignar o cambiar conductor" — si ya hay una asignación
+  // activa en este vehículo, se desactiva antes de crear la nueva. Sin esto,
+  // reasignar dejaba las dos activas a la vez (bug real de QA, 2026-07-22).
+  await supabase
+    .from("vehicle_assignments")
+    .update({ activo: false })
+    .eq("vehicle_id", parsed.data.vehicleId)
+    .eq("activo", true);
+
   const { error } = await supabase.from("vehicle_assignments").insert({
     user_id: parsed.data.userId,
     vehicle_id: parsed.data.vehicleId,

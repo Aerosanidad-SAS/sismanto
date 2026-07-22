@@ -1,8 +1,17 @@
+import { redirect } from "next/navigation";
 import { getFleetWithAssignments, getOvemUsers } from "@/app/api/actions/regulacion";
+import { getProfile } from "@/app/api/actions/auth";
 import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 
+const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];
+
 export default async function RegulacionPage() {
+  const profile = await getProfile();
+  if (!profile || !ROLES_PERMITIDOS.includes(profile.role_codigo)) {
+    redirect("/");
+  }
+
   const [fleet, ovemUsers] = await Promise.all([
     getFleetWithAssignments(),
     getOvemUsers(),

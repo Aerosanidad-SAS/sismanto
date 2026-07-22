@@ -73,7 +73,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Regulación",
         href: "/regulacion",
         icon: Radio,
-        roles: ["ADMIN", "REGULACION"],
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
         hint: "Despacho de flota: disponibles vs fuera de servicio y asignación de conductores OVEM.",
       },
       {
