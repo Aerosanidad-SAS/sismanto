@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { getProfile } from "@/app/api/actions/auth";
+import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
 import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
+import { TableroServicios } from "@/components/regulacion/tablero-servicios";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 
 const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];
@@ -12,11 +14,12 @@ export default async function RegulacionPage() {
     redirect("/");
   }
 
-  const [fleet, ovemUsers, medicoUsers, auxiliarUsers] = await Promise.all([
+  const [fleet, ovemUsers, medicoUsers, auxiliarUsers, servicios] = await Promise.all([
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
     getUsuariosPorRol("MEDICO"),
     getUsuariosPorRol("AUXILIAR_ENFERMERIA"),
+    getServiciosMedicos(),
   ]);
 
   return (
@@ -39,6 +42,8 @@ export default async function RegulacionPage() {
         medicoUsers={medicoUsers}
         auxiliarUsers={auxiliarUsers}
       />
+
+      <TableroServicios servicios={servicios as any} />
     </div>
   );
 }

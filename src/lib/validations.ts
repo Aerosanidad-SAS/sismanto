@@ -666,6 +666,26 @@ export function pasosServicio(perfil: keyof typeof PERFIL_FORMULARIO_SERVICIO | 
   return [];
 }
 
+// Sub-estado dentro de "en curso" para el tablero de Regulación — deriva del
+// primer paso de pasosServicio() sin timestamp, así que se mantiene en
+// sincronía automática con la secuencia real de botones de Mis Servicios.
+const SUB_ESTADOS_POR_PERFIL: Partial<Record<keyof typeof PERFIL_FORMULARIO_SERVICIO, string[]>> = {
+  TRASLADO: ["Por iniciar", "En camino a origen", "En origen", "En camino a destino", "En destino"],
+  MEDICINA_DOMICILIARIA: ["Por iniciar", "En camino", "En atención"],
+};
+
+export function subEstadoServicio(
+  tipoServicio: string,
+  servicio: Record<string, unknown>
+): string | null {
+  const perfil = perfilFormularioServicio(tipoServicio);
+  const pasos = pasosServicio(perfil);
+  if (pasos.length === 0) return null;
+  const idx = pasos.findIndex((p) => !servicio[p.campo]);
+  if (idx === -1) return "Completado, pendiente de cierre";
+  return (perfil && SUB_ESTADOS_POR_PERFIL[perfil]?.[idx]) || pasos[idx].etiqueta;
+}
+
 export const assessmentSchema = z.object({
   cedula: z.string().trim().min(4, "Documento inválido").max(20),
   nombre_completo: z.string().trim().min(3, "Nombre requerido").max(200),
