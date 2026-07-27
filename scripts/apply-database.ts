@@ -66,6 +66,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "050_servicios_tripulacion_y_campos.sql",       file: "scripts/migrations/050_servicios_tripulacion_y_campos.sql" },
   { name: "051_vehicle_assignments_rol_en_turno.sql",     file: "scripts/migrations/051_vehicle_assignments_rol_en_turno.sql" },
   { name: "052_user_profiles_ciudad.sql",                 file: "scripts/migrations/052_user_profiles_ciudad.sql" },
+  { name: "053_medical_services_rls_tripulacion.sql",     file: "scripts/migrations/053_medical_services_rls_tripulacion.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
