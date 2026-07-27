@@ -522,11 +522,21 @@ export const METODO_PAGO_OPCIONES = [
   "WOMPI",
 ] as const;
 
+// Tripulación real (FK) — reemplaza gradualmente a los campos de texto
+// libre medico/auxiliar/ovem de abajo (ver migración 050). Un servicio
+// puede tener médico_user_id sin vehicle_id/ovem_user_id: prestador
+// externo con su propio vehículo (típico de Medicina Domiciliaria).
+const optUuid = z.string().uuid().optional().or(z.literal("")).transform((v) => (v ? v : undefined));
+
 export const medicalServiceSchema = z.object({
   patient_id: z.number().int().positive().optional(),
   nombre_completo: z.string().trim().min(3, "Nombre del paciente requerido").max(200),
   tipo_servicio: z.string().trim().min(2, "Tipo de servicio requerido").max(60),
   vehicle_id: z.string().uuid().optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+  ovem_user_id: optUuid,
+  medico_user_id: optUuid,
+  auxiliar_user_id: optUuid,
+  fecha_hora_inicio_desplazamiento: optStr,
   fecha_hora_programacion: optStr,
   turno_programacion: optStr,
   autorizacion: optStr,
@@ -566,8 +576,40 @@ export const medicalServiceSchema = z.object({
   motivo_interno: optStr,
   estado_servicio: optStr,
   ciudad_registro: optStr,
+  // Medicina Domiciliaria
+  condicion: optStr,
+  medio_asignacion: optStr,
+  turno_facturacion: optStr,
+  deducible: optStr,
+  incapa: optStr,
+  // TAM/TAB
+  situacion: optStr,
+  tiempo_a_restar: z.number().optional(),
+  // Telemedicina (+ poliza también aplica a MD)
+  poliza: optStr,
+  funcionario_aseguradora: optStr,
+  codigo_telemedicina: optStr,
+  correo_electronico: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+  motivo_consulta: optText,
 });
 export type MedicalServiceFormData = z.input<typeof medicalServiceSchema>;
+
+// Perfiles de formulario por tipo de servicio (Regulación, QA 2026-07-22):
+// cada tipo de servicio real muestra un subconjunto de secciones/campos.
+// Enfermería Domiciliaria comparte perfil con Medicina Domiciliaria por
+// similitud (visita a domicilio) — a confirmar con un usuario real.
+export const PERFIL_FORMULARIO_SERVICIO = {
+  MEDICINA_DOMICILIARIA: ["MEDICINA DOMICILIARIA", "ENFERMERIA DOMICILIARIA"],
+  TRASLADO: ["TAB SIMPLE", "TAB DOBLE", "TAB SENCILLO", "TAM SIMPLE", "TAM DOBLE", "TRASLADO AEREO"],
+  TELEMEDICINA: ["TELEMEDICINA"],
+} as const;
+
+export function perfilFormularioServicio(tipoServicio: string): keyof typeof PERFIL_FORMULARIO_SERVICIO | null {
+  for (const [perfil, tipos] of Object.entries(PERFIL_FORMULARIO_SERVICIO)) {
+    if ((tipos as readonly string[]).includes(tipoServicio)) return perfil as keyof typeof PERFIL_FORMULARIO_SERVICIO;
+  }
+  return null;
+}
 
 export const assessmentSchema = z.object({
   cedula: z.string().trim().min(4, "Documento inválido").max(20),
