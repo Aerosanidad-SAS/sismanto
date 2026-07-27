@@ -231,9 +231,12 @@ export const toggleVehicleStatusSchema = z.object({
   nuevoEstado: z.enum(["OPERATIVO", "FUERA_DE_SERVICIO"]),
 });
 
+export const ROLES_TRIPULACION = ["OVEM", "MEDICO", "AUXILIAR_ENFERMERIA"] as const;
+
 export const vehicleAssignmentSchema = z.object({
   vehicleId: z.string().uuid("ID de vehículo inválido"),
   userId: z.string().uuid("ID de usuario inválido"),
+  rol: z.enum(ROLES_TRIPULACION).default("OVEM"),
   fechaInicio: parseableDateString,
   fechaFin: z.string().optional().nullable(),
 });

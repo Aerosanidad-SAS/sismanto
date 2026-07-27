@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { assignVehicleToOvem, unassignVehicle } from "@/app/api/actions/regulacion";
+import { asignarTripulacion, unassignVehicle } from "@/app/api/actions/regulacion";
 
 interface Props {
   vehicleId: string;
@@ -37,7 +37,7 @@ export function AssignOvemButton({ vehicleId, vehiclePlaca, ovemUsers, currentAs
     setError(null);
     const today = new Date().toISOString().split("T")[0];
     startTransition(async () => {
-      const result = await assignVehicleToOvem(vehicleId, selectedUserId, today);
+      const result = await asignarTripulacion(vehicleId, selectedUserId, "OVEM", today);
       if (result?.error) { setError(result.error); return; }
       setOpen(false);
       setSelectedUserId("");

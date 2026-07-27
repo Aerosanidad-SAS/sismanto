@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getFleetWithAssignments, getOvemUsers } from "@/app/api/actions/regulacion";
+import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { getProfile } from "@/app/api/actions/auth";
 import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
 import { HelpTrigger } from "@/components/ui/help-trigger";
@@ -12,9 +12,11 @@ export default async function RegulacionPage() {
     redirect("/");
   }
 
-  const [fleet, ovemUsers] = await Promise.all([
+  const [fleet, ovemUsers, medicoUsers, auxiliarUsers] = await Promise.all([
     getFleetWithAssignments(),
-    getOvemUsers(),
+    getUsuariosPorRol("OVEM"),
+    getUsuariosPorRol("MEDICO"),
+    getUsuariosPorRol("AUXILIAR_ENFERMERIA"),
   ]);
 
   return (
@@ -26,12 +28,17 @@ export default async function RegulacionPage() {
             <HelpTrigger text="Vista para despacho: revise conteos, placas en FDS y use la sección Flota para asignar OVEM, desasignar o cambiar estado operativo de cada unidad." />
           </div>
           <p className="mt-2 text-muted-foreground">
-            Disponibilidad en tiempo real y asignación de conductores (OVEM)
+            Disponibilidad en tiempo real y armado de tripulación (OVEM, médico, auxiliar)
           </p>
         </div>
       </div>
 
-      <RegulacionFleet fleet={fleet} ovemUsers={ovemUsers} />
+      <RegulacionFleet
+        fleet={fleet}
+        ovemUsers={ovemUsers}
+        medicoUsers={medicoUsers}
+        auxiliarUsers={auxiliarUsers}
+      />
     </div>
   );
 }
