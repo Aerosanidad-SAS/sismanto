@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createUserAsAdmin,
+  updateUserCiudad,
   updateUserRole,
   toggleUserActive,
 } from "@/app/api/actions/auth";
@@ -43,6 +44,7 @@ interface AdminUsuariosProps {
     nombre_completo: string | null;
     email: string | null;
     cedula: string | null;
+    ciudad: string | null;
     activo: boolean;
     role_codigo: string;
     role_nombre: string;
@@ -61,6 +63,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
   const [password, setPassword] = useState("");
   const [nombreCompleto, setNombreCompleto] = useState("");
   const [cedula, setCedula] = useState("");
+  const [ciudad, setCiudad] = useState("");
   const [roleCodigo, setRoleCodigo] = useState<UserRole>("OVEM");
 
   const handleCreate = async () => {
@@ -72,6 +75,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
       password,
       nombreCompleto,
       cedula,
+      ciudad,
       roleCodigo,
     });
     if (result?.error) setError(result.error);
@@ -82,6 +86,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
       setPassword("");
       setNombreCompleto("");
       setCedula("");
+      setCiudad("");
       setRoleCodigo("OVEM");
       router.refresh();
     }
@@ -95,6 +100,13 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
     if (result?.error) setError(result.error);
     else router.refresh();
     setLoading(false);
+  };
+
+  const handleUpdateCiudad = async (userId: string, newCiudad: string) => {
+    setError(null);
+    const result = await updateUserCiudad(userId, newCiudad);
+    if (result?.error) setError(result.error);
+    else router.refresh();
   };
 
   const handleToggleActive = async (userId: string, activo: boolean) => {
@@ -136,6 +148,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
                 <TableHead>Nombre</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Cédula</TableHead>
+                <TableHead>Ciudad</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
@@ -147,6 +160,19 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
                   <TableCell className="font-medium">{u.nombre_completo || "—"}</TableCell>
                   <TableCell>{u.email || "—"}</TableCell>
                   <TableCell>{u.cedula || "—"}</TableCell>
+                  <TableCell>
+                    <Input
+                      key={u.user_id}
+                      defaultValue={u.ciudad || ""}
+                      placeholder="Ciudad"
+                      className="h-8 w-32"
+                      disabled={loading}
+                      onBlur={(e) => {
+                        const value = e.target.value.trim();
+                        if (value !== (u.ciudad || "")) handleUpdateCiudad(u.user_id, value);
+                      }}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Select
                       value={u.role_codigo}
@@ -237,6 +263,19 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
               <p className="mt-1 text-xs text-muted-foreground">
                 Identifica al usuario si también existe en SISRES — permite cruzar cuentas por
                 cédula en vez de por nombre.
+              </p>
+            </div>
+            <div>
+              <Label>Ciudad</Label>
+              <Input
+                value={ciudad}
+                onChange={(e) => setCiudad(e.target.value)}
+                placeholder="Bogotá"
+                className="mt-1"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Ciudad base del usuario — se usa como ciudad de origen por defecto al crear
+                servicios.
               </p>
             </div>
             <div>

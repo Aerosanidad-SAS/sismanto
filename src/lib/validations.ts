@@ -183,7 +183,13 @@ export const createUserAsAdminSchema = z.object({
   password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
   nombreCompleto: z.string().min(2, "Nombre demasiado corto"),
   cedula: z.string().trim().min(4, "Documento inválido").max(20).optional().or(z.literal("")),
+  ciudad: z.string().trim().max(100).optional().or(z.literal("")),
   roleCodigo: userRoleEnum,
+});
+
+export const updateUserCiudadSchema = z.object({
+  userId: z.string().uuid("ID de usuario inválido"),
+  ciudad: z.string().trim().max(100).optional().or(z.literal("")),
 });
 
 export const updateUserRoleSchema = z.object({

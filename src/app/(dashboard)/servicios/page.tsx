@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
 import { getClientes } from "@/app/api/actions/clientes";
 import { getProfile } from "@/app/api/actions/auth";
+import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
@@ -22,13 +23,31 @@ async function getVehiculosActivos() {
 }
 
 export default async function ServiciosPage() {
-  const [profile, servicios, vehiculos, clientes] = await Promise.all([
+  const [profile, servicios, vehiculos, clientes, flota, medicosDisponibles] = await Promise.all([
     getProfile(),
     getServiciosMedicos(),
     getVehiculosActivos(),
     getClientes(),
+    getFleetWithAssignments(),
+    getUsuariosPorRol("MEDICO"),
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
+
+  // Tripulación activa hoy por vehículo (armada en Regulación) — para
+  // autocompletar al elegir el móvil en el formulario de servicio.
+  const tripulacionPorVehiculo: Record<
+    string,
+    { ovem?: { user_id: string; nombre_completo: string | null; email: string | null }; medico?: { user_id: string; nombre_completo: string | null; email: string | null }; auxiliar?: { user_id: string; nombre_completo: string | null; email: string | null } }
+  > = {};
+  for (const v of flota as any[]) {
+    const entry: (typeof tripulacionPorVehiculo)[string] = {};
+    for (const a of v.assignments ?? []) {
+      if (a.rol_en_turno === "OVEM") entry.ovem = a.driver;
+      if (a.rol_en_turno === "MEDICO") entry.medico = a.driver;
+      if (a.rol_en_turno === "AUXILIAR_ENFERMERIA") entry.auxiliar = a.driver;
+    }
+    tripulacionPorVehiculo[v.id] = entry;
+  }
 
   const programados = servicios.filter((s) => s.etapa === "PROGRAMADO").length;
   const enCurso = servicios.filter((s) => s.etapa === "CURSO").length;
@@ -95,6 +114,9 @@ export default async function ServiciosPage() {
             vehiculos={vehiculos}
             clientes={clientes.map((c) => c.nombre)}
             puedeEditar={puedeEditar}
+            medicosDisponibles={medicosDisponibles}
+            tripulacionPorVehiculo={tripulacionPorVehiculo}
+            ciudadDefault={profile?.ciudad}
           />
         </CardContent>
       </Card>
