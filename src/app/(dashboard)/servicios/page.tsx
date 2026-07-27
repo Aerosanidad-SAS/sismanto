@@ -5,8 +5,10 @@ import { getClientes } from "@/app/api/actions/clientes";
 import { getProfile } from "@/app/api/actions/auth";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
+import { MisServicios } from "@/components/servicios/mis-servicios";
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
+const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
 
 async function getVehiculosActivos() {
   try {
@@ -32,6 +34,7 @@ export default async function ServiciosPage() {
     getUsuariosPorRol("MEDICO"),
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
+  const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
 
   // Tripulación activa hoy por vehículo (armada en Regulación) — para
   // autocompletar al elegir el móvil en el formulario de servicio.
@@ -64,6 +67,13 @@ export default async function ServiciosPage() {
           Despacho y seguimiento de traslados y servicios asistenciales.
         </p>
       </div>
+
+      {mostrarMisServicios && (
+        <div>
+          <h2 className="text-xl mb-3">Mis servicios asignados</h2>
+          <MisServicios servicios={servicios as any} />
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

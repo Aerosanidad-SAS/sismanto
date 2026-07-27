@@ -620,6 +620,52 @@ export function perfilFormularioServicio(tipoServicio: string): keyof typeof PER
   return null;
 }
 
+// Secuencia de botones de estado que ve la tripulación (OVEM/médico/auxiliar)
+// desde "Mis servicios" — cada paso graba un timestamp que ya usa
+// calcularTiempos() en servicios-medicos.ts para el tiempo facturable, así
+// que no se inventa ninguna columna nueva de aquí en adelante (Daniel,
+// 2026-07: "el tiempo de espera es importante para que facturación pueda
+// facturar el servicio", ya cubierto por los campos llegada/salida).
+// Medicina Domiciliaria no tiene "origen" (el médico va directo al
+// domicilio del paciente) y colapsa llegada+inicio de atención en un solo
+// paso: el listado real de Regulación solo tiene una columna "HORA
+// ATENCIÓN", no dos — a confirmar en campo si hiciera falta separarlas.
+export const CAMPOS_PASO_SERVICIO = [
+  "fecha_hora_inicio_desplazamiento",
+  "fecha_hora_llegada_origen",
+  "fecha_hora_salida_origen",
+  "fecha_hora_llegada_destino",
+  "fecha_hora_salida_destino",
+] as const;
+export type CampoPasoServicio = (typeof CAMPOS_PASO_SERVICIO)[number];
+
+export interface PasoServicio {
+  campo: CampoPasoServicio;
+  etiqueta: string;
+  etapaDestino?: "CURSO" | "FINALIZADO";
+}
+
+const PASOS_TRASLADO: PasoServicio[] = [
+  { campo: "fecha_hora_inicio_desplazamiento", etiqueta: "Inicio de desplazamiento", etapaDestino: "CURSO" },
+  { campo: "fecha_hora_llegada_origen", etiqueta: "Llegada a origen" },
+  { campo: "fecha_hora_salida_origen", etiqueta: "Salida de origen" },
+  { campo: "fecha_hora_llegada_destino", etiqueta: "Llegada a destino" },
+  { campo: "fecha_hora_salida_destino", etiqueta: "Finalización del servicio", etapaDestino: "FINALIZADO" },
+];
+
+const PASOS_MEDICINA_DOMICILIARIA: PasoServicio[] = [
+  { campo: "fecha_hora_inicio_desplazamiento", etiqueta: "Inicio de desplazamiento", etapaDestino: "CURSO" },
+  { campo: "fecha_hora_llegada_destino", etiqueta: "Llegada / inicio de atención" },
+  { campo: "fecha_hora_salida_destino", etiqueta: "Finalización de la atención", etapaDestino: "FINALIZADO" },
+];
+
+/** Telemedicina no tiene desplazamiento físico — se maneja con cambio de etapa simple, sin pasos. */
+export function pasosServicio(perfil: keyof typeof PERFIL_FORMULARIO_SERVICIO | null): PasoServicio[] {
+  if (perfil === "TRASLADO") return PASOS_TRASLADO;
+  if (perfil === "MEDICINA_DOMICILIARIA") return PASOS_MEDICINA_DOMICILIARIA;
+  return [];
+}
+
 export const assessmentSchema = z.object({
   cedula: z.string().trim().min(4, "Documento inválido").max(20),
   nombre_completo: z.string().trim().min(3, "Nombre requerido").max(200),

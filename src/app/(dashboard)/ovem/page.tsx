@@ -4,6 +4,7 @@ import { getProfile } from "@/app/api/actions/auth";
 import { isAdminLike } from "@/lib/auth-utils";
 import { OvemPortal } from "@/components/ovem/ovem-portal";
 import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
+import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
 
 export default async function OvemPage() {
   const supabase = createClient();
@@ -22,6 +23,7 @@ export default async function OvemPage() {
     .order("placa");
 
   const checklistItems = await getChecklistItemsActivos();
+  const servicios = profile.role_codigo === "OVEM" ? await getServiciosMedicos() : [];
 
   return (
     <div className="space-y-6">
@@ -37,6 +39,7 @@ export default async function OvemPage() {
         userName={profile.nombre_completo || profile.email || "Usuario"}
         vehicles={vehicles ?? []}
         checklistItems={checklistItems}
+        servicios={servicios as any}
         isAdmin={isAdminLike(profile.role_codigo)}
         viewerRole={profile.role_codigo === "OVEM" ? "OVEM" : "ADMIN"}
       />
