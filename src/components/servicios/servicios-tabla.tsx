@@ -182,9 +182,28 @@ interface ServiciosTablaProps {
   >;
   /** Ciudad del usuario logueado — default de "ciudad origen" en un servicio nuevo. */
   ciudadDefault?: string | null;
+  /** Rol de quien ve la tabla — determina si los campos de logística quedan bloqueados al editar. */
+  viewerRole?: string | null;
 }
 
 const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p?.email || null;
+
+// Campos que Médico/Auxiliar de Enfermería SÍ puede tocar al editar — el
+// "desenlace clínico" del servicio. Todo lo demás (logística: fecha/turno,
+// móvil, tripulación, ruta, facturación...) queda bloqueado, igual que
+// editarServicio.php en SISRES (Ronda 2, pregunta 4: "$esMedicoAux" bloquea
+// campos de logística con readonly/campo-bloqueado, no oculta secciones).
+const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>([
+  "cie_codigo",
+  "requiere_aislamiento",
+  "finalidad_traslado",
+  "acepta_ips",
+  "novedad_servicio",
+  "observaciones",
+  "motivo_externo",
+  "motivo_interno",
+  "estado_servicio",
+]);
 
 export function ServiciosTabla({
   servicios,
@@ -194,6 +213,7 @@ export function ServiciosTabla({
   medicosDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
+  viewerRole,
 }: ServiciosTablaProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -230,6 +250,17 @@ export function ServiciosTabla({
   const perfil = perfilFormularioServicio(tipoSeleccionado ?? "");
   const requiereRuta = perfil !== "TELEMEDICINA";
   const requiereMedicoIndependiente = perfil === "MEDICINA_DOMICILIARIA" || perfil === "TELEMEDICINA";
+
+  // Médico/Auxiliar solo actualiza el desenlace clínico al editar — no
+  // aplica al crear (Aeromanto no usa ese flujo para ellos hoy; el que
+  // crea es Regulación). Fase E (Mis servicios) ya les da la forma
+  // correcta de avanzar llegada/salida — acá quedan bloqueados para no
+  // poder saltárselo escribiendo el timestamp a mano.
+  const esMedicoAux = viewerRole === "MEDICO" || viewerRole === "AUXILIAR_ENFERMERIA";
+  const soloLecturaLogistica = esMedicoAux && editando !== null;
+  const campoBloqueado = (name: keyof MedicalServiceFormData) =>
+    soloLecturaLogistica && !CAMPOS_CLINICOS_MEDICO_AUX.has(name);
+  const puedeCambiarEtapaLibre = puedeEditar && !esMedicoAux;
 
   const buscarCie = async (q: string) => {
     const resultados = await getCatalogoCie(q);
@@ -423,14 +454,17 @@ export function ServiciosTabla({
               <TableHead>Móvil</TableHead>
               <TableHead>Origen → Destino</TableHead>
               <TableHead>Etapa</TableHead>
-              {puedeEditar && <TableHead>Cambiar etapa</TableHead>}
+              {puedeCambiarEtapaLibre && <TableHead>Cambiar etapa</TableHead>}
               {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtrados.length === 0 && (
               <TableRow>
-                <TableCell colSpan={puedeEditar ? 8 : 6} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6 + (puedeCambiarEtapaLibre ? 1 : 0) + (puedeEditar ? 1 : 0)}
+                  className="text-center text-muted-foreground"
+                >
                   Sin servicios registrados
                 </TableCell>
               </TableRow>
@@ -452,7 +486,7 @@ export function ServiciosTabla({
                 <TableCell>
                   <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa}</Badge>
                 </TableCell>
-                {puedeEditar && (
+                {puedeCambiarEtapaLibre && (
                   <TableCell className="min-w-[10rem]">
                     <Select
                       disabled={busyId === s.id}
@@ -504,6 +538,7 @@ export function ServiciosTabla({
                 onChange={(v) => setValue("tipo_servicio", v, { shouldValidate: true })}
                 placeholder="Escribe para buscar el tipo…"
                 allowCustom={false}
+                disabled={campoBloqueado("tipo_servicio")}
               />
               <p className="text-xs text-muted-foreground">
                 Lo primero que hay que elegir: define qué campos siguen abajo.
@@ -520,8 +555,9 @@ export function ServiciosTabla({
                       value={cedulaBusqueda}
                       onChange={(e) => setCedulaBusqueda(e.target.value)}
                       placeholder="Cédula"
+                      disabled={soloLecturaLogistica}
                     />
-                    <Button type="button" variant="outline" onClick={buscarPaciente}>
+                    <Button type="button" variant="outline" onClick={buscarPaciente} disabled={soloLecturaLogistica}>
                       Buscar
                     </Button>
                   </div>
@@ -531,6 +567,7 @@ export function ServiciosTabla({
                   <Input
                     id="nombre_completo"
                     placeholder="Nombre completo del paciente"
+                    disabled={soloLecturaLogistica}
                     {...register("nombre_completo")}
                   />
                 </div>
@@ -543,7 +580,7 @@ export function ServiciosTabla({
                 {perfil !== "TELEMEDICINA" && (
                   <div className="space-y-1">
                     <Label>Móvil (ambulancia){perfil === "MEDICINA_DOMICILIARIA" ? " — opcional" : ""}</Label>
-                    <Select value={vehiculoSeleccionado ?? ""} onValueChange={handleVehiculo}>
+                    <Select value={vehiculoSeleccionado ?? ""} onValueChange={handleVehiculo} disabled={campoBloqueado("vehicle_id")}>
                       <SelectTrigger>
                         <SelectValue placeholder="Sin asignar" />
                       </SelectTrigger>
@@ -573,6 +610,7 @@ export function ServiciosTabla({
                     <Select
                       value={medicoIndependienteSeleccionado ?? ""}
                       onValueChange={(v) => setValue("medico_user_id", v === "__none__" ? "" : v)}
+                      disabled={campoBloqueado("medico_user_id")}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecciona…" />
@@ -593,6 +631,7 @@ export function ServiciosTabla({
                   <Input
                     id="fecha_hora_programacion"
                     type="datetime-local"
+                    disabled={campoBloqueado("fecha_hora_programacion")}
                     {...register("fecha_hora_programacion")}
                   />
                 </div>
@@ -601,6 +640,7 @@ export function ServiciosTabla({
                   <Select
                     value={turnoSeleccionado ?? ""}
                     onValueChange={(v) => setValue("turno_programacion", v)}
+                    disabled={campoBloqueado("turno_programacion")}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecciona…" />
@@ -621,6 +661,7 @@ export function ServiciosTabla({
                       id={campo.name}
                       type={campo.type ?? "text"}
                       placeholder={campo.placeholder}
+                      disabled={campoBloqueado(campo.name)}
                       {...register(campo.name)}
                     />
                   </div>
@@ -708,6 +749,7 @@ export function ServiciosTabla({
                       onChange={(v) => setValue("departamento_origen", v)}
                       placeholder="Selecciona o busca…"
                       allowCustom={false}
+                      disabled={campoBloqueado("departamento_origen")}
                     />
                   </div>
                   <div className="space-y-1">
@@ -718,6 +760,7 @@ export function ServiciosTabla({
                       onChange={(v) => setValue("departamento_destino", v)}
                       placeholder="Selecciona o busca…"
                       allowCustom={false}
+                      disabled={campoBloqueado("departamento_destino")}
                     />
                   </div>
                   {paraPerfil(CAMPOS_RUTA, perfil).map((campo) => (
@@ -727,6 +770,7 @@ export function ServiciosTabla({
                         id={campo.name}
                         type={campo.type ?? "text"}
                         placeholder={campo.placeholder}
+                        disabled={campoBloqueado(campo.name)}
                         {...register(campo.name)}
                       />
                     </div>
@@ -737,6 +781,7 @@ export function ServiciosTabla({
                       <Select
                         value={perimetroSeleccionado ?? ""}
                         onValueChange={(v) => setValue("perimetro", v)}
+                        disabled={campoBloqueado("perimetro")}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Selecciona…" />
@@ -765,6 +810,7 @@ export function ServiciosTabla({
                     type="number"
                     step="0.01"
                     placeholder="0"
+                    disabled={campoBloqueado("valor_servicio")}
                     {...register("valor_servicio", { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
                   />
                 </div>
@@ -773,6 +819,7 @@ export function ServiciosTabla({
                   <Select
                     value={metodoPagoSeleccionado ?? ""}
                     onValueChange={(v) => setValue("metodo_pago", v)}
+                    disabled={campoBloqueado("metodo_pago")}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecciona…" />
@@ -793,6 +840,7 @@ export function ServiciosTabla({
                     value={clienteSeleccionado ?? ""}
                     onChange={(v) => setValue("cliente", v)}
                     placeholder="Selecciona o busca…"
+                    disabled={campoBloqueado("cliente")}
                   />
                 </div>
                 {paraPerfil(CAMPOS_CIERRE, perfil).map((campo) => (
@@ -802,6 +850,7 @@ export function ServiciosTabla({
                       id={campo.name}
                       type={campo.type ?? "text"}
                       placeholder={campo.placeholder}
+                      disabled={campoBloqueado(campo.name)}
                       {...register(campo.name)}
                     />
                   </div>
@@ -825,6 +874,13 @@ export function ServiciosTabla({
                   {...register("observaciones")}
                 />
               </div>
+              {soloLecturaLogistica && (
+                <p className="text-xs text-muted-foreground">
+                  Como {viewerRole === "MEDICO" ? "médico" : "auxiliar de enfermería"} solo puedes actualizar el
+                  desenlace clínico (diagnóstico, aislamiento, finalidad, novedades y observaciones) — los campos
+                  de logística los administra Regulación.
+                </p>
+              )}
             </section>
 
             {(error || Object.values(formState.errors)[0]?.message) && (

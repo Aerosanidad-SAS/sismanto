@@ -123,6 +123,7 @@ export default async function ServiciosPage() {
             servicios={servicios}
             vehiculos={vehiculos}
             clientes={clientes.map((c) => c.nombre)}
+            viewerRole={profile?.role_codigo}
             puedeEditar={puedeEditar}
             medicosDisponibles={medicosDisponibles}
             tripulacionPorVehiculo={tripulacionPorVehiculo}
