@@ -24,6 +24,68 @@ const CAMPOS_FECHA_EQUIPO = [
   "fecha_compra",
 ];
 
+/**
+ * Alertas de mantenimiento/calibración próximos a vencer — no existe una
+ * vista SQL para esto (a diferencia de `vehicle_maintenance_alerts` en
+ * vehículos), así que se calcula acá con los mismos umbrales que ya usa
+ * el dashboard para SOAT/tecnomecánica (≤15 días = ROJA, ≤30 = NARANJA).
+ */
+export interface AlertaBiomedico {
+  id: number;
+  placa_equipo: string;
+  equipo: string;
+  ciudad: string | null;
+  dias_restantes: number;
+  tipo: "MANTENIMIENTO" | "CALIBRACION";
+  nivel: "ROJA" | "NARANJA";
+}
+
+export async function getAlertasBiomedicos() {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("biomedical_equipment")
+    .select("id, placa_equipo, equipo, ciudad, proximo_mantenimiento, proxima_calibracion")
+    .eq("activo", true);
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const diasHasta = (fecha: string) => {
+    const d = new Date(fecha);
+    return Math.round((d.getTime() - hoy.getTime()) / 86400000);
+  };
+  const nivelDe = (dias: number): "ROJA" | "NARANJA" | null => {
+    if (dias <= 15) return "ROJA";
+    if (dias <= 30) return "NARANJA";
+    return null;
+  };
+
+  const alertas: AlertaBiomedico[] = [];
+  for (const eq of data || []) {
+    if (eq.proximo_mantenimiento) {
+      const dias = diasHasta(eq.proximo_mantenimiento);
+      const nivel = nivelDe(dias);
+      if (nivel) {
+        alertas.push({ id: eq.id, placa_equipo: eq.placa_equipo, equipo: eq.equipo, ciudad: eq.ciudad, dias_restantes: dias, tipo: "MANTENIMIENTO", nivel });
+      }
+    }
+    if (eq.proxima_calibracion) {
+      const dias = diasHasta(eq.proxima_calibracion);
+      const nivel = nivelDe(dias);
+      if (nivel) {
+        alertas.push({ id: eq.id, placa_equipo: eq.placa_equipo, equipo: eq.equipo, ciudad: eq.ciudad, dias_restantes: dias, tipo: "CALIBRACION", nivel });
+      }
+    }
+  }
+  alertas.sort((a, b) => a.dias_restantes - b.dias_restantes);
+
+  return {
+    totalActivos: (data || []).length,
+    alertas,
+    totalRojas: alertas.filter((a) => a.nivel === "ROJA").length,
+    totalNaranjas: alertas.filter((a) => a.nivel === "NARANJA").length,
+  };
+}
+
 export async function getEquiposBiomedicos() {
   const supabase = createClient();
   const { data } = await supabase
