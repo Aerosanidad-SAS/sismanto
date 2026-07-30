@@ -88,13 +88,14 @@ const ETAPAS_DESTINO = (etapaActual: string): EtapaServicio[] =>
 
 // Tipos de servicio reales — verificados contra los 20.101 registros de
 // producción de SISRES (Ronda 2, pregunta 2). MEDICINA DOMICILIARIA es el
-// 84% del total; TAB SIMPLE y TAB SENCILLO son variantes de captura
-// distintas pero ambas viven en datos reales, no se puede descartar ninguna.
+// 84% del total. "TAB SENCILLO" no se ofrece como opción (Daniel, 2026-07-30:
+// es el mismo TAB SIMPLE, variante de captura duplicada) — pero sigue
+// existiendo en PERFIL_FORMULARIO_SERVICIO (validations.ts) para que los
+// servicios históricos que ya tienen ese valor sigan abriendo bien.
 const TIPOS_SERVICIO = [
   "MEDICINA DOMICILIARIA",
   "TAB SIMPLE",
   "TAB DOBLE",
-  "TAB SENCILLO",
   "TAM SIMPLE",
   "TAM DOBLE",
   "TELEMEDICINA",
