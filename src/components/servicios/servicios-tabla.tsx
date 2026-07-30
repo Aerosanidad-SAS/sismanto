@@ -28,6 +28,7 @@ import {
 import { formatDateShort } from "@/lib/utils";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
+import { DateTimeField } from "@/components/forms/date-time-field";
 import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { PRESTADORES_SISRES } from "@/lib/catalogos-sisres";
 import {
@@ -674,11 +675,11 @@ export function ServiciosTabla({
                 )}
                 <div className="space-y-1">
                   <Label htmlFor="fecha_hora_programacion">Fecha/hora de programación</Label>
-                  <Input
+                  <DateTimeField
                     id="fecha_hora_programacion"
-                    type="datetime-local"
+                    value={watch("fecha_hora_programacion") ?? ""}
+                    onChange={(v) => setValue("fecha_hora_programacion", v)}
                     disabled={campoBloqueado("fecha_hora_programacion")}
-                    {...register("fecha_hora_programacion")}
                   />
                 </div>
                 <div className="space-y-1">
@@ -844,18 +845,30 @@ export function ServiciosTabla({
                       disabled={campoBloqueado("ciudad_destino") || !departamentoDestinoSeleccionado}
                     />
                   </div>
-                  {paraPerfil(CAMPOS_RUTA, perfil).map((campo) => (
-                    <div key={campo.name} className="space-y-1">
-                      <Label htmlFor={campo.name}>{campo.label}</Label>
-                      <Input
-                        id={campo.name}
-                        type={campo.type ?? "text"}
-                        placeholder={campo.placeholder}
-                        disabled={campoBloqueado(campo.name)}
-                        {...register(campo.name)}
-                      />
-                    </div>
-                  ))}
+                  {paraPerfil(CAMPOS_RUTA, perfil).map((campo) =>
+                    campo.type === "datetime-local" ? (
+                      <div key={campo.name} className="space-y-1">
+                        <Label htmlFor={campo.name}>{campo.label}</Label>
+                        <DateTimeField
+                          id={campo.name}
+                          value={String(watch(campo.name) ?? "")}
+                          onChange={(v) => setValue(campo.name, v)}
+                          disabled={campoBloqueado(campo.name)}
+                        />
+                      </div>
+                    ) : (
+                      <div key={campo.name} className="space-y-1">
+                        <Label htmlFor={campo.name}>{campo.label}</Label>
+                        <Input
+                          id={campo.name}
+                          type="text"
+                          placeholder={campo.placeholder}
+                          disabled={campoBloqueado(campo.name)}
+                          {...register(campo.name)}
+                        />
+                      </div>
+                    )
+                  )}
                   {perfil === "TRASLADO" && (
                     <div className="space-y-1">
                       <Label>Perímetro</Label>

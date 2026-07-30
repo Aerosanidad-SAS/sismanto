@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/forms/date-field";
 import {
   Select,
   SelectContent,
@@ -139,20 +140,8 @@ export function ConsumoCliente({
       <div className="rounded-lg border bg-card px-3 py-3 sm:px-4">
         <p className="text-xs font-medium text-muted-foreground mb-2">Filtros (fecha, centro, placa)</p>
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-          <Input
-            type="date"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-            className="h-9 w-[9.25rem]"
-            aria-label="Fecha inicio"
-          />
-          <Input
-            type="date"
-            value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-            className="h-9 w-[9.25rem]"
-            aria-label="Fecha fin"
-          />
+          <DateField value={fechaInicio} onChange={setFechaInicio} className="w-[11rem]" inputClassName="h-9" placeholder="dd/mm/aaaa" />
+          <DateField value={fechaFin} onChange={setFechaFin} className="w-[11rem]" inputClassName="h-9" placeholder="dd/mm/aaaa" />
           <Select value={vehiculoId || SELECT_ALL} onValueChange={(v) => setVehiculoId(v === SELECT_ALL ? "" : v)}>
             <SelectTrigger className="h-9 w-[min(100%,11rem)] sm:w-[11rem]" aria-label="Vehículo">
               <SelectValue placeholder="Todas las placas" />

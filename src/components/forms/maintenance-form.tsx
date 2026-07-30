@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
+import { format, parse } from "date-fns";
+import { DateField } from "@/components/forms/date-field";
 import {
   maintenanceSchema,
   supplierSchema,
@@ -190,14 +192,11 @@ export function MaintenanceForm({
         {/* Fecha */}
         <div>
           <Label htmlFor="fecha">Fecha *</Label>
-          <Input
+          <DateField
             id="fecha"
-            type="date"
-            max={new Date().toISOString().split("T")[0]}
-            {...register("fecha", {
-              valueAsDate: true,
-            })}
-            className="mt-1"
+            value={watch("fecha") ? format(watch("fecha"), "yyyy-MM-dd") : ""}
+            onChange={(v) => setValue("fecha", v ? parse(v, "yyyy-MM-dd", new Date()) : (undefined as unknown as Date))}
+            max={format(new Date(), "yyyy-MM-dd")}
           />
           {errors.fecha && (
             <p className="text-sm text-red-600 mt-1">

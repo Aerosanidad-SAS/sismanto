@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { actualizarInformacionGeneralVehiculo } from "@/app/api/actions/vehiculos";
+import { DateField } from "@/components/forms/date-field";
 
 const SELECT_EMPTY = "__empty__";
 
@@ -161,29 +162,26 @@ export function VehicleGeneralEditor({ vehicle, centros, canEdit }: VehicleGener
 
             <div>
               <Label htmlFor="vencimiento_soat">Vencimiento SOAT</Label>
-              <Input
+              <DateField
                 id="vencimiento_soat"
-                type="date"
                 value={form.vencimiento_soat}
-                onChange={(e) => setField("vencimiento_soat", e.target.value)}
+                onChange={(v) => setField("vencimiento_soat", v)}
               />
             </div>
             <div>
               <Label htmlFor="vencimiento_rtm">Vencimiento RTM</Label>
-              <Input
+              <DateField
                 id="vencimiento_rtm"
-                type="date"
                 value={form.vencimiento_rtm}
-                onChange={(e) => setField("vencimiento_rtm", e.target.value)}
+                onChange={(v) => setField("vencimiento_rtm", v)}
               />
             </div>
             <div>
               <Label htmlFor="vencimiento_tecnicomecanica">Vencimiento técnico-mecánica</Label>
-              <Input
+              <DateField
                 id="vencimiento_tecnicomecanica"
-                type="date"
                 value={form.vencimiento_tecnicomecanica}
-                onChange={(e) => setField("vencimiento_tecnicomecanica", e.target.value)}
+                onChange={(v) => setField("vencimiento_tecnicomecanica", v)}
               />
             </div>
             <div>

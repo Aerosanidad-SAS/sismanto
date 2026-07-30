@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
+import { DateField } from "@/components/forms/date-field";
 import {
   patientSchema,
   type PatientFormData,
@@ -285,10 +286,10 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="fecha_nacimiento_primero">Fecha de nacimiento</Label>
-                <Input
+                <DateField
                   id="fecha_nacimiento_primero"
-                  type="date"
-                  {...register("fecha_nacimiento")}
+                  value={watch("fecha_nacimiento") ?? ""}
+                  onChange={(v) => setValue("fecha_nacimiento", v)}
                 />
                 <p className="text-xs text-muted-foreground">
                   {esMenorDeEdad

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { DateField } from "@/components/forms/date-field";
 import {
   extractInvoiceAction,
   aprobarFacturaMantenimiento,
@@ -203,7 +204,7 @@ function InvoicePreviewForm({
         {/* Fecha */}
         <div className="space-y-1">
           <Label>Fecha *</Label>
-          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputClass} />
+          <DateField value={fecha} onChange={setFecha} />
         </div>
 
         {/* Tipo */}

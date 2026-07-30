@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDateShort } from "@/lib/utils";
+import { DateField } from "@/components/forms/date-field";
 import {
   biomedicalEquipmentSchema,
   biomedicalMaintenanceSchema,
@@ -453,7 +454,11 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="fecha_mantenimiento">Fecha *</Label>
-                <Input id="fecha_mantenimiento" type="date" {...formMant.register("fecha_mantenimiento")} />
+                <DateField
+                  id="fecha_mantenimiento"
+                  value={formMant.watch("fecha_mantenimiento") ?? ""}
+                  onChange={(v) => formMant.setValue("fecha_mantenimiento", v)}
+                />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="orden_numero">Número de orden</Label>
