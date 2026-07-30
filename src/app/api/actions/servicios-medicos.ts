@@ -157,11 +157,19 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("medical_services")
     .update({ ...aFilaServicio(parsed.data), updated_at: new Date().toISOString() })
-    .eq("id", idParsed.data);
+    .eq("id", idParsed.data)
+    .select("id");
   if (error) return { error: error.message };
+  if (!data || data.length === 0) {
+    // RLS bloqueó la fila sin lanzar error (comportamiento normal de
+    // Postgres en UPDATE: 0 filas afectadas, no "permission denied") —
+    // el caso real hoy es un servicio FINALIZADO que solo puede tocar
+    // ADMIN/ANALISTA/REGULACION (migración 055).
+    return { error: "No tiene permiso para editar este servicio — si ya está FINALIZADO, solo Regulación, Analista o Administrador pueden modificarlo." };
+  }
   revalidatePath("/servicios");
   return { success: true };
 }

@@ -262,6 +262,14 @@ export function ServiciosTabla({
     soloLecturaLogistica && !CAMPOS_CLINICOS_MEDICO_AUX.has(name);
   const puedeCambiarEtapaLibre = puedeEditar && !esMedicoAux;
 
+  // Candado de servicios FINALIZADO (Daniel, 2026-07-29): solo
+  // ADMIN/ANALISTA/REGULACION puede volver a tocarlo — la migración 055
+  // ya lo hace cumplir por RLS con log de auditoría automático; esto solo
+  // evita abrir un formulario que de todos modos va a rechazar el guardado.
+  const ROLES_EDITAN_FINALIZADO = ["ADMIN", "ANALISTA", "REGULACION"];
+  const puedeEditarServicio = (s: ServicioRow) =>
+    puedeEditar && (s.etapa !== "FINALIZADO" || ROLES_EDITAN_FINALIZADO.includes(viewerRole ?? ""));
+
   const buscarCie = async (q: string) => {
     const resultados = await getCatalogoCie(q);
     return resultados.map((r) => ({ value: r.codigo, label: `${r.codigo} — ${r.descripcion}` }));
@@ -508,9 +516,13 @@ export function ServiciosTabla({
                 )}
                 {puedeEditar && (
                   <TableCell className="text-right">
-                    <Button variant="outline" size="sm" onClick={() => abrirEdicion(s)}>
-                      Editar
-                    </Button>
+                    {puedeEditarServicio(s) ? (
+                      <Button variant="outline" size="sm" onClick={() => abrirEdicion(s)}>
+                        Editar
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Finalizado — bloqueado</span>
+                    )}
                   </TableCell>
                 )}
               </TableRow>
@@ -526,6 +538,12 @@ export function ServiciosTabla({
             <DialogDescription>
               Los tiempos (oportunidad, origen, intermedia, destino y total) se calculan
               automáticamente a partir de las fechas de llegada/salida.
+              {editando?.etapa === "FINALIZADO" && (
+                <span className="mt-1 block font-medium text-amber-700">
+                  Este servicio ya está FINALIZADO — cualquier cambio que guardes queda registrado
+                  en el log de auditoría (quién, cuándo, qué valores tenía antes y después).
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
 
