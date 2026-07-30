@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
 import { isAdminLike } from "@/lib/auth-utils";
 import { ConfiguracionTabs } from "@/components/configuracion/configuracion-tabs";
+import { getCompanyBranding } from "@/app/api/actions/company-settings";
 
 async function getConfiguracionData() {
   try {
@@ -53,7 +54,7 @@ export default async function ConfiguracionPage() {
     redirect("/");
   }
 
-  const data = await getConfiguracionData();
+  const [data, branding] = await Promise.all([getConfiguracionData(), getCompanyBranding()]);
 
   return (
     <div className="space-y-6">
@@ -70,6 +71,8 @@ export default async function ConfiguracionPage() {
         proveedores={data.proveedores}
         clientes={data.clientes}
         serviceTypes={(data.serviceTypes || []) as any}
+        logoUrl={branding.logo_url}
+        esAdmin={profile.role_codigo === "ADMIN"}
       />
     </div>
   );

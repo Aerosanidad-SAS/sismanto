@@ -22,7 +22,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { IncidentForm } from "@/components/dashboard/incident-form";
-import { CheckCircle2, AlertCircle, ClipboardCheck, ArrowLeft, ArrowRight } from "lucide-react";
+import { MisServicios } from "@/components/servicios/mis-servicios";
+import { CheckCircle2, AlertCircle, ClipboardCheck, ArrowLeft, ArrowRight, Ambulance } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 
@@ -47,9 +48,10 @@ interface OvemPortalProps {
   }>;
   isAdmin: boolean;
   viewerRole?: "OVEM" | "ADMIN";
+  servicios?: Array<Record<string, unknown> & { id: number; etapa: string }>;
 }
 
-type Flow = null | "preoperacional" | "novedad";
+type Flow = null | "preoperacional" | "novedad" | "servicios";
 
 export function OvemPortal({
   userId,
@@ -58,8 +60,10 @@ export function OvemPortal({
   checklistItems,
   isAdmin,
   viewerRole = "ADMIN",
+  servicios = [],
 }: OvemPortalProps) {
   const router = useRouter();
+  const serviciosActivos = servicios.filter((s) => s.etapa === "PROGRAMADO" || s.etapa === "CURSO");
   const [flow, setFlow] = useState<Flow>(null);
   const [vehicleId, setVehicleId] = useState("");
   const [km, setKm] = useState("");
@@ -206,6 +210,21 @@ export function OvemPortal({
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col sm:flex-row gap-4">
+            {viewerRole === "OVEM" && (
+              <Button
+                className="h-auto py-6 flex flex-col gap-2 flex-1 relative"
+                variant="outline"
+                onClick={() => setFlow("servicios")}
+              >
+                <Ambulance className="h-8 w-8" />
+                <span className="text-base font-semibold">Mis servicios</span>
+                <span className="text-xs font-normal text-muted-foreground text-center">
+                  {serviciosActivos.length > 0
+                    ? `${serviciosActivos.length} servicio${serviciosActivos.length === 1 ? "" : "s"} asignado${serviciosActivos.length === 1 ? "" : "s"}`
+                    : "Servicios asignados por Regulación"}
+                </span>
+              </Button>
+            )}
             <Button
               className="h-auto py-6 flex flex-col gap-2 flex-1"
               variant="outline"
@@ -252,32 +271,38 @@ export function OvemPortal({
           Volver
         </Button>
         <p className="text-sm text-muted-foreground">
-          {flow === "preoperacional" ? "Preoperacional" : "Reporte de novedad"}
+          {flow === "preoperacional" && "Preoperacional"}
+          {flow === "novedad" && "Reporte de novedad"}
+          {flow === "servicios" && "Mis servicios"}
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Seleccionar vehículo</CardTitle>
-          <CardDescription>El mismo vehículo aplica para esta sesión.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select value={vehicleId} onValueChange={setVehicleId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Seleccione un vehículo" />
-            </SelectTrigger>
-            <SelectContent>
-              {vehicles.map((v) => (
-                <SelectItem key={v.id} value={v.id}>
-                  {v.placa}
-                  {v.marca ? ` — ${v.marca}` : ""}{" "}
-                  {v.estado_actual === "FUERA_DE_SERVICIO" ? "(FDS)" : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+      {flow === "servicios" && <MisServicios servicios={servicios as any} />}
+
+      {flow !== "servicios" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Seleccionar vehículo</CardTitle>
+            <CardDescription>El mismo vehículo aplica para esta sesión.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Select value={vehicleId} onValueChange={setVehicleId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccione un vehículo" />
+              </SelectTrigger>
+              <SelectContent>
+                {vehicles.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.placa}
+                    {v.marca ? ` — ${v.marca}` : ""}{" "}
+                    {v.estado_actual === "FUERA_DE_SERVICIO" ? "(FDS)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+      )}
 
       {vehicleId && flow === "novedad" && (
         <Card>

@@ -62,6 +62,14 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "046_analista_paridad_admin.sql",               file: "scripts/migrations/046_analista_paridad_admin.sql" },
   { name: "047_analista_paridad_admin_core.sql",          file: "scripts/migrations/047_analista_paridad_admin_core.sql" },
   { name: "048_patients_tipo_documento_catalogo.sql",     file: "scripts/migrations/048_patients_tipo_documento_catalogo.sql" },
+  { name: "049_incidents_cierre_manual.sql",              file: "scripts/migrations/049_incidents_cierre_manual.sql" },
+  { name: "050_servicios_tripulacion_y_campos.sql",       file: "scripts/migrations/050_servicios_tripulacion_y_campos.sql" },
+  { name: "051_vehicle_assignments_rol_en_turno.sql",     file: "scripts/migrations/051_vehicle_assignments_rol_en_turno.sql" },
+  { name: "052_user_profiles_ciudad.sql",                 file: "scripts/migrations/052_user_profiles_ciudad.sql" },
+  { name: "053_medical_services_rls_tripulacion.sql",     file: "scripts/migrations/053_medical_services_rls_tripulacion.sql" },
+  { name: "054_revertir_delete_analista.sql",             file: "scripts/migrations/054_revertir_delete_analista.sql" },
+  { name: "055_candado_finalizado_auditoria.sql",         file: "scripts/migrations/055_candado_finalizado_auditoria.sql" },
+  { name: "056_company_settings_branding.sql",            file: "scripts/migrations/056_company_settings_branding.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

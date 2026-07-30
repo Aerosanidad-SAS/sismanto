@@ -9,6 +9,7 @@ import {
   createUserAsAdminSchema,
   signInSchema,
   toggleUserActiveSchema,
+  updateUserCiudadSchema,
   updateUserRoleSchema,
 } from "@/lib/validations";
 
@@ -21,6 +22,7 @@ export interface UserProfile {
   role_codigo: UserRole;
   nombre_completo: string | null;
   email: string | null;
+  ciudad: string | null;
   activo: boolean;
 }
 
@@ -43,6 +45,7 @@ export async function getProfile(): Promise<UserProfile | null> {
       role_id,
       nombre_completo,
       email,
+      ciudad,
       activo,
       roles!inner(codigo)
     `)
@@ -58,6 +61,7 @@ export async function getProfile(): Promise<UserProfile | null> {
     role_codigo: (data as any).roles?.codigo as UserRole,
     nombre_completo: data.nombre_completo,
     email: data.email || user.email || null,
+    ciudad: (data as any).ciudad ?? null,
     activo: data.activo,
   };
 }
@@ -107,11 +111,19 @@ export async function createUserAsAdmin(data: {
   password: string;
   nombreCompleto: string;
   cedula?: string;
+  ciudad?: string;
   roleCodigo: UserRole;
 }) {
-  await requireRole(["ADMIN", "ANALISTA"]);
+  const caller = await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = createUserAsAdminSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  // Igual que SISRES (includes/insertar_usuarios.php): solo un ADMIN puede
+  // crear otro ADMIN — ANALISTA tiene paridad de creación de usuarios, pero
+  // no puede otorgar el rol más alto.
+  if (parsed.data.roleCodigo === "ADMIN" && caller.role_codigo !== "ADMIN") {
+    return { error: "Solo un Administrador puede crear otro Administrador" };
+  }
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { error: "SUPABASE_SERVICE_ROLE_KEY no configurado. Añada la clave en .env.local" };
@@ -136,6 +148,7 @@ export async function createUserAsAdmin(data: {
     nombre_completo: parsed.data.nombreCompleto,
     email: parsed.data.email,
     cedula: parsed.data.cedula || null,
+    ciudad: parsed.data.ciudad || null,
     activo: true,
   });
 
@@ -144,10 +157,32 @@ export async function createUserAsAdmin(data: {
   return { success: true };
 }
 
-export async function updateUserRole(userId: string, roleCodigo: UserRole) {
+export async function updateUserCiudad(userId: string, ciudad: string) {
   await requireRole(["ADMIN", "ANALISTA"]);
+  const parsed = updateUserCiudadSchema.safeParse({ userId, ciudad });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ ciudad: parsed.data.ciudad || null, updated_at: new Date().toISOString() })
+    .eq("user_id", parsed.data.userId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/usuarios");
+  return { success: true };
+}
+
+export async function updateUserRole(userId: string, roleCodigo: UserRole) {
+  const caller = await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = updateUserRoleSchema.safeParse({ userId, roleCodigo });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  // Misma regla que createUserAsAdmin: un no-ADMIN no puede ascender a
+  // nadie (ni a sí mismo) a ADMIN.
+  if (parsed.data.roleCodigo === "ADMIN" && caller.role_codigo !== "ADMIN") {
+    return { error: "Solo un Administrador puede asignar el rol de Administrador" };
+  }
 
   const supabase = createClient();
   const { data: role } = await supabase.from("roles").select("id").eq("codigo", parsed.data.roleCodigo).single();

@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { MedicalServiceFormData } from "@/lib/validations";
-import { medicalServiceSchema, ETAPAS_SERVICIO } from "@/lib/validations";
+import { medicalServiceSchema, ETAPAS_SERVICIO, CAMPOS_PASO_SERVICIO } from "@/lib/validations";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
 import { z } from "zod";
 
@@ -157,11 +157,19 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("medical_services")
     .update({ ...aFilaServicio(parsed.data), updated_at: new Date().toISOString() })
-    .eq("id", idParsed.data);
+    .eq("id", idParsed.data)
+    .select("id");
   if (error) return { error: error.message };
+  if (!data || data.length === 0) {
+    // RLS bloqueó la fila sin lanzar error (comportamiento normal de
+    // Postgres en UPDATE: 0 filas afectadas, no "permission denied") —
+    // el caso real hoy es un servicio FINALIZADO que solo puede tocar
+    // ADMIN/ANALISTA/REGULACION (migración 055).
+    return { error: "No tiene permiso para editar este servicio — si ya está FINALIZADO, solo Regulación, Analista o Administrador pueden modificarlo." };
+  }
   revalidatePath("/servicios");
   return { success: true };
 }
@@ -194,6 +202,51 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
   }
   await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
   revalidatePath("/servicios");
+  return { success: true };
+}
+
+/**
+ * Botón de "siguiente paso" de Mis Servicios (OVEM/médico/auxiliar): graba
+ * el timestamp del paso y, si corresponde, mueve la etapa — mismo guardado
+ * optimista que cambiarEtapaServicio (WHERE etapa = etapaActual). El acceso
+ * real (solo puede tocar servicios donde la tripulación es él mismo) lo
+ * impone RLS (migración 053), no esta función.
+ */
+export async function marcarPasoServicio(
+  id: number,
+  etapaActual: string,
+  campo: string,
+  etapaNueva?: string
+) {
+  const idParsed = z.number().int().positive().safeParse(id);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const campoValido = (CAMPOS_PASO_SERVICIO as readonly string[]).find((c) => c === campo);
+  if (!campoValido) return { error: "Campo inválido" };
+
+  const actual = ETAPAS_SERVICIO.find((e) => e === etapaActual);
+  if (!actual) return { error: "Etapa inválida" };
+  const nueva = etapaNueva ? ETAPAS_SERVICIO.find((e) => e === etapaNueva) : undefined;
+  if (etapaNueva && !nueva) return { error: "Etapa inválida" };
+
+  const supabase = createClient();
+  const ahora = new Date().toISOString();
+  const update: Record<string, string> = { [campoValido]: ahora, updated_at: ahora };
+  if (nueva) update.etapa = nueva;
+
+  const { data, error } = await supabase
+    .from("medical_services")
+    .update(update)
+    .eq("id", idParsed.data)
+    .eq("etapa", actual)
+    .select("id, tipo_servicio, patient_id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) {
+    return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
+  }
+  if (nueva) await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
+  revalidatePath("/servicios");
+  revalidatePath("/ovem");
   return { success: true };
 }
 

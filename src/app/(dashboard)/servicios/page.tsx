@@ -3,9 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
 import { getClientes } from "@/app/api/actions/clientes";
 import { getProfile } from "@/app/api/actions/auth";
+import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
+import { MisServicios } from "@/components/servicios/mis-servicios";
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
+const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
 
 async function getVehiculosActivos() {
   try {
@@ -22,13 +25,32 @@ async function getVehiculosActivos() {
 }
 
 export default async function ServiciosPage() {
-  const [profile, servicios, vehiculos, clientes] = await Promise.all([
+  const [profile, servicios, vehiculos, clientes, flota, medicosDisponibles] = await Promise.all([
     getProfile(),
     getServiciosMedicos(),
     getVehiculosActivos(),
     getClientes(),
+    getFleetWithAssignments(),
+    getUsuariosPorRol("MEDICO"),
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
+  const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
+
+  // Tripulación activa hoy por vehículo (armada en Regulación) — para
+  // autocompletar al elegir el móvil en el formulario de servicio.
+  const tripulacionPorVehiculo: Record<
+    string,
+    { ovem?: { user_id: string; nombre_completo: string | null; email: string | null }; medico?: { user_id: string; nombre_completo: string | null; email: string | null }; auxiliar?: { user_id: string; nombre_completo: string | null; email: string | null } }
+  > = {};
+  for (const v of flota as any[]) {
+    const entry: (typeof tripulacionPorVehiculo)[string] = {};
+    for (const a of v.assignments ?? []) {
+      if (a.rol_en_turno === "OVEM") entry.ovem = a.driver;
+      if (a.rol_en_turno === "MEDICO") entry.medico = a.driver;
+      if (a.rol_en_turno === "AUXILIAR_ENFERMERIA") entry.auxiliar = a.driver;
+    }
+    tripulacionPorVehiculo[v.id] = entry;
+  }
 
   const programados = servicios.filter((s) => s.etapa === "PROGRAMADO").length;
   const enCurso = servicios.filter((s) => s.etapa === "CURSO").length;
@@ -45,6 +67,13 @@ export default async function ServiciosPage() {
           Despacho y seguimiento de traslados y servicios asistenciales.
         </p>
       </div>
+
+      {mostrarMisServicios && (
+        <div>
+          <h2 className="text-xl mb-3">Mis servicios asignados</h2>
+          <MisServicios servicios={servicios as any} />
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -94,7 +123,11 @@ export default async function ServiciosPage() {
             servicios={servicios}
             vehiculos={vehiculos}
             clientes={clientes.map((c) => c.nombre)}
+            viewerRole={profile?.role_codigo}
             puedeEditar={puedeEditar}
+            medicosDisponibles={medicosDisponibles}
+            tripulacionPorVehiculo={tripulacionPorVehiculo}
+            ciudadDefault={profile?.ciudad}
           />
         </CardContent>
       </Card>

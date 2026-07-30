@@ -183,7 +183,13 @@ export const createUserAsAdminSchema = z.object({
   password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
   nombreCompleto: z.string().min(2, "Nombre demasiado corto"),
   cedula: z.string().trim().min(4, "Documento inválido").max(20).optional().or(z.literal("")),
+  ciudad: z.string().trim().max(100).optional().or(z.literal("")),
   roleCodigo: userRoleEnum,
+});
+
+export const updateUserCiudadSchema = z.object({
+  userId: z.string().uuid("ID de usuario inválido"),
+  ciudad: z.string().trim().max(100).optional().or(z.literal("")),
 });
 
 export const updateUserRoleSchema = z.object({
@@ -231,9 +237,12 @@ export const toggleVehicleStatusSchema = z.object({
   nuevoEstado: z.enum(["OPERATIVO", "FUERA_DE_SERVICIO"]),
 });
 
+export const ROLES_TRIPULACION = ["OVEM", "MEDICO", "AUXILIAR_ENFERMERIA"] as const;
+
 export const vehicleAssignmentSchema = z.object({
   vehicleId: z.string().uuid("ID de vehículo inválido"),
   userId: z.string().uuid("ID de usuario inválido"),
+  rol: z.enum(ROLES_TRIPULACION).default("OVEM"),
   fechaInicio: parseableDateString,
   fechaFin: z.string().optional().nullable(),
 });
@@ -522,11 +531,21 @@ export const METODO_PAGO_OPCIONES = [
   "WOMPI",
 ] as const;
 
+// Tripulación real (FK) — reemplaza gradualmente a los campos de texto
+// libre medico/auxiliar/ovem de abajo (ver migración 050). Un servicio
+// puede tener médico_user_id sin vehicle_id/ovem_user_id: prestador
+// externo con su propio vehículo (típico de Medicina Domiciliaria).
+const optUuid = z.string().uuid().optional().or(z.literal("")).transform((v) => (v ? v : undefined));
+
 export const medicalServiceSchema = z.object({
   patient_id: z.number().int().positive().optional(),
   nombre_completo: z.string().trim().min(3, "Nombre del paciente requerido").max(200),
   tipo_servicio: z.string().trim().min(2, "Tipo de servicio requerido").max(60),
   vehicle_id: z.string().uuid().optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+  ovem_user_id: optUuid,
+  medico_user_id: optUuid,
+  auxiliar_user_id: optUuid,
+  fecha_hora_inicio_desplazamiento: optStr,
   fecha_hora_programacion: optStr,
   turno_programacion: optStr,
   autorizacion: optStr,
@@ -566,8 +585,106 @@ export const medicalServiceSchema = z.object({
   motivo_interno: optStr,
   estado_servicio: optStr,
   ciudad_registro: optStr,
+  // Medicina Domiciliaria
+  condicion: optStr,
+  medio_asignacion: optStr,
+  turno_facturacion: optStr,
+  deducible: optStr,
+  incapa: optStr,
+  // TAM/TAB
+  situacion: optStr,
+  tiempo_a_restar: z.number().optional(),
+  // Telemedicina (+ poliza también aplica a MD)
+  poliza: optStr,
+  funcionario_aseguradora: optStr,
+  codigo_telemedicina: optStr,
+  correo_electronico: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+  motivo_consulta: optText,
 });
 export type MedicalServiceFormData = z.input<typeof medicalServiceSchema>;
+
+// Perfiles de formulario por tipo de servicio (Regulación, QA 2026-07-22):
+// cada tipo de servicio real muestra un subconjunto de secciones/campos.
+// Enfermería Domiciliaria comparte perfil con Medicina Domiciliaria por
+// similitud (visita a domicilio) — a confirmar con un usuario real.
+export const PERFIL_FORMULARIO_SERVICIO = {
+  MEDICINA_DOMICILIARIA: ["MEDICINA DOMICILIARIA", "ENFERMERIA DOMICILIARIA"],
+  TRASLADO: ["TAB SIMPLE", "TAB DOBLE", "TAB SENCILLO", "TAM SIMPLE", "TAM DOBLE", "TRASLADO AEREO"],
+  TELEMEDICINA: ["TELEMEDICINA"],
+} as const;
+
+export function perfilFormularioServicio(tipoServicio: string): keyof typeof PERFIL_FORMULARIO_SERVICIO | null {
+  for (const [perfil, tipos] of Object.entries(PERFIL_FORMULARIO_SERVICIO)) {
+    if ((tipos as readonly string[]).includes(tipoServicio)) return perfil as keyof typeof PERFIL_FORMULARIO_SERVICIO;
+  }
+  return null;
+}
+
+// Secuencia de botones de estado que ve la tripulación (OVEM/médico/auxiliar)
+// desde "Mis servicios" — cada paso graba un timestamp que ya usa
+// calcularTiempos() en servicios-medicos.ts para el tiempo facturable, así
+// que no se inventa ninguna columna nueva de aquí en adelante (Daniel,
+// 2026-07: "el tiempo de espera es importante para que facturación pueda
+// facturar el servicio", ya cubierto por los campos llegada/salida).
+// Medicina Domiciliaria no tiene "origen" (el médico va directo al
+// domicilio del paciente) y colapsa llegada+inicio de atención en un solo
+// paso: el listado real de Regulación solo tiene una columna "HORA
+// ATENCIÓN", no dos — a confirmar en campo si hiciera falta separarlas.
+export const CAMPOS_PASO_SERVICIO = [
+  "fecha_hora_inicio_desplazamiento",
+  "fecha_hora_llegada_origen",
+  "fecha_hora_salida_origen",
+  "fecha_hora_llegada_destino",
+  "fecha_hora_salida_destino",
+] as const;
+export type CampoPasoServicio = (typeof CAMPOS_PASO_SERVICIO)[number];
+
+export interface PasoServicio {
+  campo: CampoPasoServicio;
+  etiqueta: string;
+  etapaDestino?: "CURSO" | "FINALIZADO";
+}
+
+const PASOS_TRASLADO: PasoServicio[] = [
+  { campo: "fecha_hora_inicio_desplazamiento", etiqueta: "Inicio de desplazamiento", etapaDestino: "CURSO" },
+  { campo: "fecha_hora_llegada_origen", etiqueta: "Llegada a origen" },
+  { campo: "fecha_hora_salida_origen", etiqueta: "Salida de origen" },
+  { campo: "fecha_hora_llegada_destino", etiqueta: "Llegada a destino" },
+  { campo: "fecha_hora_salida_destino", etiqueta: "Finalización del servicio", etapaDestino: "FINALIZADO" },
+];
+
+const PASOS_MEDICINA_DOMICILIARIA: PasoServicio[] = [
+  { campo: "fecha_hora_inicio_desplazamiento", etiqueta: "Inicio de desplazamiento", etapaDestino: "CURSO" },
+  { campo: "fecha_hora_llegada_destino", etiqueta: "Llegada / inicio de atención" },
+  { campo: "fecha_hora_salida_destino", etiqueta: "Finalización de la atención", etapaDestino: "FINALIZADO" },
+];
+
+/** Telemedicina no tiene desplazamiento físico — se maneja con cambio de etapa simple, sin pasos. */
+export function pasosServicio(perfil: keyof typeof PERFIL_FORMULARIO_SERVICIO | null): PasoServicio[] {
+  if (perfil === "TRASLADO") return PASOS_TRASLADO;
+  if (perfil === "MEDICINA_DOMICILIARIA") return PASOS_MEDICINA_DOMICILIARIA;
+  return [];
+}
+
+// Sub-estado dentro de "en curso" para el tablero de Regulación — deriva del
+// primer paso de pasosServicio() sin timestamp, así que se mantiene en
+// sincronía automática con la secuencia real de botones de Mis Servicios.
+const SUB_ESTADOS_POR_PERFIL: Partial<Record<keyof typeof PERFIL_FORMULARIO_SERVICIO, string[]>> = {
+  TRASLADO: ["Por iniciar", "En camino a origen", "En origen", "En camino a destino", "En destino"],
+  MEDICINA_DOMICILIARIA: ["Por iniciar", "En camino", "En atención"],
+};
+
+export function subEstadoServicio(
+  tipoServicio: string,
+  servicio: Record<string, unknown>
+): string | null {
+  const perfil = perfilFormularioServicio(tipoServicio);
+  const pasos = pasosServicio(perfil);
+  if (pasos.length === 0) return null;
+  const idx = pasos.findIndex((p) => !servicio[p.campo]);
+  if (idx === -1) return "Completado, pendiente de cierre";
+  return (perfil && SUB_ESTADOS_POR_PERFIL[perfil]?.[idx]) || pasos[idx].etiqueta;
+}
 
 export const assessmentSchema = z.object({
   cedula: z.string().trim().min(4, "Documento inválido").max(20),

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
+import { DateField } from "@/components/forms/date-field";
 import {
   opcionesTipoCombustible,
   opcionesTipoRefrigerante,
@@ -370,22 +371,20 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <Label htmlFor="vencimiento_soat">Fecha Vencimiento SOAT</Label>
-            <Input
+            <DateField
               id="vencimiento_soat"
-              type="date"
-              {...register("vencimiento_soat")}
-              className="mt-1"
+              value={watch("vencimiento_soat") ?? ""}
+              onChange={(v) => setValue("vencimiento_soat", v)}
             />
           </div>
           <div>
             <Label htmlFor="vencimiento_tecnicomecanica">
               Fecha Vencimiento Técnico-Mecánica
             </Label>
-            <Input
+            <DateField
               id="vencimiento_tecnicomecanica"
-              type="date"
-              {...register("vencimiento_tecnicomecanica")}
-              className="mt-1"
+              value={watch("vencimiento_tecnicomecanica") ?? ""}
+              onChange={(v) => setValue("vencimiento_tecnicomecanica", v)}
             />
           </div>
           <div>

@@ -73,3 +73,61 @@ export async function getEstadisticasServicios(): Promise<EstadisticasServicios>
       .slice(0, 10),
   };
 }
+
+export interface EstadisticasPorCiudad {
+  ciudad: string;
+  total30dias: number;
+  pctFinalizados: number;
+  tiempoTotalPromedio: number;
+  serieMensual: { mes: string; cantidad: number }[];
+}
+
+// Bogotá/Medellín por texto libre — no hay catálogo de ciudad cerrado en
+// medical_services (ni un centro_operativo 1:1 con ciudad: AIRPLAN mezcla
+// Medellín con otras 5 ciudades). Es una cifra aproximada, no exacta —
+// avisar antes de presentarla como dato cerrado.
+const CIUDADES_JUNTA = [
+  { ciudad: "Bogotá", prefijo: "bogot" },
+  { ciudad: "Medellín", prefijo: "medell" },
+] as const;
+
+export async function getEstadisticasServiciosPorCiudad(): Promise<EstadisticasPorCiudad[]> {
+  const supabase = createClient();
+  const desde = new Date();
+  desde.setMonth(desde.getMonth() - 6);
+  const hace30dias = new Date();
+  hace30dias.setDate(hace30dias.getDate() - 30);
+
+  const { data } = await supabase
+    .from("medical_services")
+    .select("etapa, fecha_hora_registro, ciudad_origen, tiempo_total")
+    .gte("fecha_hora_registro", desde.toISOString())
+    .not("ciudad_origen", "is", null)
+    .limit(20000);
+
+  const filas = data || [];
+  const sinAcentos = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+  return CIUDADES_JUNTA.map(({ ciudad, prefijo }) => {
+    const deLaCiudad = filas.filter((s) => sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo));
+    const ultimos30 = deLaCiudad.filter((s) => new Date(s.fecha_hora_registro) >= hace30dias);
+    const finalizados = ultimos30.filter((s) => s.etapa === "FINALIZADO").length;
+
+    const porMesMap = new Map<string, number>();
+    for (const s of deLaCiudad) {
+      const mes = s.fecha_hora_registro?.slice(0, 7) ?? "s/f";
+      porMesMap.set(mes, (porMesMap.get(mes) ?? 0) + 1);
+    }
+
+    const tiempos = ultimos30.filter((s) => s.tiempo_total != null).map((s) => Number(s.tiempo_total));
+    const tiempoTotalPromedio = tiempos.length > 0 ? Math.round((tiempos.reduce((a, b) => a + b, 0) / tiempos.length) * 10) / 10 : 0;
+
+    return {
+      ciudad,
+      total30dias: ultimos30.length,
+      pctFinalizados: ultimos30.length > 0 ? Math.round((finalizados / ultimos30.length) * 100) : 0,
+      tiempoTotalPromedio,
+      serieMensual: Array.from(porMesMap, ([mes, cantidad]) => ({ mes, cantidad })).sort((a, b) => a.mes.localeCompare(b.mes)),
+    };
+  });
+}

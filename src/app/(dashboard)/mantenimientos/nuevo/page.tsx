@@ -26,7 +26,7 @@ async function getFormData() {
 
 export default async function NuevoMantenimientoPage() {
   const profile = await getProfile();
-  if (!profile || !["ADMIN", "MANTENIMIENTO"].includes(profile.role_codigo)) {
+  if (!profile || !["ADMIN", "ANALISTA", "MANTENIMIENTO"].includes(profile.role_codigo)) {
     redirect("/");
   }
 

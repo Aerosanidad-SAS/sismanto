@@ -15,6 +15,7 @@ import { Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateField } from "@/components/forms/date-field";
 import {
   Select,
   SelectContent,
@@ -217,20 +218,8 @@ export function DisponibilidadCard({
               <div className="min-w-[18rem] flex-1">
                 <Label className="text-[10px]">Período</Label>
                 <div className="mt-0.5 grid grid-cols-2 gap-2">
-                  <Input
-                    type="date"
-                    aria-label="Fecha desde"
-                    value={fi}
-                    onChange={(e) => setFi(e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                  <Input
-                    type="date"
-                    aria-label="Fecha hasta"
-                    value={ff}
-                    onChange={(e) => setFf(e.target.value)}
-                    className="h-8 text-xs"
-                  />
+                  <DateField value={fi} onChange={setFi} inputClassName="h-8 text-xs" placeholder="dd/mm/aaaa" />
+                  <DateField value={ff} onChange={setFf} inputClassName="h-8 text-xs" placeholder="dd/mm/aaaa" />
                 </div>
               </div>
 

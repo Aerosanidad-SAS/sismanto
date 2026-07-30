@@ -53,23 +53,30 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
   return { success: true };
 }
 
-export async function assignVehicleToOvem(
+/**
+ * Arma la tripulación de un vehículo para el turno — un vehículo puede
+ * tener a la vez un OVEM, un médico y un auxiliar activos (roles
+ * distintos), no solo un conductor. Reemplaza a assignVehicleToOvem.
+ */
+export async function asignarTripulacion(
   vehicleId: string,
   userId: string,
+  rol: "OVEM" | "MEDICO" | "AUXILIAR_ENFERMERIA",
   fechaInicio: string,
   fechaFin?: string
 ) {
   const profile = await requireRole(["ADMIN", "ANALISTA", "REGULACION", "OVEM"]);
 
-  // OVEM solo puede asignarse a sí mismo
-  if (profile.role_codigo === "OVEM" && userId !== profile.user_id) {
-    return { error: "Un OVEM solo puede asignarse a sí mismo" };
+  // OVEM solo puede asignarse a sí mismo, y solo con rol OVEM
+  if (profile.role_codigo === "OVEM" && (userId !== profile.user_id || rol !== "OVEM")) {
+    return { error: "Un OVEM solo puede asignarse a sí mismo como conductor" };
   }
 
   const parseFin = fechaFin?.trim() ? fechaFin.trim() : undefined;
   const parsed = vehicleAssignmentSchema.safeParse({
     vehicleId,
     userId,
+    rol,
     fechaInicio,
     fechaFin: parseFin ?? null,
   });
@@ -78,9 +85,20 @@ export async function assignVehicleToOvem(
   const supabase = createClient();
   const fin = parsed.data.fechaFin?.trim() || null;
 
+  // "Asignar o cambiar" — si ya hay alguien activo en ESE rol en este
+  // vehículo, se desactiva antes de crear la nueva (un OVEM nuevo no debe
+  // desactivar al médico que ya estaba activo en el mismo carro).
+  await supabase
+    .from("vehicle_assignments")
+    .update({ activo: false })
+    .eq("vehicle_id", parsed.data.vehicleId)
+    .eq("rol_en_turno", parsed.data.rol)
+    .eq("activo", true);
+
   const { error } = await supabase.from("vehicle_assignments").insert({
     user_id: parsed.data.userId,
     vehicle_id: parsed.data.vehicleId,
+    rol_en_turno: parsed.data.rol,
     fecha_inicio: parsed.data.fechaInicio,
     fecha_fin: fin,
     activo: true,
@@ -120,7 +138,7 @@ export async function getFleetWithAssignments() {
 
   const { data: assignments } = await supabase
     .from("vehicle_assignments")
-    .select("id, vehicle_id, user_id, fecha_inicio, fecha_fin")
+    .select("id, vehicle_id, user_id, rol_en_turno, fecha_inicio, fecha_fin")
     .eq("activo", true)
     .lte("fecha_inicio", hoy)
     .or(`fecha_fin.is.null,fecha_fin.gte.${hoy}`);
@@ -144,9 +162,9 @@ export async function getFleetWithAssignments() {
   }));
 }
 
-export async function getOvemUsers() {
+export async function getUsuariosPorRol(rolCodigo: "OVEM" | "MEDICO" | "AUXILIAR_ENFERMERIA") {
   const supabase = createClient();
-  const { data: role } = await supabase.from("roles").select("id").eq("codigo", "OVEM").single();
+  const { data: role } = await supabase.from("roles").select("id").eq("codigo", rolCodigo).single();
   if (!role) return [];
   const { data } = await supabase
     .from("user_profiles")

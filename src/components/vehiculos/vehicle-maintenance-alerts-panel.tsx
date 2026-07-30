@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { DateField } from "@/components/forms/date-field";
 import { CheckCircle2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import type { MaintenanceAlert, AlertLevel } from "@/types";
 
@@ -128,13 +129,7 @@ function AlertRow({
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
               <Label className="text-xs">Fecha realizado</Label>
-              <Input
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                required
-                className="mt-1 h-8 text-sm"
-              />
+              <DateField value={fecha} onChange={setFecha} />
             </div>
             {alert.intervalo_km > 0 && (
               <div>

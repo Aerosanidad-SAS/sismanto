@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateField } from "@/components/forms/date-field";
 import {
   Select,
   SelectContent,
@@ -178,11 +179,7 @@ function JobCard({
 
               <div className="space-y-1">
                 <Label>Fecha *</Label>
-                <Input
-                  type="date"
-                  value={form.fecha}
-                  onChange={(e) => set("fecha", e.target.value)}
-                />
+                <DateField value={form.fecha} onChange={(v) => set("fecha", v)} />
               </div>
 
               <div className="space-y-1">

@@ -1,7 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getProfile } from "@/app/api/actions/auth";
+import { isAdminLike } from "@/lib/auth-utils";
 import { NovedadesTabla } from "@/components/novedades/novedades-tabla";
+
+const ROLES_CIERRE = ["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"];
+// Quiénes pueden crear un mantenimiento nuevo desde el cierre de una
+// novedad — mismo set que la RLS de insert en maintenance_records.
+// REGULACION puede cerrar novedades (nota o ligar a uno existente) pero
+// no crear mantenimientos, así que no ve esa opción específica.
+const ROLES_CREAN_MANTENIMIENTO = ["ADMIN", "ANALISTA", "MANTENIMIENTO"];
 
 async function getNovedades() {
   try {
@@ -22,7 +30,9 @@ async function getNovedades() {
 
 export default async function NovedadesPage() {
   const [profile, novedades] = await Promise.all([getProfile(), getNovedades()]);
-  const isAdmin = profile?.role_codigo === "ADMIN";
+  const isAdmin = profile ? isAdminLike(profile.role_codigo) : false;
+  const puedeCerrar = ROLES_CIERRE.includes(profile?.role_codigo ?? "");
+  const puedeCrearMantenimiento = ROLES_CREAN_MANTENIMIENTO.includes(profile?.role_codigo ?? "");
 
   const abiertas = novedades.filter((n: any) => n.estado === "ABIERTO");
   const enProceso = novedades.filter((n: any) => n.estado === "EN_PROCESO");
@@ -71,7 +81,12 @@ export default async function NovedadesPage() {
           <CardDescription>Todas las novedades e incidentes reportados</CardDescription>
         </CardHeader>
         <CardContent>
-          <NovedadesTabla novedades={novedades as any} isAdmin={isAdmin} />
+          <NovedadesTabla
+            novedades={novedades as any}
+            isAdmin={isAdmin}
+            puedeCerrar={puedeCerrar}
+            puedeCrearMantenimiento={puedeCrearMantenimiento}
+          />
         </CardContent>
       </Card>
     </div>
