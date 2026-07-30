@@ -69,6 +69,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "053_medical_services_rls_tripulacion.sql",     file: "scripts/migrations/053_medical_services_rls_tripulacion.sql" },
   { name: "054_revertir_delete_analista.sql",             file: "scripts/migrations/054_revertir_delete_analista.sql" },
   { name: "055_candado_finalizado_auditoria.sql",         file: "scripts/migrations/055_candado_finalizado_auditoria.sql" },
+  { name: "056_company_settings_branding.sql",            file: "scripts/migrations/056_company_settings_branding.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

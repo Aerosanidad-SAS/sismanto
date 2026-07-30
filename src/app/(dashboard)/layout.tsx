@@ -29,10 +29,12 @@ import {
   Stethoscope,
   Activity,
   MessageCircle,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
+import { getCompanyBranding } from "@/app/api/actions/company-settings";
 import { Button } from "@/components/ui/button";
 
 type NavItem = {
@@ -56,6 +58,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: LayoutDashboard,
         roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO", "ANALISTA"],
         hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
+      },
+      {
+        name: "Tablero ejecutivo",
+        href: "/gerencial",
+        icon: TrendingUp,
+        roles: ["ADMIN", "GERENCIAL"],
+        hint: "Vista de alto nivel para Gerencia y Junta Directiva: servicios por ciudad, flota, vencimientos, equipos biomédicos e ingresos.",
       },
       {
         name: "Coordinación",
@@ -263,6 +272,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const [profile, setProfile] = useState<Awaited<ReturnType<typeof getProfile>>>(null);
   const [loading, setLoading] = useState(true);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   /** Solo lg+: barra lateral estrecha (iconos). En móvil el drawer siempre muestra texto completo. */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -275,6 +285,10 @@ export default function DashboardLayout({
     } catch {
       /* ignore */
     }
+  }, []);
+
+  useEffect(() => {
+    getCompanyBranding().then((b) => setLogoUrl(b.logo_url));
   }, []);
 
   const setCollapsedPersist = useCallback((next: boolean) => {
@@ -310,7 +324,7 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "GERENCIAL" &&
-          !["/", "/kpis", "/consumo", "/combustible", "/estadisticas", "/ai-chat", "/ai-insights"].includes(pathname) &&
+          !["/", "/kpis", "/consumo", "/combustible", "/estadisticas", "/ai-chat", "/ai-insights", "/gerencial"].includes(pathname) &&
           !pathname.startsWith("/admin")
         ) {
           router.replace("/");
@@ -414,12 +428,13 @@ export default function DashboardLayout({
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="relative h-9 w-28 shrink-0 overflow-hidden rounded">
             <Image
-              src="/brand/alianza.png"
+              src={logoUrl ?? "/brand/alianza.png"}
               alt="Aerosanidad e Inter Assist"
               fill
               className="object-contain object-left"
               sizes="112px"
               priority
+              unoptimized={Boolean(logoUrl)}
             />
           </div>
           <div className="min-w-0 leading-tight">
@@ -463,12 +478,13 @@ export default function DashboardLayout({
             ) : (
               <div className="relative h-10 w-44 shrink-0 overflow-hidden rounded">
                 <Image
-                  src="/brand/alianza.png"
+                  src={logoUrl ?? "/brand/alianza.png"}
                   alt="Aerosanidad e Inter Assist"
                   fill
                   className="object-contain object-left"
                   sizes="176px"
                   priority
+                  unoptimized={Boolean(logoUrl)}
                 />
               </div>
             )}

@@ -1228,6 +1228,12 @@ export type Database = {
         Update: { id?: number; canal?: string; destinatario?: string; asunto?: string | null; plantilla?: string | null; referencia?: string | null; ok?: boolean; error?: string | null; created_by?: string | null; created_at?: string }
         Relationships: []
       }
+      company_settings: {
+        Row: { id: number; logo_url: string | null; updated_at: string; updated_by: string | null }
+        Insert: { id?: number; logo_url?: string | null; updated_at?: string; updated_by?: string | null }
+        Update: { id?: number; logo_url?: string | null; updated_at?: string; updated_by?: string | null }
+        Relationships: []
+      }
       medical_services_audit_log: {
         Row: { id: number; medical_service_id: number; changed_by: string | null; changed_by_role: string | null; changed_at: string; valores_anteriores: Json; valores_nuevos: Json }
         Insert: { id?: number; medical_service_id: number; changed_by?: string | null; changed_by_role?: string | null; changed_at?: string; valores_anteriores: Json; valores_nuevos: Json }

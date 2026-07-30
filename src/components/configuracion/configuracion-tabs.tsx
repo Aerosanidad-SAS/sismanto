@@ -9,6 +9,7 @@ import { ProveedoresTab } from "./proveedores-tab";
 import { CargaMasivaTab } from "./carga-masiva-tab";
 import { ServiciosTab } from "./servicios-tab";
 import { ClientesTab, type ClienteRow } from "./clientes-tab";
+import { MarcaTab } from "./marca-tab";
 import type { OperationalCenter, Supplier } from "@/types";
 
 interface ConfiguracionTabsProps {
@@ -17,6 +18,8 @@ interface ConfiguracionTabsProps {
   proveedores: Supplier[];
   clientes: ClienteRow[];
   serviceTypes: Array<{ id: number; codigo: string; nombre: string; activo: boolean; orden: number }>;
+  logoUrl: string | null;
+  esAdmin: boolean;
 }
 
 const tabItems = [
@@ -26,6 +29,7 @@ const tabItems = [
   { id: "clientes", label: "Clientes" },
   { id: "servicios", label: "Servicios prestados" },
   { id: "carga", label: "Carga Masiva" },
+  { id: "marca", label: "Marca" },
 ];
 
 export function ConfiguracionTabs({
@@ -34,6 +38,8 @@ export function ConfiguracionTabs({
   proveedores,
   clientes,
   serviceTypes,
+  logoUrl,
+  esAdmin,
 }: ConfiguracionTabsProps) {
   return (
     <Tabs.Root defaultValue="vehiculos">
@@ -75,6 +81,10 @@ export function ConfiguracionTabs({
 
       <Tabs.Content value="carga">
         <CargaMasivaTab />
+      </Tabs.Content>
+
+      <Tabs.Content value="marca">
+        <MarcaTab logoUrl={logoUrl} puedeEditar={esAdmin} />
       </Tabs.Content>
     </Tabs.Root>
   );

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, getProfile } from "@/app/api/actions/auth";
+import { getCompanyBranding } from "@/app/api/actions/company-settings";
 import { getDefaultRoute } from "@/lib/auth-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCompanyBranding().then((b) => setLogoUrl(b.logo_url));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,12 +55,13 @@ export default function LoginPage() {
         <CardHeader className="space-y-4">
           <div className="relative mx-auto h-14 w-full max-w-[16rem] overflow-hidden rounded-md bg-black px-3 py-2">
             <Image
-              src="/brand/alianza.png"
+              src={logoUrl ?? "/brand/alianza.png"}
               alt="Aerosanidad e Inter Assist"
               fill
               className="object-contain"
               sizes="256px"
               priority
+              unoptimized={Boolean(logoUrl)}
             />
           </div>
           <div>
