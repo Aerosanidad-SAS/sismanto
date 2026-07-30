@@ -28,7 +28,8 @@ import {
 import { formatDateShort } from "@/lib/utils";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
-import { DEPARTAMENTOS_COLOMBIA } from "@/lib/colombia-geo";
+import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
+import { PRESTADORES_SISRES } from "@/lib/catalogos-sisres";
 import {
   medicalServiceSchema,
   type MedicalServiceFormData,
@@ -115,55 +116,53 @@ const paraPerfil = (campos: CampoDef[], perfil: Perfil | null) =>
 // Prestador queda como texto libre — en SISRES sale de la misma tabla
 // `proveedores` que "Proveedor" (ver nota en CAMPOS_CIERRE), pendiente del
 // export real de León.
+// Prestador ya no está acá: tiene catálogo real (PRESTADORES_SISRES) y se
+// renderiza aparte, más abajo, como CatalogCombobox.
 const CAMPOS_PROGRAMACION: CampoDef[] = [
-  { name: "fecha_hora_programacion", label: "Fecha/hora de programación", type: "datetime-local" },
+  { name: "fecha_hora_programacion", label: "Fecha/hora de programación", type: "datetime-local", placeholder: "dd/mm/aaaa hh:mm" },
   { name: "autorizacion", label: "Autorización", placeholder: "Número de autorización" },
   { name: "asesor", label: "Asesor quien solicita", placeholder: "Nombre del asesor", perfiles: ["TRASLADO"] },
-  { name: "prestador", label: "Prestador", placeholder: "Catálogo pendiente — ver bolsa de QA", perfiles: ["TRASLADO"] },
   { name: "soporte", label: "Soporte", placeholder: "Oxígeno, ventilación, máscaras, control de líquidos…", perfiles: ["TRASLADO"] },
   { name: "condicion", label: "Condición", placeholder: "Condición del paciente", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "medio_asignacion", label: "Medio de asignación", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "poliza", label: "Póliza", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
-  { name: "motivo_consulta", label: "Motivo de consulta", perfiles: ["TELEMEDICINA"] },
+  { name: "medio_asignacion", label: "Medio de asignación", placeholder: "Cómo llegó la solicitud (llamada, WhatsApp, correo…)", perfiles: ["MEDICINA_DOMICILIARIA"] },
+  { name: "poliza", label: "Póliza", placeholder: "Número de póliza", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
+  { name: "motivo_consulta", label: "Motivo de consulta", placeholder: "Motivo de la consulta de telemedicina", perfiles: ["TELEMEDICINA"] },
 ];
 
-// Ciudad origen/destino quedan como texto libre (catálogo pendiente — ver
-// QA_HALLAZGOS.md, requiere el export real de subregiones de León). Toda
+// Ciudad origen/destino ya no están acá: tienen catálogo real en cascada
+// (MUNICIPIOS_POR_DEPARTAMENTO) y se renderizan aparte, más abajo. Toda
 // esta sección solo aplica a Medicina Domiciliaria y Traslado — Telemedicina
 // no tiene ruta física.
 const CAMPOS_RUTA: CampoDef[] = [
-  { name: "ciudad_origen", label: "Ciudad origen", placeholder: "Catálogo pendiente — ver bolsa de QA" },
   { name: "direccion_origen", label: "Dirección origen", placeholder: "Dirección exacta de origen" },
-  { name: "fecha_hora_llegada_origen", label: "Llegada a origen", type: "datetime-local" },
-  { name: "fecha_hora_salida_origen", label: "Salida de origen", type: "datetime-local" },
+  { name: "fecha_hora_llegada_origen", label: "Llegada a origen", type: "datetime-local", placeholder: "dd/mm/aaaa hh:mm" },
+  { name: "fecha_hora_salida_origen", label: "Salida de origen", type: "datetime-local", placeholder: "dd/mm/aaaa hh:mm" },
   { name: "direccion_intermedia", label: "Dirección intermedia (opcional)", placeholder: "Solo si el traslado tiene punto intermedio", perfiles: ["TRASLADO"] },
-  { name: "fecha_hora_llegada_intermedia", label: "Llegada intermedia", type: "datetime-local", perfiles: ["TRASLADO"] },
-  { name: "fecha_hora_salida_intermedia", label: "Salida intermedia", type: "datetime-local", perfiles: ["TRASLADO"] },
-  { name: "ciudad_destino", label: "Ciudad destino", placeholder: "Catálogo pendiente — ver bolsa de QA" },
+  { name: "fecha_hora_llegada_intermedia", label: "Llegada intermedia", type: "datetime-local", placeholder: "dd/mm/aaaa hh:mm", perfiles: ["TRASLADO"] },
+  { name: "fecha_hora_salida_intermedia", label: "Salida intermedia", type: "datetime-local", placeholder: "dd/mm/aaaa hh:mm", perfiles: ["TRASLADO"] },
   { name: "direccion_destino", label: "Dirección destino", placeholder: "Dirección exacta de destino" },
-  { name: "fecha_hora_llegada_destino", label: "Llegada a destino", type: "datetime-local" },
-  { name: "fecha_hora_salida_destino", label: "Salida de destino", type: "datetime-local", perfiles: ["TRASLADO"] },
+  { name: "fecha_hora_llegada_destino", label: "Llegada a destino", type: "datetime-local", placeholder: "dd/mm/aaaa hh:mm" },
+  { name: "fecha_hora_salida_destino", label: "Salida de destino", type: "datetime-local", placeholder: "dd/mm/aaaa hh:mm", perfiles: ["TRASLADO"] },
 ];
 
-// Prestador/Proveedor quedan como texto libre: en SISRES ambos salen de la
-// misma tabla `proveedores`, que todavía no se migró a Aeromanto — hace
-// falta el export real de León (ver QA_HALLAZGOS.md), no un catálogo propio.
+// Proveedor ya no está acá: mismo catálogo real que Prestador
+// (PRESTADORES_SISRES — en SISRES es la misma tabla `proveedores` para
+// ambos campos), se renderiza aparte, más abajo.
 const CAMPOS_CIERRE: CampoDef[] = [
-  { name: "proveedor", label: "Proveedor", placeholder: "Catálogo pendiente — ver bolsa de QA", perfiles: ["TRASLADO"] },
   { name: "usuario_recibe", label: "Usuario que recibe", placeholder: "Quién recibe el servicio" },
   { name: "usuario_despacha", label: "Usuario que despacha", placeholder: "Quién despacha el servicio" },
   { name: "motivo_externo", label: "Motivo externo", placeholder: "Motivo externo (si aplica)" },
   { name: "motivo_interno", label: "Motivo interno", placeholder: "Motivo interno (si aplica)" },
   { name: "estado_servicio", label: "Estado del servicio", placeholder: "Estado del servicio" },
   { name: "ciudad_registro", label: "Ciudad de registro", placeholder: "Ciudad donde se registra el servicio" },
-  { name: "turno_facturacion", label: "Turno de facturación", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "deducible", label: "Deducible", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
-  { name: "incapa", label: "INCAPA", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "situacion", label: "Situación", perfiles: ["TRASLADO", "TELEMEDICINA"] },
-  { name: "tiempo_a_restar", label: "Tiempo a restar (min)", type: "number", perfiles: ["TRASLADO"] },
-  { name: "funcionario_aseguradora", label: "Funcionario aseguradora", perfiles: ["TELEMEDICINA"] },
-  { name: "codigo_telemedicina", label: "Código", perfiles: ["TELEMEDICINA"] },
-  { name: "correo_electronico", label: "Correo electrónico", type: "email", perfiles: ["TELEMEDICINA"] },
+  { name: "turno_facturacion", label: "Turno de facturación", placeholder: "Turno en que se factura el servicio", perfiles: ["MEDICINA_DOMICILIARIA"] },
+  { name: "deducible", label: "Deducible", placeholder: "Valor o porcentaje del deducible", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
+  { name: "incapa", label: "INCAPA", placeholder: "Información INCAPA", perfiles: ["MEDICINA_DOMICILIARIA"] },
+  { name: "situacion", label: "Situación", placeholder: "Situación del servicio", perfiles: ["TRASLADO", "TELEMEDICINA"] },
+  { name: "tiempo_a_restar", label: "Tiempo a restar (min)", type: "number", placeholder: "0", perfiles: ["TRASLADO"] },
+  { name: "funcionario_aseguradora", label: "Funcionario aseguradora", placeholder: "Nombre del funcionario", perfiles: ["TELEMEDICINA"] },
+  { name: "codigo_telemedicina", label: "Código", placeholder: "Código de telemedicina", perfiles: ["TELEMEDICINA"] },
+  { name: "correo_electronico", label: "Correo electrónico", type: "email", placeholder: "correo@ejemplo.com", perfiles: ["TELEMEDICINA"] },
 ];
 
 type PersonaTripulacion = { user_id: string; nombre_completo: string | null; email: string | null };
@@ -243,6 +242,10 @@ export function ServiciosTabla({
   const metodoPagoSeleccionado = watch("metodo_pago");
   const clienteSeleccionado = watch("cliente");
   const medicoIndependienteSeleccionado = watch("medico_user_id");
+  const prestadorSeleccionado = watch("prestador");
+  const proveedorSeleccionado = watch("proveedor");
+  const ciudadOrigenSeleccionada = watch("ciudad_origen");
+  const ciudadDestinoSeleccionada = watch("ciudad_destino");
 
   // Perfil del formulario según el tipo de servicio — define qué secciones
   // se muestran (Regulación, QA 2026-07-22): Medicina/Enfermería
@@ -250,6 +253,20 @@ export function ServiciosTabla({
   const perfil = perfilFormularioServicio(tipoSeleccionado ?? "");
   const requiereRuta = perfil !== "TELEMEDICINA";
   const requiereMedicoIndependiente = perfil === "MEDICINA_DOMICILIARIA" || perfil === "TELEMEDICINA";
+
+  // Ciudad en cascada: solo las del departamento ya elegido (catálogo real
+  // DIVIPOLA, ver colombia-geo.ts). Si cambia el departamento, se limpia la
+  // ciudad para no dejar una que ya no corresponde.
+  const ciudadesOrigen = departamentoOrigenSeleccionado ? MUNICIPIOS_POR_DEPARTAMENTO[departamentoOrigenSeleccionado] ?? [] : [];
+  const ciudadesDestino = departamentoDestinoSeleccionado ? MUNICIPIOS_POR_DEPARTAMENTO[departamentoDestinoSeleccionado] ?? [] : [];
+  const handleDepartamentoOrigen = (v: string) => {
+    setValue("departamento_origen", v);
+    setValue("ciudad_origen", "");
+  };
+  const handleDepartamentoDestino = (v: string) => {
+    setValue("departamento_destino", v);
+    setValue("ciudad_destino", "");
+  };
 
   // Médico/Auxiliar solo actualiza el desenlace clínico al editar — no
   // aplica al crear (Aeromanto no usa ese flujo para ellos hoy; el que
@@ -327,7 +344,17 @@ export function ServiciosTabla({
     setError(null);
     setCedulaBusqueda("");
     setCieLabel("");
-    reset({ tipo_servicio: "", ciudad_origen: ciudadDefault ?? "" } as MedicalServiceFormData);
+    // Ciudad de origen por defecto = ciudad del usuario logueado (Fase D).
+    // Ahora que ciudad depende de un departamento elegido, hace falta
+    // encontrar a qué departamento pertenece esa ciudad para dejar los dos
+    // campos coherentes — si no se encuentra, se deja vacío en vez de un
+    // valor huérfano que el candado departamento→ciudad rechazaría.
+    const ubicacionDefault = resolverCiudad(ciudadDefault);
+    reset({
+      tipo_servicio: "",
+      departamento_origen: ubicacionDefault?.departamento ?? "",
+      ciudad_origen: ubicacionDefault?.ciudad ?? "",
+    } as MedicalServiceFormData);
     setDialogOpen(true);
   };
 
@@ -684,6 +711,19 @@ export function ServiciosTabla({
                     />
                   </div>
                 ))}
+                {perfil === "TRASLADO" && (
+                  <div className="space-y-1">
+                    <Label>Prestador</Label>
+                    <CatalogCombobox
+                      options={PRESTADORES_SISRES as string[]}
+                      value={prestadorSeleccionado ?? ""}
+                      onChange={(v) => setValue("prestador", v)}
+                      placeholder="Escribe para buscar el prestador…"
+                      allowCustom={false}
+                      disabled={campoBloqueado("prestador")}
+                    />
+                  </div>
+                )}
                 {perfil !== "TELEMEDICINA" && (
                   <div className="space-y-1">
                     <Label>Código CIE-10</Label>
@@ -764,10 +804,21 @@ export function ServiciosTabla({
                     <CatalogCombobox
                       options={[...DEPARTAMENTOS_COLOMBIA]}
                       value={departamentoOrigenSeleccionado ?? ""}
-                      onChange={(v) => setValue("departamento_origen", v)}
+                      onChange={handleDepartamentoOrigen}
                       placeholder="Selecciona o busca…"
                       allowCustom={false}
                       disabled={campoBloqueado("departamento_origen")}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Ciudad origen</Label>
+                    <CatalogCombobox
+                      options={ciudadesOrigen as string[]}
+                      value={ciudadOrigenSeleccionada ?? ""}
+                      onChange={(v) => setValue("ciudad_origen", v)}
+                      placeholder={departamentoOrigenSeleccionado ? "Escribe para buscar la ciudad…" : "Primero elige el departamento"}
+                      allowCustom={false}
+                      disabled={campoBloqueado("ciudad_origen") || !departamentoOrigenSeleccionado}
                     />
                   </div>
                   <div className="space-y-1">
@@ -775,10 +826,21 @@ export function ServiciosTabla({
                     <CatalogCombobox
                       options={[...DEPARTAMENTOS_COLOMBIA]}
                       value={departamentoDestinoSeleccionado ?? ""}
-                      onChange={(v) => setValue("departamento_destino", v)}
+                      onChange={handleDepartamentoDestino}
                       placeholder="Selecciona o busca…"
                       allowCustom={false}
                       disabled={campoBloqueado("departamento_destino")}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Ciudad destino</Label>
+                    <CatalogCombobox
+                      options={ciudadesDestino as string[]}
+                      value={ciudadDestinoSeleccionada ?? ""}
+                      onChange={(v) => setValue("ciudad_destino", v)}
+                      placeholder={departamentoDestinoSeleccionado ? "Escribe para buscar la ciudad…" : "Primero elige el departamento"}
+                      allowCustom={false}
+                      disabled={campoBloqueado("ciudad_destino") || !departamentoDestinoSeleccionado}
                     />
                   </div>
                   {paraPerfil(CAMPOS_RUTA, perfil).map((campo) => (
@@ -861,6 +923,19 @@ export function ServiciosTabla({
                     disabled={campoBloqueado("cliente")}
                   />
                 </div>
+                {perfil === "TRASLADO" && (
+                  <div className="space-y-1">
+                    <Label>Proveedor</Label>
+                    <CatalogCombobox
+                      options={PRESTADORES_SISRES as string[]}
+                      value={proveedorSeleccionado ?? ""}
+                      onChange={(v) => setValue("proveedor", v)}
+                      placeholder="Escribe para buscar el proveedor…"
+                      allowCustom={false}
+                      disabled={campoBloqueado("proveedor")}
+                    />
+                  </div>
+                )}
                 {paraPerfil(CAMPOS_CIERRE, perfil).map((campo) => (
                   <div key={campo.name} className="space-y-1">
                     <Label htmlFor={campo.name}>{campo.label}</Label>
