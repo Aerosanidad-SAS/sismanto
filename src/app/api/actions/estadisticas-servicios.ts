@@ -91,6 +91,8 @@ const CIUDADES_JUNTA = [
   { ciudad: "Medellín", prefijo: "medell" },
 ] as const;
 
+const sinAcentos = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
 export async function getEstadisticasServiciosPorCiudad(): Promise<EstadisticasPorCiudad[]> {
   const supabase = createClient();
   const desde = new Date();
@@ -106,7 +108,6 @@ export async function getEstadisticasServiciosPorCiudad(): Promise<EstadisticasP
     .limit(20000);
 
   const filas = data || [];
-  const sinAcentos = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
   return CIUDADES_JUNTA.map(({ ciudad, prefijo }) => {
     const deLaCiudad = filas.filter((s) => sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo));
@@ -130,4 +131,97 @@ export async function getEstadisticasServiciosPorCiudad(): Promise<EstadisticasP
       serieMensual: Array.from(porMesMap, ([mes, cantidad]) => ({ mes, cantidad })).sort((a, b) => a.mes.localeCompare(b.mes)),
     };
   });
+}
+
+// ─── Resumen operativo diario (Daniel, 2026-07-30) ─────────────────────────
+// Port directo del reporte que Regulación ya revisa a diario en SISRES, por
+// ciudad, con filtro de fecha. Definiciones exactas que dio Daniel:
+//   Asignados  = servicios solicitados que Regulación recibe y programa
+//                (todas las etapas reales — excluye NO EFECTIVO, que no
+//                cuenta como servicio real; DUPLICADO tampoco se cuenta acá
+//                por la misma razón, aunque Daniel no lo mencionó explícito)
+//   Atendidos  = etapa FINALIZADO (se terminan efectivamente en el turno)
+//   Fallidos   = etapa FALLIDO (se recibe la solicitud pero no se presta —
+//                la razón exacta queda pendiente de que Daniel la confirme)
+//   Cancelados = etapa CANCELADO
+//   No efectivo = etapa "NO EFECTIVO" (definición exacta pendiente)
+// "Por tipo de servicio": TAB DOBLE/TAM DOBLE cuentan doble (2 en vez de 1)
+// dentro de este desglose — por eso la suma por tipo no cuadra contra el
+// total de Asignados, tal como se ve en el reporte real de SISRES.
+
+export type TipoServicioResumen = "Medicina Domiciliaria" | "TAB" | "TAM" | "Telemedicina" | "Otros";
+const ORDEN_TIPOS: TipoServicioResumen[] = ["Medicina Domiciliaria", "TAB", "TAM", "Telemedicina", "Otros"];
+
+function tipoResumenDe(tipoServicio: string): TipoServicioResumen {
+  const t = tipoServicio.toUpperCase();
+  if (t.includes("DOMICILIARIA")) return "Medicina Domiciliaria";
+  if (t.startsWith("TAB")) return "TAB";
+  if (t.startsWith("TAM")) return "TAM";
+  if (t === "TELEMEDICINA") return "Telemedicina";
+  return "Otros";
+}
+
+const pesoDe = (tipoServicio: string) => (tipoServicio.toUpperCase().includes("DOBLE") ? 2 : 1);
+
+export interface ResumenOperativoDiario {
+  asignados: number;
+  atendidos: number;
+  fallidos: number;
+  cancelados: number;
+  noEfectivo: number;
+  porTipo: { tipo: TipoServicioResumen; asignados: number; atendidos: number }[];
+}
+
+/** `ciudad`: "Bogotá" | "Medellín" | "Todas". `desde`/`hasta`: "yyyy-MM-dd". */
+export async function getResumenOperativoDiario(params: {
+  desde: string;
+  hasta: string;
+  ciudad: string;
+}): Promise<ResumenOperativoDiario> {
+  const supabase = createClient();
+  const desdeIso = `${params.desde}T00:00:00.000Z`;
+  const diaSiguiente = new Date(`${params.hasta}T00:00:00.000Z`);
+  diaSiguiente.setDate(diaSiguiente.getDate() + 1);
+
+  const { data } = await supabase
+    .from("medical_services")
+    .select("etapa, tipo_servicio, ciudad_origen")
+    .gte("fecha_hora_registro", desdeIso)
+    .lt("fecha_hora_registro", diaSiguiente.toISOString())
+    .limit(20000);
+
+  const prefijo = CIUDADES_JUNTA.find((c) => c.ciudad === params.ciudad)?.prefijo;
+  const filas = (data || []).filter((s) => !prefijo || sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo));
+
+  const porTipoAsignados = new Map<TipoServicioResumen, number>();
+  const porTipoAtendidos = new Map<TipoServicioResumen, number>();
+  let asignados = 0, atendidos = 0, fallidos = 0, cancelados = 0, noEfectivo = 0;
+
+  for (const s of filas) {
+    if (s.etapa === "NO EFECTIVO") { noEfectivo++; continue; }
+    if (s.etapa === "DUPLICADO") continue;
+
+    asignados++;
+    if (s.etapa === "FINALIZADO") atendidos++;
+    if (s.etapa === "FALLIDO") fallidos++;
+    if (s.etapa === "CANCELADO") cancelados++;
+
+    const tipo = tipoResumenDe(s.tipo_servicio);
+    const peso = pesoDe(s.tipo_servicio);
+    porTipoAsignados.set(tipo, (porTipoAsignados.get(tipo) ?? 0) + peso);
+    if (s.etapa === "FINALIZADO") porTipoAtendidos.set(tipo, (porTipoAtendidos.get(tipo) ?? 0) + peso);
+  }
+
+  return {
+    asignados,
+    atendidos,
+    fallidos,
+    cancelados,
+    noEfectivo,
+    porTipo: ORDEN_TIPOS.map((tipo) => ({
+      tipo,
+      asignados: porTipoAsignados.get(tipo) ?? 0,
+      atendidos: porTipoAtendidos.get(tipo) ?? 0,
+    })),
+  };
 }

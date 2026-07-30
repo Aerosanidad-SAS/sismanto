@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
-import { getEstadisticasServiciosPorCiudad } from "@/app/api/actions/estadisticas-servicios";
+import { getEstadisticasServiciosPorCiudad, getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
 import { getAlertasBiomedicos } from "@/app/api/actions/inventario-biomedico";
 import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 import { formatCurrency } from "@/lib/utils";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ServiciosPorCiudadChart } from "@/components/gerencial/gerencial-charts";
+import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 
 const ROLES_PERMITIDOS = ["ADMIN", "GERENCIAL"];
@@ -29,9 +30,12 @@ interface VencimientoFila {
 async function getDatosGerenciales() {
   const supabase = createClient();
 
-  const [{ data: vehiclesRaw }, estadisticasCiudad, biomedicos, { data: revenueRaw }] = await Promise.all([
+  const hoyIso = new Date().toISOString().slice(0, 10);
+
+  const [{ data: vehiclesRaw }, estadisticasCiudad, resumenHoy, biomedicos, { data: revenueRaw }] = await Promise.all([
     supabase.from("vehicles").select("placa, estado_actual, centro_operativo, vencimiento_soat, vencimiento_rtm, vencimiento_tecnicomecanica, fecha_pase_aeroportuario"),
     getEstadisticasServiciosPorCiudad(),
+    getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso, ciudad: "Todas" }),
     getAlertasBiomedicos(),
     supabase
       .from("vehicle_service_revenue")
@@ -76,6 +80,7 @@ async function getDatosGerenciales() {
     vencimientosTecno,
     vencimientosPase,
     estadisticasCiudad,
+    resumenHoy,
     biomedicos,
     ingresos3Meses,
   };
@@ -105,30 +110,7 @@ export default async function GerencialPage() {
           <h2 className="text-xl">Servicios — Bogotá y Medellín</h2>
           <HelpTrigger text="Segmentado por texto libre (ciudad de origen del servicio) — no hay un catálogo cerrado de ciudad todavía, así que es una cifra aproximada, no exacta." />
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          {datos.estadisticasCiudad.map((c) => (
-            <Card key={c.ciudad}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{c.ciudad}</CardTitle>
-                <CardDescription>Últimos 30 días</CardDescription>
-              </CardHeader>
-              <CardContent className="grid grid-cols-3 gap-3">
-                <div>
-                  <p className="text-2xl font-bold">{c.total30dias}</p>
-                  <p className="text-xs text-muted-foreground">Servicios</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{c.pctFinalizados}%</p>
-                  <p className="text-xs text-muted-foreground">Finalizados</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{c.tiempoTotalPromedio}</p>
-                  <p className="text-xs text-muted-foreground">Min. promedio</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <ResumenOperativo inicial={datos.resumenHoy} />
         <ServiciosPorCiudadChart datos={datos.estadisticasCiudad} />
       </section>
 
