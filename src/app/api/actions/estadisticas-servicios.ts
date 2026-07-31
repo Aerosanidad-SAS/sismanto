@@ -163,7 +163,7 @@ function tipoResumenDe(tipoServicio: string): TipoServicioResumen {
 
 const pesoDe = (tipoServicio: string) => (tipoServicio.toUpperCase().includes("DOBLE") ? 2 : 1);
 
-export interface ResumenOperativoDiario {
+export interface ResumenOperativoBucket {
   asignados: number;
   atendidos: number;
   fallidos: number;
@@ -172,27 +172,16 @@ export interface ResumenOperativoDiario {
   porTipo: { tipo: TipoServicioResumen; asignados: number; atendidos: number }[];
 }
 
-/** `ciudad`: "Bogotá" | "Medellín" | "Todas". `desde`/`hasta`: "yyyy-MM-dd". */
-export async function getResumenOperativoDiario(params: {
-  desde: string;
-  hasta: string;
+export interface ResumenOperativoCiudad extends ResumenOperativoBucket {
   ciudad: string;
-}): Promise<ResumenOperativoDiario> {
-  const supabase = createClient();
-  const desdeIso = `${params.desde}T00:00:00.000Z`;
-  const diaSiguiente = new Date(`${params.hasta}T00:00:00.000Z`);
-  diaSiguiente.setDate(diaSiguiente.getDate() + 1);
+}
 
-  const { data } = await supabase
-    .from("medical_services")
-    .select("etapa, tipo_servicio, ciudad_origen")
-    .gte("fecha_hora_registro", desdeIso)
-    .lt("fecha_hora_registro", diaSiguiente.toISOString())
-    .limit(20000);
+export interface ResumenOperativoConsolidado {
+  consolidado: ResumenOperativoBucket;
+  porCiudad: ResumenOperativoCiudad[];
+}
 
-  const prefijo = CIUDADES_JUNTA.find((c) => c.ciudad === params.ciudad)?.prefijo;
-  const filas = (data || []).filter((s) => !prefijo || sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo));
-
+function calcularBucket(filas: { etapa: string; tipo_servicio: string }[]): ResumenOperativoBucket {
   const porTipoAsignados = new Map<TipoServicioResumen, number>();
   const porTipoAtendidos = new Map<TipoServicioResumen, number>();
   let asignados = 0, atendidos = 0, fallidos = 0, cancelados = 0, noEfectivo = 0;
@@ -224,4 +213,50 @@ export async function getResumenOperativoDiario(params: {
       atendidos: porTipoAtendidos.get(tipo) ?? 0,
     })),
   };
+}
+
+const sumarBuckets = (buckets: ResumenOperativoBucket[]): ResumenOperativoBucket => ({
+  asignados: buckets.reduce((s, b) => s + b.asignados, 0),
+  atendidos: buckets.reduce((s, b) => s + b.atendidos, 0),
+  fallidos: buckets.reduce((s, b) => s + b.fallidos, 0),
+  cancelados: buckets.reduce((s, b) => s + b.cancelados, 0),
+  noEfectivo: buckets.reduce((s, b) => s + b.noEfectivo, 0),
+  porTipo: ORDEN_TIPOS.map((tipo) => ({
+    tipo,
+    asignados: buckets.reduce((s, b) => s + (b.porTipo.find((t) => t.tipo === tipo)?.asignados ?? 0), 0),
+    atendidos: buckets.reduce((s, b) => s + (b.porTipo.find((t) => t.tipo === tipo)?.atendidos ?? 0), 0),
+  })),
+});
+
+/**
+ * `desde`/`hasta`: "yyyy-MM-dd". Devuelve el desglose por cada ciudad
+ * (Medellín, Bogotá — en ese orden) más un consolidado que es la SUMA
+ * de esas dos ciudades exactamente (no un tercer query "todas las
+ * ciudades sin filtrar", que incluiría otras ciudades y no cuadraría
+ * contra la suma — así lo pidió Daniel explícitamente).
+ */
+export async function getResumenOperativoDiario(params: {
+  desde: string;
+  hasta: string;
+}): Promise<ResumenOperativoConsolidado> {
+  const supabase = createClient();
+  const desdeIso = `${params.desde}T00:00:00.000Z`;
+  const diaSiguiente = new Date(`${params.hasta}T00:00:00.000Z`);
+  diaSiguiente.setDate(diaSiguiente.getDate() + 1);
+
+  const { data } = await supabase
+    .from("medical_services")
+    .select("etapa, tipo_servicio, ciudad_origen")
+    .gte("fecha_hora_registro", desdeIso)
+    .lt("fecha_hora_registro", diaSiguiente.toISOString())
+    .limit(20000);
+
+  const filas = data || [];
+
+  const porCiudad: ResumenOperativoCiudad[] = [...CIUDADES_JUNTA].reverse().map(({ ciudad, prefijo }) => ({
+    ciudad,
+    ...calcularBucket(filas.filter((s) => sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo))),
+  }));
+
+  return { consolidado: sumarBuckets(porCiudad), porCiudad };
 }

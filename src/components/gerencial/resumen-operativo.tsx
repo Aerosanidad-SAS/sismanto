@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateField } from "@/components/forms/date-field";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { getResumenOperativoDiario, type ResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
+import {
+  getResumenOperativoDiario,
+  type ResumenOperativoConsolidado,
+  type ResumenOperativoBucket,
+} from "@/app/api/actions/estadisticas-servicios";
 import { LayoutGrid, ClipboardCheck, CheckCircle2, AlertTriangle, XCircle, CircleSlash } from "lucide-react";
-
-const CIUDADES = ["Todas", "Bogotá", "Medellín"] as const;
+import { cn } from "@/lib/utils";
 
 const TARJETAS = [
   { key: "asignados", label: "Asignados", icon: ClipboardCheck, bg: "bg-blue-50", fg: "text-blue-700" },
@@ -22,91 +24,115 @@ function hoyIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function ResumenOperativo({ inicial }: { inicial: ResumenOperativoDiario }) {
+/** Fila compacta de tipo de servicio — mismo dato en los 3 niveles (consolidado y cada ciudad). */
+function FilaPorTipo({ porTipo }: { porTipo: ResumenOperativoBucket["porTipo"] }) {
+  return (
+    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+      {porTipo.map((t) => (
+        <div key={t.tipo} className="rounded-md border bg-muted/30 px-2 py-1.5 text-center">
+          <p className="truncate text-[10px] text-muted-foreground">{t.tipo}</p>
+          <p className="text-sm font-semibold">
+            {t.asignados}
+            <span className="font-normal text-muted-foreground"> / {t.atendidos}</span>
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Bloque grande (consolidado) — números destacados, para la fila de arriba. */
+function BloqueConsolidado({ titulo, bucket }: { titulo: string; bucket: ResumenOperativoBucket }) {
+  return (
+    <div>
+      <p className="mb-2 text-sm font-semibold">{titulo}</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {TARJETAS.map(({ key, label, icon: Icon, bg, fg }) => (
+          <div key={key} className={cn("rounded-lg p-3 text-center", bg)}>
+            <Icon className={cn("mx-auto mb-1 h-4 w-4", fg)} />
+            <p className={cn("text-2xl font-bold leading-tight", fg)}>{bucket[key]}</p>
+            <p className="text-[11px] text-muted-foreground">{label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2">
+        <FilaPorTipo porTipo={bucket.porTipo} />
+      </div>
+    </div>
+  );
+}
+
+/** Bloque compacto por ciudad — icono + etiqueta + número en una sola línea, para ahorrar espacio vertical. */
+function BloqueCiudad({ ciudad, bucket }: { ciudad: string; bucket: ResumenOperativoBucket }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">{ciudad}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {TARJETAS.map(({ key, label, icon: Icon, bg, fg }) => (
+            <div key={key} className={cn("flex items-center gap-2 rounded-lg px-2.5 py-2", bg)}>
+              <Icon className={cn("h-4 w-4 shrink-0", fg)} />
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-[10px] text-muted-foreground">{label}</p>
+                <p className={cn("text-lg font-bold", fg)}>{bucket[key]}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <FilaPorTipo porTipo={bucket.porTipo} />
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ResumenOperativo({ inicial }: { inicial: ResumenOperativoConsolidado }) {
   const [desde, setDesde] = useState(hoyIso());
   const [hasta, setHasta] = useState(hoyIso());
-  const [ciudad, setCiudad] = useState<(typeof CIUDADES)[number]>("Todas");
-  const [resumen, setResumen] = useState(inicial);
+  const [datos, setDatos] = useState(inicial);
   const [cargando, setCargando] = useState(false);
 
   const filtrar = async () => {
     setCargando(true);
-    const r = await getResumenOperativoDiario({ desde, hasta, ciudad });
-    setResumen(r);
+    const r = await getResumenOperativoDiario({ desde, hasta });
+    setDatos(r);
     setCargando(false);
   };
 
   return (
     <Card>
       <CardHeader className="space-y-3">
-        <div className="flex items-center gap-2">
-          <LayoutGrid className="h-5 w-5 text-primary" />
-          <CardTitle>Resumen operativo</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <LayoutGrid className="h-5 w-5 text-primary" />
+            <CardTitle>Resumen operativo</CardTitle>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Desde</label>
+              <DateField value={desde} onChange={setDesde} inputClassName="h-9 w-28" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Hasta</label>
+              <DateField value={hasta} onChange={setHasta} inputClassName="h-9 w-28" />
+            </div>
+            <Button size="sm" onClick={filtrar} disabled={cargando}>
+              {cargando ? "Filtrando..." : "Filtrar"}
+            </Button>
+          </div>
         </div>
         <CardDescription>
-          Servicios recibidos y programados por Regulación — mismo reporte diario que ya se revisa por ciudad.
+          Servicios recibidos y programados por Regulación — Bogotá y Medellín por separado, con el
+          consolidado de ambas arriba.
         </CardDescription>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Desde</label>
-            <DateField value={desde} onChange={setDesde} inputClassName="h-9 w-32" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Hasta</label>
-            <DateField value={hasta} onChange={setHasta} inputClassName="h-9 w-32" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Ciudad</label>
-            <Select value={ciudad} onValueChange={(v) => setCiudad(v as (typeof CIUDADES)[number])}>
-              <SelectTrigger className="h-9 w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CIUDADES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button size="sm" onClick={filtrar} disabled={cargando}>
-            {cargando ? "Filtrando..." : "Filtrar"}
-          </Button>
-        </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div>
-          <p className="mb-2 text-sm font-semibold">
-            Total — {ciudad === "Todas" ? "Bogotá y Medellín" : ciudad.toUpperCase()}
-          </p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {TARJETAS.map(({ key, label, icon: Icon, bg, fg }) => (
-              <div key={key} className={`rounded-lg p-4 text-center ${bg}`}>
-                <Icon className={`mx-auto mb-1 h-4 w-4 ${fg}`} />
-                <p className={`text-2xl font-bold ${fg}`}>{resumen[key]}</p>
-                <p className="text-xs text-muted-foreground">{label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-2 text-sm font-semibold">Por tipo de servicio</p>
-          <p className="mb-2 text-xs text-muted-foreground">
-            TAB DOBLE/TAM DOBLE cuentan como 2 en este desglose, y &quot;Asignados&quot; no incluye los No
-            Efectivo — por eso la suma no cuadra exacto con el total de arriba.
-          </p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {resumen.porTipo.map((t) => (
-              <div key={t.tipo} className="rounded-lg border p-3 text-center">
-                <p className="text-xs text-muted-foreground">{t.tipo}</p>
-                <p className="text-lg font-bold">
-                  {t.asignados} <span className="text-sm font-normal text-muted-foreground">/ {t.atendidos}</span>
-                </p>
-              </div>
-            ))}
-          </div>
+        <BloqueConsolidado titulo="Consolidado — Bogotá + Medellín" bucket={datos.consolidado} />
+        <div className="grid gap-3 md:grid-cols-2">
+          {datos.porCiudad.map((c) => (
+            <BloqueCiudad key={c.ciudad} ciudad={c.ciudad} bucket={c} />
+          ))}
         </div>
       </CardContent>
     </Card>
