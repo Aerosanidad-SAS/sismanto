@@ -52,6 +52,7 @@ import {
   crearServicioMedico,
   actualizarServicioMedico,
   cambiarEtapaServicio,
+  eliminarServicioMedico,
   getCatalogoCie,
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
@@ -495,6 +496,21 @@ export function ServiciosTabla({
     else router.refresh();
   };
 
+  // Borrado físico — igual que SISRES (delete.php, tabla=servicios: DELETE
+  // real, no soft delete). RLS de medical_services (migración 054) ya lo
+  // restringe a ADMIN a nivel de base de datos; el botón solo se muestra
+  // acá para ese rol para no ofrecer una acción que el servidor va a
+  // rechazar.
+  const puedeEliminar = viewerRole === "ADMIN";
+  const handleEliminar = async (servicio: ServicioRow) => {
+    if (!confirm(`¿Está seguro que desea eliminar el registro con id ${servicio.id}?`)) return;
+    setBusyId(servicio.id);
+    const res = await eliminarServicioMedico(servicio.id);
+    setBusyId(null);
+    if (res.error) alert(res.error);
+    else router.refresh();
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -585,13 +601,24 @@ export function ServiciosTabla({
                   </TableCell>
                 )}
                 {puedeEditar && (
-                  <TableCell className="text-right">
+                  <TableCell className="text-right space-x-2">
                     {puedeEditarServicio(s) ? (
                       <Button variant="outline" size="sm" onClick={() => abrirEdicion(s)}>
                         Editar
                       </Button>
                     ) : (
                       <span className="text-xs text-muted-foreground">Finalizado — bloqueado</span>
+                    )}
+                    {puedeEliminar && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        disabled={busyId === s.id}
+                        onClick={() => handleEliminar(s)}
+                      >
+                        Eliminar
+                      </Button>
                     )}
                   </TableCell>
                 )}
