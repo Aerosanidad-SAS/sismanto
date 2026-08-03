@@ -30,6 +30,33 @@ export async function buscarPacientePorCedula(cedula: string) {
   return data;
 }
 
+export interface PacienteTypeahead {
+  id: number;
+  cedula: string;
+  nombre1: string;
+  nombre2: string | null;
+  apellido1: string;
+  apellido2: string | null;
+}
+
+/** Búsqueda incremental por cédula o nombre (cualquier parte) — para el combobox
+ * de "buscar paciente" en el modal de Nuevo servicio, mínimo 2 caracteres. */
+export async function buscarPacientesTypeahead(busqueda: string): Promise<PacienteTypeahead[]> {
+  const parsed = z.string().trim().min(2).max(60).safeParse(busqueda);
+  if (!parsed.success) return [];
+
+  const supabase = createClient();
+  const q = parsed.data;
+  const { data } = await supabase
+    .from("patients")
+    .select("id, cedula, nombre1, nombre2, apellido1, apellido2")
+    .eq("activo", true)
+    .or(`cedula.ilike.%${q}%,nombre1.ilike.%${q}%,nombre2.ilike.%${q}%,apellido1.ilike.%${q}%,apellido2.ilike.%${q}%`)
+    .order("apellido1")
+    .limit(15);
+  return (data ?? []) as PacienteTypeahead[];
+}
+
 export async function crearPaciente(formData: PatientFormData) {
   const parsed = patientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };

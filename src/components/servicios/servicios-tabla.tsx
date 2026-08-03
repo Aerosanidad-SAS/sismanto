@@ -28,6 +28,7 @@ import {
 import { formatDateShort } from "@/lib/utils";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
+import { PatientSearchCombobox, nombreCompletoDe } from "@/components/forms/patient-search-combobox";
 import { DateTimeField } from "@/components/forms/date-time-field";
 import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { PRESTADORES_SISRES } from "@/lib/catalogos-sisres";
@@ -49,7 +50,7 @@ import {
   cambiarEtapaServicio,
   getCatalogoCie,
 } from "@/app/api/actions/servicios-medicos";
-import { buscarPacientePorCedula } from "@/app/api/actions/pacientes";
+import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 
@@ -324,21 +325,11 @@ export function ServiciosTabla({
     );
   }, [servicios, busqueda, filtroEtapa]);
 
-  const buscarPaciente = async () => {
-    if (!cedulaBusqueda.trim()) return;
-    const paciente = await buscarPacientePorCedula(cedulaBusqueda.trim());
-    if (!paciente) {
-      setError("Paciente no encontrado — regístralo primero en el módulo Pacientes");
-      return;
-    }
+  const seleccionarPaciente = (paciente: PacienteTypeahead) => {
     setError(null);
     setValue("patient_id", paciente.id);
-    setValue(
-      "nombre_completo",
-      [paciente.nombre1, paciente.nombre2, paciente.apellido1, paciente.apellido2]
-        .filter(Boolean)
-        .join(" ")
-    );
+    setValue("nombre_completo", nombreCompletoDe(paciente));
+    setCedulaBusqueda(`${paciente.cedula} — ${nombreCompletoDe(paciente)}`);
   };
 
   const abrirNuevo = () => {
@@ -363,7 +354,7 @@ export function ServiciosTabla({
   const abrirEdicion = (s: ServicioRow) => {
     setEditando(s);
     setError(null);
-    setCedulaBusqueda(s.patients?.cedula ?? "");
+    setCedulaBusqueda(s.patients?.cedula ? `${s.patients.cedula} — ${s.nombre_completo}` : "");
     setCieLabel("");
     const str = (k: string) => (s[k] ? String(s[k]) : "");
     const fecha = (k: string) => (s[k] ? String(s[k]).slice(0, 16) : "");
@@ -596,18 +587,15 @@ export function ServiciosTabla({
               <h3 className="text-sm font-semibold text-muted-foreground">Paciente</h3>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1 sm:col-span-1">
-                  <Label>Documento</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={cedulaBusqueda}
-                      onChange={(e) => setCedulaBusqueda(e.target.value)}
-                      placeholder="Cédula"
-                      disabled={soloLecturaLogistica}
-                    />
-                    <Button type="button" variant="outline" onClick={buscarPaciente} disabled={soloLecturaLogistica}>
-                      Buscar
-                    </Button>
-                  </div>
+                  <Label>Buscar paciente</Label>
+                  <PatientSearchCombobox
+                    valueLabel={cedulaBusqueda || undefined}
+                    onSelect={seleccionarPaciente}
+                    disabled={soloLecturaLogistica}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Por cédula o nombre — si no aparece, es un paciente nuevo: escribe el nombre a la derecha.
+                  </p>
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor="nombre_completo">Nombre completo *</Label>
