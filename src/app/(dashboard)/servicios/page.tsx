@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
+import { getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
 import { getClientes } from "@/app/api/actions/clientes";
 import { getProfile } from "@/app/api/actions/auth";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 import { MisServicios } from "@/components/servicios/mis-servicios";
+import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
@@ -25,15 +27,18 @@ async function getVehiculosActivos() {
 }
 
 export default async function ServiciosPage() {
-  const [profile, servicios, vehiculos, clientes, flota, medicosDisponibles, reguladoresDisponibles] = await Promise.all([
-    getProfile(),
-    getServiciosMedicos(),
-    getVehiculosActivos(),
-    getClientes(),
-    getFleetWithAssignments(),
-    getUsuariosPorRol("MEDICO"),
-    getUsuariosPorRol("REGULACION"),
-  ]);
+  const hoyIso = new Date().toISOString().slice(0, 10);
+  const [profile, servicios, vehiculos, clientes, flota, medicosDisponibles, reguladoresDisponibles, resumenHoy] =
+    await Promise.all([
+      getProfile(),
+      getServiciosMedicos(),
+      getVehiculosActivos(),
+      getClientes(),
+      getFleetWithAssignments(),
+      getUsuariosPorRol("MEDICO"),
+      getUsuariosPorRol("REGULACION"),
+      getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
+    ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
 
@@ -53,13 +58,6 @@ export default async function ServiciosPage() {
     tripulacionPorVehiculo[v.id] = entry;
   }
 
-  const programados = servicios.filter((s) => s.etapa === "PROGRAMADO").length;
-  const enCurso = servicios.filter((s) => s.etapa === "CURSO").length;
-  const finalizados = servicios.filter((s) => s.etapa === "FINALIZADO").length;
-  const cerradosSinExito = servicios.filter((s) =>
-    ["CANCELADO", "FALLIDO", "NO EFECTIVO"].includes(s.etapa)
-  ).length;
-
   return (
     <div className="space-y-8">
       <div>
@@ -76,40 +74,7 @@ export default async function ServiciosPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Programados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{programados}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">En curso</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{enCurso}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Finalizados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{finalizados}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Cancelados / fallidos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{cerradosSinExito}</div>
-          </CardContent>
-        </Card>
-      </div>
+      <ResumenOperativo inicial={resumenHoy} />
 
       <Card>
         <CardHeader>

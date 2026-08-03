@@ -1,9 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getEstadisticasServicios } from "@/app/api/actions/estadisticas-servicios";
+import { getEstadisticasServicios, getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
 import { EstadisticasCharts } from "@/components/servicios/estadisticas-charts";
+import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 
 export default async function EstadisticasPage() {
-  const stats = await getEstadisticasServicios();
+  const hoyIso = new Date().toISOString().slice(0, 10);
+  const [stats, resumenHoy] = await Promise.all([
+    getEstadisticasServicios(),
+    getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -13,6 +18,8 @@ export default async function EstadisticasPage() {
           Servicios médicos de los últimos 12 meses — volumen, etapas, tipos y tiempos de atención.
         </p>
       </div>
+
+      <ResumenOperativo inicial={resumenHoy} />
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

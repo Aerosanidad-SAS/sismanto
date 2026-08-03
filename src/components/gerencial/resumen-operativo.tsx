@@ -87,18 +87,37 @@ function BloqueCiudad({ ciudad, bucket }: { ciudad: string; bucket: ResumenOpera
   );
 }
 
-export function ResumenOperativo({ inicial }: { inicial: ResumenOperativoConsolidado }) {
+type ModoFecha = "hoy" | "rango";
+
+export function ResumenOperativo({
+  inicial,
+  modoInicial = "hoy",
+}: {
+  inicial: ResumenOperativoConsolidado;
+  modoInicial?: ModoFecha;
+}) {
+  const [modo, setModo] = useState<ModoFecha>(modoInicial);
   const [desde, setDesde] = useState(hoyIso());
   const [hasta, setHasta] = useState(hoyIso());
   const [datos, setDatos] = useState(inicial);
   const [cargando, setCargando] = useState(false);
 
-  const filtrar = async () => {
+  const cargar = async (d: string, h: string) => {
     setCargando(true);
-    const r = await getResumenOperativoDiario({ desde, hasta });
+    const r = await getResumenOperativoDiario({ desde: d, hasta: h });
     setDatos(r);
     setCargando(false);
   };
+
+  const elegirHoy = () => {
+    setModo("hoy");
+    const hoy = hoyIso();
+    setDesde(hoy);
+    setHasta(hoy);
+    cargar(hoy, hoy);
+  };
+
+  const filtrar = () => cargar(desde, hasta);
 
   return (
     <Card>
@@ -109,22 +128,48 @@ export function ResumenOperativo({ inicial }: { inicial: ResumenOperativoConsoli
             <CardTitle>Resumen operativo</CardTitle>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Desde</label>
-              <DateField value={desde} onChange={setDesde} inputClassName="h-9 w-28" />
+            <div className="flex gap-0.5 rounded-md border p-0.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={modo === "hoy" ? "default" : "ghost"}
+                className="h-8"
+                onClick={elegirHoy}
+                disabled={cargando}
+              >
+                Hoy
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={modo === "rango" ? "default" : "ghost"}
+                className="h-8"
+                onClick={() => setModo("rango")}
+                disabled={cargando}
+              >
+                Rango
+              </Button>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Hasta</label>
-              <DateField value={hasta} onChange={setHasta} inputClassName="h-9 w-28" />
-            </div>
-            <Button size="sm" onClick={filtrar} disabled={cargando}>
-              {cargando ? "Filtrando..." : "Filtrar"}
-            </Button>
+            {modo === "rango" && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Desde</label>
+                  <DateField value={desde} onChange={setDesde} inputClassName="h-9 w-28" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Hasta</label>
+                  <DateField value={hasta} onChange={setHasta} inputClassName="h-9 w-28" />
+                </div>
+                <Button size="sm" onClick={filtrar} disabled={cargando}>
+                  {cargando ? "Filtrando..." : "Filtrar"}
+                </Button>
+              </>
+            )}
           </div>
         </div>
         <CardDescription>
-          Servicios recibidos y programados por Regulación — Bogotá y Medellín por separado, con el
-          consolidado de ambas arriba.
+          {modo === "hoy" ? "Servicios de hoy" : `Servicios entre ${desde} y ${hasta}`} — Bogotá y
+          Medellín por separado, con el consolidado de ambas arriba.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
