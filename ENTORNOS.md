@@ -26,8 +26,8 @@ Cada rama tiene su propio dominio estable de Vercel:
 
 | Rama | Dominio |
 |---|---|
-| `dev` | `sismanto-dev.vercel.app` |
-| `staging` | `sismanto-staging.vercel.app` (el que ya existía — se re-apunta de `integration/sisres` a `staging`) |
+| `dev` | `sisres-v2-dev.vercel.app` |
+| `staging` | `sisres-v2-staging.vercel.app` (el que ya existía — se re-apunta de `integration/sisres` a `staging`) |
 | `main` | dominio de producción de Aeromanto (el de siempre) |
 
 **Por qué no es el Git-integration nativo de Vercel:** el plan Hobby bloquea despliegues disparados por un commit de alguien que no sea el dueño del proyecto, en un repo privado (esto es lo que le pasó a León hoy). En vez de pagar Vercel Pro, `dev` y `staging` se despliegan vía **Deploy Hook** (`.github/workflows/deploy-dev.yml` y `deploy-staging.yml`) — un webhook de Vercel que reconstruye la rama sin mirar quién hizo el commit. `main` sigue con el Git-integration nativo porque ahí, por ahora, solo commitea Daniel.
@@ -35,7 +35,7 @@ Cada rama tiene su propio dominio estable de Vercel:
 ## Setup pendiente en Vercel (una sola vez)
 
 1. **Deploy Hooks**: Project Settings → Git → Deploy Hooks → crear uno apuntando a `dev` y otro a `staging`. Cada uno da una URL — esas dos URLs van como secretos de GitHub (`VERCEL_DEPLOY_HOOK_DEV`, `VERCEL_DEPLOY_HOOK_STAGING`).
-2. **Dominios**: Project Settings → Domains → agregar `sismanto-dev.vercel.app` apuntado a la rama `dev`; re-apuntar `sismanto-staging.vercel.app` de `integration/sisres` a `staging`.
+2. **Dominios**: Project Settings → Domains → agregar `sisres-v2-dev.vercel.app` apuntado a la rama `dev`; re-apuntar `sisres-v2-staging.vercel.app` de `integration/sisres` a `staging`.
 3. **Deployment Protection**: confirmar que sigue deshabilitada (o con Preview Deployment Suite en modo "Only Preview Deployments" sin protección) para que León pueda abrir las URLs sin login de Vercel.
 
 ## Prioridad #1 ahora mismo

@@ -1,14 +1,14 @@
 # Cargar ~35.000 servicios históricos a staging
 
 Herramienta ya existente: `scripts/etl-sisres.ts`. Se conecta directo por Postgres al
-proyecto de Supabase de **staging** (`SISMANTO_Staging`) e inserta los datos exportados
+proyecto de Supabase de **staging** (`SISRES_V2_Staging`) e inserta los datos exportados
 de SISRES. No hay que programar nada nuevo — solo seguir estos pasos.
 
 ## 0. Antes de empezar
 
-- Esto escribe en la base de **staging** (`SISMANTO_Staging`), la misma que usan `dev` y
+- Esto escribe en la base de **staging** (`SISRES_V2_Staging`), la misma que usan `dev` y
   `staging` de la app. **Nunca** apuntes esto a producción.
-- Necesitas acceso al Supabase Dashboard del proyecto `SISMANTO_Staging`.
+- Necesitas acceso al Supabase Dashboard del proyecto `SISRES_V2_Staging`.
 
 ## 1. Reunir los CSV exportados de SISRES
 
@@ -31,12 +31,12 @@ En tu `.env.local` (raíz del proyecto `aeromanto/`), agrega:
 DATABASE_URL=postgresql://...
 ```
 
-Ese valor lo sacas de: **Supabase Dashboard → proyecto `SISMANTO_Staging` → Project
+Ese valor lo sacas de: **Supabase Dashboard → proyecto `SISRES_V2_Staging` → Project
 Settings → Database → Connection string → modo "URI"** (con la contraseña incluida).
 
 ⚠️ **No es lo mismo que `NEXT_PUBLIC_SUPABASE_URL`** (ese es para el cliente JS de la app).
 `DATABASE_URL` es la conexión directa de Postgres que usa este script — verifica dos veces
-que el proyecto que copiaste sea `SISMANTO_Staging`, no producción.
+que el proyecto que copiaste sea `SISRES_V2_Staging`, no producción.
 
 ## 3. Revisar si `medical_services` ya tiene datos en staging
 

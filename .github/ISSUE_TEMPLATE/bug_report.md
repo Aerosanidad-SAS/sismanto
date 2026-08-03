@@ -8,7 +8,7 @@ assignees: ""
 
 ## Entorno
 
-- [ ] Staging (`SISMANTO_Staging`)
+- [ ] Staging (`SISRES_V2_Staging`)
 - [ ] Producción
 
 **URL exacta:**

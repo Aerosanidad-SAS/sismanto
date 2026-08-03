@@ -24,8 +24,8 @@ Three-tier flow, promotion by Pull Request only (never a direct push to `staging
 dev (Daniel + León push here) → PR → staging (QA) → PR → main (production)
 ```
 
-- `dev` → auto-deploys to `sismanto-dev.vercel.app` via a GitHub Actions Deploy Hook (`.github/workflows/deploy-dev.yml`) — pushed there because Vercel's Hobby plan blocks deploys triggered by a non-owner commit author on a private repo.
-- `staging` → same mechanism, `sismanto-staging.vercel.app` (`deploy-staging.yml`). Same Supabase project as `dev` (`SISMANTO_Staging`, see `STAGING_SETUP.md`).
+- `dev` → auto-deploys to `sisres-v2-dev.vercel.app` via a GitHub Actions Deploy Hook (`.github/workflows/deploy-dev.yml`) — pushed there because Vercel's Hobby plan blocks deploys triggered by a non-owner commit author on a private repo.
+- `staging` → same mechanism, `sisres-v2-staging.vercel.app` (`deploy-staging.yml`). Same Supabase project as `dev` (`SISRES_V2_Staging`, see `STAGING_SETUP.md`).
 - `main` → production domain, deployed via Vercel's native Git integration (no Action needed — only Daniel merges to `main`, so the Hobby-plan author restriction never triggers). Own production Supabase project.
 
 Never suggest a direct push/commit to `staging` or `main` — always a PR from the branch below it.
