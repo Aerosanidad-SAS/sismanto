@@ -127,9 +127,15 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
   return data || [];
 }
 
-export async function crearServicioMedico(formData: MedicalServiceFormData) {
+export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  // SISRES pide la etapa como select obligatorio al registrar
+  // (registroServicios.php) — permite loguear directo un servicio que ya
+  // sucedió (ej. FALLIDO, NO EFECTIVO) sin pasarlo primero por PROGRAMADO.
+  const etapa = ETAPAS_SERVICIO.find((e) => e === etapaInicial);
+  if (!etapa) return { error: "Debes seleccionar la etapa del servicio" };
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -138,13 +144,13 @@ export async function crearServicioMedico(formData: MedicalServiceFormData) {
     .from("medical_services")
     .insert({
       ...aFilaServicio(parsed.data),
-      etapa: "PROGRAMADO",
+      etapa,
       created_by: userData.user?.id ?? null,
     })
     .select()
     .single();
   if (error) return { error: error.message };
-  await notificarEtapaServicio(supabase, data.id, "PROGRAMADO", data.tipo_servicio, data.patient_id);
+  await notificarEtapaServicio(supabase, data.id, etapa, data.tipo_servicio, data.patient_id);
   revalidatePath("/servicios");
   return { success: true, data };
 }

@@ -519,6 +519,29 @@ export const FINALIDAD_TRASLADO_OPCIONES = [
 
 export const PERIMETRO_OPCIONES = ["METROPOLITANO", "URBANO", "RURAL"] as const;
 
+// Catálogos reales de motivo de no-efectividad — verificados contra
+// registroServicios.php de SISRES (selects fijos, no texto libre).
+export const MOTIVO_EXTERNO_OPCIONES = [
+  "No aceptan disponibilidad",
+  "Solo por cotizar",
+  "Sin Cobertura",
+] as const;
+
+export const MOTIVO_INTERNO_OPCIONES = [
+  "Tiempo de desplazamiento",
+  "Por fuera del horario de servicio",
+  "Sin capacidad instalada",
+  "Tripulación en otro servicio",
+  "Sin Cobertura",
+] as const;
+
+// SISRES guarda el estado como "0"/"1" (estadoServicio, select binario) —
+// no es texto libre.
+export const ESTADO_SERVICIO_OPCIONES = [
+  { value: "0", label: "ACTIVO" },
+  { value: "1", label: "INACTIVO" },
+] as const;
+
 export const METODO_PAGO_OPCIONES = [
   "N/A",
   "QR BANCOLOMBIA",

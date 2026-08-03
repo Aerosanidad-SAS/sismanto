@@ -162,7 +162,7 @@ export async function getFleetWithAssignments() {
   }));
 }
 
-export async function getUsuariosPorRol(rolCodigo: "OVEM" | "MEDICO" | "AUXILIAR_ENFERMERIA") {
+export async function getUsuariosPorRol(rolCodigo: "OVEM" | "MEDICO" | "AUXILIAR_ENFERMERIA" | "REGULACION") {
   const supabase = createClient();
   const { data: role } = await supabase.from("roles").select("id").eq("codigo", rolCodigo).single();
   if (!role) return [];

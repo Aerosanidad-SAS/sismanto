@@ -25,13 +25,14 @@ async function getVehiculosActivos() {
 }
 
 export default async function ServiciosPage() {
-  const [profile, servicios, vehiculos, clientes, flota, medicosDisponibles] = await Promise.all([
+  const [profile, servicios, vehiculos, clientes, flota, medicosDisponibles, reguladoresDisponibles] = await Promise.all([
     getProfile(),
     getServiciosMedicos(),
     getVehiculosActivos(),
     getClientes(),
     getFleetWithAssignments(),
     getUsuariosPorRol("MEDICO"),
+    getUsuariosPorRol("REGULACION"),
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
@@ -124,8 +125,10 @@ export default async function ServiciosPage() {
             vehiculos={vehiculos}
             clientes={clientes.map((c) => c.nombre)}
             viewerRole={profile?.role_codigo}
+            viewerNombreCompleto={profile?.nombre_completo ?? profile?.email ?? null}
             puedeEditar={puedeEditar}
             medicosDisponibles={medicosDisponibles}
+            reguladoresDisponibles={reguladoresDisponibles}
             tripulacionPorVehiculo={tripulacionPorVehiculo}
             ciudadDefault={profile?.ciudad}
           />

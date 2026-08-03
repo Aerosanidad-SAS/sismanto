@@ -43,6 +43,10 @@ import {
   PERIMETRO_OPCIONES,
   PERFIL_FORMULARIO_SERVICIO,
   perfilFormularioServicio,
+  ETAPAS_SERVICIO,
+  MOTIVO_EXTERNO_OPCIONES,
+  MOTIVO_INTERNO_OPCIONES,
+  ESTADO_SERVICIO_OPCIONES,
 } from "@/lib/validations";
 import {
   crearServicioMedico,
@@ -105,6 +109,12 @@ const TIPOS_SERVICIO = [
   "TRASLADO AEREO",
 ];
 
+// SISRES no ofrece ENFERMERIA DOMICILIARIA/TELEMEDICINA/TRASLADO AEREO al
+// Regulador (cargo=4) en el formulario de registro — solo al crear
+// (registroServicios.php, $esRegulador). No se aplica al editar un servicio
+// ya existente (editarServicio.php es otro flujo, fuera de este alcance).
+const TIPOS_SERVICIO_REGULACION = ["MEDICINA DOMICILIARIA", "TAB SIMPLE", "TAB DOBLE", "TAM SIMPLE", "TAM DOBLE"];
+
 type Perfil = keyof typeof PERFIL_FORMULARIO_SERVICIO;
 type CampoDef = { name: keyof MedicalServiceFormData; label: string; type?: string; placeholder?: string; perfiles?: Perfil[] };
 /** undefined en `perfiles` = visible en los 3 perfiles. */
@@ -151,12 +161,11 @@ const CAMPOS_RUTA: CampoDef[] = [
 // Proveedor ya no está acá: mismo catálogo real que Prestador
 // (PRESTADORES_SISRES — en SISRES es la misma tabla `proveedores` para
 // ambos campos), se renderiza aparte, más abajo.
+// usuario_recibe/usuario_despacha (select de Reguladores reales),
+// motivo_externo/motivo_interno (catálogos fijos) y estado_servicio
+// (ACTIVO/INACTIVO) ya no están acá: SISRES los resuelve con <select>, no
+// texto libre — se renderizan aparte, más abajo.
 const CAMPOS_CIERRE: CampoDef[] = [
-  { name: "usuario_recibe", label: "Usuario que recibe", placeholder: "Quién recibe el servicio" },
-  { name: "usuario_despacha", label: "Usuario que despacha", placeholder: "Quién despacha el servicio" },
-  { name: "motivo_externo", label: "Motivo externo", placeholder: "Motivo externo (si aplica)" },
-  { name: "motivo_interno", label: "Motivo interno", placeholder: "Motivo interno (si aplica)" },
-  { name: "estado_servicio", label: "Estado del servicio", placeholder: "Estado del servicio" },
   { name: "ciudad_registro", label: "Ciudad de registro", placeholder: "Ciudad donde se registra el servicio" },
   { name: "turno_facturacion", label: "Turno de facturación", placeholder: "Turno en que se factura el servicio", perfiles: ["MEDICINA_DOMICILIARIA"] },
   { name: "deducible", label: "Deducible", placeholder: "Valor o porcentaje del deducible", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
@@ -177,6 +186,10 @@ interface ServiciosTablaProps {
   puedeEditar: boolean;
   /** Médicos activos disponibles para asignar directo a un servicio (sin vehículo/OVEM) — típico de Medicina Domiciliaria con prestador externo. */
   medicosDisponibles: PersonaTripulacion[];
+  /** Reguladores activos — reemplaza el texto libre de "usuario que recibe/despacha" por un select real (SISRES: usuarios cargo=4). */
+  reguladoresDisponibles: PersonaTripulacion[];
+  /** Nombre de quien ve el formulario — precarga "recibe/despacha" igual que la sesión en SISRES. */
+  viewerNombreCompleto?: string | null;
   /** Tripulación activa hoy por vehículo (armada en Regulación) — para autocompletar al elegir móvil. */
   tripulacionPorVehiculo: Record<
     string,
@@ -213,9 +226,11 @@ export function ServiciosTabla({
   clientes,
   puedeEditar,
   medicosDisponibles,
+  reguladoresDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
   viewerRole,
+  viewerNombreCompleto,
 }: ServiciosTablaProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -226,6 +241,13 @@ export function ServiciosTabla({
   const [guardando, setGuardando] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [cedulaBusqueda, setCedulaBusqueda] = useState("");
+  // Etapa inicial — solo aplica al crear (SISRES: registroServicios.php la
+  // pide como select obligatorio; editarServicio.php es otro flujo, la
+  // etapa de un servicio existente se cambia desde "Cambiar etapa" en la
+  // tabla). Se maneja fuera del schema de react-hook-form/zod a propósito:
+  // así nunca se cuela en el payload de actualizarServicioMedico y pisa la
+  // etapa real de un servicio ya existente.
+  const [etapaInicial, setEtapaInicial] = useState<string>("");
 
   const { register, handleSubmit, reset, setValue, watch, formState } =
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
@@ -249,6 +271,17 @@ export function ServiciosTabla({
   const proveedorSeleccionado = watch("proveedor");
   const ciudadOrigenSeleccionada = watch("ciudad_origen");
   const ciudadDestinoSeleccionada = watch("ciudad_destino");
+  const usuarioRecibeSeleccionado = watch("usuario_recibe");
+  const usuarioDespachaSeleccionado = watch("usuario_despacha");
+  const motivoExternoSeleccionado = watch("motivo_externo");
+  const motivoInternoSeleccionado = watch("motivo_interno");
+  const estadoServicioSeleccionado = watch("estado_servicio");
+
+  // SISRES oculta 3 tipos de servicio para el Regulador al registrar
+  // (registroServicios.php, $esRegulador) — solo al crear, no al editar uno
+  // ya existente con un tipo fuera de esa lista.
+  const esRegulador = viewerRole === "REGULACION";
+  const tiposServicioDisponibles = !editando && esRegulador ? TIPOS_SERVICIO_REGULACION : TIPOS_SERVICIO;
 
   // Perfil del formulario según el tipo de servicio — define qué secciones
   // se muestran (Regulación, QA 2026-07-22): Medicina/Enfermería
@@ -337,6 +370,7 @@ export function ServiciosTabla({
     setError(null);
     setCedulaBusqueda("");
     setCieLabel("");
+    setEtapaInicial("");
     // Ciudad de origen por defecto = ciudad del usuario logueado (Fase D).
     // Ahora que ciudad depende de un departamento elegido, hace falta
     // encontrar a qué departamento pertenece esa ciudad para dejar los dos
@@ -347,6 +381,17 @@ export function ServiciosTabla({
       tipo_servicio: "",
       departamento_origen: ubicacionDefault?.departamento ?? "",
       ciudad_origen: ubicacionDefault?.ciudad ?? "",
+      // SISRES precarga "Recibe" con la sesión y preselecciona "Despacha"
+      // al mismo usuario cuando es Regulador (registroServicios.php,
+      // $esRegulador) — y fuerza método de pago a N/A porque el Regulador
+      // no lo decide en este punto del flujo.
+      ...(esRegulador
+        ? {
+            usuario_recibe: viewerNombreCompleto ?? "",
+            usuario_despacha: viewerNombreCompleto ?? "",
+            metodo_pago: "N/A",
+          }
+        : {}),
     } as MedicalServiceFormData);
     setDialogOpen(true);
   };
@@ -356,6 +401,7 @@ export function ServiciosTabla({
     setError(null);
     setCedulaBusqueda(s.patients?.cedula ? `${s.patients.cedula} — ${s.nombre_completo}` : "");
     setCieLabel("");
+    setEtapaInicial("");
     const str = (k: string) => (s[k] ? String(s[k]) : "");
     const fecha = (k: string) => (s[k] ? String(s[k]).slice(0, 16) : "");
     reset({
@@ -423,11 +469,15 @@ export function ServiciosTabla({
   };
 
   const onSubmit = async (values: MedicalServiceFormData) => {
+    if (!editando && !etapaInicial) {
+      setError("Debes seleccionar la etapa del servicio");
+      return;
+    }
     setGuardando(true);
     setError(null);
     const res = editando
       ? await actualizarServicioMedico(editando.id, values)
-      : await crearServicioMedico(values);
+      : await crearServicioMedico(values, etapaInicial);
     setGuardando(false);
     if (res.error) {
       setError(res.error);
@@ -571,7 +621,7 @@ export function ServiciosTabla({
             <section className="space-y-1 rounded-md border bg-muted/30 p-3">
               <Label>Tipo de servicio *</Label>
               <CatalogCombobox
-                options={TIPOS_SERVICIO}
+                options={tiposServicioDisponibles}
                 value={tipoSeleccionado ?? ""}
                 onChange={(v) => setValue("tipo_servicio", v, { shouldValidate: true })}
                 placeholder="Escribe para buscar el tipo…"
@@ -582,6 +632,28 @@ export function ServiciosTabla({
                 Lo primero que hay que elegir: define qué campos siguen abajo.
               </p>
             </section>
+
+            {!editando && (
+              <section className="space-y-1">
+                <Label>Etapa del servicio *</Label>
+                <Select value={etapaInicial} onValueChange={setEtapaInicial}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ETAPAS_SERVICIO.map((e) => (
+                      <SelectItem key={e} value={e}>
+                        {e}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Permite registrar directamente un servicio que ya sucedió (ej. FALLIDO, NO
+                  EFECTIVO) sin tener que pasarlo primero por PROGRAMADO.
+                </p>
+              </section>
+            )}
 
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground">Paciente</h3>
@@ -896,25 +968,29 @@ export function ServiciosTabla({
                     {...register("valor_servicio", { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label>Método de pago</Label>
-                  <Select
-                    value={metodoPagoSeleccionado ?? ""}
-                    onValueChange={(v) => setValue("metodo_pago", v)}
-                    disabled={campoBloqueado("metodo_pago")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {METODO_PAGO_OPCIONES.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* SISRES fija método de pago en "N/A" (oculto) para el Regulador al
+                    registrar — no lo decide en este punto del flujo. */}
+                {!(esRegulador && !editando) && (
+                  <div className="space-y-1">
+                    <Label>Método de pago</Label>
+                    <Select
+                      value={metodoPagoSeleccionado ?? ""}
+                      onValueChange={(v) => setValue("metodo_pago", v)}
+                      disabled={campoBloqueado("metodo_pago")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {METODO_PAGO_OPCIONES.map((m) => (
+                          <SelectItem key={m} value={m}>
+                            {m}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label>Cliente / aseguradora</Label>
                   <CatalogCombobox
@@ -950,6 +1026,101 @@ export function ServiciosTabla({
                     />
                   </div>
                 ))}
+                <div className="space-y-1">
+                  <Label>Usuario que recibe</Label>
+                  <Select
+                    value={usuarioRecibeSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("usuario_recibe", v)}
+                    disabled={campoBloqueado("usuario_recibe")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reguladoresDisponibles.map((r) => (
+                        <SelectItem key={r.user_id} value={nombrePersona(r) ?? r.user_id}>
+                          {nombrePersona(r)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Usuario que despacha</Label>
+                  <Select
+                    value={usuarioDespachaSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("usuario_despacha", v)}
+                    disabled={campoBloqueado("usuario_despacha")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reguladoresDisponibles.map((r) => (
+                        <SelectItem key={r.user_id} value={nombrePersona(r) ?? r.user_id}>
+                          {nombrePersona(r)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Motivo externo</Label>
+                  <Select
+                    value={motivoExternoSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("motivo_externo", v)}
+                    disabled={campoBloqueado("motivo_externo")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MOTIVO_EXTERNO_OPCIONES.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Motivo interno</Label>
+                  <Select
+                    value={motivoInternoSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("motivo_interno", v)}
+                    disabled={campoBloqueado("motivo_interno")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MOTIVO_INTERNO_OPCIONES.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Estado del servicio</Label>
+                  <Select
+                    value={estadoServicioSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("estado_servicio", v)}
+                    disabled={campoBloqueado("estado_servicio")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ESTADO_SERVICIO_OPCIONES.map((e) => (
+                        <SelectItem key={e.value} value={e.value}>
+                          {e.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="novedad_servicio">Novedad del servicio</Label>
