@@ -54,6 +54,8 @@ import {
   cambiarEtapaServicio,
   eliminarServicioMedico,
   getCatalogoCie,
+  subirBoletaSalida,
+  getUrlBoletaSalida,
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
 
@@ -67,6 +69,7 @@ export interface ServicioRow {
   tipo_servicio: string;
   vehicle_id: string | null;
   movil_placa: string | null;
+  imagen_boleta_salida: string | null;
   etapa: string;
   ciudad_origen: string | null;
   ciudad_destino: string | null;
@@ -137,10 +140,6 @@ const CAMPOS_PROGRAMACION: CampoDef[] = [
   { name: "autorizacion", label: "Autorización", placeholder: "Número de autorización" },
   { name: "asesor", label: "Asesor quien solicita", placeholder: "Nombre del asesor", perfiles: ["TRASLADO"] },
   { name: "soporte", label: "Soporte", placeholder: "Oxígeno, ventilación, máscaras, control de líquidos…", perfiles: ["TRASLADO"] },
-  { name: "condicion", label: "Condición", placeholder: "Condición del paciente", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "medio_asignacion", label: "Medio de asignación", placeholder: "Cómo llegó la solicitud (llamada, WhatsApp, correo…)", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "poliza", label: "Póliza", placeholder: "Número de póliza", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
-  { name: "motivo_consulta", label: "Motivo de consulta", placeholder: "Motivo de la consulta de telemedicina", perfiles: ["TELEMEDICINA"] },
 ];
 
 // Ciudad origen/destino ya no están acá: tienen catálogo real en cascada
@@ -168,14 +167,6 @@ const CAMPOS_RUTA: CampoDef[] = [
 // texto libre — se renderizan aparte, más abajo.
 const CAMPOS_CIERRE: CampoDef[] = [
   { name: "ciudad_registro", label: "Ciudad de registro", placeholder: "Ciudad donde se registra el servicio" },
-  { name: "turno_facturacion", label: "Turno de facturación", placeholder: "Turno en que se factura el servicio", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "deducible", label: "Deducible", placeholder: "Valor o porcentaje del deducible", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
-  { name: "incapa", label: "INCAPA", placeholder: "Información INCAPA", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "situacion", label: "Situación", placeholder: "Situación del servicio", perfiles: ["TRASLADO", "TELEMEDICINA"] },
-  { name: "tiempo_a_restar", label: "Tiempo a restar (min)", type: "number", placeholder: "0", perfiles: ["TRASLADO"] },
-  { name: "funcionario_aseguradora", label: "Funcionario aseguradora", placeholder: "Nombre del funcionario", perfiles: ["TELEMEDICINA"] },
-  { name: "codigo_telemedicina", label: "Código", placeholder: "Código de telemedicina", perfiles: ["TELEMEDICINA"] },
-  { name: "correo_electronico", label: "Correo electrónico", type: "email", placeholder: "correo@ejemplo.com", perfiles: ["TELEMEDICINA"] },
 ];
 
 type PersonaTripulacion = { user_id: string; nombre_completo: string | null; email: string | null };
@@ -453,18 +444,6 @@ export function ServiciosTabla({
       motivo_interno: str("motivo_interno"),
       estado_servicio: str("estado_servicio"),
       ciudad_registro: str("ciudad_registro"),
-      condicion: str("condicion"),
-      medio_asignacion: str("medio_asignacion"),
-      turno_facturacion: str("turno_facturacion"),
-      deducible: str("deducible"),
-      incapa: str("incapa"),
-      situacion: str("situacion"),
-      tiempo_a_restar: (s.tiempo_a_restar as number | null) ?? undefined,
-      poliza: str("poliza"),
-      funcionario_aseguradora: str("funcionario_aseguradora"),
-      codigo_telemedicina: str("codigo_telemedicina"),
-      correo_electronico: str("correo_electronico"),
-      motivo_consulta: str("motivo_consulta"),
     });
     setDialogOpen(true);
   };
@@ -509,6 +488,29 @@ export function ServiciosTabla({
     setBusyId(null);
     if (res.error) alert(res.error);
     else router.refresh();
+  };
+
+  // Boleta de Salida — equivalente a la columna `imagen` de SISRES
+  // (editarServicio.php, sección oculta para Médico/Auxiliar). Solo
+  // aplica al editar: SISRES tampoco la ofrece en el registro inicial.
+  const [subiendoBoleta, setSubiendoBoleta] = useState(false);
+  const handleSubirBoleta = async (file: File) => {
+    if (!editando) return;
+    setSubiendoBoleta(true);
+    const res = await subirBoletaSalida(editando.id, file);
+    setSubiendoBoleta(false);
+    if (res.error) {
+      alert(res.error);
+      return;
+    }
+    setEditando({ ...editando, imagen_boleta_salida: res.ruta ?? null });
+    router.refresh();
+  };
+  const handleVerBoleta = async () => {
+    if (!editando?.imagen_boleta_salida) return;
+    const url = await getUrlBoletaSalida(editando.imagen_boleta_salida);
+    if (url) window.open(url, "_blank");
+    else alert("No se pudo generar el enlace de la imagen");
   };
 
   return (
@@ -1175,6 +1177,34 @@ export function ServiciosTabla({
                 </p>
               )}
             </section>
+
+            {editando && !esMedicoAux && (
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground">Boleta de salida</h3>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={subiendoBoleta}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleSubirBoleta(file);
+                      e.target.value = "";
+                    }}
+                    className="max-w-xs"
+                  />
+                  {subiendoBoleta && <span className="text-xs text-muted-foreground">Subiendo…</span>}
+                  {editando.imagen_boleta_salida && (
+                    <Button type="button" variant="outline" size="sm" onClick={handleVerBoleta}>
+                      Ver / descargar
+                    </Button>
+                  )}
+                </div>
+                {!editando.imagen_boleta_salida && (
+                  <p className="text-xs text-muted-foreground">Al servicio le hace falta la boleta de salida.</p>
+                )}
+              </section>
+            )}
 
             {(error || Object.values(formState.errors)[0]?.message) && (
               <p className="text-sm text-destructive">

@@ -19,7 +19,6 @@ interface ServicioAsignado {
   direccion_origen: string | null;
   ciudad_destino: string | null;
   direccion_destino: string | null;
-  motivo_consulta: string | null;
   fecha_hora_inicio_desplazamiento: string | null;
   fecha_hora_llegada_origen: string | null;
   fecha_hora_salida_origen: string | null;
@@ -119,13 +118,6 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                     )}
                   </div>
                 </div>
-              )}
-
-              {s.motivo_consulta && (
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Motivo: </span>
-                  {s.motivo_consulta}
-                </p>
               )}
 
               {pasos.length > 0 ? (

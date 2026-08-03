@@ -5,7 +5,15 @@ import { revalidatePath } from "next/cache";
 import type { MedicalServiceFormData } from "@/lib/validations";
 import { medicalServiceSchema, ETAPAS_SERVICIO, CAMPOS_PASO_SERVICIO } from "@/lib/validations";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
+import { requireRole } from "@/app/api/actions/auth";
+import type { UserRole } from "@/lib/auth-utils";
 import { z } from "zod";
+
+// Mismo rol que ve la sección completa en SISRES (editarServicio.php,
+// "!$esMedicoAux") — Médico/Auxiliar no ven ni suben la Boleta de Salida.
+const ROLES_BOLETA_SALIDA: UserRole[] = ["ADMIN", "REGULACION", "ANALISTA"];
+const BOLETA_TIPOS_PERMITIDOS = ["image/png", "image/jpeg", "image/webp"];
+const BOLETA_TAMANO_MAXIMO = 8 * 1024 * 1024; // 8MB — foto de un documento físico
 
 // SISRES no tiene una máquina de estados fija (Ronda 2, pregunta 3 en
 // sisres/RESPUESTAS_LEON.md): el dropdown de etapa está gobernado por
@@ -265,6 +273,54 @@ export async function eliminarServicioMedico(id: number) {
   if (error) return { error: error.message };
   revalidatePath("/servicios");
   return { success: true };
+}
+
+/**
+ * Boleta de Salida — equivalente a la columna `imagen` de SISRES
+ * (editarServicio.php: subida real de foto al editar el servicio, ya
+ * existente en producción). Bucket privado (migración 057): se guarda
+ * la ruta, no una URL pública — ver getUrlBoletaSalida() para mostrarla.
+ */
+export async function subirBoletaSalida(servicioId: number, file: File) {
+  await requireRole(ROLES_BOLETA_SALIDA);
+
+  const idParsed = z.number().int().positive().safeParse(servicioId);
+  if (!idParsed.success) return { error: "ID inválido" };
+  if (!BOLETA_TIPOS_PERMITIDOS.includes(file.type)) {
+    return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
+  }
+  if (file.size > BOLETA_TAMANO_MAXIMO) {
+    return { error: "La imagen no puede pesar más de 8MB" };
+  }
+
+  const supabase = createClient();
+  const extension = file.name.split(".").pop() || "jpg";
+  const ruta = `servicio-${idParsed.data}-${Date.now()}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage.from("servicios-boletas").upload(ruta, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (uploadError) return { error: uploadError.message };
+
+  const { error } = await supabase
+    .from("medical_services")
+    .update({ imagen_boleta_salida: ruta, updated_at: new Date().toISOString() })
+    .eq("id", idParsed.data);
+  if (error) return { error: error.message };
+
+  revalidatePath("/servicios");
+  return { success: true, ruta };
+}
+
+export async function getUrlBoletaSalida(ruta: string) {
+  const parsed = z.string().trim().min(1).safeParse(ruta);
+  if (!parsed.success) return null;
+
+  const supabase = createClient();
+  const { data, error } = await supabase.storage.from("servicios-boletas").createSignedUrl(parsed.data, 3600);
+  if (error || !data) return null;
+  return data.signedUrl;
 }
 
 export async function getCatalogoCie(busqueda: string) {

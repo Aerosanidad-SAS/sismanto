@@ -608,21 +608,6 @@ export const medicalServiceSchema = z.object({
   motivo_interno: optStr,
   estado_servicio: optStr,
   ciudad_registro: optStr,
-  // Medicina Domiciliaria
-  condicion: optStr,
-  medio_asignacion: optStr,
-  turno_facturacion: optStr,
-  deducible: optStr,
-  incapa: optStr,
-  // TAM/TAB
-  situacion: optStr,
-  tiempo_a_restar: z.number().optional(),
-  // Telemedicina (+ poliza también aplica a MD)
-  poliza: optStr,
-  funcionario_aseguradora: optStr,
-  codigo_telemedicina: optStr,
-  correo_electronico: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
-  motivo_consulta: optText,
 });
 export type MedicalServiceFormData = z.input<typeof medicalServiceSchema>;
 
