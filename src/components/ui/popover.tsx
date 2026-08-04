@@ -18,7 +18,13 @@ const PopoverContent = React.forwardRef<
       align={align}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 w-[var(--radix-popover-trigger-width)] max-h-[min(22rem,var(--radix-popover-content-available-height))] rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        // pointer-events-auto: Radix Dialog (modal) pone pointer-events:none en
+        // <body> mientras está abierto — un Popover anidado (Select, CatalogCombobox,
+        // AsyncCombobox, PatientSearchCombobox) hereda ese "none" porque su Portal
+        // renderiza como hermano de body, no descendiente de DialogContent (que sí
+        // se auto-reactiva con su propio estilo inline). Sin esto, ningún combobox
+        // dentro de un diálogo recibe clics.
+        "pointer-events-auto z-50 w-[var(--radix-popover-trigger-width)] max-h-[min(22rem,var(--radix-popover-content-available-height))] rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         className
       )}
       {...props}
