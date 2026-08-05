@@ -9,13 +9,27 @@ import {
   type ResumenOperativoConsolidado,
   type ResumenOperativoBucket,
 } from "@/app/api/actions/estadisticas-servicios";
-import { LayoutGrid, ClipboardCheck, CheckCircle2, AlertTriangle, XCircle, CircleSlash } from "lucide-react";
+import {
+  LayoutGrid,
+  ClipboardList,
+  CalendarClock,
+  Truck,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  CircleSlash,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Asignados es el total: Asignados = Programados + En curso + Atendidos +
+// Fallidos + Cancelados, exacto — cada estado real tiene su propia tarjeta
+// (Daniel, 2026-08-03: "cada estado es importante").
 const TARJETAS = [
-  { key: "asignados", label: "Asignados", icon: ClipboardCheck, bg: "bg-blue-50", fg: "text-blue-700" },
+  { key: "asignados", label: "Asignados", icon: ClipboardList, bg: "bg-slate-100", fg: "text-slate-700" },
+  { key: "programados", label: "Programados", icon: CalendarClock, bg: "bg-blue-50", fg: "text-blue-700" },
+  { key: "enCurso", label: "En curso", icon: Truck, bg: "bg-yellow-50", fg: "text-yellow-700" },
   { key: "atendidos", label: "Atendidos", icon: CheckCircle2, bg: "bg-green-50", fg: "text-green-700" },
-  { key: "fallidos", label: "Fallidos", icon: AlertTriangle, bg: "bg-amber-50", fg: "text-amber-700" },
+  { key: "fallidos", label: "Fallidos", icon: AlertTriangle, bg: "bg-orange-50", fg: "text-orange-700" },
   { key: "cancelados", label: "Cancelados", icon: XCircle, bg: "bg-red-50", fg: "text-red-700" },
   { key: "noEfectivo", label: "No efectivo", icon: CircleSlash, bg: "bg-purple-50", fg: "text-purple-700" },
 ] as const;
@@ -46,7 +60,7 @@ function BloqueConsolidado({ titulo, bucket }: { titulo: string; bucket: Resumen
   return (
     <div>
       <p className="mb-2 text-sm font-semibold">{titulo}</p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {TARJETAS.map(({ key, label, icon: Icon, bg, fg }) => (
           <div key={key} className={cn("rounded-lg p-3 text-center", bg)}>
             <Icon className={cn("mx-auto mb-1 h-4 w-4", fg)} />
@@ -70,7 +84,7 @@ function BloqueCiudad({ ciudad, bucket }: { ciudad: string; bucket: ResumenOpera
         <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">{ciudad}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {TARJETAS.map(({ key, label, icon: Icon, bg, fg }) => (
             <div key={key} className={cn("flex items-center gap-2 rounded-lg px-2.5 py-2", bg)}>
               <Icon className={cn("h-4 w-4 shrink-0", fg)} />

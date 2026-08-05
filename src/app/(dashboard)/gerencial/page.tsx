@@ -111,7 +111,7 @@ export default async function GerencialPage() {
           <HelpTrigger text="Segmentado por texto libre (ciudad de origen del servicio) — no hay un catálogo cerrado de ciudad todavía, así que es una cifra aproximada, no exacta." />
         </div>
         <ResumenOperativo inicial={datos.resumenHoy} />
-        <ServiciosPorCiudadChart datos={datos.estadisticasCiudad} />
+        <ServiciosPorCiudadChart inicial={datos.estadisticasCiudad} />
       </section>
 
       {/* Estado de flota */}

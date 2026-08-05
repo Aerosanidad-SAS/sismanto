@@ -1,12 +1,37 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DateField } from "@/components/forms/date-field";
+import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import type { EstadisticasPorCiudad } from "@/app/api/actions/estadisticas-servicios";
+import { getEstadisticasServiciosPorCiudad, type EstadisticasPorCiudad } from "@/app/api/actions/estadisticas-servicios";
 
 const COLORES = { Bogotá: "#2563eb", Medellín: "#16a34a" };
 
-export function ServiciosPorCiudadChart({ datos }: { datos: EstadisticasPorCiudad[] }) {
+function hoyIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function seisMesesAtrasIso() {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 6);
+  return d.toISOString().slice(0, 10);
+}
+
+export function ServiciosPorCiudadChart({ inicial }: { inicial: EstadisticasPorCiudad[] }) {
+  const [desde, setDesde] = useState(seisMesesAtrasIso());
+  const [hasta, setHasta] = useState(hoyIso());
+  const [datos, setDatos] = useState(inicial);
+  const [cargando, setCargando] = useState(false);
+
+  const filtrar = async () => {
+    setCargando(true);
+    const r = await getEstadisticasServiciosPorCiudad({ desde, hasta });
+    setDatos(r);
+    setCargando(false);
+  };
+
   const meses = Array.from(new Set(datos.flatMap((d) => d.serieMensual.map((s) => s.mes)))).sort();
   const filas = meses.map((mes) => {
     const fila: Record<string, string | number> = { mes };
@@ -18,9 +43,26 @@ export function ServiciosPorCiudadChart({ datos }: { datos: EstadisticasPorCiuda
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Servicios por mes — Bogotá vs. Medellín</CardTitle>
-        <CardDescription>Últimos 6 meses, por ciudad de origen del servicio.</CardDescription>
+      <CardHeader className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle>Servicios por mes — Bogotá vs. Medellín</CardTitle>
+            <CardDescription>Por ciudad de origen del servicio.</CardDescription>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Desde</label>
+              <DateField value={desde} onChange={setDesde} inputClassName="h-9 w-32" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Hasta</label>
+              <DateField value={hasta} onChange={setHasta} inputClassName="h-9 w-32" />
+            </div>
+            <Button size="sm" onClick={filtrar} disabled={cargando}>
+              {cargando ? "Filtrando..." : "Filtrar"}
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="h-72">
         <ResponsiveContainer width="100%" height="100%">
