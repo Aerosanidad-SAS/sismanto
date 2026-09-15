@@ -6,7 +6,7 @@ Decisión de Daniel (2026-07-21): dejar de trabajar todo sobre `integration/sisr
 
 | Rama | Quién pushea | Para qué | Base de datos |
 |---|---|---|---|
-| `dev` | Daniel y León, en paralelo | Trabajo activo del día a día. Se prueba acá primero. | Supabase de staging (la misma que se venía usando) |
+| `dev` | Nadie directo: entra por PR desde `feat/<nombre>-<tema>` (Daniel, León y David en paralelo — reglas en `CLAUDE.md` → "Team workflow") | Trabajo activo del día a día. Se prueba acá primero. | Supabase de staging (la misma que se venía usando) |
 | `staging` | Solo por promoción desde `dev` (merge), nunca commits directos | Gate de QA antes de producción — cuando algo en `dev` ya se probó y se dio por bueno | Misma Supabase de staging |
 | `main` | Solo por promoción desde `staging`, cuando hay un lote de cambios sustanciales validados | Producción real, usuarios reales | Supabase de producción |
 

@@ -14,21 +14,35 @@ npm run lint         # ESLint
 npm run db:apply     # Apply database migrations
 ```
 
-No test runner. CI: `.github/workflows/ci.yml` runs lint + build.
+No test runner. CI on every PR into `dev`/`staging`/`main`: `.github/workflows/ci.yml` (lint + build) and `.github/workflows/claude-review.yml` (Claude review as Aegis + new type errors; fails on BLOCK).
 
 ## Branches & deploy — read `ENTORNOS.md` for full detail
 
-Three-tier flow, promotion by Pull Request only (never a direct push to `staging` or `main`):
+Every change enters by Pull Request — nobody pushes directly to `dev`, `staging` or `main`:
 
 ```
-dev (Daniel + León push here) → PR → staging (QA) → PR → main (production)
+feat/<name>-<topic> → PR → dev → PR → staging (QA) → PR → main (production)
 ```
 
 - `dev` → auto-deploys to `sisres-v2-dev.vercel.app` via a GitHub Actions Deploy Hook (`.github/workflows/deploy-dev.yml`) — pushed there because Vercel's Hobby plan blocks deploys triggered by a non-owner commit author on a private repo.
 - `staging` → same mechanism, `sisres-v2-staging.vercel.app` (`deploy-staging.yml`). Same Supabase project as `dev` (`SISRES_V2_Staging`, see `STAGING_SETUP.md`).
 - `main` → production domain, deployed via Vercel's native Git integration (no Action needed — only Daniel merges to `main`, so the Hobby-plan author restriction never triggers). Own production Supabase project.
 
-Never suggest a direct push/commit to `staging` or `main` — always a PR from the branch below it.
+Never suggest a direct push/commit to `dev`, `staging` or `main` — always a PR from the branch below it.
+
+## Team workflow (Daniel, León, David)
+
+Three people push to this repo in parallel, each with their own Claude Code. These rules apply to all of them:
+
+- **Branching:** start from fresh `origin/dev` as `feat/<name>-<topic>` or `fix/<name>-<topic>`. Rebase on `origin/dev` daily; keep branches under 3 days. Open the PR into `dev`.
+- **One PR = one concern.** No drive-by refactors or reformatting — it creates conflicts for the other two.
+- **Before opening a PR:** `npm run lint`, `npm run build`, and `npx tsc --noEmit` filtered to the files you touched (no *new* errors). Fill in `.github/pull_request_template.md` — roles affected, migrations, how it was verified (screenshot for UI).
+- **Shared database:** `dev` and `staging` use ONE Supabase project. Never run `npm run db:apply` from an unmerged branch — migrations are applied only after the PR is merged into `dev`.
+- **Migration numbers:** right before opening the PR, check the highest number on `origin/dev`. If someone merged the same number, renumber the file and its entry in `scripts/apply-database.ts`. Any DROP or type change → PR title starts with `[DB-DESTRUCTIVE]`.
+- **Conflict-prone files — touch minimally:** `src/lib/validations.ts`, `src/lib/supabase/database.types.ts`, `src/app/(dashboard)/layout.tsx`, `scripts/apply-database.ts`.
+- **Merge into `dev`** requires: CI green + Claude review with no BLOCK + one approval from someone other than the author. Squash merge. `staging → main` is approved only by Daniel.
+- **Personal data:** real patient or staff data (ETL CSVs, cédulas, emails, `RESPUESTAS_LEON.md`) never goes into the repo, PR descriptions or review comments.
+- **Domain ownership** (who reviews first, not who is allowed to touch): León → servicios, pacientes, notificaciones, biomédico · Daniel → roles/RBAC, flota, infra, ETL · David → pending assignment.
 
 ## Tech Stack
 
