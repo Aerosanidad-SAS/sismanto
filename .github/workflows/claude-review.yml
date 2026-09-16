@@ -3,10 +3,9 @@
 # es BLOCKED o si la revisión no llegó a publicarse. Aprobar el PR sigue
 # siendo de una persona — este check solo decide si se puede mergear.
 #
-# Requiere UNO de estos secretos (GitHub → Settings → Secrets and variables →
-# Actions). Solo un admin del repo `Aerosanidad-SAS/sismanto` puede cargarlos:
-#   ANTHROPIC_API_KEY        — cobro por tokens en la cuenta de Anthropic
-#   CLAUDE_CODE_OAUTH_TOKEN  — suscripción de Claude (`claude setup-token`)
+# Requiere el secreto CLAUDE_CODE_OAUTH_TOKEN (GitHub → Settings → Secrets and
+# variables → Actions), generado con `claude setup-token`. Lo carga un admin
+# del repo `Aerosanidad-SAS/sismanto`.
 name: Claude Code Review
 
 on:
@@ -39,10 +38,10 @@ jobs:
     steps:
       - name: Verificar credenciales de Claude
         env:
-          HAS_CREDENTIALS: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_CREDENTIALS: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
         run: |
           if [ "$HAS_CREDENTIALS" != "true" ]; then
-            echo "::error::Falta el secreto ANTHROPIC_API_KEY o CLAUDE_CODE_OAUTH_TOKEN. Lo carga el dueño del repo en Settings → Secrets and variables → Actions."
+            echo "::error::Falta el secreto CLAUDE_CODE_OAUTH_TOKEN (claude setup-token). Lo carga un admin del repo en Settings → Secrets and variables → Actions."
             exit 1
           fi
 
@@ -84,7 +83,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           claude_args: |
