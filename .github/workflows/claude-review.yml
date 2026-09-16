@@ -113,7 +113,10 @@ jobs:
             en español con tuteo, que empiece con la línea
             `<!-- aegis-review:${{ github.event.pull_request.head.sha }} -->`
             y siga el formato de salida de aegis.md, con una sola línea de veredicto
-            `### Verdict: APPROVED`, `### Verdict: CHANGES REQUESTED` o `### Verdict: BLOCKED`.
+            `### Verdict: APPROVED`, `### Verdict: CHANGES REQUESTED` o `### Verdict: BLOCKED`,
+            y que TERMINE con una última línea que repita ese veredicto exactamente así:
+            `<!-- aegis-verdict:APPROVED -->`, `<!-- aegis-verdict:CHANGES REQUESTED -->` o
+            `<!-- aegis-verdict:BLOCKED -->`. Nada después de esa línea.
 
             No hagas commits, no edites archivos y no apruebes el PR: solo revisas y comentas.
 
@@ -121,16 +124,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Solo cuenta la línea "### Verdict: ..." del comentario de este commit:
-          # la revisión puede citar esas palabras en su propio texto.
+          # Solo cuenta el marcador de la ÚLTIMA línea no vacía del comentario de
+          # este commit: la revisión puede citar veredictos en su propio texto.
           verdict=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-            --jq '.[] | select(.body | contains("aegis-review:'"$HEAD_SHA"'")) | .body | gsub("\r"; "") | ([match("(?m)^#+ *Verdict: *([A-Z][A-Z ]*[A-Z]) *$"; "g").captures[0].string] | last) // "SIN_VEREDICTO"' | tail -n 1)
+            --jq '.[] | select(.body | contains("aegis-review:'"$HEAD_SHA"'")) | .body | gsub("\r"; "") | split("\n") | map(select(test("[^ \t]"))) | (last // "") | ((capture("^<!-- aegis-verdict:(?<v>APPROVED|CHANGES REQUESTED|BLOCKED) -->$") | .v) // "SIN_VEREDICTO")' | tail -n 1)
           case "$verdict" in
             "")
               echo "::error::Claude no publicó la revisión del commit $HEAD_SHA."
               exit 1 ;;
             SIN_VEREDICTO)
-              echo "::error::La revisión del commit $HEAD_SHA no tiene la línea '### Verdict: ...'."
+              echo "::error::La revisión del commit $HEAD_SHA no termina con el marcador <!-- aegis-verdict:... -->."
               exit 1 ;;
             BLOCKED)
               echo "::error::Revisión de Claude: BLOCKED. Corrige los puntos BLOCK del comentario y vuelve a pushear."
