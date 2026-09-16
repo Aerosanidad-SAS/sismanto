@@ -87,8 +87,8 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
-          # Resumen de la ejecución (incluye el motivo si Claude falla) en el Summary del run.
-          display_report: true
+          # TEMPORAL: diagnóstico del fallo de autenticación; quitar al resolverlo.
+          show_full_output: true
           claude_args: |
             --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"
           prompt: |
