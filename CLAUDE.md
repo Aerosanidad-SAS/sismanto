@@ -42,7 +42,7 @@ Three people push to this repo in parallel, each with their own Claude Code. The
 - **Conflict-prone files — touch minimally:** `src/lib/validations.ts`, `src/lib/supabase/database.types.ts`, `src/app/(dashboard)/layout.tsx`, `scripts/apply-database.ts`.
 - **Merge into `dev`** requires: CI green + Claude review with no BLOCK + one approval from someone other than the author. Squash merge. `staging → main` is approved only by Daniel.
 - **Personal data:** real patient or staff data (ETL CSVs, cédulas, emails, `RESPUESTAS_LEON.md`) never goes into the repo, PR descriptions or review comments.
-- **Domain ownership** (who reviews first, not who is allowed to touch): León → servicios, pacientes, notificaciones, biomédico · Daniel → roles/RBAC, flota, infra, ETL · David → pending assignment.
+- **Domain ownership** (who reviews first, not who is allowed to touch): León → servicios, pacientes, notificaciones, biomédico · Daniel → roles/RBAC, flota, infra, ETL · David → same domains as León, as his junior (León reviews and approves David's PRs).
 
 ## Tech Stack
 
