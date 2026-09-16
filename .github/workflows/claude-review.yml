@@ -62,7 +62,7 @@ jobs:
       # quedarse solo con los que introduce este PR.
       - name: Errores de tipos nuevos en archivos cambiados
         run: |
-          git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- '*.ts' '*.tsx' > changed-files.txt || true
+          git diff --name-only --diff-filter=AMR "origin/$BASE_REF...HEAD" -- '*.ts' '*.tsx' > changed-files.txt || true
           touch tsc-new.txt
           if [ ! -s changed-files.txt ]; then echo "Sin archivos TypeScript cambiados."; exit 0; fi
 
@@ -121,14 +121,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          body=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-            --jq '.[] | select(.body | contains("aegis-review:'"$HEAD_SHA"'")) | .body | @json' | tail -n 1)
-          if [ -z "$body" ]; then
-            echo "::error::Claude no publicó la revisión del commit $HEAD_SHA."
-            exit 1
-          fi
-          if echo "$body" | grep -q 'Verdict: BLOCKED'; then
-            echo "::error::Revisión de Claude: BLOCKED. Corrige los puntos BLOCK del comentario y vuelve a pushear."
-            exit 1
-          fi
-          echo "Revisión publicada sin BLOCK."
+          # Solo cuenta la línea "### Verdict: ..." del comentario de este commit:
+          # la revisión puede citar esas palabras en su propio texto.
+          verdict=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.body | contains("aegis-review:'"$HEAD_SHA"'")) | .body | gsub("\r"; "") | ([match("(?m)^#+ *Verdict: *([A-Z][A-Z ]*[A-Z]) *$"; "g").captures[0].string] | last) // "SIN_VEREDICTO"' | tail -n 1)
+          case "$verdict" in
+            "")
+              echo "::error::Claude no publicó la revisión del commit $HEAD_SHA."
+              exit 1 ;;
+            SIN_VEREDICTO)
+              echo "::error::La revisión del commit $HEAD_SHA no tiene la línea '### Verdict: ...'."
+              exit 1 ;;
+            BLOCKED)
+              echo "::error::Revisión de Claude: BLOCKED. Corrige los puntos BLOCK del comentario y vuelve a pushear."
+              exit 1 ;;
+            *)
+              echo "Veredicto de Claude: $verdict" ;;
+          esac
