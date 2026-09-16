@@ -17,6 +17,9 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  # La action pide un token OIDC si no recibe github_token; sin este permiso
+  # falla con "Unable to get ACTIONS_ID_TOKEN_REQUEST_URL".
+  id-token: write
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
