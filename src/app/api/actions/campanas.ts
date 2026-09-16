@@ -10,6 +10,12 @@ import { z } from "zod";
 
 const ROLES_CAMPANAS = ["ADMIN", "COORDINACION"];
 
+// Mismo ritmo que procesarLoteCampana.php de SISRES (BATCH=5 + sleep(2)):
+// Meta limita por tasa y puede restringir el número si recibe ráfagas.
+const LOTE_CAMPANA = 5;
+const PAUSA_ENTRE_ENVIOS_MS = 2000;
+const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function getCampanas() {
   const supabase = createClient();
   const { data } = await supabase
@@ -83,9 +89,10 @@ export async function crearCampana(formData: WaCampaignFormData) {
 }
 
 /**
- * Procesa un lote de destinatarios PENDIENTES (máx 50 por invocación, como
- * procesarLoteCampana.php) — la UI lo invoca repetidamente hasta completar.
- * Sin credenciales de WhatsApp configuradas simula el envío (modo staging).
+ * Procesa un lote de destinatarios PENDIENTES (LOTE_CAMPANA por invocación,
+ * con pausa entre envíos, como procesarLoteCampana.php) — la UI lo invoca
+ * repetidamente hasta completar. Sin credenciales de WhatsApp configuradas
+ * simula el envío sin pausas (modo staging).
  */
 export async function procesarLoteCampana(campaignId: number) {
   const profile = await getProfile();
@@ -111,7 +118,7 @@ export async function procesarLoteCampana(campaignId: number) {
     .eq("campaign_id", campana.id)
     .eq("estado", "PENDIENTE")
     .order("id")
-    .limit(50);
+    .limit(LOTE_CAMPANA);
 
   if (!pendientes || pendientes.length === 0) {
     await supabase
@@ -129,7 +136,10 @@ export async function procesarLoteCampana(campaignId: number) {
 
   let enviados = 0;
   let fallidos = 0;
-  for (const dest of pendientes) {
+  const envioReal = whatsappConfigurado();
+  for (let i = 0; i < pendientes.length; i++) {
+    const dest = pendientes[i];
+    if (envioReal && i > 0) await esperar(PAUSA_ENTRE_ENVIOS_MS);
     const params = Array.isArray(dest.parametros) ? (dest.parametros as string[]).map(String) : [];
     const resultado = await enviarPlantilla(dest.telefono, campana.plantilla, campana.idioma, params);
     if (resultado.ok) enviados++;
@@ -162,5 +172,5 @@ export async function procesarLoteCampana(campaignId: number) {
     .eq("id", campana.id);
 
   revalidatePath("/comunicaciones");
-  return { success: true, procesados: pendientes.length, restantes: restantes ?? 0, simulado: !whatsappConfigurado() };
+  return { success: true, procesados: pendientes.length, restantes: restantes ?? 0, simulado: !envioReal };
 }

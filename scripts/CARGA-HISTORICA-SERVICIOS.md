@@ -1,94 +1,92 @@
-# Cargar ~35.000 servicios históricos a staging
+# Cargar la base de datos de SISRES a SISRES V2
 
-Herramienta ya existente: `scripts/etl-sisres.ts`. Se conecta directo por Postgres al
-proyecto de Supabase de **staging** (`SISRES_V2_Staging`) e inserta los datos exportados
-de SISRES. No hay que programar nada nuevo — solo seguir estos pasos.
+Herramienta: `scripts/etl-sisres.ts`. Se conecta directo por Postgres al proyecto de
+Supabase indicado en `DATABASE_URL` e inserta los datos exportados de SISRES. Es la
+misma herramienta para los ensayos en staging y para el corte final.
 
 ## 0. Antes de empezar
 
-- Esto escribe en la base de **staging** (`SISRES_V2_Staging`), la misma que usan `dev` y
-  `staging` de la app. **Nunca** apuntes esto a producción.
-- Necesitas acceso al Supabase Dashboard del proyecto `SISRES_V2_Staging`.
+- La base de destino debe tener aplicada la migración **058** (`npm run db:apply`).
+  Sin ella el ETL falla al primer upsert (no existe `sisres_id`).
+- Para ensayos, `DATABASE_URL` apunta a **staging** (`SISRES_V2_Staging`). Producción
+  solo el día del corte, según el runbook del plan.
+- Los CSV y los archivos de rechazos/avisos contienen **datos clínicos y personales
+  reales**: no se suben a git ni se dejan en carpetas compartidas.
 
-## 1. Reunir los CSV exportados de SISRES
+## 1. Exportar desde SISRES
 
-Desde phpMyAdmin: **Exportar → CSV, con fila de encabezados**. Guarda los archivos en una
-carpeta nueva dentro del repo, por ejemplo `./etl-data/` (no la subas a git).
+León corre en el servidor de SISRES:
 
-- `servicios.csv` — el que importa para esta carga (los 35 mil servicios ya prestados).
-- `paciente.csv` — recomendado. Si un servicio trae `cedula` y esa cédula no aparece en
-  `paciente.csv`, el servicio se carga igual (queda solo con el nombre, sin paciente
-  enlazado) — no es bloqueante, pero enlazar es mejor.
-- Opcionales (si no los tienes, el script los omite solo y sigue sin fallar):
-  `clientes.csv`, `cie10.csv`, `movil.csv`, `valoraciones.csv`, `inventario.csv`,
-  `mantenimiento.csv`.
+```bash
+php sql/generar_csv_etl.php <carpeta_salida>
+```
+
+Genera los CSV con los nombres que espera el ETL: `clientes`, `cie10`, `eps`,
+`proveedores`, `paciente`, `movil`, `inventario`, `servicios`, `valoraciones`,
+`mantenimiento`. Si falta alguno, el ETL omite esa tabla y sigue.
+
+`servicios`, `proveedores`, `valoraciones` y `mantenimiento` **deben traer la columna
+`id`**: sin ella la fila se rechaza, porque no se podría re-ejecutar sin duplicar.
 
 ## 2. Configurar `DATABASE_URL`
 
-En tu `.env.local` (raíz del proyecto `aeromanto/`), agrega:
+En `.env.local` (raíz de `aeromanto/`):
 
 ```
 DATABASE_URL=postgresql://...
 ```
 
-Ese valor lo sacas de: **Supabase Dashboard → proyecto `SISRES_V2_Staging` → Project
-Settings → Database → Connection string → modo "URI"** (con la contraseña incluida).
+Sale de **Supabase Dashboard → proyecto → Project Settings → Database → Connection
+string → URI**. No es lo mismo que `NEXT_PUBLIC_SUPABASE_URL`. El ETL imprime el host
+de destino al arrancar: confírmalo antes de dejarlo seguir.
 
-⚠️ **No es lo mismo que `NEXT_PUBLIC_SUPABASE_URL`** (ese es para el cliente JS de la app).
-`DATABASE_URL` es la conexión directa de Postgres que usa este script — verifica dos veces
-que el proyecto que copiaste sea `SISRES_V2_Staging`, no producción.
+## 3. Ensayo en seco
 
-## 3. Revisar si `medical_services` ya tiene datos en staging
-
-El script tiene una guarda de seguridad: **si la tabla `medical_services` no está vacía, se
-salta toda la carga de servicios** (solo imprime un aviso, no falla). Antes de correrlo, en
-el SQL Editor de Supabase (proyecto staging) ejecuta:
-
-```sql
-select count(*) from medical_services;
+```bash
+npx tsx scripts/etl-sisres.ts ./etl-data --validar
 ```
 
-- Si da `0` → puedes seguir directo al paso 4.
-- Si da `> 0` → probablemente hay datos de prueba de la app. **Antes de vaciarla, confírmalo
-  con Daniel** — vaciar significa:
-  ```sql
-  truncate medical_services;
-  ```
-  Esto borra lo que haya ahí en ese momento. No lo hagas sin luz verde de Daniel.
+Corre la carga completa dentro de una transacción y la revierte al final: valida
+contra las restricciones reales de la base sin dejar nada escrito. Revisa:
 
-## 4. Ejecutar la carga
+- los conteos por tabla;
+- `etl-rechazos-<tabla>.csv`: filas que no se cargarían, con el motivo;
+- `etl-avisos-<tabla>.csv`: filas que sí se cargan pero con algún campo vacío porque
+  el valor original no se pudo leer (fechas o números en formatos no reconocidos);
+- las placas sin vehículo en V2 y los servicios sin paciente en el maestro.
 
-Desde la raíz del proyecto (`aeromanto/`):
+Si aparece el aviso de *servicios sin sisres_id ni created_by*, en esa base quedaron
+filas de una carga con la versión anterior del ETL: se duplicarían. Confírmalo con
+Daniel antes de borrarlas.
+
+## 4. Carga real
 
 ```bash
 npx tsx scripts/etl-sisres.ts ./etl-data
 ```
 
-(cambia `./etl-data` por la ruta real de tu carpeta con los CSV).
+Orden: clientes → cie10 → eps → proveedores → pacientes → móviles → inventario →
+servicios → valoraciones → mantenimientos. Cada tabla va en su propia transacción: si
+algo falla fuera de una fila, esa tabla se revierte completa.
 
-El script carga en este orden: clientes → cie10 → pacientes → móviles → inventario →
-**servicios** → valoraciones → mantenimientos, y al final imprime los conteos por tabla.
+Se puede **correr las veces que haga falta**: cada tabla actualiza por `sisres_id` o
+por su clave natural. Un segundo export más reciente solo actualiza lo que cambió.
 
-No tiene modo `--dry-run` — corre directo. Por eso el paso 3 (conteo antes) importa: te da
-un punto de comparación.
+## 5. Verificar
 
-## 5. Verificar después
+Compara contra MySQL:
 
 ```sql
-select count(*) from medical_services;
+select count(*) from medical_services where sisres_id is not null;
+select etapa, count(*) from medical_services group by etapa order by 2 desc;
+select tipo_servicio, count(*) from medical_services group by tipo_servicio order by 2 desc;
 ```
 
-Debería acercarse a los ~35.000 (puede ser un poco menos si hay filas del CSV sin `cedula`
-válida u otros datos incompletos que el script descarta silenciosamente — el log de la
-consola al final dice cuántas quedaron "sin match de paciente", que es distinto de
-"descartadas").
-
-Si algo sale mal o los números no cuadran, no vuelvas a correr el script sin antes vaciar
-`medical_services` de nuevo — como no tiene clave natural en esa tabla, correrlo dos veces
-sobre datos ya cargados duplicaría todo.
+Las distribuciones deben coincidir con las de SISRES (`RESPUESTAS_LEON.md`, Ronda 2).
+Revisa también la hora: un servicio programado a las 08:00 en SISRES debe verse a las
+08:00 en V2.
 
 ## 6. Avisar a Daniel
 
-Cuando termine, repórtale el conteo final y cualquier advertencia que haya salido en
-consola (placas huérfanas, servicios sin paciente, etc.) para que decida si hace falta
-limpieza adicional.
+Repórtale los conteos finales y el número de filas en rechazos y avisos, para decidir
+si hace falta limpieza antes del siguiente ensayo.
