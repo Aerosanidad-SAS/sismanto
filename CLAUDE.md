@@ -24,9 +24,8 @@ Every change enters by Pull Request — nobody pushes directly to `dev`, `stagin
 feat/<name>-<topic> → PR → dev → PR → staging (QA) → PR → main (production)
 ```
 
-- `dev` → auto-deploys to `sismanto-dev.vercel.app` via a GitHub Actions Deploy Hook (`.github/workflows/deploy-dev.yml`) — pushed there because Vercel's Hobby plan blocks deploys triggered by a non-owner commit author on a private repo.
-- `staging` → same mechanism, `sismanto-staging.vercel.app` (`deploy-staging.yml`). Same Supabase project as `dev` (`SISMANTO_Staging`, see `STAGING_SETUP.md`).
-- `main` → production domain, deployed via Vercel's native Git integration (no Action needed — only Daniel merges to `main`, so the Hobby-plan author restriction never triggers). Own production Supabase project.
+- `dev` and `staging` → deployed by `.github/workflows/deploy.yml`, which runs the Vercel CLI with `VERCEL_TOKEN` and re-points the branch domain (`sismanto-dev.vercel.app` / `sismanto-staging.vercel.app`). The Vercel project is not connected to this repo — connecting it would need a Vercel GitHub App install on the org — and this way nobody but the token needs Vercel access. Both branches share the `SISMANTO_Staging` Supabase project (see `STAGING_SETUP.md`).
+- `main` → production domain, deployed by Daniel from the Vercel dashboard/CLI until the project is reconnected to this repo. Own production Supabase project.
 
 Never suggest a direct push/commit to `dev`, `staging` or `main` — always a PR from the branch below it.
 
