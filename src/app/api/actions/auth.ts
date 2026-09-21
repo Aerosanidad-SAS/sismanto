@@ -9,6 +9,7 @@ import {
   createUserAsAdminSchema,
   signInSchema,
   toggleUserActiveSchema,
+  updateUserCentroSchema,
   updateUserCiudadSchema,
   updateUserRoleSchema,
 } from "@/lib/validations";
@@ -23,6 +24,9 @@ export interface UserProfile {
   nombre_completo: string | null;
   email: string | null;
   ciudad: string | null;
+  operational_center_id: number | null;
+  centro_codigo: string | null;
+  centro_nombre: string | null;
   activo: boolean;
 }
 
@@ -46,8 +50,10 @@ export async function getProfile(): Promise<UserProfile | null> {
       nombre_completo,
       email,
       ciudad,
+      operational_center_id,
       activo,
-      roles!inner(codigo)
+      roles!inner(codigo),
+      operational_centers(codigo, nombre)
     `)
     .eq("user_id", user.id)
     .eq("activo", true)
@@ -62,6 +68,9 @@ export async function getProfile(): Promise<UserProfile | null> {
     nombre_completo: data.nombre_completo,
     email: data.email || user.email || null,
     ciudad: (data as any).ciudad ?? null,
+    operational_center_id: (data as any).operational_center_id ?? null,
+    centro_codigo: (data as any).operational_centers?.codigo ?? null,
+    centro_nombre: (data as any).operational_centers?.nombre ?? null,
     activo: data.activo,
   };
 }
@@ -162,6 +171,7 @@ export async function createUserAsAdmin(data: {
   nombreCompleto: string;
   cedula?: string;
   ciudad?: string;
+  operationalCenterId?: number | null;
   roleCodigo: UserRole;
 }) {
   const caller = await requireRole(["ADMIN", "ANALISTA"]);
@@ -199,6 +209,7 @@ export async function createUserAsAdmin(data: {
     email: parsed.data.email,
     cedula: parsed.data.cedula || null,
     ciudad: parsed.data.ciudad || null,
+    operational_center_id: parsed.data.operationalCenterId ?? null,
     activo: true,
   });
 
@@ -216,6 +227,22 @@ export async function updateUserCiudad(userId: string, ciudad: string) {
   const { error } = await supabase
     .from("user_profiles")
     .update({ ciudad: parsed.data.ciudad || null, updated_at: new Date().toISOString() })
+    .eq("user_id", parsed.data.userId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/usuarios");
+  return { success: true };
+}
+
+export async function updateUserCentro(userId: string, operationalCenterId: number | null) {
+  await requireRole(["ADMIN", "ANALISTA"]);
+  const parsed = updateUserCentroSchema.safeParse({ userId, operationalCenterId });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ operational_center_id: parsed.data.operationalCenterId, updated_at: new Date().toISOString() })
     .eq("user_id", parsed.data.userId);
 
   if (error) return { error: error.message };

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/app/api/actions/auth";
-import { isAdminLike } from "@/lib/auth-utils";
+import { centroVisible, isAdminLike } from "@/lib/auth-utils";
 import { OvemPortal } from "@/components/ovem/ovem-portal";
 import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
 import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
@@ -17,10 +17,13 @@ export default async function OvemPage() {
     redirect("/");
   }
 
-  const { data: vehicles = [] } = await supabase
+  let vehiclesQuery = supabase
     .from("vehicles")
     .select("id, placa, marca, modelo, estado_actual, centro_operativo")
     .order("placa");
+  const centro = centroVisible(profile);
+  if (centro) vehiclesQuery = vehiclesQuery.eq("centro_operativo", centro.codigo);
+  const { data: vehicles = [] } = await vehiclesQuery;
 
   const checklistItems = await getChecklistItemsActivos();
   const servicios = profile.role_codigo === "OVEM" ? await getServiciosMedicos() : [];

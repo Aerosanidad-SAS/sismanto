@@ -5,6 +5,7 @@ import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
 import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
 import { TableroServicios } from "@/components/regulacion/tablero-servicios";
 import { HelpTrigger } from "@/components/ui/help-trigger";
+import { veSoloSuCentro } from "@/lib/auth-utils";
 
 const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];
 
@@ -31,10 +32,18 @@ export default async function RegulacionPage() {
             <HelpTrigger text="Vista para despacho: revise conteos, placas en FDS y use la sección Flota para asignar OVEM, desasignar o cambiar estado operativo de cada unidad." />
           </div>
           <p className="mt-2 text-muted-foreground">
+            {profile.centro_nombre ? `Centro ${profile.centro_nombre} · ` : ""}
             Disponibilidad en tiempo real y armado de tripulación (OVEM, médico, auxiliar)
           </p>
         </div>
       </div>
+
+      {veSoloSuCentro(profile.role_codigo) && !profile.operational_center_id && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          Tu usuario no tiene centro operativo asignado, así que ves la operación de todos los
+          centros. Pide al administrador que te lo asigne en Administración → Usuarios.
+        </div>
+      )}
 
       <RegulacionFleet
         fleet={fleet}

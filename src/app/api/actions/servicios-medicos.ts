@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 import type { MedicalServiceFormData } from "@/lib/validations";
 import { medicalServiceSchema, ETAPAS_SERVICIO, CAMPOS_PASO_SERVICIO } from "@/lib/validations";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
-import { requireRole } from "@/app/api/actions/auth";
-import type { UserRole } from "@/lib/auth-utils";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { centroVisible, type UserRole } from "@/lib/auth-utils";
 import { z } from "zod";
 
 // Mismo rol que ve la sección completa en SISRES (editarServicio.php,
@@ -117,6 +117,33 @@ function aFilaServicio(parsed: z.output<typeof medicalServiceSchema>) {
   };
 }
 
+/**
+ * Centro del servicio (migración 059): el del vehículo asignado; sin
+ * vehículo (médico en su propio carro), el de quien lo registra.
+ */
+async function centroDelServicio(
+  supabase: ReturnType<typeof createClient>,
+  vehicleId: string | null,
+  centroDelUsuario: number | null
+): Promise<number | null> {
+  if (vehicleId) {
+    const { data: vehiculo } = await supabase
+      .from("vehicles")
+      .select("centro_operativo")
+      .eq("id", vehicleId)
+      .maybeSingle();
+    if (vehiculo?.centro_operativo) {
+      const { data: centro } = await supabase
+        .from("operational_centers")
+        .select("id")
+        .eq("codigo", vehiculo.centro_operativo)
+        .maybeSingle();
+      if (centro) return centro.id;
+    }
+  }
+  return centroDelUsuario;
+}
+
 export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: string; hasta?: string }) {
   const supabase = createClient();
   let query = supabase
@@ -124,6 +151,12 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
     .select("*, patients(cedula, nombre1, apellido1), vehicles(placa)")
     .order("fecha_hora_registro", { ascending: false })
     .limit(500);
+
+  // Servicios de su centro, más los que no tienen centro (históricos de
+  // antes de la migración 059, o registrados sin vehículo por alguien sin
+  // centro asignado): ocultarlos los dejaría invisibles para todo Regulación.
+  const centro = centroVisible(await getProfile());
+  if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
 
   if (filtro?.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtro.etapa)) {
     query = query.eq("etapa", filtro.etapa);
@@ -147,12 +180,15 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
+  const profile = await getProfile();
+  const fila = aFilaServicio(parsed.data);
 
   const { data, error } = await supabase
     .from("medical_services")
     .insert({
-      ...aFilaServicio(parsed.data),
+      ...fila,
       etapa,
+      operational_center_id: await centroDelServicio(supabase, fila.vehicle_id, profile?.operational_center_id ?? null),
       created_by: userData.user?.id ?? null,
     })
     .select()
@@ -171,9 +207,17 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
+  const fila = aFilaServicio(parsed.data);
+  // Solo el vehículo redefine el centro al editar: sin vehículo se conserva
+  // el que ya tenía, no el de quien edita.
+  const centro = fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
   const { data, error } = await supabase
     .from("medical_services")
-    .update({ ...aFilaServicio(parsed.data), updated_at: new Date().toISOString() })
+    .update({
+      ...fila,
+      ...(centro !== null ? { operational_center_id: centro } : {}),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", idParsed.data)
     .select("id");
   if (error) return { error: error.message };

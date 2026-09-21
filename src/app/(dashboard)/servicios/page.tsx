@@ -8,6 +8,7 @@ import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/re
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 import { MisServicios } from "@/components/servicios/mis-servicios";
 import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
+import { centroVisible } from "@/lib/auth-utils";
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
@@ -15,11 +16,14 @@ const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
 async function getVehiculosActivos() {
   try {
     const supabase = createClient();
-    const { data } = await supabase
+    let query = supabase
       .from("vehicles")
       .select("id, placa")
       .eq("estado_actual", "OPERATIVO")
       .order("placa");
+    const centro = centroVisible(await getProfile());
+    if (centro) query = query.eq("centro_operativo", centro.codigo);
+    const { data } = await query;
     return data || [];
   } catch {
     return [];

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createUserAsAdmin,
+  updateUserCentro,
   updateUserCiudad,
   updateUserRole,
   toggleUserActive,
@@ -36,6 +37,11 @@ import {
 } from "@/components/ui/select";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
+import { veSoloSuCentro } from "@/lib/auth-utils";
+import { cn } from "@/lib/utils";
+
+// Radix Select no admite value="" — valor centinela para "sin centro".
+const SIN_CENTRO = "__none__";
 
 interface AdminUsuariosProps {
   users: {
@@ -45,14 +51,16 @@ interface AdminUsuariosProps {
     email: string | null;
     cedula: string | null;
     ciudad: string | null;
+    operational_center_id: number | null;
     activo: boolean;
     role_codigo: string;
     role_nombre: string;
   }[];
   roles: { id: number; codigo: string; nombre: string }[];
+  centros: { id: number; nombre: string }[];
 }
 
-export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
+export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
   const router = useRouter();
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -64,6 +72,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
   const [nombreCompleto, setNombreCompleto] = useState("");
   const [cedula, setCedula] = useState("");
   const [ciudad, setCiudad] = useState("");
+  const [centroId, setCentroId] = useState(SIN_CENTRO);
   const [roleCodigo, setRoleCodigo] = useState<UserRole>("OVEM");
 
   const handleCreate = async () => {
@@ -76,6 +85,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
       nombreCompleto,
       cedula,
       ciudad,
+      operationalCenterId: centroId === SIN_CENTRO ? null : Number(centroId),
       roleCodigo,
     });
     if (result?.error) setError(result.error);
@@ -87,6 +97,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
       setNombreCompleto("");
       setCedula("");
       setCiudad("");
+      setCentroId(SIN_CENTRO);
       setRoleCodigo("OVEM");
       router.refresh();
     }
@@ -107,6 +118,15 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
     const result = await updateUserCiudad(userId, newCiudad);
     if (result?.error) setError(result.error);
     else router.refresh();
+  };
+
+  const handleUpdateCentro = async (userId: string, value: string) => {
+    setLoading(true);
+    setError(null);
+    const result = await updateUserCentro(userId, value === SIN_CENTRO ? null : Number(value));
+    if (result?.error) setError(result.error);
+    else router.refresh();
+    setLoading(false);
   };
 
   const handleToggleActive = async (userId: string, activo: boolean) => {
@@ -149,6 +169,7 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
                 <TableHead>Email</TableHead>
                 <TableHead>Cédula</TableHead>
                 <TableHead>Ciudad</TableHead>
+                <TableHead>Centro</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
@@ -172,6 +193,35 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
                         if (value !== (u.ciudad || "")) handleUpdateCiudad(u.user_id, value);
                       }}
                     />
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={u.operational_center_id ? String(u.operational_center_id) : SIN_CENTRO}
+                      onValueChange={(v) => handleUpdateCentro(u.user_id, v)}
+                      disabled={loading}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "w-36",
+                          veSoloSuCentro(u.role_codigo) && !u.operational_center_id && "border-amber-500"
+                        )}
+                        title={
+                          veSoloSuCentro(u.role_codigo) && !u.operational_center_id
+                            ? "Sin centro: este usuario ve la operación de todos los centros"
+                            : undefined
+                        }
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SIN_CENTRO}>Sin centro</SelectItem>
+                        {centros.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   <TableCell>
                     <Select
@@ -276,6 +326,26 @@ export function AdminUsuarios({ users, roles }: AdminUsuariosProps) {
               <p className="mt-1 text-xs text-muted-foreground">
                 Ciudad base del usuario — se usa como ciudad de origen por defecto al crear
                 servicios.
+              </p>
+            </div>
+            <div>
+              <Label>Centro operativo</Label>
+              <Select value={centroId} onValueChange={setCentroId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_CENTRO}>Sin centro</SelectItem>
+                  {centros.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Regulación, OVEM, médico y auxiliar ven solo la operación de su centro. Sin centro
+                ven todos.
               </p>
             </div>
             <div>

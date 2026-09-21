@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireRole } from "./auth";
+import { getProfile, requireRole } from "./auth";
+import { centroVisible } from "@/lib/auth-utils";
 import { revalidatePath } from "next/cache";
 import { toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
 import { z } from "zod";
@@ -130,11 +131,14 @@ export async function unassignVehicle(assignmentId: number) {
 export async function getFleetWithAssignments() {
   const supabase = createClient();
   const hoy = new Date().toISOString().split("T")[0];
+  const centro = centroVisible(await getProfile());
 
-  const { data: vehicles } = await supabase
+  let vehiclesQuery = supabase
     .from("vehicles")
     .select("id, placa, marca, modelo, estado_actual, centro_operativo")
     .order("placa");
+  if (centro) vehiclesQuery = vehiclesQuery.eq("centro_operativo", centro.codigo);
+  const { data: vehicles } = await vehiclesQuery;
 
   const { data: assignments } = await supabase
     .from("vehicle_assignments")
@@ -166,10 +170,15 @@ export async function getUsuariosPorRol(rolCodigo: "OVEM" | "MEDICO" | "AUXILIAR
   const supabase = createClient();
   const { data: role } = await supabase.from("roles").select("id").eq("codigo", rolCodigo).single();
   if (!role) return [];
-  const { data } = await supabase
+  let query = supabase
     .from("user_profiles")
     .select("user_id, nombre_completo, email")
     .eq("activo", true)
     .eq("role_id", role.id);
+  // Personas de su centro, más las que aún no tienen centro asignado: sin
+  // ellas, un centro recién configurado se quedaría sin a quién asignar.
+  const centro = centroVisible(await getProfile());
+  if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+  const { data } = await query;
   return data || [];
 }
