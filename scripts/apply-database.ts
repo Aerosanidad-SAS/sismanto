@@ -71,6 +71,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "055_candado_finalizado_auditoria.sql",         file: "scripts/migrations/055_candado_finalizado_auditoria.sql" },
   { name: "056_company_settings_branding.sql",            file: "scripts/migrations/056_company_settings_branding.sql" },
   { name: "057_paridad_estricta_servicios_sisres.sql",    file: "scripts/migrations/057_paridad_estricta_servicios_sisres.sql" },
+  { name: "058_etl_identidad_origen.sql",                 file: "scripts/migrations/058_etl_identidad_origen.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

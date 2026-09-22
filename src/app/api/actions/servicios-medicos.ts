@@ -327,11 +327,16 @@ export async function getCatalogoCie(busqueda: string) {
   const parsed = z.string().trim().min(1).max(60).safeParse(busqueda);
   if (!parsed.success) return [];
 
+  // PostgREST lee , ( ) " como sintaxis del filtro .or() — sin quitarlos, el
+  // texto del usuario puede agregar condiciones propias al filtro.
+  const termino = parsed.data.replace(/[,()"*%\\]/g, " ").trim();
+  if (!termino) return [];
+
   const supabase = createClient();
   const { data } = await supabase
     .from("cie10")
     .select("codigo, descripcion")
-    .or(`codigo.ilike.%${parsed.data}%,descripcion.ilike.%${parsed.data}%`)
+    .or(`codigo.ilike.%${termino}%,descripcion.ilike.%${termino}%`)
     .limit(20);
   return data || [];
 }

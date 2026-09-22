@@ -13,7 +13,7 @@ import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -28,7 +28,7 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const result = await signIn(email, password);
+      const result = await signIn(identificador, password);
       if (result?.error) {
         setError(result.error);
       } else {
@@ -65,20 +65,21 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <CardTitle className="text-2xl">Aeromanto</CardTitle>
-            <CardDescription>Inicie sesión con su cuenta corporativa</CardDescription>
+            <CardTitle className="text-2xl">SISMANTO</CardTitle>
+            <CardDescription>Inicie sesión con su cédula y contraseña</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="email">Correo electrónico</Label>
+              <Label htmlFor="identificador">Cédula o correo</Label>
               <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="usuario@ejemplo.com"
+                id="identificador"
+                type="text"
+                autoComplete="username"
+                value={identificador}
+                onChange={(e) => setIdentificador(e.target.value)}
+                placeholder="Número de cédula"
                 className="mt-1"
                 required
               />

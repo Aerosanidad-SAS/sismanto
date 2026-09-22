@@ -66,16 +66,66 @@ export async function getProfile(): Promise<UserProfile | null> {
   };
 }
 
-export async function signIn(email: string, password: string) {
-  const parsed = signInSchema.safeParse({ email, password });
+const CREDENCIALES_INVALIDAS = "Usuario o contraseña incorrectos";
+
+// Destino de los intentos con cédula inexistente. Dominio .invalid (RFC 2606):
+// nunca puede pertenecer a una cuenta real.
+const EMAIL_INEXISTENTE = "login-no-encontrado@sisres.invalid";
+
+/**
+ * Resuelve lo que el usuario escribe en el login al email de Supabase Auth.
+ * Los usuarios migrados de SISRES entran con su cédula, como en
+ * login_users.php, y tienen un email sintético que nunca ven; los de
+ * Aeromanto siguen entrando con su correo.
+ */
+async function resolverEmailLogin(identificador: string): Promise<string | null> {
+  if (identificador.includes("@")) return identificador.toLowerCase();
+
+  // Tolera cédulas escritas con puntos o espacios ("1.020.458.300").
+  const cedula = identificador.replace(/[\s.]/g, "");
+  if (!/^\d{5,15}$/.test(cedula)) return null;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
+
+  // Cliente admin: quien intenta entrar todavía no tiene sesión, y la RLS de
+  // user_profiles no deja leer perfiles ajenos sin ella.
+  const admin = createAdminClient();
+  const { data: perfil } = await admin
+    .from("user_profiles")
+    .select("user_id")
+    .eq("cedula", cedula)
+    .eq("activo", true)
+    .maybeSingle<{ user_id: string }>();
+  if (!perfil) return null;
+
+  const { data } = await admin.auth.admin.getUserById(perfil.user_id);
+  return data.user?.email ?? null;
+}
+
+export async function signIn(identificador: string, password: string) {
+  const parsed = signInSchema.safeParse({ identificador, password });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
+  // Una cédula inexistente también pasa por Supabase Auth: si respondiera
+  // antes, la diferencia de tiempo delataría qué cédulas tienen cuenta y el
+  // intento quedaría fuera del límite de intentos de Auth.
+  const email = (await resolverEmailLogin(parsed.data.identificador)) ?? EMAIL_INEXISTENTE;
+
   const supabase = createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: parsed.data.email,
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
     password: parsed.data.password,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    // Mismo mensaje para cédula inexistente y clave errada, para no revelar
+    // qué cédulas tienen cuenta. Solo el bloqueo por intentos se distingue.
+    if (error.status === 429) return { error: "Demasiados intentos. Espere unos minutos e intente de nuevo." };
+    // Sin status (fallo de red) o 5xx: Auth no respondió. No es una clave
+    // errada, y decirlo así haría pasar una caída por un problema del usuario.
+    if (!error.status || error.status >= 500) {
+      return { error: "No se pudo conectar con el servicio de autenticación. Intente de nuevo en unos minutos." };
+    }
+    return { error: CREDENCIALES_INVALIDAS };
+  }
   revalidatePath("/");
   return { success: true };
 }
