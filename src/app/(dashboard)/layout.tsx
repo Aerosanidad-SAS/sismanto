@@ -372,7 +372,14 @@ export default function DashboardLayout({
     ? NAV_GROUPS.map((g) => ({
         ...g,
         items: g.items.filter((n) => n.roles.includes(profile.role_codigo)),
-      })).filter((g) => g.items.length > 0)
+      }))
+        .filter((g) => g.items.length > 0)
+        // El OVEM entra a trabajar a su portal: va primero, antes de Formación.
+        .sort((a, b) =>
+          profile.role_codigo === "OVEM"
+            ? Number(b.label === "Portal OVEM") - Number(a.label === "Portal OVEM")
+            : 0
+        )
     : [];
 
   if (loading) {

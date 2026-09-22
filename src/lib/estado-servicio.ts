@@ -54,21 +54,21 @@ export function modalidadTraslado(tipoServicio: string): ModalidadTraslado | nul
 
 const INICIO: PasoServicio = {
   campo: "fecha_hora_inicio_desplazamiento",
-  hito: "Desplazamiento",
-  accion: "Iniciar desplazamiento",
+  hito: "Inicio de desplazamiento",
+  accion: "Inicio de desplazamiento",
   estado: "En desplazamiento",
   etapaDestino: "CURSO",
 };
 
 const RECOGIDA: PasoServicio[] = [
-  { campo: "fecha_hora_llegada_origen", hito: "Llegada al sitio", accion: "Llegué al sitio", estado: "En sitio" },
-  { campo: "fecha_hora_salida_origen", hito: "Sale con paciente", accion: "Salgo con el paciente", estado: "En traslado" },
+  { campo: "fecha_hora_llegada_origen", hito: "Llegada a sitio", accion: "Llegada a sitio", estado: "En sitio" },
+  { campo: "fecha_hora_salida_origen", hito: "Salida con paciente", accion: "Salida con paciente", estado: "En traslado" },
 ];
 
 const FIN_TRASLADO: PasoServicio = {
   campo: "fecha_hora_salida_destino",
-  hito: "Entrega",
-  accion: "Entregué al paciente",
+  hito: "Paciente entregado",
+  accion: "Paciente entregado",
   estado: "Finalizado",
   etapaDestino: "FINALIZADO",
 };
@@ -76,25 +76,25 @@ const FIN_TRASLADO: PasoServicio = {
 const PASOS_SENCILLO: PasoServicio[] = [
   INICIO,
   ...RECOGIDA,
-  { campo: "fecha_hora_llegada_destino", hito: "Llegada a destino", accion: "Llegué a destino", estado: "En destino" },
+  { campo: "fecha_hora_llegada_destino", hito: "Llegada a destino", accion: "Llegada a destino", estado: "En destino" },
   FIN_TRASLADO,
 ];
 
 const PASOS_DOBLE: PasoServicio[] = [
   INICIO,
   ...RECOGIDA,
-  { campo: "fecha_hora_llegada_intermedia", hito: "Llegada a B", accion: "Llegué al punto intermedio", estado: "En punto intermedio" },
-  { campo: "fecha_hora_salida_intermedia", hito: "Retorno", accion: "Salgo de regreso", estado: "Retorno a origen" },
-  { campo: "fecha_hora_llegada_destino", hito: "De vuelta en A", accion: "Llegué de vuelta al origen", estado: "De vuelta en origen" },
+  { campo: "fecha_hora_llegada_intermedia", hito: "Llegada a punto intermedio", accion: "Llegada a punto intermedio", estado: "En punto intermedio" },
+  { campo: "fecha_hora_salida_intermedia", hito: "Salida de regreso", accion: "Salida de regreso", estado: "Retorno a origen" },
+  { campo: "fecha_hora_llegada_destino", hito: "Llegada a origen", accion: "Llegada a origen", estado: "De vuelta en origen" },
   FIN_TRASLADO,
 ];
 
 const PASOS_AEREO: PasoServicio[] = [
   INICIO,
   ...RECOGIDA,
-  { campo: "fecha_hora_llegada_intermedia", hito: "Aeropuerto", accion: "Llegué al aeropuerto", estado: "En aeropuerto" },
-  { campo: "fecha_hora_salida_intermedia", hito: "Sale de aeropuerto", accion: "Salgo del aeropuerto", estado: "En traslado a destino" },
-  { campo: "fecha_hora_llegada_destino", hito: "Llegada a destino", accion: "Llegué a destino", estado: "En destino" },
+  { campo: "fecha_hora_llegada_intermedia", hito: "Llegada a aeropuerto", accion: "Llegada a aeropuerto", estado: "En aeropuerto" },
+  { campo: "fecha_hora_salida_intermedia", hito: "Salida de aeropuerto", accion: "Salida de aeropuerto", estado: "En traslado a destino" },
+  { campo: "fecha_hora_llegada_destino", hito: "Llegada a destino", accion: "Llegada a destino", estado: "En destino" },
   FIN_TRASLADO,
 ];
 
@@ -103,11 +103,11 @@ const PASOS_AEREO: PasoServicio[] = [
 // el listado real de Regulación).
 const PASOS_DOMICILIARIA: PasoServicio[] = [
   INICIO,
-  { campo: "fecha_hora_llegada_destino", hito: "Inicio de atención", accion: "Llegué / inicio atención", estado: "En atención" },
+  { campo: "fecha_hora_llegada_destino", hito: "Inicio de atención", accion: "Inicio de atención", estado: "En atención" },
   {
     campo: "fecha_hora_salida_destino",
     hito: "Fin de atención",
-    accion: "Finalizar atención",
+    accion: "Fin de atención",
     estado: "Finalizado",
     etapaDestino: "FINALIZADO",
   },
