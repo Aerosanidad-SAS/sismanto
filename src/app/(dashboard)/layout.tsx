@@ -30,6 +30,7 @@ import {
   Activity,
   MessageCircle,
   TrendingUp,
+  PackageCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -91,6 +92,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Ambulance,
         roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"],
         hint: "Despacho y seguimiento de traslados asistenciales por etapas (origen SISRES).",
+      },
+      {
+        name: "Dotación e insumos",
+        href: "/dotacion",
+        icon: PackageCheck,
+        roles: ["ADMIN", "AUXILIAR_ENFERMERIA", "ANALISTA"],
+        hint: "Oxígeno, medicamentos y consumibles que la auxiliar verifica al recibir la ambulancia.",
       },
     ],
   },
