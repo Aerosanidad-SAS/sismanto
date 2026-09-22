@@ -11,7 +11,7 @@
 --   gerencial@aeromanto.co      → GERENCIAL (nombre en Auth; rol sigue siendo GERENCIAL)
 --   ovem@aeromanto.co           → OVEM
 --   regulacion@aeromanto.co     → REGULACION
---   mantenimiento@aeromanto.co  → MANTENIMIENTO (contraseña: crear en Auth o script create-test-users, ej. aero123)
+--   mantenimiento@aeromanto.co  → MANTENIMIENTO (contraseña: se define al correr create-test-users con TEST_USERS_PASSWORD)
 --
 -- Ejecutar una vez en SQL Editor (idempotente por ON CONFLICT user_id).
 -- =============================================================================
