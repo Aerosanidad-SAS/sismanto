@@ -75,6 +75,8 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "059_centro_operativo_servicios.sql",          file: "scripts/migrations/059_centro_operativo_servicios.sql" },
   { name: "060_ovem_turno.sql",                          file: "scripts/migrations/060_ovem_turno.sql" },
   { name: "061_dotacion_auxiliares.sql",                 file: "scripts/migrations/061_dotacion_auxiliares.sql" },
+  // 062_dotacion_catalogo.sql: se registra cuando esté la lista real de dotación.
+  { name: "063_servicios_lista_regulacion.sql",          file: "scripts/migrations/063_servicios_lista_regulacion.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

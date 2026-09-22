@@ -31,6 +31,8 @@ import {
   MessageCircle,
   TrendingUp,
   PackageCheck,
+  Handshake,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -57,7 +59,8 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Dashboard",
         href: "/",
         icon: LayoutDashboard,
-        roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO", "ANALISTA"],
+        // Regulación entra a Servicios, como en SISRES; el resumen ejecutivo no es su trabajo diario.
+        roles: ["ADMIN", "GERENCIAL", "MANTENIMIENTO", "ANALISTA"],
         hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
       },
       {
@@ -80,18 +83,39 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     label: "Operación",
     items: [
       {
-        name: "Regulación",
-        href: "/regulacion",
-        icon: Radio,
-        roles: ["ADMIN", "REGULACION", "ANALISTA"],
-        hint: "Despacho de flota: disponibles vs fuera de servicio y asignación de conductores OVEM.",
-      },
-      {
-        name: "Servicios médicos",
+        name: "Servicios",
         href: "/servicios",
         icon: Ambulance,
         roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"],
-        hint: "Despacho y seguimiento de traslados asistenciales por etapas (origen SISRES).",
+        hint: "Servicios registrados: filtros, registro, etapas, exportación y avisos sonoros.",
+      },
+      {
+        name: "Sala de control",
+        href: "/regulacion",
+        icon: Radio,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Servicios del día, flota disponible, tripulación y vencimientos del centro.",
+      },
+      {
+        name: "Clientes",
+        href: "/clientes",
+        icon: Handshake,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Directorio de clientes y aseguradoras (consulta).",
+      },
+      {
+        name: "Proveedores",
+        href: "/proveedores",
+        icon: Building2,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Directorio de prestadores y proveedores de servicios de salud (consulta).",
+      },
+      {
+        name: "Dotación e insumos",
+        href: "/dotacion",
+        icon: PackageCheck,
+        roles: ["ADMIN", "AUXILIAR_ENFERMERIA", "ANALISTA"],
+        hint: "Oxígeno, medicamentos y consumibles que la auxiliar verifica al recibir la ambulancia.",
       },
       {
         name: "Dotación e insumos",
@@ -345,11 +369,11 @@ export default function DashboardLayout({
         ) {
           router.replace("/coordinacion");
         }
-        // Roles clínicos de la integración SISRES: llevarlos a su pantalla de trabajo.
+        // Roles clínicos de la integración SISRES y Regulación: llevarlos a su pantalla de trabajo.
         // ANALISTA queda fuera — tiene paridad con ADMIN (ver migración 046) y
         // aterriza en el dashboard como cualquier otro rol con acceso completo.
         if (
-          ["MEDICO", "AUXILIAR_ENFERMERIA", "VISTA"].includes(p.role_codigo) &&
+          ["MEDICO", "AUXILIAR_ENFERMERIA", "VISTA", "REGULACION"].includes(p.role_codigo) &&
           pathname === "/"
         ) {
           router.replace(getDefaultRoute(p.role_codigo));

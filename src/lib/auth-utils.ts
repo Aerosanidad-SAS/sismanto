@@ -65,7 +65,7 @@ export function getDefaultRoute(role: UserRole): string {
   switch (role) {
     case "OVEM":           return "/ovem";
     case "ADMIN":          return "/";
-    case "REGULACION":     return "/regulacion";
+    case "REGULACION":     return "/servicios";
     case "GERENCIAL":      return "/";
     case "MANTENIMIENTO":  return "/vehiculos";
     case "COORDINACION":   return "/coordinacion";

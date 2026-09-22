@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateShort } from "@/lib/utils";
+import { fechaHora24, horasEstancado } from "@/lib/servicios-lista";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
 import { PatientSearchCombobox, nombreCompletoDe } from "@/components/forms/patient-search-combobox";
@@ -102,7 +102,7 @@ const ETAPAS_DESTINO = (etapaActual: string): EtapaServicio[] =>
 // es el mismo TAB SIMPLE, variante de captura duplicada) — pero sigue
 // existiendo en PERFIL_FORMULARIO_SERVICIO (validations.ts) para que los
 // servicios históricos que ya tienen ese valor sigan abriendo bien.
-const TIPOS_SERVICIO = [
+export const TIPOS_SERVICIO = [
   "MEDICINA DOMICILIARIA",
   "TAB SIMPLE",
   "TAB DOBLE",
@@ -225,8 +225,6 @@ export function ServiciosTabla({
   viewerNombreCompleto,
 }: ServiciosTablaProps) {
   const router = useRouter();
-  const [busqueda, setBusqueda] = useState("");
-  const [filtroEtapa, setFiltroEtapa] = useState<string>("TODAS");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<ServicioRow | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -335,20 +333,8 @@ export function ServiciosTabla({
 
   const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionPorVehiculo[vehiculoSeleccionado] : undefined;
 
-  const filtrados = useMemo(() => {
-    let lista = servicios;
-    if (filtroEtapa !== "TODAS") lista = lista.filter((s) => s.etapa === filtroEtapa);
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return lista;
-    return lista.filter(
-      (s) =>
-        s.nombre_completo.toLowerCase().includes(q) ||
-        (s.patients?.cedula ?? "").toLowerCase().includes(q) ||
-        (s.vehicles?.placa ?? s.movil_placa ?? "").toLowerCase().includes(q) ||
-        s.tipo_servicio.toLowerCase().includes(q) ||
-        (s.cliente ?? "").toLowerCase().includes(q)
-    );
-  }, [servicios, busqueda, filtroEtapa]);
+  // Los filtros se aplican en el servidor (ServiciosFiltros): la tabla muestra la página tal cual.
+  const filtrados = servicios;
 
   const seleccionarPaciente = (paciente: PacienteTypeahead) => {
     setError(null);
@@ -515,41 +501,24 @@ export function ServiciosTabla({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Input
-            placeholder="Buscar por paciente, placa, tipo o cliente…"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="sm:w-72"
-          />
-          <Select value={filtroEtapa} onValueChange={setFiltroEtapa}>
-            <SelectTrigger className="sm:w-44">
-              <SelectValue placeholder="Etapa" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="TODAS">Todas las etapas</SelectItem>
-              {Object.keys(ETAPA_BADGE).map((etapa) => (
-                <SelectItem key={etapa} value={etapa}>
-                  {etapa}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {puedeEditar && (
+        <div className="flex justify-end">
+          <Button onClick={abrirNuevo}>+ Registrar</Button>
         </div>
-        {puedeEditar && <Button onClick={abrirNuevo}>Nuevo servicio</Button>}
-      </div>
+      )}
 
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Registro</TableHead>
+              <TableHead>ID</TableHead>
+              <TableHead>Etapa</TableHead>
               <TableHead>Paciente</TableHead>
+              <TableHead>Registro</TableHead>
+              <TableHead>Programado</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Móvil</TableHead>
               <TableHead>Origen → Destino</TableHead>
-              <TableHead>Etapa</TableHead>
               {puedeCambiarEtapaLibre && <TableHead>Cambiar etapa</TableHead>}
               {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
@@ -558,19 +527,44 @@ export function ServiciosTabla({
             {filtrados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6 + (puedeCambiarEtapaLibre ? 1 : 0) + (puedeEditar ? 1 : 0)}
+                  colSpan={8 + (puedeCambiarEtapaLibre ? 1 : 0) + (puedeEditar ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin servicios registrados
                 </TableCell>
               </TableRow>
             )}
-            {filtrados.map((s) => (
+            {filtrados.map((s) => {
+              const estancado = horasEstancado({
+                etapa: s.etapa,
+                fecha_hora_programacion: (s.fecha_hora_programacion as string | null) ?? null,
+              });
+              return (
               <TableRow key={s.id}>
-                <TableCell>{formatDateShort(s.fecha_hora_registro)}</TableCell>
+                <TableCell className="tabular-nums text-muted-foreground">{s.id}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa}</Badge>
+                    {estancado !== null && (
+                      <Badge
+                        variant="outline"
+                        className="border-transparent bg-foreground text-background"
+                        title={`Lleva ${estancado} h en ${s.etapa} sin avanzar`}
+                      >
+                        ⏰ {estancado}h
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <div className="font-medium">{s.nombre_completo}</div>
-                  <div className="text-xs text-muted-foreground">{s.patients?.cedula ?? "sin enlace"}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {s.patients?.cedula ?? (s.cedula_paciente as string | null) ?? "sin enlace"}
+                  </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">{fechaHora24(s.fecha_hora_registro)}</TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">
+                  {fechaHora24(s.fecha_hora_programacion as string | null) || "—"}
                 </TableCell>
                 <TableCell className="max-w-40">
                   <p className="truncate text-sm">{s.tipo_servicio}</p>
@@ -578,9 +572,6 @@ export function ServiciosTabla({
                 <TableCell>{s.vehicles?.placa ?? s.movil_placa ?? "—"}</TableCell>
                 <TableCell className="text-sm">
                   {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa}</Badge>
                 </TableCell>
                 {puedeCambiarEtapaLibre && (
                   <TableCell className="min-w-[10rem]">
@@ -625,7 +616,8 @@ export function ServiciosTabla({
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
