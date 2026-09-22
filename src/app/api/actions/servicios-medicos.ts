@@ -9,6 +9,11 @@ import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
 import { z } from "zod";
+import {
+  EXPORT_MAX_FILAS,
+  SERVICIOS_POR_PAGINA,
+  type FiltrosServicios,
+} from "@/lib/servicios-lista";
 
 // Mismo rol que ve la sección completa en SISRES (editarServicio.php,
 // "!$esMedicoAux") — Médico/Auxiliar no ven ni suben la Boleta de Salida.
@@ -167,6 +172,117 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
 
   const { data } = await query;
   return data || [];
+}
+
+// ── Lista de servicios con filtros de SISRES (mostrarServicios.php) ────────
+
+const ROLES_LISTA_SERVICIOS: UserRole[] = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"];
+
+// Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este
+// repo (ver CLAUDE.md), y el builder solo recibe filtros encadenados.
+function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centroId: number | null) {
+  let q = query;
+  if (centroId) q = q.or(`operational_center_id.eq.${centroId},operational_center_id.is.null`);
+  if (filtros.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtros.etapa)) q = q.eq("etapa", filtros.etapa);
+  if (filtros.tipo) q = q.eq("tipo_servicio", filtros.tipo);
+  if (filtros.cliente) q = q.eq("cliente", filtros.cliente);
+  if (filtros.origen) q = q.eq("ciudad_origen", filtros.origen);
+  if (filtros.destino) q = q.eq("ciudad_destino", filtros.destino);
+  if (filtros.cedula) q = q.ilike("cedula_paciente", `%${filtros.cedula.replace(/[%_\\]/g, "")}%`);
+  // Como SISRES: el rango es sobre la fecha programada, en hora de Colombia.
+  if (filtros.desde) q = q.gte("fecha_hora_programacion", `${filtros.desde}T00:00:00-05:00`);
+  if (filtros.hasta) q = q.lte("fecha_hora_programacion", `${filtros.hasta}T23:59:59.999-05:00`);
+  return q;
+}
+
+/** Una página de servicios con el total, para la lista paginada de 100. */
+export async function buscarServicios(filtros: FiltrosServicios, pagina: number) {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const desde = (Math.max(1, pagina) - 1) * SERVICIOS_POR_PAGINA;
+
+  const query = supabase
+    .from("medical_services")
+    .select("*, patients(cedula, nombre1, apellido1), vehicles(placa)", { count: "exact" })
+    .order("fecha_hora_registro", { ascending: false })
+    .order("id", { ascending: false })
+    .range(desde, desde + SERVICIOS_POR_PAGINA - 1);
+
+  const { data, count, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile)?.id ?? null);
+  if (error) return { servicios: [], total: 0, error: error.message as string };
+  return { servicios: data ?? [], total: count ?? 0 };
+}
+
+/** Valores reales para los desplegables de cliente y ciudades (distintos, ordenados). */
+export async function getOpcionesFiltroServicios() {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const query = supabase
+    .from("medical_services")
+    .select("cliente, ciudad_origen, ciudad_destino")
+    .order("fecha_hora_registro", { ascending: false })
+    .limit(5000);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile)?.id ?? null);
+  const distintos = (campo: string) =>
+    Array.from(new Set(((data ?? []) as Record<string, string | null>[]).map((r) => r[campo]).filter(Boolean) as string[])).sort(
+      (a, b) => a.localeCompare(b, "es")
+    );
+  return { clientes: distintos("cliente"), origenes: distintos("ciudad_origen"), destinos: distintos("ciudad_destino") };
+}
+
+/** Filas para el Excel, con los mismos filtros de la lista (tope EXPORT_MAX_FILAS). */
+export async function exportarServicios(filtros: FiltrosServicios) {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const filas: Record<string, unknown>[] = [];
+  const LOTE = 1000; // PostgREST devuelve máximo 1000 filas por consulta
+  for (let desde = 0; desde < EXPORT_MAX_FILAS; desde += LOTE) {
+    const query = supabase
+      .from("medical_services")
+      .select("*, vehicles(placa)")
+      .order("fecha_hora_registro", { ascending: false })
+      .order("id", { ascending: false })
+      .range(desde, desde + LOTE - 1);
+    const { data, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile)?.id ?? null);
+    if (error) return { error: error.message as string };
+    filas.push(...((data ?? []) as Record<string, unknown>[]));
+    if (!data || data.length < LOTE) break;
+  }
+  return {
+    filas: filas.map((s) => ({
+      ...s,
+      movil: (s.vehicles as { placa?: string } | null)?.placa ?? s.movil_placa ?? "",
+      diagnostico: [s.cie_codigo, s.cie_descripcion].filter(Boolean).join(" — "),
+    })),
+    truncado: filas.length >= EXPORT_MAX_FILAS,
+  };
+}
+
+/**
+ * Servicios que necesitan aviso sonoro: PROGRAMADO que empieza en la próxima
+ * hora, y PROGRAMADO/CURSO que ya pasaron su hora (candidatos a estancado).
+ * Independiente de la página y los filtros, como en SISRES.
+ */
+export async function getServiciosParaAvisos() {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const en60 = new Date(Date.now() + 60 * 60_000).toISOString();
+  const query = supabase
+    .from("medical_services")
+    .select("id, etapa, nombre_completo, tipo_servicio, fecha_hora_programacion")
+    .in("etapa", ["PROGRAMADO", "CURSO"])
+    .not("fecha_hora_programacion", "is", null)
+    .lte("fecha_hora_programacion", en60)
+    .order("fecha_hora_programacion", { ascending: true })
+    .limit(500);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile)?.id ?? null);
+  return (data ?? []) as {
+    id: number;
+    etapa: string;
+    nombre_completo: string;
+    tipo_servicio: string;
+    fecha_hora_programacion: string;
+  }[];
 }
 
 export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
