@@ -27,7 +27,14 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const PASSWORD = "Aeromanto2025!";
+// La contraseña no vive en el repo: se pasa por entorno al ejecutar el script.
+const PASSWORD = process.env.TEST_USERS_PASSWORD;
+if (!PASSWORD || PASSWORD.length < 8) {
+  console.error(
+    'Falta TEST_USERS_PASSWORD (mínimo 8 caracteres). Uso: TEST_USERS_PASSWORD="..." npx tsx scripts/create-test-users.ts'
+  );
+  process.exit(1);
+}
 
 type UserSeed = {
   email: string;
@@ -46,7 +53,7 @@ const USERS: UserSeed[] = [
     email: "mantenimiento@aeromanto.co",
     roleCodigo: "MANTENIMIENTO",
     nombre: "Líder Mantenimiento",
-    password: "aero123",
+    password: PASSWORD,
   },
 ];
 
