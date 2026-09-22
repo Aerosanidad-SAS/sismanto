@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { marcarPasoServicio, cambiarEtapaServicio } from "@/app/api/actions/servicios-medicos";
-import { perfilFormularioServicio, pasosServicio, type CampoPasoServicio } from "@/lib/validations";
+import { estadoOperativo, pasosPorTipo, type CampoPasoServicio } from "@/lib/estado-servicio";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,8 @@ interface ServicioAsignado {
   etapa: string;
   ciudad_origen: string | null;
   direccion_origen: string | null;
+  ciudad_intermedia?: string | null;
+  direccion_intermedia?: string | null;
   ciudad_destino: string | null;
   direccion_destino: string | null;
   fecha_hora_inicio_desplazamiento: string | null;
@@ -81,8 +83,8 @@ export function MisServicios({ servicios }: MisServiciosProps) {
         <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">{error}</div>
       )}
       {activos.map((s) => {
-        const perfil = perfilFormularioServicio(s.tipo_servicio);
-        const pasos = pasosServicio(perfil);
+        const pasos = pasosPorTipo(s.tipo_servicio);
+        const estado = estadoOperativo(s);
         const siguientePaso = pasos.find((p) => !s[p.campo]);
         const ocupado = loadingId === s.id;
 
@@ -94,8 +96,8 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                   <CardTitle className="text-base">{s.tipo_servicio}</CardTitle>
                   <p className="text-sm text-muted-foreground truncate">{s.nombre_completo}</p>
                 </div>
-                <Badge variant={s.etapa === "CURSO" ? "default" : "secondary"} className="shrink-0">
-                  {s.etapa === "CURSO" ? "En curso" : "Programado"}
+                <Badge variant={estado.tono === "en_curso" ? "default" : "secondary"} className="shrink-0">
+                  {estado.etiqueta}
                 </Badge>
               </div>
             </CardHeader>
@@ -108,6 +110,12 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                       <p>
                         <span className="text-muted-foreground">Origen: </span>
                         {s.direccion_origen || s.ciudad_origen}
+                      </p>
+                    )}
+                    {(s.ciudad_intermedia || s.direccion_intermedia) && (
+                      <p>
+                        <span className="text-muted-foreground">Punto intermedio: </span>
+                        {s.direccion_intermedia || s.ciudad_intermedia}
                       </p>
                     )}
                     {(s.ciudad_destino || s.direccion_destino) && (
@@ -134,7 +142,7 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                           )}
                         >
                           {valor && <CheckCircle2 className="h-3 w-3" />}
-                          {p.etiqueta}
+                          {p.hito}
                           {valor && ` — ${horaCorta(valor)}`}
                         </span>
                       );
@@ -146,7 +154,7 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                       disabled={ocupado}
                       onClick={() => avanzarPaso(s, siguientePaso.campo, siguientePaso.etapaDestino)}
                     >
-                      {ocupado ? "Guardando..." : siguientePaso.etiqueta}
+                      {ocupado ? "Guardando..." : siguientePaso.accion}
                     </Button>
                   ) : (
                     <p className="text-sm text-green-700 flex items-center gap-1">
