@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireRole } from "./auth";
 import { centroVisible } from "@/lib/auth-utils";
+import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
 import { revalidatePath } from "next/cache";
 import { toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
 import { z } from "zod";
@@ -220,26 +221,11 @@ export async function getUsuariosPorRol(rolCodigo: "OVEM" | "MEDICO" | "AUXILIAR
 
 // ── Tablero de control de Regulación ──────────────────────────────────────
 
-const ZONA_BOGOTA = "America/Bogota";
 const VENTANA_VENCIMIENTOS_DIAS = 30;
-
-/** Fecha YYYY-MM-DD en hora de Colombia (el servidor corre en UTC). */
-function fechaBogota(fecha: Date | string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: ZONA_BOGOTA,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(fecha));
-}
-
-function diasHasta(fecha: string, hoy: string): number {
-  return Math.round((Date.parse(`${fecha}T00:00:00Z`) - Date.parse(`${hoy}T00:00:00Z`)) / 86400000);
-}
 
 export interface VencimientoVehiculo {
   placa: string;
-  documento: "SOAT" | "Técnico-mecánica" | "Pase aeroportuario";
+  documento: DocumentoVehiculo;
   fecha: string;
   dias: number;
 }
@@ -301,12 +287,7 @@ export async function getTableroRegulacion() {
 
   const vencimientos: VencimientoVehiculo[] = [];
   for (const v of (vehiculos ?? []) as any[]) {
-    const documentos: [VencimientoVehiculo["documento"], string | null][] = [
-      ["SOAT", v.vencimiento_soat],
-      ["Técnico-mecánica", v.vencimiento_tecnicomecanica || v.vencimiento_rtm],
-      ["Pase aeroportuario", v.fecha_pase_aeroportuario],
-    ];
-    for (const [documento, fecha] of documentos) {
+    for (const [documento, fecha] of documentosVehiculo(v)) {
       if (!fecha) continue;
       const dias = diasHasta(fecha, hoy);
       if (dias <= VENTANA_VENCIMIENTOS_DIAS) vencimientos.push({ placa: v.placa, documento, fecha, dias });

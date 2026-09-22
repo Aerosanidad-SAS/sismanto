@@ -23,41 +23,65 @@ import {
 } from "@/components/ui/dialog";
 import { IncidentForm } from "@/components/dashboard/incident-form";
 import { MisServicios } from "@/components/servicios/mis-servicios";
-import { CheckCircle2, AlertCircle, ClipboardCheck, ArrowLeft, ArrowRight, Ambulance } from "lucide-react";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  CheckCircle2,
+  AlertCircle,
+  ClipboardCheck,
+  ArrowLeft,
+  ArrowRight,
+  Ambulance,
+  PackageCheck,
+  Fuel,
+  Siren,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { VehiculoConDocumentos } from "@/lib/vencimientos";
+import { ChecklistItemRow, agruparPorCategoria, type ChecklistItem } from "./checklist-item-row";
+import { DotacionForm } from "./dotacion-form";
+import { CombustibleForm } from "./combustible-form";
+import { SiniestroForm } from "./siniestro-form";
+import { DocumentosVehiculo } from "./documentos-vehiculo";
 
 interface OvemPortalProps {
   userId: string;
   userName: string;
-  vehicles: Array<{
-    id: string;
-    placa: string;
-    marca?: string | null;
-    modelo?: string | null;
-    estado_actual?: string;
-    centro_operativo?: string;
-  }>;
-  checklistItems: Array<{
-    id: number;
-    categoria: string;
-    descripcion: string;
-    cantidad_esperada: string | null;
-    orden: number;
-    activo: boolean;
-  }>;
+  vehicles: Array<
+    VehiculoConDocumentos & {
+      id: string;
+      placa: string;
+      marca?: string | null;
+      modelo?: string | null;
+      estado_actual?: string;
+      centro_operativo?: string;
+    }
+  >;
+  checklistItems: ChecklistItem[];
+  dotacionItems: ChecklistItem[];
+  /** Hoy en hora de Colombia (YYYY-MM-DD), calculado en el servidor. */
+  hoyBogota: string;
   isAdmin: boolean;
   viewerRole?: "OVEM" | "ADMIN";
   servicios?: Array<Record<string, unknown> & { id: number; etapa: string }>;
 }
 
-type Flow = null | "preoperacional" | "novedad" | "servicios";
+type Flow = null | "preoperacional" | "dotacion" | "combustible" | "novedad" | "siniestro" | "servicios";
+
+const FLOW_LABEL: Record<Exclude<Flow, null>, string> = {
+  preoperacional: "Preoperacional",
+  dotacion: "Dotación e insumos",
+  combustible: "Tanqueo",
+  novedad: "Reporte de novedad",
+  siniestro: "Siniestro vial",
+  servicios: "Mis servicios",
+};
 
 export function OvemPortal({
   userId,
   userName,
   vehicles,
   checklistItems,
+  dotacionItems,
+  hoyBogota,
   isAdmin,
   viewerRole = "ADMIN",
   servicios = [],
@@ -73,6 +97,8 @@ export function OvemPortal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  /** Confirmación que sobrevive al volver al menú (tanqueo, siniestro). */
+  const [aviso, setAviso] = useState<string | null>(null);
   const [novedadesOpen, setNovedadesOpen] = useState(false);
   const [checkItemsState, setCheckItemsState] = useState<
     Record<
@@ -136,15 +162,7 @@ export function OvemPortal({
     });
   }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo]);
 
-  const checklistItemsByCategoria = useMemo(() => {
-    const m = new Map<string, OvemPortalProps["checklistItems"]>();
-    for (const it of checklistFiltrado) {
-      const arr = m.get(it.categoria) || [];
-      arr.push(it);
-      m.set(it.categoria, arr);
-    }
-    return Array.from(m.entries());
-  }, [checklistFiltrado]);
+  const checklistItemsByCategoria = useMemo(() => agruparPorCategoria(checklistFiltrado), [checklistFiltrado]);
 
   const handleSubmitChecklist = async () => {
     if (!vehicleId || flow !== "preoperacional") return;
@@ -197,10 +215,41 @@ export function OvemPortal({
     setVehicleId("");
   };
 
+  const abrir = (f: Exclude<Flow, null>) => {
+    setAviso(null);
+    setFlow(f);
+  };
+
+  const acciones: Array<{ flow: Exclude<Flow, null>; icon: typeof Ambulance; titulo: string; detalle: string }> = [
+    ...(viewerRole === "OVEM"
+      ? [
+          {
+            flow: "servicios" as const,
+            icon: Ambulance,
+            titulo: "Mis servicios",
+            detalle:
+              serviciosActivos.length > 0
+                ? `${serviciosActivos.length} servicio${serviciosActivos.length === 1 ? "" : "s"} asignado${serviciosActivos.length === 1 ? "" : "s"}`
+                : "Servicios asignados por Regulación",
+          },
+        ]
+      : []),
+    { flow: "preoperacional", icon: ClipboardCheck, titulo: "Iniciar preoperacional", detalle: "Checklist diario, kilometraje y documentos" },
+    { flow: "dotacion", icon: PackageCheck, titulo: "Dotación e insumos", detalle: "Lo que recibes en la ambulancia" },
+    { flow: "combustible", icon: Fuel, titulo: "Registrar tanqueo", detalle: "Galones, kilometraje y recibo" },
+    { flow: "novedad", icon: AlertCircle, titulo: "Reportar novedad", detalle: "Falla o daño del vehículo" },
+    { flow: "siniestro", icon: Siren, titulo: "Reportar siniestro", detalle: "Choque o accidente de tránsito" },
+  ];
+
   /* Flujo inicial: opciones sin exigir asignaciones */
   if (flow === null) {
     return (
       <div className="space-y-6">
+        {aviso && (
+          <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800" role="status">
+            {aviso}
+          </p>
+        )}
         <Card>
           <CardHeader>
             <CardTitle>Elija una acción</CardTitle>
@@ -209,44 +258,19 @@ export function OvemPortal({
               en regulación para iniciar preoperacional o reportar una novedad.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row gap-4">
-            {viewerRole === "OVEM" && (
+          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {acciones.map(({ flow: f, icon: Icon, titulo, detalle }) => (
               <Button
-                className="h-auto py-6 flex flex-col gap-2 flex-1 relative"
+                key={f}
+                className={cn("h-auto flex-col gap-2 py-5", f === "siniestro" && "border-red-200")}
                 variant="outline"
-                onClick={() => setFlow("servicios")}
+                onClick={() => abrir(f)}
               >
-                <Ambulance className="h-8 w-8" />
-                <span className="text-base font-semibold">Mis servicios</span>
-                <span className="text-xs font-normal text-muted-foreground text-center">
-                  {serviciosActivos.length > 0
-                    ? `${serviciosActivos.length} servicio${serviciosActivos.length === 1 ? "" : "s"} asignado${serviciosActivos.length === 1 ? "" : "s"}`
-                    : "Servicios asignados por Regulación"}
-                </span>
+                <Icon className={cn("h-8 w-8", f === "siniestro" && "text-red-600")} />
+                <span className="text-base font-semibold">{titulo}</span>
+                <span className="whitespace-normal text-center text-xs font-normal text-muted-foreground">{detalle}</span>
               </Button>
-            )}
-            <Button
-              className="h-auto py-6 flex flex-col gap-2 flex-1"
-              variant="outline"
-              onClick={() => setFlow("preoperacional")}
-            >
-              <ClipboardCheck className="h-8 w-8" />
-              <span className="text-base font-semibold">Iniciar preoperacional</span>
-              <span className="text-xs font-normal text-muted-foreground text-center">
-                Checklist diario y kilometraje
-              </span>
-            </Button>
-            <Button
-              className="h-auto py-6 flex flex-col gap-2 flex-1"
-              variant="outline"
-              onClick={() => setFlow("novedad")}
-            >
-              <AlertCircle className="h-8 w-8" />
-              <span className="text-base font-semibold">Reportar novedad</span>
-              <span className="text-xs font-normal text-muted-foreground text-center">
-                Formulario de incidente por vehículo
-              </span>
-            </Button>
+            ))}
           </CardContent>
         </Card>
 
@@ -266,15 +290,11 @@ export function OvemPortal({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button type="button" variant="ghost" size="sm" onClick={goHub} className="gap-2">
+        <Button type="button" variant="ghost" onClick={goHub} className="h-11 gap-2">
           <ArrowLeft className="h-4 w-4" />
           Volver
         </Button>
-        <p className="text-sm text-muted-foreground">
-          {flow === "preoperacional" && "Preoperacional"}
-          {flow === "novedad" && "Reporte de novedad"}
-          {flow === "servicios" && "Mis servicios"}
-        </p>
+        <p className="text-sm text-muted-foreground">{FLOW_LABEL[flow]}</p>
       </div>
 
       {flow === "servicios" && <MisServicios servicios={servicios as any} />}
@@ -302,6 +322,42 @@ export function OvemPortal({
             </Select>
           </CardContent>
         </Card>
+      )}
+
+      {vehicleId && selectedVehicle && (flow === "preoperacional" || flow === "dotacion") && (
+        <DocumentosVehiculo
+          placa={selectedVehicle.placa}
+          vehiculo={selectedVehicle}
+          hoy={hoyBogota}
+          esAeroportuario={String(selectedVehicle.centro_operativo ?? "").toUpperCase() === "AIRPLAN"}
+        />
+      )}
+
+      {vehicleId && selectedVehicle && flow === "dotacion" && (
+        <DotacionForm vehicleId={vehicleId} placa={selectedVehicle.placa} items={dotacionItems} />
+      )}
+
+      {vehicleId && selectedVehicle && flow === "combustible" && (
+        <CombustibleForm
+          vehicleId={vehicleId}
+          placa={selectedVehicle.placa}
+          hoy={hoyBogota}
+          onDone={() => {
+            setFlow(null);
+            setAviso(`Tanqueo de ${selectedVehicle.placa} registrado.`);
+          }}
+        />
+      )}
+
+      {vehicleId && selectedVehicle && flow === "siniestro" && (
+        <SiniestroForm
+          vehicleId={vehicleId}
+          placa={selectedVehicle.placa}
+          onDone={() => {
+            setFlow(null);
+            setAviso(`Siniestro de ${selectedVehicle.placa} reportado. Regulación ya lo ve en novedades.`);
+          }}
+        />
       )}
 
       {vehicleId && flow === "novedad" && (
@@ -357,127 +413,24 @@ export function OvemPortal({
                     {categoria.replaceAll("_", " ")}
                   </h3>
                   <div className="space-y-2">
-                    {items.map((it) => {
-                      const expectedNum = it.cantidad_esperada ? Number(it.cantidad_esperada) : NaN;
-                      const isNumericQty = Number.isFinite(expectedNum) && expectedNum > 0;
-                      const st = checkItemsState[it.id] || { estado: "OK" as const };
-
-                      const showAlert = st.estado === "FALLA";
-
-                      return (
-                        <div
-                          key={it.id}
-                          className={cn(
-                            "rounded-lg border p-3",
-                            showAlert ? "border-red-300 bg-red-50/50" : "border-border bg-card"
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground">{it.descripcion}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Esperado: {it.cantidad_esperada || "OK"}
-                              </p>
-                            </div>
-                            {showAlert ? (
-                              <span className="text-xs font-semibold text-red-700">ALERTA</span>
-                            ) : (
-                              <span className="text-xs font-semibold text-muted-foreground">—</span>
-                            )}
-                          </div>
-
-                          <div className="mt-3 grid gap-3 md:grid-cols-2">
-                            {isNumericQty ? (
-                              <div className="space-y-2">
-                                <Label className="text-xs">¿Cuántos están OK?</Label>
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    max={expectedNum}
-                                    value={st.cantidadOk ?? expectedNum}
-                                    onChange={(e) => {
-                                      const v = parseInt(e.target.value || "0", 10);
-                                      const clamped = Math.max(0, Math.min(expectedNum, Number.isNaN(v) ? 0 : v));
-                                      const estado = clamped < expectedNum ? "FALLA" : "OK";
-                                      setCheckItemsState((prev) => ({
-                                        ...prev,
-                                        [it.id]: { ...prev[it.id], cantidadOk: clamped, estado },
-                                      }));
-                                    }}
-                                    className="w-28"
-                                  />
-                                  <span className="text-xs text-muted-foreground">de {expectedNum}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                <Label className="text-xs">Estado</Label>
-                                <RadioGroup
-                                  value={st.estado}
-                                  onValueChange={(v) =>
-                                    setCheckItemsState((prev) => ({
-                                      ...prev,
-                                      [it.id]: { ...prev[it.id], estado: v as any },
-                                    }))
-                                  }
-                                  className="grid grid-cols-3 gap-3"
-                                >
-                                  {[
-                                    { v: "OK", label: "OK" },
-                                    { v: "FALLA", label: "Falla" },
-                                    { v: "NO_APLICA", label: "N/A" },
-                                  ].map((opt) => (
-                                    <label key={opt.v} className="flex items-center gap-2 text-sm">
-                                      <RadioGroupItem value={opt.v} />
-                                      <span className="text-xs">{opt.label}</span>
-                                    </label>
-                                  ))}
-                                </RadioGroup>
-                              </div>
-                            )}
-
-                            <div className="space-y-2">
-                              <Label className="text-xs">Observación</Label>
-                              <Input
-                                value={st.observacion ?? ""}
-                                placeholder={
-                                  st.estado === "FALLA"
-                                    ? "Describa la falla (ej: farola sin luz media)"
-                                    : "Opcional"
-                                }
-                                onChange={(e) =>
-                                  setCheckItemsState((prev) => ({
-                                    ...prev,
-                                    [it.id]: { ...prev[it.id], observacion: e.target.value },
-                                  }))
-                                }
-                              />
-                            </div>
-                          </div>
-
-                          {st.estado === "FALLA" && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  setIncidentFromItem({
-                                    title: `Reportar novedad — ${selectedVehicle?.placa}`,
-                                    desc:
-                                      `${categoria.replaceAll("_", " ")}: ${it.descripcion}. ` +
-                                      (st.observacion ? `Detalle: ${st.observacion}` : "Detalle: "),
-                                  })
-                                }
-                              >
-                                Reportar novedad de este ítem
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {items.map((it) => (
+                      <ChecklistItemRow
+                        key={it.id}
+                        item={it}
+                        state={checkItemsState[it.id]}
+                        fallaPlaceholder="Describa la falla (ej: farola sin luz media)"
+                        onChange={(next) => setCheckItemsState((prev) => ({ ...prev, [it.id]: next }))}
+                        onReportarNovedad={() => {
+                          const st = checkItemsState[it.id];
+                          setIncidentFromItem({
+                            title: `Reportar novedad — ${selectedVehicle?.placa}`,
+                            desc:
+                              `${categoria.replaceAll("_", " ")}: ${it.descripcion}. ` +
+                              (st?.observacion ? `Detalle: ${st.observacion}` : "Detalle: "),
+                          });
+                        }}
+                      />
+                    ))}
                   </div>
                 </div>
               ))}

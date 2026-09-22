@@ -227,6 +227,65 @@ export const dailyCheckSchema = z.object({
     .optional(),
 });
 
+const checklistResultItemSchema = z.object({
+  checklistItemId: z.number().int().positive(),
+  estado: z.enum(["OK", "FALLA", "NO_APLICA"]),
+  cantidadOk: z.number().int().nonnegative().optional(),
+  observacion: z.string().optional(),
+});
+
+/** Dotación e insumos verificados al recibir la ambulancia. */
+export const supplyCheckSchema = z.object({
+  vehicleId: z.string().uuid("ID de vehículo inválido"),
+  observaciones: z.string().max(1000).optional(),
+  items: z.array(checklistResultItemSchema).min(1, "No hay ítems de dotación para guardar"),
+});
+
+/** Tanqueo registrado por el OVEM desde el portal. */
+export const ovemFuelLogSchema = z.object({
+  vehicleId: z.string().uuid("Seleccione un vehículo"),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
+  kilometraje: z.number().int().positive("El kilometraje es obligatorio"),
+  galones: z.number().positive("Los galones deben ser mayores a cero").max(100, "Revise los galones: más de 100 no cabe en un tanque"),
+  costo: z.number().nonnegative().optional(),
+  numeroVenta: z.string().trim().max(40).optional(),
+});
+
+/** Siniestro vial reportado por el OVEM. */
+export const roadAccidentSchema = z
+  .object({
+    vehicleId: z.string().uuid("Seleccione un vehículo"),
+    fechaHora: z.string().min(1, "Indique fecha y hora"),
+    lugar: z.string().trim().min(5, "Indique dirección o punto de referencia"),
+    descripcion: z.string().trim().min(10, "Mínimo 10 caracteres"),
+    pacienteABordo: z.boolean(),
+    hayLesionados: z.boolean(),
+    lesionadosDetalle: z.string().trim().optional(),
+    hayTerceros: z.boolean(),
+    terceroPlaca: z.string().trim().max(10).optional(),
+    terceroNombre: z.string().trim().max(200).optional(),
+    terceroTelefono: z.string().trim().max(30).optional(),
+    terceroAseguradora: z.string().trim().max(120).optional(),
+    intervinoAutoridad: z.boolean(),
+    numeroIpat: z.string().trim().max(40).optional(),
+    vehiculoOperativo: z.boolean(),
+  })
+  .superRefine((row, ctx) => {
+    if (Number.isNaN(Date.parse(row.fechaHora))) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Fecha y hora inválidas", path: ["fechaHora"] });
+    } else if (Date.parse(row.fechaHora) > Date.now() + 5 * 60_000) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "La fecha no puede ser futura", path: ["fechaHora"] });
+    }
+    if (row.hayLesionados && !row.lesionadosDetalle) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Describa los lesionados", path: ["lesionadosDetalle"] });
+    }
+    if (row.hayTerceros && !row.terceroPlaca && !row.terceroNombre) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Indique al menos placa o nombre del tercero", path: ["terceroPlaca"] });
+    }
+  });
+
+export type RoadAccidentFormData = z.infer<typeof roadAccidentSchema>;
+
 export const updateKilometrajeOdometerSchema = z.object({
   userId: z.string().uuid("ID de usuario inválido"),
   vehicleId: z.string().uuid("ID de vehículo inválido"),
