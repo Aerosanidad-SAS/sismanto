@@ -3,7 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { MedicalServiceFormData } from "@/lib/validations";
-import { medicalServiceSchema, ETAPAS_SERVICIO, CAMPOS_PASO_SERVICIO } from "@/lib/validations";
+import { medicalServiceSchema, ETAPAS_SERVICIO } from "@/lib/validations";
+import { CAMPOS_PASO_SERVICIO } from "@/lib/estado-servicio";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
