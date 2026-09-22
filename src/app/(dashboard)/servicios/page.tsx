@@ -49,7 +49,7 @@ export default async function ServiciosPage({
   const profile = await getProfile();
   const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
   const [
-    { servicios, total },
+    { servicios, total, error: errorLista },
     opciones,
     misServicios,
     vehiculos,
@@ -121,6 +121,11 @@ export default async function ServiciosPage({
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <ExportarServicios filtros={filtros} />
           </div>
+          {errorLista && (
+            <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
+              No se pudo cargar la lista de servicios: {errorLista}
+            </p>
+          )}
           <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />
           <ServiciosTabla
             servicios={servicios as any}

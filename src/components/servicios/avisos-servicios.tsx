@@ -169,13 +169,16 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
 
   // Refresco periódico de la lista y de los avisos.
   useEffect(() => {
-    const tick = () => {
+    const marcar = () =>
+      setActualizado(new Date().toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour12: false }));
+    // Al montar la página ya viene fresca: solo se revisan avisos.
+    revisar();
+    marcar();
+    const t = setInterval(() => {
       router.refresh();
       revisar();
-      setActualizado(new Date().toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour12: false }));
-    };
-    tick();
-    const t = setInterval(tick, REFRESCO_MS);
+      marcar();
+    }, REFRESCO_MS);
     return () => clearInterval(t);
   }, [router, revisar]);
 
@@ -222,7 +225,7 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
           size="sm"
           onClick={alternarSonido}
           aria-pressed={sonidoOn}
-          className="h-9 gap-2"
+          className="h-11 gap-2 sm:h-9"
           title="Activar o desactivar las alertas sonoras"
         >
           {sonidoOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
