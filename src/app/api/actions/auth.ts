@@ -9,8 +9,7 @@ import {
   createUserAsAdminSchema,
   signInSchema,
   toggleUserActiveSchema,
-  updateUserCiudadSchema,
-  updateUserRoleSchema,
+  updateUserAsAdminSchema,
 } from "@/lib/validations";
 
 export type { UserRole };
@@ -23,6 +22,9 @@ export interface UserProfile {
   nombre_completo: string | null;
   email: string | null;
   ciudad: string | null;
+  operational_center_id: number | null;
+  centro_codigo: string | null;
+  centro_nombre: string | null;
   activo: boolean;
 }
 
@@ -46,8 +48,10 @@ export async function getProfile(): Promise<UserProfile | null> {
       nombre_completo,
       email,
       ciudad,
+      operational_center_id,
       activo,
-      roles!inner(codigo)
+      roles!inner(codigo),
+      operational_centers(codigo, nombre)
     `)
     .eq("user_id", user.id)
     .eq("activo", true)
@@ -62,6 +66,9 @@ export async function getProfile(): Promise<UserProfile | null> {
     nombre_completo: data.nombre_completo,
     email: data.email || user.email || null,
     ciudad: (data as any).ciudad ?? null,
+    operational_center_id: (data as any).operational_center_id ?? null,
+    centro_codigo: (data as any).operational_centers?.codigo ?? null,
+    centro_nombre: (data as any).operational_centers?.nombre ?? null,
     activo: data.activo,
   };
 }
@@ -162,6 +169,7 @@ export async function createUserAsAdmin(data: {
   nombreCompleto: string;
   cedula?: string;
   ciudad?: string;
+  operationalCenterId?: number | null;
   roleCodigo: UserRole;
 }) {
   const caller = await requireRole(["ADMIN", "ANALISTA"]);
@@ -199,6 +207,7 @@ export async function createUserAsAdmin(data: {
     email: parsed.data.email,
     cedula: parsed.data.cedula || null,
     ciudad: parsed.data.ciudad || null,
+    operational_center_id: parsed.data.operationalCenterId ?? null,
     activo: true,
   });
 
@@ -207,43 +216,58 @@ export async function createUserAsAdmin(data: {
   return { success: true };
 }
 
-export async function updateUserCiudad(userId: string, ciudad: string) {
-  await requireRole(["ADMIN", "ANALISTA"]);
-  const parsed = updateUserCiudadSchema.safeParse({ userId, ciudad });
+/**
+ * Edición de un usuario desde Administración → Usuarios: nombre, cédula,
+ * ciudad, centro operativo y rol en una sola operación. El email no se
+ * edita aquí: es la identidad de Supabase Auth.
+ */
+export async function updateUserAsAdmin(data: {
+  userId: string;
+  nombreCompleto: string;
+  cedula?: string;
+  ciudad?: string;
+  operationalCenterId: number | null;
+  roleCodigo: UserRole;
+}) {
+  const caller = await requireRole(["ADMIN", "ANALISTA"]);
+  const parsed = updateUserAsAdminSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
-  const { error } = await supabase
+  const { data: actual } = await supabase
     .from("user_profiles")
-    .update({ ciudad: parsed.data.ciudad || null, updated_at: new Date().toISOString() })
-    .eq("user_id", parsed.data.userId);
+    .select("roles!inner(codigo)")
+    .eq("user_id", parsed.data.userId)
+    .maybeSingle();
+  if (!actual) return { error: "Usuario no encontrado" };
 
-  if (error) return { error: error.message };
-  revalidatePath("/admin/usuarios");
-  return { success: true };
-}
-
-export async function updateUserRole(userId: string, roleCodigo: UserRole) {
-  const caller = await requireRole(["ADMIN", "ANALISTA"]);
-  const parsed = updateUserRoleSchema.safeParse({ userId, roleCodigo });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-
-  // Misma regla que createUserAsAdmin: un no-ADMIN no puede ascender a
-  // nadie (ni a sí mismo) a ADMIN.
-  if (parsed.data.roleCodigo === "ADMIN" && caller.role_codigo !== "ADMIN") {
-    return { error: "Solo un Administrador puede asignar el rol de Administrador" };
+  // Misma regla que createUserAsAdmin: solo un ADMIN otorga el rol ADMIN, y
+  // tampoco un no-ADMIN puede editar (ni degradar) a un ADMIN existente.
+  const rolActual = (actual as any).roles?.codigo as UserRole | undefined;
+  if (caller.role_codigo !== "ADMIN" && (parsed.data.roleCodigo === "ADMIN" || rolActual === "ADMIN")) {
+    return { error: "Solo un Administrador puede editar o asignar el rol de Administrador" };
   }
 
-  const supabase = createClient();
   const { data: role } = await supabase.from("roles").select("id").eq("codigo", parsed.data.roleCodigo).single();
   if (!role) return { error: "Rol no encontrado" };
 
   const { error } = await supabase
     .from("user_profiles")
-    .update({ role_id: role.id, updated_at: new Date().toISOString() })
+    .update({
+      nombre_completo: parsed.data.nombreCompleto,
+      cedula: parsed.data.cedula || null,
+      ciudad: parsed.data.ciudad || null,
+      operational_center_id: parsed.data.operationalCenterId,
+      role_id: role.id,
+      updated_at: new Date().toISOString(),
+    })
     .eq("user_id", parsed.data.userId);
 
-  if (error) return { error: error.message };
+  if (error) {
+    // Índice único parcial sobre cédula (migración 043).
+    if (error.code === "23505") return { error: "Esa cédula ya está registrada en otro usuario" };
+    return { error: error.message };
+  }
   revalidatePath("/admin/usuarios");
   return { success: true };
 }
