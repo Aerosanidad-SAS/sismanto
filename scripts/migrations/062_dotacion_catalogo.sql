@@ -1,4 +1,4 @@
--- Migración 061: catálogo de dotación e insumos que la tripulación verifica al
+-- Migración 062: catálogo de dotación e insumos que la auxiliar de enfermería verifica al
 -- recibir la ambulancia (checklist_items.lista = 'DOTACION', ver 060).
 --
 -- cantidad_esperada: un número ('2') muestra "¿Cuántos están OK?" y marca FALLA

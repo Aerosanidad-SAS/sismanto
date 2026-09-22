@@ -25,8 +25,17 @@ export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACI
     .eq("activo", true)
     .eq("lista", lista)
     .order("orden", { ascending: true });
-  if (error) return [];
-  return data || [];
+  if (!error) return data || [];
+
+  // Sin la migración 060 no existe `lista`: el preoperacional sigue funcionando
+  // con el catálogo completo (antes de 060 todo era preoperacional).
+  if (lista === "DOTACION") return [];
+  const { data: legacy } = await supabase
+    .from("checklist_items")
+    .select("id, categoria, descripcion, cantidad_esperada, orden, activo")
+    .eq("activo", true)
+    .order("orden", { ascending: true });
+  return legacy || [];
 }
 
 export async function getAssignedVehicles(userId: string) {
@@ -230,8 +239,10 @@ export async function getDailyCheckItemsForToday(userId: string, vehicleId: stri
 
 // ─── Dotación e insumos ──────────────────────────────────────────────────────
 
+const ROLES_DOTACION = ["AUXILIAR_ENFERMERIA", "ADMIN", "ANALISTA"] as const;
+
 export async function getSupplyCheckForToday(vehicleId: string) {
-  const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
+  const profile = await requireRole([...ROLES_DOTACION]);
   const supabase = createClient();
   const { data: check } = await supabase
     .from("supply_checks")
@@ -263,7 +274,7 @@ export async function submitSupplyCheck(data: {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const row = parsed.data;
 
-  const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
+  const profile = await requireRole([...ROLES_DOTACION]);
   const supabase = createClient();
   const faltantes = row.items.filter((it) => it.estado === "FALLA").length;
 

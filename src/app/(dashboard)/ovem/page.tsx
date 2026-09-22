@@ -28,10 +28,7 @@ export default async function OvemPage() {
   if (centro) vehiclesQuery = vehiclesQuery.eq("centro_operativo", centro.codigo);
   const { data: vehicles = [] } = await vehiclesQuery;
 
-  const [checklistItems, dotacionItems] = await Promise.all([
-    getChecklistItemsActivos("PREOPERACIONAL"),
-    getChecklistItemsActivos("DOTACION"),
-  ]);
+  const checklistItems = await getChecklistItemsActivos("PREOPERACIONAL");
   const servicios = profile.role_codigo === "OVEM" ? await getServiciosMedicos() : [];
 
   return (
@@ -39,7 +36,7 @@ export default async function OvemPage() {
       <div>
         <h1 className="text-3xl">Portal OVEM</h1>
         <p className="mt-2 text-muted-foreground">
-          Preoperacional, dotación, tanqueos, novedades y siniestros
+          Preoperacional, tanqueos, novedades y siniestros
         </p>
       </div>
 
@@ -48,7 +45,6 @@ export default async function OvemPage() {
         userName={profile.nombre_completo || profile.email || "Usuario"}
         vehicles={vehicles ?? []}
         checklistItems={checklistItems}
-        dotacionItems={dotacionItems}
         hoyBogota={fechaBogota(new Date())}
         servicios={servicios as any}
         isAdmin={isAdminLike(profile.role_codigo)}

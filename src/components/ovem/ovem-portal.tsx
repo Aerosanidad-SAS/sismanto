@@ -30,14 +30,12 @@ import {
   ArrowLeft,
   ArrowRight,
   Ambulance,
-  PackageCheck,
   Fuel,
   Siren,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VehiculoConDocumentos } from "@/lib/vencimientos";
 import { ChecklistItemRow, agruparPorCategoria, type ChecklistItem } from "./checklist-item-row";
-import { DotacionForm } from "./dotacion-form";
 import { CombustibleForm } from "./combustible-form";
 import { SiniestroForm } from "./siniestro-form";
 import { DocumentosVehiculo } from "./documentos-vehiculo";
@@ -56,7 +54,6 @@ interface OvemPortalProps {
     }
   >;
   checklistItems: ChecklistItem[];
-  dotacionItems: ChecklistItem[];
   /** Hoy en hora de Colombia (YYYY-MM-DD), calculado en el servidor. */
   hoyBogota: string;
   isAdmin: boolean;
@@ -64,11 +61,10 @@ interface OvemPortalProps {
   servicios?: Array<Record<string, unknown> & { id: number; etapa: string }>;
 }
 
-type Flow = null | "preoperacional" | "dotacion" | "combustible" | "novedad" | "siniestro" | "servicios";
+type Flow = null | "preoperacional" | "combustible" | "novedad" | "siniestro" | "servicios";
 
 const FLOW_LABEL: Record<Exclude<Flow, null>, string> = {
   preoperacional: "Preoperacional",
-  dotacion: "Dotación e insumos",
   combustible: "Tanqueo",
   novedad: "Reporte de novedad",
   siniestro: "Siniestro vial",
@@ -80,7 +76,6 @@ export function OvemPortal({
   userName,
   vehicles,
   checklistItems,
-  dotacionItems,
   hoyBogota,
   isAdmin,
   viewerRole = "ADMIN",
@@ -235,7 +230,6 @@ export function OvemPortal({
         ]
       : []),
     { flow: "preoperacional", icon: ClipboardCheck, titulo: "Iniciar preoperacional", detalle: "Checklist diario, kilometraje y documentos" },
-    { flow: "dotacion", icon: PackageCheck, titulo: "Dotación e insumos", detalle: "Lo que recibes en la ambulancia" },
     { flow: "combustible", icon: Fuel, titulo: "Registrar tanqueo", detalle: "Galones, kilometraje y recibo" },
     { flow: "novedad", icon: AlertCircle, titulo: "Reportar novedad", detalle: "Falla o daño del vehículo" },
     { flow: "siniestro", icon: Siren, titulo: "Reportar siniestro", detalle: "Choque o accidente de tránsito" },
@@ -258,17 +252,29 @@ export function OvemPortal({
               en regulación para iniciar preoperacional o reportar una novedad.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <CardContent className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             {acciones.map(({ flow: f, icon: Icon, titulo, detalle }) => (
               <Button
                 key={f}
-                className={cn("h-auto flex-col gap-2 py-5", f === "siniestro" && "border-red-200")}
+                className={cn(
+                  "h-auto min-h-24 flex-col gap-2 px-2 py-4",
+                  // Con cinco acciones, siniestro ocupa la fila completa en el celular.
+                  f === "siniestro" && "col-span-2 border-red-200 lg:col-span-1"
+                )}
                 variant="outline"
                 onClick={() => abrir(f)}
               >
-                <Icon className={cn("h-8 w-8", f === "siniestro" && "text-red-600")} />
-                <span className="text-base font-semibold">{titulo}</span>
-                <span className="whitespace-normal text-center text-xs font-normal text-muted-foreground">{detalle}</span>
+                <Icon className={cn("h-7 w-7 sm:h-8 sm:w-8", f === "siniestro" && "text-red-600")} />
+                <span className="whitespace-normal text-center text-sm font-semibold sm:text-base">{titulo}</span>
+                {/* En el celular solo queda el conteo de servicios; el resto es obvio por el título. */}
+                <span
+                  className={cn(
+                    "whitespace-normal text-center text-xs font-normal text-muted-foreground",
+                    f === "servicios" ? "block" : "hidden sm:block"
+                  )}
+                >
+                  {detalle}
+                </span>
               </Button>
             ))}
           </CardContent>
@@ -324,17 +330,13 @@ export function OvemPortal({
         </Card>
       )}
 
-      {vehicleId && selectedVehicle && (flow === "preoperacional" || flow === "dotacion") && (
+      {vehicleId && selectedVehicle && flow === "preoperacional" && (
         <DocumentosVehiculo
           placa={selectedVehicle.placa}
           vehiculo={selectedVehicle}
           hoy={hoyBogota}
           esAeroportuario={String(selectedVehicle.centro_operativo ?? "").toUpperCase() === "AIRPLAN"}
         />
-      )}
-
-      {vehicleId && selectedVehicle && flow === "dotacion" && (
-        <DotacionForm vehicleId={vehicleId} placa={selectedVehicle.placa} items={dotacionItems} />
       )}
 
       {vehicleId && selectedVehicle && flow === "combustible" && (

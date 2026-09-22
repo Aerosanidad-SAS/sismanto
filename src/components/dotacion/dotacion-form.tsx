@@ -14,7 +14,7 @@ import {
   ChecklistItemRow,
   type ChecklistItem,
   type ChecklistState,
-} from "./checklist-item-row";
+} from "@/components/ovem/checklist-item-row";
 
 /**
  * Dotación e insumos al recibir la ambulancia. Se guarda aparte del

@@ -74,7 +74,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "058_etl_identidad_origen.sql",                 file: "scripts/migrations/058_etl_identidad_origen.sql" },
   { name: "059_centro_operativo_servicios.sql",          file: "scripts/migrations/059_centro_operativo_servicios.sql" },
   { name: "060_ovem_turno.sql",                          file: "scripts/migrations/060_ovem_turno.sql" },
-  { name: "061_dotacion_catalogo.sql",                   file: "scripts/migrations/061_dotacion_catalogo.sql" },
+  { name: "061_dotacion_auxiliares.sql",                 file: "scripts/migrations/061_dotacion_auxiliares.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
