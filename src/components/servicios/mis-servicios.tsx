@@ -37,7 +37,12 @@ function horaCorta(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Bogota",
+  });
 }
 
 export function MisServicios({ servicios }: MisServiciosProps) {
@@ -85,12 +90,38 @@ export function MisServicios({ servicios }: MisServiciosProps) {
       {activos.map((s) => {
         const pasos = pasosPorTipo(s.tipo_servicio);
         const estado = estadoOperativo(s);
+        const completados = pasos.filter((p) => s[p.campo]).length;
         const siguientePaso = pasos.find((p) => !s[p.campo]);
         const ocupado = loadingId === s.id;
 
         return (
           <Card key={s.id}>
-            <CardHeader className="pb-3">
+            <CardHeader className="space-y-3 pb-3">
+              {pasos.length > 0 && (
+                <div>
+                  <div
+                    className="flex gap-1"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={pasos.length}
+                    aria-valuenow={completados}
+                    aria-label={`Paso ${completados} de ${pasos.length}: ${estado.etiqueta}`}
+                  >
+                    {pasos.map((p, i) => (
+                      <span
+                        key={p.campo}
+                        className={cn(
+                          "h-1.5 flex-1 rounded-full",
+                          i < completados ? "bg-primary" : "bg-muted"
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Paso {completados} de {pasos.length}
+                  </p>
+                </div>
+              )}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <CardTitle className="text-base">{s.tipo_servicio}</CardTitle>
