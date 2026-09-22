@@ -2,13 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  createUserAsAdmin,
-  updateUserCentro,
-  updateUserCiudad,
-  updateUserRole,
-  toggleUserActive,
-} from "@/app/api/actions/auth";
+import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive } from "@/app/api/actions/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
@@ -43,37 +37,150 @@ import { cn } from "@/lib/utils";
 // Radix Select no admite value="" — valor centinela para "sin centro".
 const SIN_CENTRO = "__none__";
 
+interface Usuario {
+  id: number;
+  user_id: string;
+  nombre_completo: string | null;
+  email: string | null;
+  cedula: string | null;
+  ciudad: string | null;
+  operational_center_id: number | null;
+  activo: boolean;
+  role_codigo: string;
+  role_nombre: string;
+}
+
 interface AdminUsuariosProps {
-  users: {
-    id: number;
-    user_id: string;
-    nombre_completo: string | null;
-    email: string | null;
-    cedula: string | null;
-    ciudad: string | null;
-    operational_center_id: number | null;
-    activo: boolean;
-    role_codigo: string;
-    role_nombre: string;
-  }[];
+  users: Usuario[];
   roles: { id: number; codigo: string; nombre: string }[];
   centros: { id: number; nombre: string }[];
 }
 
+interface CamposPerfil {
+  nombreCompleto: string;
+  cedula: string;
+  ciudad: string;
+  centroId: string;
+  roleCodigo: UserRole;
+}
+
+const PERFIL_VACIO: CamposPerfil = {
+  nombreCompleto: "",
+  cedula: "",
+  ciudad: "",
+  centroId: SIN_CENTRO,
+  roleCodigo: "OVEM",
+};
+
+function aCentroId(centroId: string): number | null {
+  return centroId === SIN_CENTRO ? null : Number(centroId);
+}
+
+/** Campos comunes a "Crear usuario" y "Editar usuario". */
+function CamposPerfilUsuario({
+  valores,
+  onChange,
+  roles,
+  centros,
+}: {
+  valores: CamposPerfil;
+  onChange: (valores: CamposPerfil) => void;
+  roles: AdminUsuariosProps["roles"];
+  centros: AdminUsuariosProps["centros"];
+}) {
+  const set = <K extends keyof CamposPerfil>(campo: K, valor: CamposPerfil[K]) =>
+    onChange({ ...valores, [campo]: valor });
+
+  return (
+    <>
+      <div>
+        <Label>Nombre completo</Label>
+        <Input
+          value={valores.nombreCompleto}
+          onChange={(e) => set("nombreCompleto", e.target.value)}
+          placeholder="Juan Pérez"
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <Label>Cédula</Label>
+        <Input
+          value={valores.cedula}
+          onChange={(e) => set("cedula", e.target.value)}
+          placeholder="Documento de identidad"
+          className="mt-1"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Con la cédula el usuario también puede iniciar sesión, igual que en SISRES.
+        </p>
+      </div>
+      <div>
+        <Label>Ciudad</Label>
+        <Input
+          value={valores.ciudad}
+          onChange={(e) => set("ciudad", e.target.value)}
+          placeholder="Bogotá"
+          className="mt-1"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Ciudad de origen por defecto al crear servicios.
+        </p>
+      </div>
+      <div>
+        <Label>Centro operativo</Label>
+        <Select value={valores.centroId} onValueChange={(v) => set("centroId", v)}>
+          <SelectTrigger className="mt-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SIN_CENTRO}>Sin centro</SelectItem>
+            {centros.map((c) => (
+              <SelectItem key={c.id} value={String(c.id)}>
+                {c.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Regulación, OVEM, médico y auxiliar ven solo la operación de su centro. Sin centro ven
+          todos.
+        </p>
+      </div>
+      <div>
+        <Label>Rol *</Label>
+        <Select value={valores.roleCodigo} onValueChange={(v) => set("roleCodigo", v as UserRole)}>
+          <SelectTrigger className="mt-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {roles.map((r) => (
+              <SelectItem key={r.id} value={r.codigo}>
+                {r.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
+}
+
 export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
   const router = useRouter();
-  const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [showCreate, setShowCreate] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [nombreCompleto, setNombreCompleto] = useState("");
-  const [cedula, setCedula] = useState("");
-  const [ciudad, setCiudad] = useState("");
-  const [centroId, setCentroId] = useState(SIN_CENTRO);
-  const [roleCodigo, setRoleCodigo] = useState<UserRole>("OVEM");
+  const [nuevo, setNuevo] = useState<CamposPerfil>(PERFIL_VACIO);
+
+  const [editando, setEditando] = useState<Usuario | null>(null);
+  const [edicion, setEdicion] = useState<CamposPerfil>(PERFIL_VACIO);
+  const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
+
+  const nombreCentro = new Map(centros.map((c) => [c.id, c.nombre]));
 
   const handleCreate = async () => {
     setLoading(true);
@@ -82,11 +189,11 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
     const result = await createUserAsAdmin({
       email,
       password,
-      nombreCompleto,
-      cedula,
-      ciudad,
-      operationalCenterId: centroId === SIN_CENTRO ? null : Number(centroId),
-      roleCodigo,
+      nombreCompleto: nuevo.nombreCompleto,
+      cedula: nuevo.cedula,
+      ciudad: nuevo.ciudad,
+      operationalCenterId: aCentroId(nuevo.centroId),
+      roleCodigo: nuevo.roleCodigo,
     });
     if (result?.error) setError(result.error);
     else {
@@ -94,38 +201,42 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
       setShowCreate(false);
       setEmail("");
       setPassword("");
-      setNombreCompleto("");
-      setCedula("");
-      setCiudad("");
-      setCentroId(SIN_CENTRO);
-      setRoleCodigo("OVEM");
+      setNuevo(PERFIL_VACIO);
       router.refresh();
     }
     setLoading(false);
   };
 
-  const handleUpdateRole = async (userId: string, newRole: UserRole) => {
-    setLoading(true);
-    setError(null);
-    const result = await updateUserRole(userId, newRole);
-    if (result?.error) setError(result.error);
-    else router.refresh();
-    setLoading(false);
+  const abrirEdicion = (u: Usuario) => {
+    setErrorEdicion(null);
+    setEdicion({
+      nombreCompleto: u.nombre_completo ?? "",
+      cedula: u.cedula ?? "",
+      ciudad: u.ciudad ?? "",
+      centroId: u.operational_center_id ? String(u.operational_center_id) : SIN_CENTRO,
+      roleCodigo: u.role_codigo as UserRole,
+    });
+    setEditando(u);
   };
 
-  const handleUpdateCiudad = async (userId: string, newCiudad: string) => {
-    setError(null);
-    const result = await updateUserCiudad(userId, newCiudad);
-    if (result?.error) setError(result.error);
-    else router.refresh();
-  };
-
-  const handleUpdateCentro = async (userId: string, value: string) => {
+  const handleSaveEdit = async () => {
+    if (!editando) return;
     setLoading(true);
-    setError(null);
-    const result = await updateUserCentro(userId, value === SIN_CENTRO ? null : Number(value));
-    if (result?.error) setError(result.error);
-    else router.refresh();
+    setErrorEdicion(null);
+    const result = await updateUserAsAdmin({
+      userId: editando.user_id,
+      nombreCompleto: edicion.nombreCompleto,
+      cedula: edicion.cedula,
+      ciudad: edicion.ciudad,
+      operationalCenterId: aCentroId(edicion.centroId),
+      roleCodigo: edicion.roleCodigo,
+    });
+    if (result?.error) setErrorEdicion(result.error);
+    else {
+      setSuccess(`Usuario ${editando.email ?? ""} actualizado`);
+      setEditando(null);
+      router.refresh();
+    }
     setLoading(false);
   };
 
@@ -176,89 +287,60 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => (
-                <TableRow key={u.user_id}>
-                  <TableCell className="font-medium">{u.nombre_completo || "—"}</TableCell>
-                  <TableCell>{u.email || "—"}</TableCell>
-                  <TableCell>{u.cedula || "—"}</TableCell>
-                  <TableCell>
-                    <Input
-                      key={u.user_id}
-                      defaultValue={u.ciudad || ""}
-                      placeholder="Ciudad"
-                      className="h-8 w-32"
-                      disabled={loading}
-                      onBlur={(e) => {
-                        const value = e.target.value.trim();
-                        if (value !== (u.ciudad || "")) handleUpdateCiudad(u.user_id, value);
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={u.operational_center_id ? String(u.operational_center_id) : SIN_CENTRO}
-                      onValueChange={(v) => handleUpdateCentro(u.user_id, v)}
-                      disabled={loading}
-                    >
-                      <SelectTrigger
-                        className={cn(
-                          "w-36",
-                          veSoloSuCentro(u.role_codigo) && !u.operational_center_id && "border-amber-500"
-                        )}
-                        title={
-                          veSoloSuCentro(u.role_codigo) && !u.operational_center_id
-                            ? "Sin centro: este usuario ve la operación de todos los centros"
-                            : undefined
-                        }
+              {users.map((u) => {
+                const centro = u.operational_center_id ? nombreCentro.get(u.operational_center_id) : null;
+                return (
+                  <TableRow key={u.user_id}>
+                    <TableCell className="font-medium">{u.nombre_completo || "—"}</TableCell>
+                    <TableCell className="max-w-[12rem] truncate" title={u.email ?? undefined}>
+                      {u.email || "—"}
+                    </TableCell>
+                    <TableCell>{u.cedula || "—"}</TableCell>
+                    <TableCell>{u.ciudad || "—"}</TableCell>
+                    <TableCell>
+                      {centro ? (
+                        centro
+                      ) : veSoloSuCentro(u.role_codigo) ? (
+                        <Badge
+                          variant="warning"
+                          title="Sin centro: este usuario ve la operación de todos los centros"
+                        >
+                          Sin centro
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">Todos</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{u.role_nombre || u.role_codigo}</TableCell>
+                    <TableCell>
+                      <Badge variant={u.activo ? "success" : "secondary"}>
+                        {u.activo ? "Activo" : "Deshabilitado"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => abrirEdicion(u)}
+                        disabled={loading}
+                        className="px-2"
                       >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={SIN_CENTRO}>Sin centro</SelectItem>
-                        {centros.map((c) => (
-                          <SelectItem key={c.id} value={String(c.id)}>
-                            {c.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={u.role_codigo}
-                      onValueChange={(v) => handleUpdateRole(u.user_id, v as UserRole)}
-                      disabled={loading}
-                    >
-                      <SelectTrigger className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {roles.map((r) => (
-                          <SelectItem key={r.id} value={r.codigo}>
-                            {r.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={u.activo ? "success" : "secondary"}>
-                      {u.activo ? "Activo" : "Deshabilitado"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleToggleActive(u.user_id, !u.activo)}
-                      disabled={loading}
-                      className={!u.activo ? "text-green-600" : "text-red-600"}
-                    >
-                      {u.activo ? "Deshabilitar" : "Habilitar"}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        <Pencil className="h-4 w-4 mr-1" />
+                        Editar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleToggleActive(u.user_id, !u.activo)}
+                        disabled={loading}
+                        className={cn("px-2", u.activo ? "text-red-600" : "text-green-600")}
+                      >
+                        {u.activo ? "Deshabilitar" : "Habilitar"}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -289,89 +371,42 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres"
                 className="mt-1"
               />
             </div>
-            <div>
-              <Label>Nombre completo</Label>
-              <Input
-                value={nombreCompleto}
-                onChange={(e) => setNombreCompleto(e.target.value)}
-                placeholder="Juan Pérez"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Cédula</Label>
-              <Input
-                value={cedula}
-                onChange={(e) => setCedula(e.target.value)}
-                placeholder="Documento de identidad"
-                className="mt-1"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Identifica al usuario si también existe en SISRES — permite cruzar cuentas por
-                cédula en vez de por nombre.
-              </p>
-            </div>
-            <div>
-              <Label>Ciudad</Label>
-              <Input
-                value={ciudad}
-                onChange={(e) => setCiudad(e.target.value)}
-                placeholder="Bogotá"
-                className="mt-1"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Ciudad base del usuario — se usa como ciudad de origen por defecto al crear
-                servicios.
-              </p>
-            </div>
-            <div>
-              <Label>Centro operativo</Label>
-              <Select value={centroId} onValueChange={setCentroId}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_CENTRO}>Sin centro</SelectItem>
-                  {centros.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Regulación, OVEM, médico y auxiliar ven solo la operación de su centro. Sin centro
-                ven todos.
-              </p>
-            </div>
-            <div>
-              <Label>Rol *</Label>
-              <Select value={roleCodigo} onValueChange={(v) => setRoleCodigo(v as UserRole)}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((r) => (
-                    <SelectItem key={r.id} value={r.codigo}>
-                      {r.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <CamposPerfilUsuario valores={nuevo} onChange={setNuevo} roles={roles} centros={centros} />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowCreate(false)}>
                 Cancelar
               </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={!email || !password || loading}
-              >
+              <Button onClick={handleCreate} disabled={!email || !password || loading}>
                 {loading ? "Creando..." : "Crear usuario"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editando !== null} onOpenChange={(open) => !open && setEditando(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar usuario</DialogTitle>
+            <p className="text-sm text-muted-foreground">{editando?.email}</p>
+          </DialogHeader>
+          <div className="space-y-4">
+            {errorEdicion && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {errorEdicion}
+              </div>
+            )}
+            <CamposPerfilUsuario valores={edicion} onChange={setEdicion} roles={roles} centros={centros} />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditando(null)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={loading || !edicion.nombreCompleto.trim()}>
+                {loading ? "Guardando..." : "Guardar cambios"}
               </Button>
             </div>
           </div>

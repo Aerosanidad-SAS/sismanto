@@ -190,18 +190,12 @@ export const createUserAsAdminSchema = z.object({
   roleCodigo: userRoleEnum,
 });
 
-export const updateUserCiudadSchema = z.object({
+export const updateUserAsAdminSchema = z.object({
   userId: z.string().uuid("ID de usuario inválido"),
+  nombreCompleto: z.string().trim().min(2, "Nombre demasiado corto").max(200),
+  cedula: z.string().trim().min(4, "Documento inválido").max(20).optional().or(z.literal("")),
   ciudad: z.string().trim().max(100).optional().or(z.literal("")),
-});
-
-export const updateUserCentroSchema = z.object({
-  userId: z.string().uuid("ID de usuario inválido"),
   operationalCenterId: z.number().int().positive("Centro inválido").nullable(),
-});
-
-export const updateUserRoleSchema = z.object({
-  userId: z.string().uuid("ID de usuario inválido"),
   roleCodigo: userRoleEnum,
 });
 
