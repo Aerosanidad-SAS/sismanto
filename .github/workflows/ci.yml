@@ -1,11 +1,16 @@
 # CI: lint + build (sin Supabase real; variables públicas dummy para compilar)
+# Corre en todo PR hacia dev, staging o main — es un check requerido para mergear.
 name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [dev, staging, main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint-and-build:
