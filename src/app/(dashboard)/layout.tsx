@@ -117,13 +117,6 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         roles: ["ADMIN", "AUXILIAR_ENFERMERIA", "ANALISTA"],
         hint: "Oxígeno, medicamentos y consumibles que la auxiliar verifica al recibir la ambulancia.",
       },
-      {
-        name: "Dotación e insumos",
-        href: "/dotacion",
-        icon: PackageCheck,
-        roles: ["ADMIN", "AUXILIAR_ENFERMERIA", "ANALISTA"],
-        hint: "Oxígeno, medicamentos y consumibles que la auxiliar verifica al recibir la ambulancia.",
-      },
     ],
   },
   {
