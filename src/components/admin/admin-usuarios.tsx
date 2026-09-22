@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive } from "@/app/api/actions/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Check, X } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
@@ -176,9 +176,9 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
   const [password, setPassword] = useState("");
   const [nuevo, setNuevo] = useState<CamposPerfil>(PERFIL_VACIO);
 
-  const [editando, setEditando] = useState<Usuario | null>(null);
+  // Fila en edición en línea (user_id) — una a la vez.
+  const [editando, setEditando] = useState<string | null>(null);
   const [edicion, setEdicion] = useState<CamposPerfil>(PERFIL_VACIO);
-  const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
 
   const nombreCentro = new Map(centros.map((c) => [c.id, c.nombre]));
 
@@ -208,7 +208,8 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
   };
 
   const abrirEdicion = (u: Usuario) => {
-    setErrorEdicion(null);
+    setError(null);
+    setSuccess(null);
     setEdicion({
       nombreCompleto: u.nombre_completo ?? "",
       cedula: u.cedula ?? "",
@@ -216,24 +217,28 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
       centroId: u.operational_center_id ? String(u.operational_center_id) : SIN_CENTRO,
       roleCodigo: u.role_codigo as UserRole,
     });
-    setEditando(u);
+    setEditando(u.user_id);
   };
 
+  const setCampo = <K extends keyof CamposPerfil>(campo: K, valor: CamposPerfil[K]) =>
+    setEdicion((prev) => ({ ...prev, [campo]: valor }));
+
   const handleSaveEdit = async () => {
-    if (!editando) return;
+    if (!editando || !edicion.nombreCompleto.trim()) return;
+    const usuario = users.find((u) => u.user_id === editando);
     setLoading(true);
-    setErrorEdicion(null);
+    setError(null);
     const result = await updateUserAsAdmin({
-      userId: editando.user_id,
+      userId: editando,
       nombreCompleto: edicion.nombreCompleto,
       cedula: edicion.cedula,
       ciudad: edicion.ciudad,
       operationalCenterId: aCentroId(edicion.centroId),
       roleCodigo: edicion.roleCodigo,
     });
-    if (result?.error) setErrorEdicion(result.error);
+    if (result?.error) setError(result.error);
     else {
-      setSuccess(`Usuario ${editando.email ?? ""} actualizado`);
+      setSuccess(`Usuario ${usuario?.email ?? ""} actualizado`);
       setEditando(null);
       router.refresh();
     }
@@ -289,6 +294,105 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
             <TableBody>
               {users.map((u) => {
                 const centro = u.operational_center_id ? nombreCentro.get(u.operational_center_id) : null;
+                if (editando === u.user_id) {
+                  // Enter guarda y Escape cancela desde los campos de texto (no desde
+                  // los Select: su lista usa esas teclas para navegar).
+                  const teclas = (e: KeyboardEvent) => {
+                    if (e.key === "Enter") handleSaveEdit();
+                    if (e.key === "Escape") setEditando(null);
+                  };
+                  return (
+                    <TableRow key={u.user_id} className="bg-muted/40">
+                      <TableCell>
+                        <Input
+                          value={edicion.nombreCompleto}
+                          onChange={(e) => setCampo("nombreCompleto", e.target.value)}
+                          onKeyDown={teclas}
+                          className="h-8 w-40"
+                          autoFocus
+                        />
+                      </TableCell>
+                      <TableCell className="max-w-[12rem] truncate" title={u.email ?? undefined}>
+                        {u.email || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={edicion.cedula}
+                          onChange={(e) => setCampo("cedula", e.target.value)}
+                          onKeyDown={teclas}
+                          className="h-8 w-28"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={edicion.ciudad}
+                          onChange={(e) => setCampo("ciudad", e.target.value)}
+                          onKeyDown={teclas}
+                          className="h-8 w-28"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Select value={edicion.centroId} onValueChange={(v) => setCampo("centroId", v)}>
+                          <SelectTrigger className="h-8 w-36">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={SIN_CENTRO}>Sin centro</SelectItem>
+                            {centros.map((c) => (
+                              <SelectItem key={c.id} value={String(c.id)}>
+                                {c.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={edicion.roleCodigo}
+                          onValueChange={(v) => setCampo("roleCodigo", v as UserRole)}
+                        >
+                          <SelectTrigger className="h-8 w-40">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roles.map((r) => (
+                              <SelectItem key={r.id} value={r.codigo}>
+                                {r.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={u.activo ? "success" : "secondary"}>
+                          {u.activo ? "Activo" : "Deshabilitado"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <Button
+                          size="sm"
+                          onClick={handleSaveEdit}
+                          disabled={loading || !edicion.nombreCompleto.trim()}
+                          className="px-2"
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          {loading ? "Guardando..." : "Guardar"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditando(null)}
+                          disabled={loading}
+                          className="px-2"
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Cancelar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+
                 return (
                   <TableRow key={u.user_id}>
                     <TableCell className="font-medium">{u.nombre_completo || "—"}</TableCell>
@@ -322,7 +426,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => abrirEdicion(u)}
-                        disabled={loading}
+                        disabled={loading || editando !== null}
                         className="px-2"
                       >
                         <Pencil className="h-4 w-4 mr-1" />
@@ -382,31 +486,6 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
               </Button>
               <Button onClick={handleCreate} disabled={!email || !password || loading}>
                 {loading ? "Creando..." : "Crear usuario"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={editando !== null} onOpenChange={(open) => !open && setEditando(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar usuario</DialogTitle>
-            <p className="text-sm text-muted-foreground">{editando?.email}</p>
-          </DialogHeader>
-          <div className="space-y-4">
-            {errorEdicion && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-                {errorEdicion}
-              </div>
-            )}
-            <CamposPerfilUsuario valores={edicion} onChange={setEdicion} roles={roles} centros={centros} />
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditando(null)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSaveEdit} disabled={loading || !edicion.nombreCompleto.trim()}>
-                {loading ? "Guardando..." : "Guardar cambios"}
               </Button>
             </div>
           </div>
