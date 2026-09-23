@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -117,11 +118,12 @@ interface PacientesTablaProps {
   /** Catálogo real de EPS (tabla `eps`, migración 058) — mismo select
    * cerrado que SISRES. */
   epsOptions: string[];
+  /** Texto de la búsqueda actual (parámetro `q` de la URL); la búsqueda se hace en el servidor. */
+  busqueda: string;
 }
 
-export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: PacientesTablaProps) {
+export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }: PacientesTablaProps) {
   const router = useRouter();
-  const [busqueda, setBusqueda] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<PacienteRow | null>(null);
   const [eliminando, setEliminando] = useState<PacienteRow | null>(null);
@@ -155,18 +157,6 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: Pacientes
     if (esMenorDeEdad) return !(TIPOS_DOCUMENTO_SOLO_ADULTO as readonly string[]).includes(t);
     return !(TIPOS_DOCUMENTO_SOLO_MENOR as readonly string[]).includes(t);
   });
-
-  const filtrados = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return pacientes;
-    return pacientes.filter(
-      (p) =>
-        p.cedula.toLowerCase().includes(q) ||
-        nombreCompleto(p).toLowerCase().includes(q) ||
-        (p.eps ?? "").toLowerCase().includes(q) ||
-        (p.ciudad ?? "").toLowerCase().includes(q)
-    );
-  }, [pacientes, busqueda]);
 
   const abrirNuevo = () => {
     setEditando(null);
@@ -229,12 +219,22 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: Pacientes
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          placeholder="Buscar por documento, nombre, EPS o ciudad…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="sm:max-w-sm"
-        />
+        <form action="/pacientes" method="get" role="search" className="flex flex-1 flex-wrap items-center gap-2">
+          <Input
+            name="q"
+            defaultValue={busqueda}
+            maxLength={80}
+            placeholder="Buscar por documento, nombre, EPS o ciudad…"
+            aria-label="Buscar pacientes"
+            className="sm:max-w-sm"
+          />
+          <Button type="submit" variant="outline">Buscar</Button>
+          {busqueda && (
+            <Link href="/pacientes" className="text-sm text-muted-foreground underline">
+              Limpiar
+            </Link>
+          )}
+        </form>
         {puedeEditar && <Button onClick={abrirNuevo}>Nuevo paciente</Button>}
       </div>
 
@@ -253,14 +253,14 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: Pacientes
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtrados.length === 0 && (
+            {pacientes.length === 0 && (
               <TableRow>
                 <TableCell colSpan={puedeEditar ? 8 : 7} className="text-center text-muted-foreground">
-                  Sin pacientes registrados
+                  {busqueda ? "Sin resultados para la búsqueda" : "Sin pacientes registrados"}
                 </TableCell>
               </TableRow>
             )}
-            {filtrados.map((p) => (
+            {pacientes.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">
                   <Badge variant="outline">{p.tipo_documento}</Badge> {p.cedula}

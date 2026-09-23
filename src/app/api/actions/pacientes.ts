@@ -7,15 +7,42 @@ import { patientSchema } from "@/lib/validations";
 import { z } from "zod";
 import { requireRole } from "@/app/api/actions/auth";
 import { EXPORT_PACIENTES_MAX_FILAS, ROLES_EXPORTAR_PACIENTES, type PacienteExport } from "@/lib/pacientes-export";
+import { COLUMNAS_BUSQUEDA_PACIENTES, PACIENTES_POR_PAGINA, palabrasBusquedaPacientes } from "@/lib/pacientes-lista";
 
-export async function getPacientes() {
+/**
+ * Una página de pacientes activos (100) con búsqueda en el servidor. Antes se
+ * traían todos de una vez y PostgREST corta en 1000 filas sin avisar, así que
+ * la lista se truncaba en silencio. Cada palabra debe aparecer en alguna de
+ * las columnas de búsqueda (varios `.or()` encadenados = AND).
+ */
+export async function buscarPacientes(q: string, pagina: number) {
   const supabase = createClient();
-  const { data } = await supabase
+  const desde = (Math.max(1, pagina) - 1) * PACIENTES_POR_PAGINA;
+  let query = supabase
     .from("patients")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("activo", true)
-    .order("apellido1");
-  return data || [];
+    .order("apellido1")
+    .order("id")
+    .range(desde, desde + PACIENTES_POR_PAGINA - 1);
+  for (const palabra of palabrasBusquedaPacientes(q)) {
+    query = query.or(COLUMNAS_BUSQUEDA_PACIENTES.map((c) => `${c}.ilike.%${palabra}%`).join(","));
+  }
+  const { data, count, error } = await query;
+  if (error) return { pacientes: [], total: 0, error: error.message as string };
+  return { pacientes: data ?? [], total: count ?? 0 };
+}
+
+/** Totales de las tarjetas de arriba: sobre todos los pacientes activos, no sobre la página ni la búsqueda. */
+export async function getResumenPacientes() {
+  const supabase = createClient();
+  const activos = () => supabase.from("patients").select("id", { count: "exact", head: true }).eq("activo", true);
+  const [total, conCelular, conEps] = await Promise.all([
+    activos(),
+    activos().not("celular", "is", null).neq("celular", ""),
+    activos().not("eps", "is", null).neq("eps", ""),
+  ]);
+  return { total: total.count ?? 0, conCelular: conCelular.count ?? 0, conEps: conEps.count ?? 0 };
 }
 
 /** Catálogo real de EPS (tabla `eps`, migración 058_etl_identidad_origen,
