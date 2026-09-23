@@ -1,11 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getValoraciones } from "@/app/api/actions/valoraciones";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { ValoracionesTabla } from "@/components/pacientes/valoraciones-tabla";
 
 const ROLES_EDICION = ["ADMIN", "MEDICO", "ANALISTA"];
 
 export default async function ValoracionesPage() {
+  await requireRole(["ADMIN", "MEDICO", "ANALISTA", "VISTA"]);
   const [profile, valoraciones] = await Promise.all([getProfile(), getValoraciones()]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
 
