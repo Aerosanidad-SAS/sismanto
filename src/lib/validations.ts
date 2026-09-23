@@ -654,7 +654,12 @@ export const medicalServiceSchema = z.object({
   fecha_hora_salida_destino: optStr,
   finalidad_traslado: optStr,
   acepta_ips: optStr,
-  valor_servicio: z.number().nonnegative().optional(),
+  // Campo opcional en SISRES: vacío llega como "" o NaN desde el input
+  // numérico y no debe romper el guardado con "Expected number, received nan".
+  valor_servicio: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? undefined : Number(v)),
+    z.number().nonnegative("El valor del servicio no puede ser negativo").optional()
+  ),
   metodo_pago: optStr,
   cliente: optStr,
   proveedor: optStr,

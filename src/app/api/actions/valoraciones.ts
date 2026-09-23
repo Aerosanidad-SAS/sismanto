@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { aTimestamptzColombia } from "@/lib/hora-colombia";
 import { revalidatePath } from "next/cache";
 import type { AssessmentFormData } from "@/lib/validations";
 import { assessmentSchema } from "@/lib/validations";
@@ -36,7 +37,7 @@ export async function crearValoracion(formData: AssessmentFormData) {
       ...parsed.data,
       patient_id: paciente?.id ?? null,
       fecha_nacimiento: parsed.data.fecha_nacimiento || null,
-      fecha_hora_vuelo: parsed.data.fecha_hora_vuelo || null,
+      fecha_hora_vuelo: aTimestamptzColombia(parsed.data.fecha_hora_vuelo),
       created_by: userData.user?.id ?? null,
     })
     .select()
@@ -59,7 +60,7 @@ export async function actualizarValoracion(id: number, formData: AssessmentFormD
     .update({
       ...parsed.data,
       fecha_nacimiento: parsed.data.fecha_nacimiento || null,
-      fecha_hora_vuelo: parsed.data.fecha_hora_vuelo || null,
+      fecha_hora_vuelo: aTimestamptzColombia(parsed.data.fecha_hora_vuelo),
       updated_at: new Date().toISOString(),
     })
     .eq("id", idParsed.data);

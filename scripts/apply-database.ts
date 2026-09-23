@@ -77,7 +77,8 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "061_dotacion_auxiliares.sql",                 file: "scripts/migrations/061_dotacion_auxiliares.sql" },
   // 062_dotacion_catalogo.sql: se registra cuando esté la lista real de dotación.
   { name: "063_servicios_lista_regulacion.sql",          file: "scripts/migrations/063_servicios_lista_regulacion.sql" },
-  { name: "064_biomedico_vencimiento_parche.sql",        file: "scripts/migrations/064_biomedico_vencimiento_parche.sql" },
+  { name: "064_notificaciones_vencimientos.sql",         file: "scripts/migrations/064_notificaciones_vencimientos.sql" },
+  { name: "065_biomedico_vencimiento_parche.sql",        file: "scripts/migrations/065_biomedico_vencimiento_parche.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

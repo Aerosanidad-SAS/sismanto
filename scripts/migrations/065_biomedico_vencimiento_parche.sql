@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 064: vencimiento de Parche (BIOMÉDICA) en equipos biomédicos
+-- Migración 065: vencimiento de Parche (BIOMÉDICA) en equipos biomédicos
 --
 -- Hallazgo real (docs/PARIDAD_SISTEMA.md §2.3): SISRES tiene dos campos
 -- independientes de vencimiento de parche/pad de desfibrilador — Adulto
