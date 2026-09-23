@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import type { PatientFormData } from "@/lib/validations";
 import { patientSchema } from "@/lib/validations";
 import { z } from "zod";
+import { requireRole } from "@/app/api/actions/auth";
+import { EXPORT_PACIENTES_MAX_FILAS, ROLES_EXPORTAR_PACIENTES, type PacienteExport } from "@/lib/pacientes-export";
 
 export async function getPacientes() {
   const supabase = createClient();
@@ -135,4 +137,23 @@ export async function eliminarPaciente(id: number) {
   if (error) return { error: error.message };
   revalidatePath("/pacientes");
   return { success: true };
+}
+
+/** Todos los pacientes (activos e inactivos, como SISRES) para el Excel, en lotes de 1000, con tope EXPORT_PACIENTES_MAX_FILAS. */
+export async function exportarPacientes() {
+  await requireRole([...ROLES_EXPORTAR_PACIENTES]);
+  const supabase = createClient();
+  const filas: PacienteExport[] = [];
+  const LOTE = 1000; // PostgREST devuelve máximo 1000 filas por consulta
+  for (let desde = 0; desde < EXPORT_PACIENTES_MAX_FILAS; desde += LOTE) {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("*")
+      .order("id", { ascending: false })
+      .range(desde, desde + LOTE - 1);
+    if (error) return { error: error.message as string };
+    filas.push(...((data ?? []) as PacienteExport[]));
+    if (!data || data.length < LOTE) break;
+  }
+  return { filas, truncado: filas.length >= EXPORT_PACIENTES_MAX_FILAS };
 }

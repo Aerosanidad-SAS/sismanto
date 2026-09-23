@@ -2,12 +2,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getPacientes, getEpsCatalog } from "@/app/api/actions/pacientes";
 import { getProfile } from "@/app/api/actions/auth";
 import { PacientesTabla } from "@/components/pacientes/pacientes-tabla";
+import { ExportarPacientes } from "@/components/pacientes/exportar-pacientes";
+import { ROLES_EXPORTAR_PACIENTES } from "@/lib/pacientes-export";
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 
 export default async function PacientesPage() {
   const [profile, pacientes, epsOptions] = await Promise.all([getProfile(), getPacientes(), getEpsCatalog()]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
+  const puedeExportar = (ROLES_EXPORTAR_PACIENTES as readonly string[]).includes(profile?.role_codigo ?? "");
 
   const conCelular = pacientes.filter((p) => p.celular).length;
   const conEps = pacientes.filter((p) => p.eps).length;
@@ -49,9 +52,12 @@ export default async function PacientesPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Listado de pacientes</CardTitle>
-          <CardDescription>Búsqueda por documento, nombre o EPS</CardDescription>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>Listado de pacientes</CardTitle>
+            <CardDescription>Búsqueda por documento, nombre o EPS</CardDescription>
+          </div>
+          {puedeExportar && <ExportarPacientes />}
         </CardHeader>
         <CardContent>
           <PacientesTabla pacientes={pacientes} puedeEditar={puedeEditar} epsOptions={epsOptions} />
