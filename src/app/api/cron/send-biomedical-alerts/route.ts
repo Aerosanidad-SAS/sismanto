@@ -31,10 +31,14 @@ export async function POST(request: NextRequest): Promise<Response> {
   const hoy = hoyBogota();
 
   // ── 1. Candidatas: los 4 campos de vencimiento de cada equipo activo ──
+  // La tabla también guarda el inventario de Sistemas (computadores, tablets: area = 'SISTEMAS',
+  // 191 de 1155 en los datos reales de SISRES). En SISRES cada área avisa a sus propios
+  // destinatarios; estos correos son solo de equipos biomédicos.
   const { data: equipos, error: errEquipos } = await supabase
     .from("biomedical_equipment")
     .select("id, placa_equipo, equipo, proximo_mantenimiento, proxima_calibracion, vencimiento_parche_adulto, vencimiento_parche_pediatrico")
-    .eq("activo", true);
+    .eq("activo", true)
+    .or("area.is.null,area.neq.SISTEMAS");
   if (errEquipos) return NextResponse.json({ error: errEquipos.message }, { status: 500 });
 
   const candidatas = ((equipos ?? []) as EquipoVencimientos[]).flatMap((e) => alertasEquipoBiomedico(e, hoy));

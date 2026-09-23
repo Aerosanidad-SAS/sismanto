@@ -49,7 +49,9 @@ export async function getAlertasBiomedicos() {
     .select(
       "id, placa_equipo, equipo, ciudad, proximo_mantenimiento, proxima_calibracion, vencimiento_parche_adulto, vencimiento_parche_pediatrico"
     )
-    .eq("activo", true);
+    .eq("activo", true)
+    // El inventario de Sistemas (area = 'SISTEMAS') comparte la tabla; no son alertas biomédicas.
+    .or("area.is.null,area.neq.SISTEMAS");
 
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
