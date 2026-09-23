@@ -45,7 +45,7 @@ import {
   SEXO_OPCIONES,
   RH_OPCIONES,
 } from "@/lib/validations";
-import { DEPARTAMENTOS_COLOMBIA } from "@/lib/colombia-geo";
+import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { crearPaciente, actualizarPaciente, eliminarPaciente } from "@/app/api/actions/pacientes";
 
 /** null = no se pudo determinar (sin fecha de nacimiento o fecha inválida) */
@@ -98,9 +98,9 @@ function calcularEdad(fechaNacimiento: string | null): string {
 }
 
 // Campos de texto simples del formulario (los que tienen catálogo real —
-// tipo_documento, sexo, rh, departamento, EPS — se renderizan aparte más
-// abajo). Ciudad queda como texto libre por ahora — cascada por
-// departamento pendiente en una PR aparte (PARIDAD_REGULACION.md, PAC-06).
+// tipo_documento, sexo, rh, departamento, ciudad, EPS — se renderizan
+// aparte más abajo). Ciudad va en cascada por departamento, igual que
+// registroPacientes.php en SISRES (PARIDAD_REGULACION.md, PAC-06).
 const CAMPOS_OPCIONALES: { name: keyof PatientFormData; label: string; type?: string }[] = [
   { name: "nombre2", label: "Segundo nombre" },
   { name: "apellido2", label: "Segundo apellido" },
@@ -109,7 +109,6 @@ const CAMPOS_OPCIONALES: { name: keyof PatientFormData; label: string; type?: st
   { name: "direccion", label: "Dirección" },
   { name: "barrio", label: "Barrio" },
   { name: "localidad", label: "Localidad" },
-  { name: "ciudad", label: "Ciudad (catálogo pendiente)" },
 ];
 
 interface PacientesTablaProps {
@@ -137,7 +136,18 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: Pacientes
   const sexoSeleccionado = watch("sexo");
   const rhSeleccionado = watch("rh");
   const departamentoSeleccionado = watch("departamento");
+  const ciudadSeleccionada = watch("ciudad");
   const epsSeleccionada = watch("eps");
+  // Ciudad en cascada: solo las del departamento ya elegido (mismo criterio
+  // que servicios-tabla.tsx). Si cambia el departamento, se limpia la ciudad
+  // para no dejar una que ya no corresponde.
+  const ciudadesDisponibles = departamentoSeleccionado
+    ? MUNICIPIOS_POR_DEPARTAMENTO[departamentoSeleccionado] ?? []
+    : [];
+  const handleDepartamento = (v: string) => {
+    setValue("departamento", v);
+    setValue("ciudad", "");
+  };
   const edadCalculada = calcularEdadNumero(watch("fecha_nacimiento"));
   const esMenorDeEdad = edadCalculada !== null && edadCalculada < 18;
   const tiposDocumentoDisponibles = TIPOS_DOCUMENTO.filter((t) => {
@@ -168,6 +178,10 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: Pacientes
   const abrirEdicion = (p: PacienteRow) => {
     setEditando(p);
     setError(null);
+    // Pacientes históricos con ciudad en texto libre y sin departamento:
+    // si la ciudad está en el catálogo, se completa el departamento para
+    // que la cascada quede coherente. Si no hay match, se conserva tal cual.
+    const ubicacion = p.departamento ? null : resolverCiudad(p.ciudad);
     reset({
       cedula: p.cedula,
       tipo_documento: p.tipo_documento,
@@ -179,8 +193,8 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: Pacientes
       direccion: p.direccion ?? "",
       barrio: p.barrio ?? "",
       localidad: p.localidad ?? "",
-      departamento: p.departamento ?? "",
-      ciudad: p.ciudad ?? "",
+      departamento: ubicacion?.departamento ?? p.departamento ?? "",
+      ciudad: ubicacion?.ciudad ?? p.ciudad ?? "",
       rh: p.rh ?? "",
       sexo: p.sexo ?? "",
       estatura: p.estatura ?? "",
@@ -382,9 +396,21 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: Pacientes
                   id="departamento"
                   options={[...DEPARTAMENTOS_COLOMBIA]}
                   value={departamentoSeleccionado ?? ""}
-                  onChange={(v) => setValue("departamento", v)}
+                  onChange={handleDepartamento}
                   placeholder="Selecciona o busca…"
                   allowCustom={false}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="ciudad">Ciudad</Label>
+                <CatalogCombobox
+                  id="ciudad"
+                  options={ciudadesDisponibles as string[]}
+                  value={ciudadSeleccionada ?? ""}
+                  onChange={(v) => setValue("ciudad", v)}
+                  placeholder={departamentoSeleccionado ? "Escribe para buscar la ciudad…" : "Primero elige el departamento"}
+                  allowCustom={false}
+                  disabled={!departamentoSeleccionado}
                 />
               </div>
               <div className="space-y-1">
