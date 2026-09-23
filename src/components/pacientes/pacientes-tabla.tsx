@@ -98,28 +98,29 @@ function calcularEdad(fechaNacimiento: string | null): string {
 }
 
 // Campos de texto simples del formulario (los que tienen catálogo real —
-// tipo_documento, sexo, rh, departamento — se renderizan aparte más abajo).
-// Ciudad y EPS quedan como texto libre: SISRES sí las tiene como catálogo
-// (tabla subregiones / eps), pero requieren el export real de León para no
-// inventar datos — ver QA_HALLAZGOS.md.
+// tipo_documento, sexo, rh, departamento, EPS — se renderizan aparte más
+// abajo). Ciudad queda como texto libre por ahora — cascada por
+// departamento pendiente en una PR aparte (PARIDAD_REGULACION.md, PAC-06).
 const CAMPOS_OPCIONALES: { name: keyof PatientFormData; label: string; type?: string }[] = [
   { name: "nombre2", label: "Segundo nombre" },
   { name: "apellido2", label: "Segundo apellido" },
-  { name: "eps", label: "EPS (catálogo pendiente — ver bolsa de QA)" },
   { name: "celular", label: "Celular" },
   { name: "correo", label: "Correo", type: "email" },
   { name: "direccion", label: "Dirección" },
   { name: "barrio", label: "Barrio" },
   { name: "localidad", label: "Localidad" },
-  { name: "ciudad", label: "Ciudad (catálogo pendiente — ver bolsa de QA)" },
+  { name: "ciudad", label: "Ciudad (catálogo pendiente)" },
 ];
 
 interface PacientesTablaProps {
   pacientes: PacienteRow[];
   puedeEditar: boolean;
+  /** Catálogo real de EPS (tabla `eps`, migración 058) — mismo select
+   * cerrado que SISRES. */
+  epsOptions: string[];
 }
 
-export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) {
+export function PacientesTabla({ pacientes, puedeEditar, epsOptions }: PacientesTablaProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -136,6 +137,7 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
   const sexoSeleccionado = watch("sexo");
   const rhSeleccionado = watch("rh");
   const departamentoSeleccionado = watch("departamento");
+  const epsSeleccionada = watch("eps");
   const edadCalculada = calcularEdadNumero(watch("fecha_nacimiento"));
   const esMenorDeEdad = edadCalculada !== null && edadCalculada < 18;
   const tiposDocumentoDisponibles = TIPOS_DOCUMENTO.filter((t) => {
@@ -381,6 +383,17 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
                   options={[...DEPARTAMENTOS_COLOMBIA]}
                   value={departamentoSeleccionado ?? ""}
                   onChange={(v) => setValue("departamento", v)}
+                  placeholder="Selecciona o busca…"
+                  allowCustom={false}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="eps">EPS</Label>
+                <CatalogCombobox
+                  id="eps"
+                  options={epsOptions}
+                  value={epsSeleccionada ?? ""}
+                  onChange={(v) => setValue("eps", v)}
                   placeholder="Selecciona o busca…"
                   allowCustom={false}
                 />

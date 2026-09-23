@@ -1,12 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPacientes } from "@/app/api/actions/pacientes";
+import { getPacientes, getEpsCatalog } from "@/app/api/actions/pacientes";
 import { getProfile } from "@/app/api/actions/auth";
 import { PacientesTabla } from "@/components/pacientes/pacientes-tabla";
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 
 export default async function PacientesPage() {
-  const [profile, pacientes] = await Promise.all([getProfile(), getPacientes()]);
+  const [profile, pacientes, epsOptions] = await Promise.all([getProfile(), getPacientes(), getEpsCatalog()]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
 
   const conCelular = pacientes.filter((p) => p.celular).length;
@@ -54,7 +54,7 @@ export default async function PacientesPage() {
           <CardDescription>Búsqueda por documento, nombre o EPS</CardDescription>
         </CardHeader>
         <CardContent>
-          <PacientesTabla pacientes={pacientes} puedeEditar={puedeEditar} />
+          <PacientesTabla pacientes={pacientes} puedeEditar={puedeEditar} epsOptions={epsOptions} />
         </CardContent>
       </Card>
     </div>

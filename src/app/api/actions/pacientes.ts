@@ -16,6 +16,20 @@ export async function getPacientes() {
   return data || [];
 }
 
+/** Catálogo real de EPS (tabla `eps`, migración 058_etl_identidad_origen,
+ * 30 filas de sisres.eps) — mismo criterio que registroPacientes.php de
+ * SISRES: select cerrado, sin texto libre. Ver PARIDAD_REGULACION.md
+ * (sección Pacientes): la tabla ya existía sin usar en el formulario. */
+export async function getEpsCatalog(): Promise<string[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("eps")
+    .select("entidad")
+    .eq("activo", true)
+    .order("entidad");
+  return (data ?? []).map((r) => r.entidad as string);
+}
+
 export async function buscarPacientePorCedula(cedula: string) {
   const parsed = z.string().trim().min(4).max(20).safeParse(cedula);
   if (!parsed.success) return null;
