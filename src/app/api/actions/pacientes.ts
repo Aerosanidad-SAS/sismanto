@@ -7,7 +7,13 @@ import { patientSchema } from "@/lib/validations";
 import { z } from "zod";
 import { requireRole } from "@/app/api/actions/auth";
 import { EXPORT_PACIENTES_MAX_FILAS, ROLES_EXPORTAR_PACIENTES, type PacienteExport } from "@/lib/pacientes-export";
-import { COLUMNAS_BUSQUEDA_PACIENTES, PACIENTES_POR_PAGINA, palabrasBusquedaPacientes } from "@/lib/pacientes-lista";
+import {
+  COLUMNAS_BUSQUEDA_PACIENTES,
+  COLUMNAS_TYPEAHEAD_PACIENTES,
+  PACIENTES_POR_PAGINA,
+  condicionOrPalabra,
+  palabrasBusquedaPacientes,
+} from "@/lib/pacientes-lista";
 
 /**
  * Una página de pacientes activos (100) con búsqueda en el servidor. Antes se
@@ -26,7 +32,7 @@ export async function buscarPacientes(q: string, pagina: number) {
     .order("id")
     .range(desde, desde + PACIENTES_POR_PAGINA - 1);
   for (const palabra of palabrasBusquedaPacientes(q)) {
-    query = query.or(COLUMNAS_BUSQUEDA_PACIENTES.map((c) => `${c}.ilike.%${palabra}%`).join(","));
+    query = query.or(condicionOrPalabra(COLUMNAS_BUSQUEDA_PACIENTES, palabra));
   }
   const { data, count, error } = await query;
   if (error) return { pacientes: [], total: 0, error: error.message as string };
@@ -88,15 +94,20 @@ export async function buscarPacientesTypeahead(busqueda: string): Promise<Pacien
   const parsed = z.string().trim().min(2).max(60).safeParse(busqueda);
   if (!parsed.success) return [];
 
+  // El texto se limpia antes de entrar al .or() de PostgREST (ver palabrasBusquedaPacientes):
+  // sin esto, comas o paréntesis del usuario podían agregar condiciones propias al filtro.
+  const palabras = palabrasBusquedaPacientes(parsed.data);
+  if (palabras.length === 0) return [];
+
   const supabase = createClient();
-  const q = parsed.data;
-  const { data } = await supabase
+  let query = supabase
     .from("patients")
     .select("id, cedula, nombre1, nombre2, apellido1, apellido2")
-    .eq("activo", true)
-    .or(`cedula.ilike.%${q}%,nombre1.ilike.%${q}%,nombre2.ilike.%${q}%,apellido1.ilike.%${q}%,apellido2.ilike.%${q}%`)
-    .order("apellido1")
-    .limit(15);
+    .eq("activo", true);
+  for (const palabra of palabras) {
+    query = query.or(condicionOrPalabra(COLUMNAS_TYPEAHEAD_PACIENTES, palabra));
+  }
+  const { data } = await query.order("apellido1").order("id").limit(15);
   return (data ?? []) as PacienteTypeahead[];
 }
 

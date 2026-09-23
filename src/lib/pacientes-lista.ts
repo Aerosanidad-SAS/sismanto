@@ -30,6 +30,14 @@ export function palabrasBusquedaPacientes(q: string): string[] {
     .slice(0, 6);
 }
 
+/** Columnas del buscador rápido de pacientes (combobox de Nuevo servicio): solo documento y nombres. */
+export const COLUMNAS_TYPEAHEAD_PACIENTES = ["cedula", "nombre1", "nombre2", "apellido1", "apellido2"] as const;
+
+/** Valor para `.or()` de PostgREST: la palabra (ya limpia) en cualquiera de las columnas. */
+export function condicionOrPalabra(columnas: readonly string[], palabra: string): string {
+  return columnas.map((c) => `${c}.ilike.%${palabra}%`).join(",");
+}
+
 export function pacientesAQuery(q: string, pagina = 1): string {
   const sp = new URLSearchParams();
   if (q) sp.set("q", q);
