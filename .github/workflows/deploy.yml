@@ -1,0 +1,66 @@
+# Despliega en Vercel desde GitHub Actions con la CLI. La integración nativa de
+# Vercel con GitHub NO funciona mientras el team sea Hobby: rechaza los repos
+# privados de una organización ("Cannot deploy from a private GitHub
+# organization repository on the Hobby plan"). Con la CLI despliega el token
+# del proyecto, así que León y David no necesitan cuenta de Vercel.
+#
+# Proyecto: `sismanto` del team `tecnicoaerosanidad`. Requiere los secretos
+# VERCEL_TOKEN (token de ese team), VERCEL_ORG_ID y VERCEL_PROJECT_ID.
+# Al pasar a Vercel Pro se puede volver a la integración nativa y borrar esto.
+name: Deploy
+
+on:
+  push:
+    branches: [dev, staging]
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # Dominio estable por rama (ver ENTORNOS.md).
+      ALIAS: ${{ github.ref_name == 'staging' && 'sismanto-staging.vercel.app' || 'sismanto-dev.vercel.app' }}
+    steps:
+      - name: Verificar credenciales de Vercel
+        run: |
+          for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Falta el secreto $v (Settings → Secrets and variables → Actions)."
+              exit 1
+            fi
+          done
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm install --global vercel@latest
+
+      # Las variables de entorno de Preview del proyecto (apuntan a la Supabase
+      # de staging) las trae `vercel pull`: no viven en este repo.
+      - run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+
+      - run: vercel build --token="$VERCEL_TOKEN"
+
+      - name: Desplegar y apuntar el dominio de la rama
+        run: |
+          url=$(vercel deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN")
+          echo "Despliegue: $url"
+          echo "- \`${{ github.ref_name }}\` → $url" >> "$GITHUB_STEP_SUMMARY"
+          # The alias can fail while the domain still belongs to the old
+          # project; the deployment itself is fine, so don't fail the job.
+          if vercel alias set "$url" "$ALIAS" --token="$VERCEL_TOKEN"; then
+            echo "  alias: https://$ALIAS" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Could not set alias $ALIAS; use $url"
+          fi
