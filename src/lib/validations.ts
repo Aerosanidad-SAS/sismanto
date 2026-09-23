@@ -740,6 +740,8 @@ export const biomedicalEquipmentSchema = z.object({
   proximo_mantenimiento: optStr,
   ultima_calibracion: optStr,
   proxima_calibracion: optStr,
+  vencimiento_parche_adulto: optStr,
+  vencimiento_parche_pediatrico: optStr,
   frec_mantenimiento: optStr,
   frec_calibracion: optStr,
   ubicacion_interna: optStr,
