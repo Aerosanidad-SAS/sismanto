@@ -1,0 +1,32 @@
+# Supabase Free pauses a project after 7 days without activity. The legacy
+# project has no daily traffic, so ping each project's REST endpoint weekly.
+# Delete this workflow when the projects move to a paid plan.
+#
+# Repo variable SUPABASE_KEEPALIVE_TARGETS (public values, not a secret), one
+# project per line as "<project url> <anon key>":
+#   https://<ref>.supabase.co eyJ...
+name: Supabase keepalive
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping
+        env:
+          TARGETS: ${{ vars.SUPABASE_KEEPALIVE_TARGETS }}
+        run: |
+          if [ -z "$TARGETS" ]; then
+            echo "::warning::SUPABASE_KEEPALIVE_TARGETS not set; nothing to ping."
+            exit 0
+          fi
+          echo "$TARGETS" | while read -r url key; do
+            [ -z "$url" ] && continue
+            code=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $key" "$url/rest/v1/")
+            echo "$url -> HTTP $code"
+          done

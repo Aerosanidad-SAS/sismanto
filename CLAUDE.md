@@ -24,8 +24,9 @@ Every change enters by Pull Request — nobody pushes directly to `dev`, `stagin
 feat/<name>-<topic> → PR → dev → PR → staging (QA) → PR → main (production)
 ```
 
-- `dev` and `staging` → deployed by `.github/workflows/deploy.yml`, which runs the Vercel CLI with `VERCEL_TOKEN` and re-points the branch domain (`sismanto-dev.vercel.app` / `sismanto-staging.vercel.app`). The Vercel project is not connected to this repo — connecting it would need a Vercel GitHub App install on the org — and this way nobody but the token needs Vercel access. Both branches share the `SISMANTO_Staging` Supabase project (see `STAGING_SETUP.md`).
-- `main` → production domain, deployed by Daniel from the Vercel dashboard/CLI until the project is reconnected to this repo. Own production Supabase project.
+- Vercel deploys every branch itself (native Git integration, project `sismanto` in the `tecnicoaerosanidad` team): `main` → Production, every other branch → Preview with a stable URL (`sismanto-git-dev-tecnicoaerosanidad.vercel.app`, `sismanto-git-staging-…`). Nobody but the team owner needs a Vercel account.
+- `dev` and `staging` share the `SISMANTO_Staging` Supabase project (see `STAGING_SETUP.md`). `.github/workflows/db-migrate.yml` runs `npm run db:apply` against it on every push to those branches, i.e. only after a PR is merged, using the repo secret `DATABASE_URL_STAGING`.
+- `main` → production. No production database credentials live in GitHub for now, so production migrations and the production Supabase project are handled by Daniel by hand until the go-live checklist in `ENTORNOS.md` is done.
 
 Never suggest a direct push/commit to `dev`, `staging` or `main` — always a PR from the branch below it.
 
@@ -36,7 +37,7 @@ Three people push to this repo in parallel, each with their own Claude Code. The
 - **Branching:** start from fresh `origin/dev` as `feat/<name>-<topic>` or `fix/<name>-<topic>`. Rebase on `origin/dev` daily; keep branches under 3 days. Open the PR into `dev`.
 - **One PR = one concern.** No drive-by refactors or reformatting — it creates conflicts for the other two.
 - **Before opening a PR:** `npm run lint`, `npm run build`, and `npx tsc --noEmit` filtered to the files you touched (no *new* errors). Fill in `.github/pull_request_template.md` — roles affected, migrations, how it was verified (screenshot for UI).
-- **Shared database:** `dev` and `staging` use ONE Supabase project. Never run `npm run db:apply` from an unmerged branch — migrations are applied only after the PR is merged into `dev`.
+- **Shared database:** `dev` and `staging` use ONE Supabase project. Never run `npm run db:apply` by hand against it — `db-migrate.yml` applies migrations automatically after the PR is merged into `dev` (or `staging`). A `[DB-DESTRUCTIVE]` migration therefore runs the moment the PR merges: review it as if it were already running.
 - **Migration numbers:** right before opening the PR, check the highest number on `origin/dev`. If someone merged the same number, renumber the file and its entry in `scripts/apply-database.ts`. Any DROP or type change → PR title starts with `[DB-DESTRUCTIVE]`.
 - **Conflict-prone files — touch minimally:** `src/lib/validations.ts`, `src/lib/supabase/database.types.ts`, `src/app/(dashboard)/layout.tsx`, `scripts/apply-database.ts`.
 - **Merge into `dev`** requires: CI green + Claude review with no BLOCK + one approval from someone other than the author. Squash merge. `staging → main` is approved only by Daniel.
