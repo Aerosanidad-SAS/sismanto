@@ -24,7 +24,7 @@ Every change enters by Pull Request — nobody pushes directly to `dev`, `stagin
 feat/<name>-<topic> → PR → dev → PR → staging (QA) → PR → main (production)
 ```
 
-- Vercel deploys every branch itself (native Git integration, project `sismanto` in the `tecnicoaerosanidad` team): `main` → Production, every other branch → Preview with a stable URL (`sismanto-git-dev-tecnicoaerosanidad.vercel.app`, `sismanto-git-staging-…`). Nobody but the team owner needs a Vercel account.
+- `dev` and `staging` are deployed by `.github/workflows/deploy.yml` with the Vercel CLI (`VERCEL_TOKEN`, project `sismanto` in the `tecnicoaerosanidad` team). Vercel's native Git integration cannot be used while the team is on Hobby: it refuses private organization repos. Nobody but the token needs Vercel access. `main` → production is deployed by Daniel by hand until the go-live checklist in `ENTORNOS.md` is done.
 - `dev` and `staging` share the `SISMANTO_Staging` Supabase project (see `STAGING_SETUP.md`). `.github/workflows/db-migrate.yml` runs `npm run db:apply` against it on every push to those branches, i.e. only after a PR is merged, using the repo secret `DATABASE_URL_STAGING`.
 - `main` → production. No production database credentials live in GitHub for now, so production migrations and the production Supabase project are handled by Daniel by hand until the go-live checklist in `ENTORNOS.md` is done.
 
