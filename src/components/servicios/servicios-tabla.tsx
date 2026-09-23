@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fechaHora24, horasEstancado } from "@/lib/servicios-lista";
+import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
 import { PatientSearchCombobox, nombreCompletoDe } from "@/components/forms/patient-search-combobox";
@@ -381,7 +382,8 @@ export function ServiciosTabla({
     setCieLabel("");
     setEtapaInicial("");
     const str = (k: string) => (s[k] ? String(s[k]) : "");
-    const fecha = (k: string) => (s[k] ? String(s[k]).slice(0, 16) : "");
+    // La base guarda en UTC: el formulario se precarga en hora de Colombia.
+    const fecha = (k: string) => aTextoLocalColombia(s[k] as string | null);
     reset({
       patient_id: s.patient_id ?? undefined,
       nombre_completo: s.nombre_completo,
@@ -432,6 +434,17 @@ export function ServiciosTabla({
       ciudad_registro: str("ciudad_registro"),
     });
     setDialogOpen(true);
+  };
+
+  // Sin esto, un campo inválido deja el botón "Guardar" sin efecto visible:
+  // el usuario cree que el sistema no responde.
+  const onInvalid = (errores: Record<string, { message?: string }>) => {
+    const primero = Object.entries(errores)[0];
+    setError(
+      primero
+        ? `Revisa el formulario: ${primero[1]?.message ?? "campo inválido"} (${primero[0].replaceAll("_", " ")})`
+        : "Revisa el formulario: hay campos sin completar."
+    );
   };
 
   const onSubmit = async (values: MedicalServiceFormData) => {
@@ -638,7 +651,7 @@ export function ServiciosTabla({
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
             <section className="space-y-1 rounded-md border bg-muted/30 p-3">
               <Label>Tipo de servicio *</Label>
               <CatalogCombobox
@@ -986,7 +999,9 @@ export function ServiciosTabla({
                     step="0.01"
                     placeholder="0"
                     disabled={campoBloqueado("valor_servicio")}
-                    {...register("valor_servicio", { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                    {...register("valor_servicio", {
+                      setValueAs: (v) => (v === "" || v === null || Number.isNaN(Number(v)) ? undefined : Number(v)),
+                    })}
                   />
                 </div>
                 {/* SISRES fija método de pago en "N/A" (oculto) para el Regulador al

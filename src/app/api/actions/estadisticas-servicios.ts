@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/app/api/actions/auth";
+import { centroVisible } from "@/lib/auth-utils";
 
 export interface EstadisticasServicios {
   total: number;
@@ -275,12 +277,19 @@ export async function getResumenOperativoDiario(params: {
   const diaSiguiente = new Date(`${params.hasta}T00:00:00.000Z`);
   diaSiguiente.setDate(diaSiguiente.getDate() + 1);
 
-  const { data } = await supabase
+  let query = supabase
     .from("medical_services")
     .select("etapa, tipo_servicio, ciudad_origen")
     .gte("fecha_hora_registro", desdeIso)
     .lt("fecha_hora_registro", diaSiguiente.toISOString())
     .limit(20000);
+
+  // Mismo alcance que la lista de servicios: Regulación cuenta lo de su centro,
+  // si no, el resumen muestra cifras de servicios que ni puede abrir.
+  const centro = centroVisible(await getProfile());
+  if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+
+  const { data } = await query;
 
   const filas = data || [];
 

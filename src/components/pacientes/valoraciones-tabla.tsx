@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatDateShort } from "@/lib/utils";
 import { assessmentSchema, type AssessmentFormData } from "@/lib/validations";
+import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { crearValoracion, actualizarValoracion } from "@/app/api/actions/valoraciones";
 
 export interface ValoracionRow {
@@ -104,7 +105,7 @@ export function ValoracionesTabla({ valoraciones, puedeEditar }: ValoracionesTab
       fecha_nacimiento: v.fecha_nacimiento ?? "",
       genero: v.genero ?? "",
       aerolinea: v.aerolinea ?? "",
-      fecha_hora_vuelo: v.fecha_hora_vuelo ? v.fecha_hora_vuelo.slice(0, 16) : "",
+      fecha_hora_vuelo: aTextoLocalColombia(v.fecha_hora_vuelo),
       acompanante: v.acompanante ?? "",
       origen: v.origen ?? "",
       destino: v.destino ?? "",
