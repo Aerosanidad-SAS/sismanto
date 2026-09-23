@@ -80,6 +80,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "064_notificaciones_vencimientos.sql",         file: "scripts/migrations/064_notificaciones_vencimientos.sql" },
   { name: "065_biomedico_vencimiento_parche.sql",        file: "scripts/migrations/065_biomedico_vencimiento_parche.sql" },
   { name: "066_biomedical_alerts_log.sql",               file: "scripts/migrations/066_biomedical_alerts_log.sql" },
+  { name: "067_biomedical_especificaciones_100.sql",     file: "scripts/migrations/067_biomedical_especificaciones_100.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
@@ -198,7 +199,7 @@ Cómo obtenerla (Supabase):
 
   const client = new pg.Client({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
+    ssl: process.env.DATABASE_SSL === "off" ? false : { rejectUnauthorized: false },
   });
 
   try {
