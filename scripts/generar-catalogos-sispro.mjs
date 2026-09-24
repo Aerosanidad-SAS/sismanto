@@ -42,11 +42,13 @@ const aeropuertos = filas("AEROPUERTOS")
   .map((r) => [limpio(r[0]), limpio(r[1]), String(r[2]).trim(), limpio(r[3]), limpio(r[4]), limpio(r[5])])
   .filter(([n]) => n);
 
-// AEROPUERTOS NAL (atención): NOMBRE, OACI, CIUDAD, DEPARTAMENTO
+// AEROPUERTOS NAL (atención): NOMBRE, OACI, CIUDAD, DEPARTAMENTO.
+// La hoja trae basura: nombres con las coordenadas pegadas ("... 04°42'05.74?N 74°08'49.01?O") y, al
+// final, el pie de página de Wikipedia. Se recortan las coordenadas y se descartan esas líneas.
 const nal = filas("AEROPUERTOS NAL")
   .slice(1)
-  .map((r) => [limpio(r[0]), limpio(r[1]), limpio(r[2]), limpio(r[3])])
-  .filter(([n]) => n);
+  .map((r) => [limpio(r[0]).replace(/\s+\d{1,3}\s*[°º].*$/, "").trim(), limpio(r[1]), limpio(r[2]), limpio(r[3])])
+  .filter(([n, oaci, ciudad]) => n && (oaci || ciudad || n.startsWith("DESCONOCIDO")) && !/WIKIPEDIA|LICENCIA|P[ÁA]GINA FUE MODIFICADA/.test(n) && n.length <= 150);
 
 const salida = `-- ============================================================
 -- Migración 081: catálogos oficiales del reporte SISPRO de atenciones en aeropuertos
