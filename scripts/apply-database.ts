@@ -81,6 +81,11 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "065_biomedico_vencimiento_parche.sql",        file: "scripts/migrations/065_biomedico_vencimiento_parche.sql" },
   { name: "066_biomedical_alerts_log.sql",               file: "scripts/migrations/066_biomedical_alerts_log.sql" },
   { name: "067_biomedical_especificaciones_100.sql",     file: "scripts/migrations/067_biomedical_especificaciones_100.sql" },
+  { name: "065_tickets_soporte.sql",                     file: "scripts/migrations/065_tickets_soporte.sql" },
+  { name: "066_tickets_gestion.sql",                     file: "scripts/migrations/066_tickets_gestion.sql" },
+  { name: "067_tickets_config_indicadores.sql",          file: "scripts/migrations/067_tickets_config_indicadores.sql" },
+  { name: "080_captacion_aeroportuaria.sql",             file: "scripts/migrations/080_captacion_aeroportuaria.sql" },
+  { name: "081_sispro_catalogos.sql",                    file: "scripts/migrations/081_sispro_catalogos.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

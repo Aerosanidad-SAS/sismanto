@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { KPIDashboard } from "@/components/charts/kpi-dashboard";
 import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 import { getMetricasConsumo } from "@/app/api/actions/consumo";
+import { requireRole } from "@/app/api/actions/auth";
 
 function calcularRtmPeriodoKpi(
   fi: string,
@@ -298,6 +299,7 @@ export default async function KPIsPage({
     kDispCentro?: string;
   };
 }) {
+  await requireRole(["ADMIN", "GERENCIAL", "ANALISTA"]);
   const hoy = new Date();
   const fechaInicio = searchParams.inicio || "2024-01-01";
   const fechaFin = searchParams.fin || hoy.toISOString().split("T")[0];

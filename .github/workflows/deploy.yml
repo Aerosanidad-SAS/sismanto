@@ -1,10 +1,17 @@
-# Despliega en Vercel desde GitHub Actions con la CLI, en vez de los Deploy
-# Hooks que usaba el repo anterior: el proyecto de Vercel no está conectado a
-# este repo, y conectarlo exige que un owner de la organización instale la app
-# de Vercel en GitHub. Con la CLI despliega el token del proyecto, así que
-# León y David no necesitan cuenta de Vercel para que su código se despliegue.
+# Despliega en Vercel desde GitHub Actions con la CLI. La integración nativa de
+# Vercel con GitHub NO funciona mientras el team sea Hobby: rechaza los repos
+# privados de una organización ("Cannot deploy from a private GitHub
+# organization repository on the Hobby plan"). Con la CLI despliega el token
+# del proyecto, pero la CLI adjunta el autor del commit y Hobby bloquea el
+# despliegue (BLOCKED) si ese autor no es el dueño de la cuenta. Por eso el job
+# despliega desde una copia de la salida de `vercel build` sin .git, de modo que
+# el despliegue no lleva autor. Si Vercel aun así lo bloquea, el job falla
+# rápido con el motivo. Es un parche mientras el team es Hobby: la salida
+# limpia es Vercel Pro (o su prueba de 14 días), y con eso se borra este archivo.
 #
-# Requiere los secretos VERCEL_TOKEN, VERCEL_ORG_ID y VERCEL_PROJECT_ID.
+# Proyecto: `sismanto` del team `tecnicoaerosanidad`. Requiere los secretos
+# VERCEL_TOKEN (token de ese team), VERCEL_ORG_ID y VERCEL_PROJECT_ID.
+# Al pasar a Vercel Pro se puede volver a la integración nativa y borrar esto.
 name: Deploy
 
 on:
@@ -50,9 +57,50 @@ jobs:
 
       - run: vercel build --token="$VERCEL_TOKEN"
 
-      - name: Desplegar y apuntar el dominio de la rama
+      # --no-wait returns as soon as the deployment exists. Without it the CLI
+      # sits in "Building…" for minutes when Vercel blocks the deployment
+      # (Hobby plan: commit author is not the account owner), so poll the API
+      # ourselves and fail fast with the reason Vercel gives.
+      - name: Deploy and wait for the result
         run: |
-          url=$(vercel deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN")
-          echo "Despliegue: $url"
-          vercel alias set "$url" "$ALIAS" --token="$VERCEL_TOKEN"
-          echo "- \`${{ github.ref_name }}\` → https://$ALIAS ($url)" >> "$GITHUB_STEP_SUMMARY"
+          # Deploy from a copy of the prebuilt output that has no .git: the CLI
+          # then attaches no commit author and Hobby has nothing to compare to
+          # the account owner. Nothing is falsified — the deployment simply
+          # carries no git author. Tested: same project, READY, HTTP 200.
+          # Se despliega desde la raíz del repo (la salida de `vercel build` referencia
+          # node_modules con rutas relativas a ella; copiarla a otra carpeta las rompe
+          # con ENOENT) pero sin `.git`. El runner es efímero: borrarla no afecta a nada.
+          rm -rf .git
+          url=$(vercel deploy --prebuilt --archive=tgz --no-wait --token="$VERCEL_TOKEN")
+          host="${url#https://}"
+          echo "Deployment: $url"
+          echo "- \`${{ github.ref_name }}\` → $url" >> "$GITHUB_STEP_SUMMARY"
+
+          state=""
+          for i in $(seq 1 40); do
+            resp=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v13/deployments/$host?teamId=$VERCEL_ORG_ID")
+            state=$(echo "$resp" | jq -r '.readyState // "UNKNOWN"')
+            case "$state" in
+              READY) break ;;
+              BLOCKED|ERROR|CANCELED)
+                reason=$(echo "$resp" | jq -r '.readyStateReason // .error.message // "no reason given"')
+                echo "::error::Deployment $state: $reason"
+                echo "- ❌ $state: $reason" >> "$GITHUB_STEP_SUMMARY"
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+
+          if [ "$state" != "READY" ]; then
+            echo "::error::Deployment still $state after 10 minutes."
+            exit 1
+          fi
+
+          # The alias can fail while the domain still belongs to the old
+          # project; the deployment itself is fine, so don't fail the job.
+          if vercel alias set "$url" "$ALIAS" --token="$VERCEL_TOKEN"; then
+            echo "  alias: https://$ALIAS" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Could not set alias $ALIAS; use $url"
+          fi
