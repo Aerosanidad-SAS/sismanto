@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import { auditar } from "@/lib/auditoria";
+import { enmascararIdentificador } from "@/lib/auditoria-lista";
 import { revalidatePath } from "next/cache";
 import { type UserRole, getDefaultRoute } from "@/lib/auth-utils";
 import {
@@ -118,11 +120,22 @@ export async function signIn(identificador: string, password: string) {
   const email = (await resolverEmailLogin(parsed.data.identificador)) ?? EMAIL_INEXISTENTE;
 
   const supabase = createClient();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data: sesion, error } = await supabase.auth.signInWithPassword({
     email,
     password: parsed.data.password,
   });
   if (error) {
+    // Intento fallido (o bloqueo por intentos): se registra con el identificador ENMASCARADO, para ver patrones sin
+    // guardar una cédula o un correo completos de alguien que ni siquiera entró.
+    if (error.status === 401 || error.status === 400 || error.status === 422 || error.status === 429) {
+      await auditar(
+        "ERROR",
+        "login",
+        "",
+        `${error.status === 429 ? "Bloqueo por demasiados intentos" : "Intento de login fallido"}: ${enmascararIdentificador(parsed.data.identificador)}`,
+        { userId: null, label: "anónimo" }
+      );
+    }
     // Mismo mensaje para cédula inexistente y clave errada, para no revelar
     // qué cédulas tienen cuenta. Solo el bloqueo por intentos se distingue.
     if (error.status === 429) return { error: "Demasiados intentos. Espere unos minutos e intente de nuevo." };
@@ -133,12 +146,16 @@ export async function signIn(identificador: string, password: string) {
     }
     return { error: CREDENCIALES_INVALIDAS };
   }
+  // La sesión recién creada aún no está en las cookies de esta petición: se pasa el usuario explícitamente.
+  if (sesion.user) await auditar("LOGIN", "login", sesion.user.id, "Inicio de sesión", { userId: sesion.user.id });
   revalidatePath("/");
   return { success: true };
 }
 
 export async function signOut() {
   const supabase = createClient();
+  // Antes de cerrar la sesión: después ya no se sabría quién era.
+  await auditar("LOGOUT", "login", "", "Cierre de sesión");
   await supabase.auth.signOut();
   revalidatePath("/");
   redirect("/login");
@@ -212,6 +229,7 @@ export async function createUserAsAdmin(data: {
   });
 
   if (profileError) return { error: profileError.message };
+  await auditar("INSERTAR", "usuarios", newUser.user.id, `Usuario creado con rol ${parsed.data.roleCodigo}`);
   revalidatePath("/admin/usuarios");
   return { success: true };
 }
@@ -268,6 +286,7 @@ export async function updateUserAsAdmin(data: {
     if (error.code === "23505") return { error: "Esa cédula ya está registrada en otro usuario" };
     return { error: error.message };
   }
+  await auditar("MODIFICAR", "usuarios", parsed.data.userId, `Usuario actualizado (rol ${parsed.data.roleCodigo})`);
   revalidatePath("/admin/usuarios");
   return { success: true };
 }
@@ -284,6 +303,7 @@ export async function toggleUserActive(userId: string, activo: boolean) {
     .eq("user_id", parsed.data.userId);
 
   if (error) return { error: error.message };
+  await auditar(parsed.data.activo ? "MODIFICAR" : "ELIMINAR", "usuarios", parsed.data.userId, parsed.data.activo ? "Usuario activado" : "Usuario desactivado");
   revalidatePath("/admin/usuarios");
   return { success: true };
 }

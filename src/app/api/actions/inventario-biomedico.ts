@@ -9,6 +9,7 @@ import { biomedicalEquipmentSchema, biomedicalMaintenanceSchema } from "@/lib/va
 import { HojaVidaBiomedicaPdf } from "@/lib/pdf/hoja-vida-biomedica";
 import { getProfile } from "@/app/api/actions/auth";
 import { z } from "zod";
+import { auditar } from "@/lib/auditoria";
 
 function fechasNulas(d: Record<string, unknown>, campos: string[]) {
   const out: Record<string, unknown> = { ...d };
@@ -119,6 +120,7 @@ export async function crearEquipoBiomedico(formData: BiomedicalEquipmentFormData
     .select()
     .single();
   if (error) return { error: error.message };
+  await auditar("INSERTAR", "inventario", data.id, "Equipo biomédico creado");
   revalidatePath("/equipos");
   return { success: true, data };
 }
@@ -139,6 +141,7 @@ export async function actualizarEquipoBiomedico(id: number, formData: Biomedical
     })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "inventario", idParsed.data, "Equipo biomédico actualizado");
   revalidatePath("/equipos");
   return { success: true };
 }
@@ -154,6 +157,7 @@ export async function eliminarEquipoBiomedico(id: number) {
     .update({ activo: false })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "inventario", idParsed.data, "Equipo biomédico desactivado");
   revalidatePath("/equipos");
   return { success: true };
 }
@@ -196,6 +200,7 @@ export async function crearMantenimientoBiomedico(formData: BiomedicalMaintenanc
     .update({ ultimo_mantenimiento: parsed.data.fecha_mantenimiento, updated_at: new Date().toISOString() })
     .eq("id", parsed.data.equipment_id);
 
+  await auditar("INSERTAR", "inventario", parsed.data.equipment_id, "Mantenimiento biomédico registrado");
   revalidatePath("/equipos");
   return { success: true, data };
 }

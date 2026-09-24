@@ -34,6 +34,7 @@ import {
   PackageCheck,
   Handshake,
   Building2,
+  History,
   Headset,
   LifeBuoy,
 } from "lucide-react";
@@ -271,6 +272,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Users,
         roles: ["ADMIN", "ANALISTA"],
         hint: "Alta, roles y estado de cuentas del personal.",
+      },
+      {
+        name: "Bitácora",
+        href: "/auditoria",
+        icon: History,
+        roles: ["ADMIN"],
+        hint: "Quién hizo qué y cuándo (registro inmutable de auditoría).",
       },
     ],
   },

@@ -10,6 +10,7 @@ import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { z } from "zod";
+import { auditar } from "@/lib/auditoria";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -325,6 +326,7 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
     .single();
   if (error) return { error: error.message };
   await notificarEtapaServicio(supabase, data.id, etapa, data.tipo_servicio, data.patient_id);
+  await auditar("INSERTAR", "servicios", data.id, `Servicio creado (${data.tipo_servicio}, etapa ${etapa})`);
   revalidatePath("/servicios");
   return { success: true, data };
 }
@@ -358,6 +360,7 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
     // ADMIN/ANALISTA/REGULACION (migración 055).
     return { error: "No tiene permiso para editar este servicio — si ya está FINALIZADO, solo Regulación, Analista o Administrador pueden modificarlo." };
   }
+  await auditar("MODIFICAR", "servicios", idParsed.data, "Servicio actualizado");
   revalidatePath("/servicios");
   return { success: true };
 }
@@ -389,6 +392,7 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
+  await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}`);
   revalidatePath("/servicios");
   return { success: true };
 }
@@ -433,6 +437,7 @@ export async function marcarPasoServicio(
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   if (nueva) await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
+  await auditar("MODIFICAR", "servicios", data[0].id, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`);
   revalidatePath("/servicios");
   revalidatePath("/ovem");
   return { success: true };
@@ -445,6 +450,7 @@ export async function eliminarServicioMedico(id: number) {
   const supabase = createClient();
   const { error } = await supabase.from("medical_services").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "servicios", idParsed.data, "Servicio eliminado");
   revalidatePath("/servicios");
   return { success: true };
 }

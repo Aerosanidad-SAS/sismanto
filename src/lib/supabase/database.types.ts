@@ -9,6 +9,11 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+type AuditLogRow = {
+  id: number; at: string; user_id: string | null; user_label: string; role: string; action: string;
+  entity: string; entity_id: string; detail: string; ip: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -1201,6 +1206,12 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      audit_log: {
+        Row: AuditLogRow
+        Insert: Partial<Omit<AuditLogRow, "id">>
+        Update: never
+        Relationships: []
       }
       wa_campaigns: {
         Row: { id: number; nombre: string; plantilla: string; idioma: string; estado: string; media_tipo: string | null; media_id: string | null; media_nombre: string | null; total_destinatarios: number; total_enviados: number; total_fallidos: number; created_by: string | null; created_at: string; updated_at: string }

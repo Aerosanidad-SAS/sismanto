@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { PatientFormData } from "@/lib/validations";
 import { patientSchema } from "@/lib/validations";
 import { z } from "zod";
+import { auditar } from "@/lib/auditoria";
 
 export async function getPacientes() {
   const supabase = createClient();
@@ -83,6 +84,8 @@ export async function crearPaciente(formData: PatientFormData) {
     .select()
     .single();
   if (error) return { error: error.message };
+  // Se identifica por id, no por cédula ni nombre: la bitácora no debe copiar datos personales.
+  await auditar("INSERTAR", "pacientes", data.id, "Paciente creado");
   revalidatePath("/pacientes");
   return { success: true, data };
 }
@@ -104,6 +107,7 @@ export async function actualizarPaciente(id: number, formData: PatientFormData) 
     })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "pacientes", idParsed.data, "Paciente actualizado");
   revalidatePath("/pacientes");
   return { success: true };
 }
@@ -119,6 +123,7 @@ export async function eliminarPaciente(id: number) {
     .update({ activo: false })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "pacientes", idParsed.data, "Paciente desactivado");
   revalidatePath("/pacientes");
   return { success: true };
 }
