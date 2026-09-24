@@ -235,14 +235,20 @@ export async function getIndicadores(desde?: string, hasta?: string): Promise<(I
     ? (desde as string)
     : new Date(ahoraBogota.getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
 
-  const { data: filas } = await s
-    .from("tickets")
-    .select("id, categoria, area, prioridad, estado, nombre_tecnico, created_at, fecha_primer_contacto, fecha_cierre")
-    .gte("created_at", `${desdeDia}T00:00:00-05:00`)
-    .lte("created_at", `${hastaDia}T23:59:59.999-05:00`)
-    .order("id", { ascending: true })
-    .limit(5000);
-  const tickets = (filas ?? []) as unknown as TicketParaIndicadores[];
+  // PostgREST corta en 1000 filas por consulta aunque se pida más (y sin avisar): se lee por páginas.
+  const tickets: TicketParaIndicadores[] = [];
+  for (let d = 0; ; d += 1000) {
+    const { data: filas } = await s
+      .from("tickets")
+      .select("id, categoria, area, prioridad, estado, nombre_tecnico, created_at, fecha_primer_contacto, fecha_cierre")
+      .gte("created_at", `${desdeDia}T00:00:00-05:00`)
+      .lte("created_at", `${hastaDia}T23:59:59.999-05:00`)
+      .order("id", { ascending: true })
+      .range(d, d + 999);
+    const pagina = (filas ?? []) as unknown as TicketParaIndicadores[];
+    tickets.push(...pagina);
+    if (pagina.length < 1000) break;
+  }
 
   // Se consulta por lotes: la lista en la URL de PostgREST tiene un tamaño máximo.
   const reabiertos = new Set<number>();
