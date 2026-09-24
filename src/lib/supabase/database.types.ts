@@ -9,6 +9,22 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+// Formatos TI (migración 070): las columnas de firma llevan ruta+hash; `numero_orden` es generada por la base.
+type TiActaEntregaRow = {
+  id: number; numero_orden: string; tipo_equipo: string;
+  func_nombre: string; func_cedula: string; func_cargo: string; func_sede: string; func_correo: string;
+  equipo_referencia: string; equipo_marca: string; equipo_modelo: string; equipo_placa: string;
+  equipo_imei: string; equipo_sim: string; equipo_activo: string; equipo_tarjeta_sd: string; equipo_operador: string;
+  checklist: Json; fecha_entrega: string; lugar_entrega: string;
+  entrega_nombre: string; firma_entrega_ruta: string; firma_entrega_hash: string;
+  recibe_nombre: string; firma_recibe_ruta: string; firma_recibe_hash: string;
+  fecha_devolucion: string | null; lugar_devolucion: string | null;
+  devolucion_entrega_nombre: string | null; firma_devolucion_entrega_ruta: string | null; firma_devolucion_entrega_hash: string | null;
+  devolucion_recibe_nombre: string | null; firma_devolucion_recibe_ruta: string | null; firma_devolucion_recibe_hash: string | null;
+  observaciones: string; firmas_png: Json; sisres_id: number | null;
+  created_by: string | null; created_at: string; updated_at: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -1201,6 +1217,12 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      ti_acta_entrega: {
+        Row: TiActaEntregaRow
+        Insert: Partial<Omit<TiActaEntregaRow, "numero_orden">>
+        Update: Partial<Omit<TiActaEntregaRow, "numero_orden">>
+        Relationships: []
       }
       wa_campaigns: {
         Row: { id: number; nombre: string; plantilla: string; idioma: string; estado: string; media_tipo: string | null; media_id: string | null; media_nombre: string | null; total_destinatarios: number; total_enviados: number; total_fallidos: number; created_by: string | null; created_at: string; updated_at: string }

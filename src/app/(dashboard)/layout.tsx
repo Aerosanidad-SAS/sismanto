@@ -33,6 +33,7 @@ import {
   PackageCheck,
   Handshake,
   Building2,
+  FileSignature,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -180,6 +181,18 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Activity,
         roles: ["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"],
         hint: "Inventario, mantenimientos y hoja de vida de equipos médicos (origen SISRES).",
+      },
+    ],
+  },
+  {
+    label: "Formatos TI",
+    items: [
+      {
+        name: "Acta de entrega",
+        href: "/formatos-ti/acta-entrega",
+        icon: FileSignature,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Acta de entrega de equipos y celulares con firma digital (G-TECN-F 028 / 031, origen SISRES).",
       },
     ],
   },
