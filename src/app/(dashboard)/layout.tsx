@@ -1,10 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState, useCallback } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname,
+  useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Truck,
@@ -41,7 +45,6 @@ import {
   Trash2,
   Headset,
   LifeBuoy,
-  Plane,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
