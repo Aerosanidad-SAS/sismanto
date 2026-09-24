@@ -1332,6 +1332,36 @@ export type Database = {
         Update: { id?: number; correo?: string }
         Relationships: []
       }
+      captaciones_aeroportuarias: {
+        Row: { id: number; sisres_id: number | null; fecha_atencion: string; aeropuerto_atencion: string; paciente_id: number | null; tipo_identificacion: string; numero_identificacion: string; primer_nombre: string; segundo_nombre: string | null; primer_apellido: string; segundo_apellido: string | null; fecha_nacimiento: string | null; sexo: string | null; nacionalidad: string; pais_residencia: string; pais_procedencia: string; aeropuerto_procedencia: string | null; telefono: string | null; tipo_usuario: number; momento_atencion: number; motivo_consulta: number; tipo_egreso: number; tipo_atencion: string | null; resultado_autorizacion: string | null; lugar_atencion: string | null; lado_atencion: string | null; ubicacion_atencion: string | null; detalle_ubicacion: string | null; tiempo_activacion: string | null; tiempo_llegada: string | null; condicion: string | null; cie10: string | null; patologia_sistema: string | null; otra_patologia: string | null; post_operatorio: string | null; accidente_especial: string | null; notificacion_obligatoria: string | null; tipo_vuelo: string | null; aerolinea: string | null; procedimientos: string[]; emergencia_tipo: string | null; emergencia_notas: string | null; remision: boolean; ips_receptora: string | null; origen: string | null; destino: string | null; recibio_medicamentos: boolean; medicamento: string | null; evento_adverso_medicamento: boolean | null; uso_dispositivo: boolean; dispositivo: string | null; evento_adverso_dispositivo: boolean | null; medico_atendio: string | null; activo: boolean; registrado_por_id: string | null; nombre_registrado_por: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; sisres_id?: number | null; fecha_atencion: string; aeropuerto_atencion: string; paciente_id?: number | null; tipo_identificacion: string; numero_identificacion: string; primer_nombre: string; segundo_nombre?: string | null; primer_apellido: string; segundo_apellido?: string | null; fecha_nacimiento?: string | null; sexo?: string | null; nacionalidad: string; pais_residencia: string; pais_procedencia: string; aeropuerto_procedencia?: string | null; telefono?: string | null; tipo_usuario: number; momento_atencion: number; motivo_consulta: number; tipo_egreso: number; tipo_atencion?: string | null; resultado_autorizacion?: string | null; lugar_atencion?: string | null; lado_atencion?: string | null; ubicacion_atencion?: string | null; detalle_ubicacion?: string | null; tiempo_activacion?: string | null; tiempo_llegada?: string | null; condicion?: string | null; cie10?: string | null; patologia_sistema?: string | null; otra_patologia?: string | null; post_operatorio?: string | null; accidente_especial?: string | null; notificacion_obligatoria?: string | null; tipo_vuelo?: string | null; aerolinea?: string | null; procedimientos: string[]; emergencia_tipo?: string | null; emergencia_notas?: string | null; remision: boolean; ips_receptora?: string | null; origen?: string | null; destino?: string | null; recibio_medicamentos: boolean; medicamento?: string | null; evento_adverso_medicamento?: boolean | null; uso_dispositivo: boolean; dispositivo?: string | null; evento_adverso_dispositivo?: boolean | null; medico_atendio?: string | null; activo?: boolean; registrado_por_id?: string | null; nombre_registrado_por?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; sisres_id?: number | null; fecha_atencion?: string; aeropuerto_atencion?: string; paciente_id?: number | null; tipo_identificacion?: string; numero_identificacion?: string; primer_nombre?: string; segundo_nombre?: string | null; primer_apellido?: string; segundo_apellido?: string | null; fecha_nacimiento?: string | null; sexo?: string | null; nacionalidad?: string; pais_residencia?: string; pais_procedencia?: string; aeropuerto_procedencia?: string | null; telefono?: string | null; tipo_usuario?: number; momento_atencion?: number; motivo_consulta?: number; tipo_egreso?: number; tipo_atencion?: string | null; resultado_autorizacion?: string | null; lugar_atencion?: string | null; lado_atencion?: string | null; ubicacion_atencion?: string | null; detalle_ubicacion?: string | null; tiempo_activacion?: string | null; tiempo_llegada?: string | null; condicion?: string | null; cie10?: string | null; patologia_sistema?: string | null; otra_patologia?: string | null; post_operatorio?: string | null; accidente_especial?: string | null; notificacion_obligatoria?: string | null; tipo_vuelo?: string | null; aerolinea?: string | null; procedimientos?: string[]; emergencia_tipo?: string | null; emergencia_notas?: string | null; remision?: boolean; ips_receptora?: string | null; origen?: string | null; destino?: string | null; recibio_medicamentos?: boolean; medicamento?: string | null; evento_adverso_medicamento?: boolean | null; uso_dispositivo?: boolean; dispositivo?: string | null; evento_adverso_dispositivo?: boolean | null; medico_atendio?: string | null; activo?: boolean; registrado_por_id?: string | null; nombre_registrado_por?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      sispro_paises: {
+        Row: { nombre: string; codigo: string }
+        Insert: { nombre: string; codigo: string }
+        Update: { nombre?: string; codigo?: string }
+        Relationships: []
+      }
+      sispro_ips: {
+        Row: { nombre: string; codigo: string }
+        Insert: { nombre: string; codigo: string }
+        Update: { nombre?: string; codigo?: string }
+        Relationships: []
+      }
+      sispro_aeropuertos: {
+        Row: { nombre: string; ciudad: string; codigo_ciudad: string | null; oaci: string | null; pais: string | null; ambito: string | null }
+        Insert: { nombre: string; ciudad: string; codigo_ciudad?: string | null; oaci?: string | null; pais?: string | null; ambito?: string | null }
+        Update: { nombre?: string; ciudad?: string; codigo_ciudad?: string | null; oaci?: string | null; pais?: string | null; ambito?: string | null }
+        Relationships: []
+      }
+      sispro_aeropuertos_atencion: {
+        Row: { nombre: string; oaci: string | null; ciudad: string | null; departamento: string | null }
+        Insert: { nombre: string; oaci?: string | null; ciudad?: string | null; departamento?: string | null }
+        Update: { nombre?: string; oaci?: string | null; ciudad?: string | null; departamento?: string | null }
+        Relationships: []
+      }
     }
     Views: {
       vehicle_maintenance_alerts: {
@@ -1397,6 +1427,10 @@ export type Database = {
       guardar_catalogo_ticket: {
         Args: { p_tipo: string; p_nombres: string[] }
         Returns: undefined
+      }
+      puede_captacion: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
       }
     }
     Enums: {

@@ -36,6 +36,7 @@ import {
   Building2,
   Headset,
   LifeBuoy,
+  Plane,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -275,6 +276,18 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     ],
   },
   {
+    label: "Aeroportuaria",
+    items: [
+      {
+        name: "Captación aeroportuaria",
+        href: "/captacion",
+        icon: Plane,
+        roles: ["ADMIN", "ANALISTA", "COORDINACION", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA"],
+        hint: "Registra las atenciones en aeropuertos y genera el reporte SISPRO del mes.",
+      },
+    ],
+  },
+  {
     label: "Soporte",
     items: [
       {
@@ -392,7 +405,7 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "COORDINACION" &&
-          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte"].some(
+          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte", "/captacion"].some(
             (b) => pathname === b || pathname.startsWith(`${b}/`)
           )
         ) {
