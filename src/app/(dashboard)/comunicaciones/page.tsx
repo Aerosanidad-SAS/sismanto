@@ -1,11 +1,16 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCampanas } from "@/app/api/actions/campanas";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { CampanasPanel } from "@/components/comunicaciones/campanas-panel";
 
 const ROLES_EDICION = ["ADMIN", "COORDINACION", "ANALISTA"];
 
+// procesarLoteCampana pausa 2 s entre envíos reales: un lote tarda ~10 s,
+// más que el tiempo por defecto de una función en Vercel.
+export const maxDuration = 60;
+
 export default async function ComunicacionesPage() {
+  await requireRole(["ADMIN", "COORDINACION", "ANALISTA"]);
   const [profile, campanas] = await Promise.all([getProfile(), getCampanas()]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const whatsappConfigurado = Boolean(
@@ -58,7 +63,8 @@ export default async function ComunicacionesPage() {
           <CardTitle>Campañas WhatsApp</CardTitle>
           <CardDescription>
             Cada campaña usa una plantilla aprobada en el WhatsApp Business Manager de Meta. El
-            procesamiento va por lotes de 50 destinatarios.
+            procesamiento va por lotes de 5 destinatarios, con una pausa entre envíos para respetar
+            los límites de Meta.
           </CardDescription>
         </CardHeader>
         <CardContent>

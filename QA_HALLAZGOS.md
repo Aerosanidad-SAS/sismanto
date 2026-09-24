@@ -1,6 +1,6 @@
 # Bolsa de QA — integración SISRES
 
-Hallazgos que Daniel va reportando probando `sismanto-staging.vercel.app`. Cada uno queda acá con su estado — no se pierde nada aunque se resuelva en otra sesión.
+Hallazgos que Daniel va reportando probando `sisres-v2-staging.vercel.app`. Cada uno queda acá con su estado — no se pierde nada aunque se resuelva en otra sesión.
 
 ## Convenciones
 

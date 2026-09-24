@@ -64,7 +64,7 @@ León respondió las 7 preguntas de `PREGUNTAS_LEON_RONDA2.md` verificando contr
 ## ⏭ Próximos pasos (en orden)
 
 1. Daniel: decidir el alcance de permisos de ANALISTA (ver arriba) — bloquea terminar el RLS del módulo de servicios/pacientes.
-2. Daniel: revisar el módulo de KPIs/costos en `sismanto-staging.vercel.app` con los datos reales ya cargados, buscar los bugs de costos de mantenimiento conocidos.
+2. Daniel: revisar el módulo de KPIs/costos en `sisres-v2-staging.vercel.app` con los datos reales ya cargados, buscar los bugs de costos de mantenimiento conocidos.
 3. Daniel: completar cédula de los usuarios actuales de Aeromanto (columna nueva, migración `043`) + correr el cruce de identidad en producción (`RBAC_INTEGRACION.md` §1.1) — sigue siendo el bloqueante para tocar producción.
 4. Portar la lógica condicional del formulario de servicios por cargo (Regulador / Médico-Auxiliar) y por tipo de servicio, usando el detalle que dio León en Ronda 2.
 5. Credenciales sandbox de WhatsApp (número de prueba de Meta) → variables `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` en Vercel Preview; `NOTIFICATIONS_MAIL_FROM` para correo — necesario para probar de punta a punta la notificación automática ya conectada.

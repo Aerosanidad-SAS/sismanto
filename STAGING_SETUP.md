@@ -2,9 +2,9 @@
 
 Guía para levantar el entorno compartido donde Daniel y León prueban en paralelo sin tocar los datos reales de flota. Ver `PLAN_INTEGRACION_SISRES.md` §2 para el contexto completo — esto es la versión ejecutable, paso a paso.
 
-## 1. Supabase — proyecto `SISMANTO_Staging`
+## 1. Supabase — proyecto `SISRES_V2_Staging`
 
-1. En [supabase.com](https://supabase.com), dentro de la misma organización del proyecto de producción: **New project** → nombre `SISMANTO_Staging` → región igual a la de producción (evita latencia distinta entre ambientes) → contraseña fuerte, guardarla en el gestor de contraseñas del equipo (no en el repo).
+1. En [supabase.com](https://supabase.com), dentro de la misma organización del proyecto de producción: **New project** → nombre `SISRES_V2_Staging` → región igual a la de producción (evita latencia distinta entre ambientes) → contraseña fuerte, guardarla en el gestor de contraseñas del equipo (no en el repo).
 2. Copiar `Project URL` y `anon public key` (Settings → API) — van a ser las variables de **Preview** en Vercel (paso 3).
 3. Aplicar el esquema completo:
    ```bash
@@ -23,7 +23,7 @@ Guía para levantar el entorno compartido donde Daniel y León prueban en parale
    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated;
    ```
-   Esto solo habilita el permiso base — la seguridad real la siguen manejando las políticas RLS de cada migración, sin cambios ahí. (Descubierto y confirmado 2026-07-17 al validar `SISMANTO_Staging`: sin este paso, el login funciona pero la app se queda mostrando "Cuenta pendiente" para cualquier usuario, porque la consulta al perfil falla en silencio por falta de permiso, no por falta de rol.)
+   Esto solo habilita el permiso base — la seguridad real la siguen manejando las políticas RLS de cada migración, sin cambios ahí. (Descubierto y confirmado 2026-07-17 al validar `SISRES_V2_Staging`: sin este paso, el login funciona pero la app se queda mostrando "Cuenta pendiente" para cualquier usuario, porque la consulta al perfil falla en silencio por falta de permiso, no por falta de rol.)
 5. Crear un usuario Admin de prueba (Authentication → Users → Add user) y enlazarlo en `user_profiles` — mismo procedimiento que ya está documentado en `README.md` §"Primer deploy hasta producción".
 6. **No copiar datos reales de pacientes/servicios** cuando lleguemos a esa parte — eso se define aparte cuando tengamos el dataset sintético (pregunta 10 a León).
 
@@ -31,11 +31,11 @@ Guía para levantar el entorno compartido donde Daniel y León prueban en parale
 
 1. En el proyecto de Vercel: **Settings → Environment Variables**.
 2. Agregar (o editar si ya existen) estas variables marcadas **solo para el entorno Preview** (no Production):
-   - `NEXT_PUBLIC_SUPABASE_URL` → URL del proyecto `SISMANTO_Staging`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → anon key de `SISMANTO_Staging`
-   - `SUPABASE_SERVICE_ROLE_KEY` → service role de `SISMANTO_Staging` (si se necesita alta de usuarios de prueba)
+   - `NEXT_PUBLIC_SUPABASE_URL` → URL del proyecto `SISRES_V2_Staging`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → anon key de `SISRES_V2_Staging`
+   - `SUPABASE_SERVICE_ROLE_KEY` → service role de `SISRES_V2_Staging` (si se necesita alta de usuarios de prueba)
    - El resto de credenciales externas (Anthropic, Microsoft Graph, WhatsApp, ProTrack) van con valores de **sandbox/test** apenas los tengamos de León — hasta entonces, dejar vacías (las features que las usan simplemente no funcionan en staging, no rompe el resto de la app).
-3. Con esto, **cualquier rama que abra un PR** (incluida `integration/sisres` y cada `feature/*`) despliega automáticamente contra `SISMANTO_Staging`, sin configuración adicional por rama.
+3. Con esto, **cualquier rama que abra un PR** (incluida `integration/sisres` y cada `feature/*`) despliega automáticamente contra `SISRES_V2_Staging`, sin configuración adicional por rama.
 
 ## 3. URL de staging estable
 
@@ -44,7 +44,7 @@ Guía para levantar el entorno compartido donde Daniel y León prueban en parale
 
 ## 4. Qué falta antes de dar esto por completo operativo
 
-- [x] Proyecto `SISMANTO_Staging` creado y con schema aplicado (2026-07-17)
+- [x] Proyecto `SISRES_V2_Staging` creado y con schema aplicado (2026-07-17)
 - [x] GRANT de permisos base aplicado (paso 4 de esta sección)
 - [x] Variables de Preview configuradas en Vercel (2026-07-17)
 - [x] Usuario Admin de prueba funcionando en staging — login verificado end-to-end contra un Preview Deployment real (2026-07-17)

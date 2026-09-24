@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { SIN_FILTROS, filtrarEquipos, hayFiltros, valoresDistintos, type FiltrosEquipos } from "@/lib/equipos-filtros";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -48,6 +49,8 @@ export interface EquipoRow {
   proximo_mantenimiento: string | null;
   ultima_calibracion: string | null;
   proxima_calibracion: string | null;
+  vencimiento_parche_adulto: string | null;
+  vencimiento_parche_pediatrico: string | null;
   ubicacion_interna: string | null;
   aeropuerto: string | null;
   ciudad: string | null;
@@ -81,6 +84,8 @@ const CAMPOS_EQUIPO: { name: keyof BiomedicalEquipmentFormData; label: string; t
   { name: "proximo_mantenimiento", label: "Próximo mantenimiento", type: "date" },
   { name: "ultima_calibracion", label: "Última calibración", type: "date" },
   { name: "proxima_calibracion", label: "Próxima calibración", type: "date" },
+  { name: "vencimiento_parche_adulto", label: "Vencimiento parche adulto (solo BIOMÉDICA)", type: "date" },
+  { name: "vencimiento_parche_pediatrico", label: "Vencimiento parche pediátrico (solo BIOMÉDICA)", type: "date" },
   { name: "frec_mantenimiento", label: "Frecuencia mantenimiento" },
   { name: "frec_calibracion", label: "Frecuencia calibración" },
   { name: "ubicacion_interna", label: "Ubicación interna" },
@@ -111,7 +116,7 @@ interface EquiposTablaProps {
 
 export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTablaProps) {
   const router = useRouter();
-  const [busqueda, setBusqueda] = useState("");
+  const [filtros, setFiltros] = useState<FiltrosEquipos>(SIN_FILTROS);
   const [dialogEquipo, setDialogEquipo] = useState(false);
   const [dialogMantenimiento, setDialogMantenimiento] = useState(false);
   const [hojaDeVida, setHojaDeVida] = useState<EquipoRow | null>(null);
@@ -127,18 +132,11 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
     resolver: zodResolver(biomedicalMaintenanceSchema),
   });
 
-  const filtrados = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return equipos;
-    return equipos.filter(
-      (e) =>
-        e.placa_equipo.toLowerCase().includes(q) ||
-        e.equipo.toLowerCase().includes(q) ||
-        (e.marca ?? "").toLowerCase().includes(q) ||
-        (e.area ?? "").toLowerCase().includes(q) ||
-        (e.ciudad ?? "").toLowerCase().includes(q)
-    );
-  }, [equipos, busqueda]);
+  const filtrados = useMemo(() => filtrarEquipos(equipos, filtros), [equipos, filtros]);
+  const areas = useMemo(() => valoresDistintos(equipos, (e) => e.area), [equipos]);
+  const tiposEquipo = useMemo(() => valoresDistintos(equipos, (e) => e.equipo), [equipos]);
+  const aeropuertos = useMemo(() => valoresDistintos(equipos, (e) => e.aeropuerto), [equipos]);
+  const cambiar = (parcial: Partial<FiltrosEquipos>) => setFiltros((f) => ({ ...f, ...parcial }));
 
   const historialEquipo = useMemo(() => {
     if (!hojaDeVida) return [];
@@ -235,12 +233,57 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          placeholder="Buscar por placa, equipo, marca, área o ciudad…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="sm:max-w-sm"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Buscar por placa, equipo, marca, serie, área o ciudad…"
+            value={filtros.buscar}
+            onChange={(e) => cambiar({ buscar: e.target.value })}
+            className="sm:w-72"
+          />
+          <select
+            aria-label="Área"
+            value={filtros.area}
+            onChange={(e) => cambiar({ area: e.target.value })}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Área: todas</option>
+            {areas.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+          <Input
+            list="lista-tipos-equipo"
+            placeholder="Tipo de equipo"
+            aria-label="Tipo de equipo"
+            value={filtros.equipo}
+            onChange={(e) => cambiar({ equipo: e.target.value })}
+            className="sm:w-48"
+          />
+          <datalist id="lista-tipos-equipo">
+            {tiposEquipo.map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
+          <select
+            aria-label="Sanidad (aeropuerto)"
+            value={filtros.aeropuerto}
+            onChange={(e) => cambiar({ aeropuerto: e.target.value })}
+            className="h-10 max-w-[14rem] rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Sanidad: todas</option>
+            {aeropuertos.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+          {hayFiltros(filtros) && (
+            <Button type="button" variant="outline" size="sm" onClick={() => setFiltros(SIN_FILTROS)}>
+              ✕ Limpiar
+            </Button>
+          )}
+          <span className="text-sm text-muted-foreground">
+            {filtrados.length} de {equipos.length}
+          </span>
+        </div>
         {puedeEditar && <Button onClick={abrirNuevoEquipo}>Nuevo equipo</Button>}
       </div>
 
@@ -342,6 +385,8 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
                     ["Próximo mantenimiento", hojaDeVida.proximo_mantenimiento],
                     ["Última calibración", hojaDeVida.ultima_calibracion],
                     ["Próxima calibración", hojaDeVida.proxima_calibracion],
+                    ["Vencimiento parche adulto", hojaDeVida.vencimiento_parche_adulto],
+                    ["Vencimiento parche pediátrico", hojaDeVida.vencimiento_parche_pediatrico],
                     ["Voltaje", hojaDeVida.voltaje as string | null],
                     ["Dimensiones", hojaDeVida.dimensiones as string | null],
                     ["Peso", hojaDeVida.peso as string | null],

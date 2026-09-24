@@ -3,9 +3,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { MedicalServiceFormData } from "@/lib/validations";
-import { medicalServiceSchema, ETAPAS_SERVICIO, CAMPOS_PASO_SERVICIO } from "@/lib/validations";
+import { medicalServiceSchema, ETAPAS_SERVICIO } from "@/lib/validations";
+import { CAMPOS_PASO_SERVICIO } from "@/lib/estado-servicio";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { centroVisible, type UserRole } from "@/lib/auth-utils";
+import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { z } from "zod";
+import { auditar } from "@/lib/auditoria";
+import {
+  EXPORT_MAX_FILAS,
+  SERVICIOS_POR_PAGINA,
+  type FiltrosServicios,
+} from "@/lib/servicios-lista";
+
+// Mismo rol que ve la sección completa en SISRES (editarServicio.php,
+// "!$esMedicoAux") — Médico/Auxiliar no ven ni suben la Boleta de Salida.
+const ROLES_BOLETA_SALIDA: UserRole[] = ["ADMIN", "REGULACION", "ANALISTA"];
+const BOLETA_TIPOS_PERMITIDOS = ["image/png", "image/jpeg", "image/webp"];
+const BOLETA_TAMANO_MAXIMO = 8 * 1024 * 1024; // 8MB — foto de un documento físico
 
 // SISRES no tiene una máquina de estados fija (Ronda 2, pregunta 3 en
 // sisres/RESPUESTAS_LEON.md): el dropdown de etapa está gobernado por
@@ -91,9 +107,21 @@ function calcularTiempos(d: {
   };
 }
 
+/** Campos de fecha/hora que el formulario captura sin zona (hora de Colombia). */
+const CAMPOS_FECHA_SERVICIO = [
+  "fecha_hora_programacion",
+  "fecha_hora_inicio_desplazamiento",
+  "fecha_hora_llegada_origen",
+  "fecha_hora_salida_origen",
+  "fecha_hora_llegada_intermedia",
+  "fecha_hora_salida_intermedia",
+  "fecha_hora_llegada_destino",
+  "fecha_hora_salida_destino",
+] as const;
+
 function aFilaServicio(parsed: z.output<typeof medicalServiceSchema>) {
   const tiempos = calcularTiempos(parsed);
-  return {
+  return filaConHoraColombia({
     ...parsed,
     patient_id: parsed.patient_id ?? null,
     vehicle_id: parsed.vehicle_id ?? null,
@@ -106,7 +134,34 @@ function aFilaServicio(parsed: z.output<typeof medicalServiceSchema>) {
     fecha_hora_llegada_destino: parsed.fecha_hora_llegada_destino || null,
     fecha_hora_salida_destino: parsed.fecha_hora_salida_destino || null,
     ...tiempos,
-  };
+  }, CAMPOS_FECHA_SERVICIO);
+}
+
+/**
+ * Centro del servicio (migración 059): el del vehículo asignado; sin
+ * vehículo (médico en su propio carro), el de quien lo registra.
+ */
+async function centroDelServicio(
+  supabase: ReturnType<typeof createClient>,
+  vehicleId: string | null,
+  centroDelUsuario: number | null
+): Promise<number | null> {
+  if (vehicleId) {
+    const { data: vehiculo } = await supabase
+      .from("vehicles")
+      .select("centro_operativo")
+      .eq("id", vehicleId)
+      .maybeSingle();
+    if (vehiculo?.centro_operativo) {
+      const { data: centro } = await supabase
+        .from("operational_centers")
+        .select("id")
+        .eq("codigo", vehiculo.centro_operativo)
+        .maybeSingle();
+      if (centro) return centro.id;
+    }
+  }
+  return centroDelUsuario;
 }
 
 export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: string; hasta?: string }) {
@@ -116,6 +171,12 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
     .select("*, patients(cedula, nombre1, apellido1), vehicles(placa)")
     .order("fecha_hora_registro", { ascending: false })
     .limit(500);
+
+  // Servicios de su centro, más los que no tienen centro (históricos de
+  // antes de la migración 059, o registrados sin vehículo por alguien sin
+  // centro asignado): ocultarlos los dejaría invisibles para todo Regulación.
+  const centro = centroVisible(await getProfile());
+  if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
 
   if (filtro?.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtro.etapa)) {
     query = query.eq("etapa", filtro.etapa);
@@ -127,24 +188,147 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
   return data || [];
 }
 
-export async function crearServicioMedico(formData: MedicalServiceFormData) {
+// ── Lista de servicios con filtros de SISRES (mostrarServicios.php) ────────
+
+const ROLES_LISTA_SERVICIOS: UserRole[] = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"];
+
+// Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este
+// repo (ver CLAUDE.md), y el builder solo recibe filtros encadenados.
+function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centroId: number | null) {
+  let q = query;
+  if (centroId) q = q.or(`operational_center_id.eq.${centroId},operational_center_id.is.null`);
+  if (filtros.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtros.etapa)) q = q.eq("etapa", filtros.etapa);
+  if (filtros.tipo) q = q.eq("tipo_servicio", filtros.tipo);
+  if (filtros.cliente) q = q.eq("cliente", filtros.cliente);
+  if (filtros.origen) q = q.eq("ciudad_origen", filtros.origen);
+  if (filtros.destino) q = q.eq("ciudad_destino", filtros.destino);
+  if (filtros.cedula) q = q.ilike("cedula_paciente", `%${filtros.cedula.replace(/[%_\\]/g, "")}%`);
+  // Como SISRES: el rango es sobre la fecha programada, en hora de Colombia.
+  if (filtros.desde) q = q.gte("fecha_hora_programacion", `${filtros.desde}T00:00:00-05:00`);
+  if (filtros.hasta) q = q.lte("fecha_hora_programacion", `${filtros.hasta}T23:59:59.999-05:00`);
+  return q;
+}
+
+/** Una página de servicios con el total, para la lista paginada de 100. */
+export async function buscarServicios(filtros: FiltrosServicios, pagina: number) {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const desde = (Math.max(1, pagina) - 1) * SERVICIOS_POR_PAGINA;
+
+  const query = supabase
+    .from("medical_services")
+    .select("*, patients(cedula, nombre1, apellido1), vehicles(placa)", { count: "exact" })
+    .order("fecha_hora_registro", { ascending: false })
+    .order("id", { ascending: false })
+    .range(desde, desde + SERVICIOS_POR_PAGINA - 1);
+
+  const { data, count, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile)?.id ?? null);
+  if (error) return { servicios: [], total: 0, error: error.message as string };
+  return { servicios: data ?? [], total: count ?? 0 };
+}
+
+/** Valores reales para los desplegables de cliente y ciudades (distintos, ordenados). */
+export async function getOpcionesFiltroServicios() {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const query = supabase
+    .from("medical_services")
+    .select("cliente, ciudad_origen, ciudad_destino")
+    .order("fecha_hora_registro", { ascending: false })
+    .limit(5000);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile)?.id ?? null);
+  const distintos = (campo: string) =>
+    Array.from(new Set(((data ?? []) as Record<string, string | null>[]).map((r) => r[campo]).filter(Boolean) as string[])).sort(
+      (a, b) => a.localeCompare(b, "es")
+    );
+  return { clientes: distintos("cliente"), origenes: distintos("ciudad_origen"), destinos: distintos("ciudad_destino") };
+}
+
+/** Filas para el Excel, con los mismos filtros de la lista (tope EXPORT_MAX_FILAS). */
+export async function exportarServicios(filtros: FiltrosServicios) {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const filas: Record<string, unknown>[] = [];
+  const LOTE = 1000; // PostgREST devuelve máximo 1000 filas por consulta
+  for (let desde = 0; desde < EXPORT_MAX_FILAS; desde += LOTE) {
+    const query = supabase
+      .from("medical_services")
+      .select("*, vehicles(placa)")
+      .order("fecha_hora_registro", { ascending: false })
+      .order("id", { ascending: false })
+      .range(desde, desde + LOTE - 1);
+    const { data, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile)?.id ?? null);
+    if (error) return { error: error.message as string };
+    filas.push(...((data ?? []) as Record<string, unknown>[]));
+    if (!data || data.length < LOTE) break;
+  }
+  // Quién sacó datos de servicios (pacientes, diagnósticos) a un archivo y cuántas filas: solo la cuenta, no el contenido.
+  await auditar("EXPORTAR", "servicios", "", `Exportación de servicios (${filas.length} filas${filas.length >= EXPORT_MAX_FILAS ? ", truncada" : ""})`);
+  return {
+    filas: filas.map((s) => ({
+      ...s,
+      movil: (s.vehicles as { placa?: string } | null)?.placa ?? s.movil_placa ?? "",
+      diagnostico: [s.cie_codigo, s.cie_descripcion].filter(Boolean).join(" — "),
+    })),
+    truncado: filas.length >= EXPORT_MAX_FILAS,
+  };
+}
+
+/**
+ * Servicios que necesitan aviso sonoro: PROGRAMADO que empieza en la próxima
+ * hora, y PROGRAMADO/CURSO que ya pasaron su hora (candidatos a estancado).
+ * Independiente de la página y los filtros, como en SISRES.
+ */
+export async function getServiciosParaAvisos() {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const en60 = new Date(Date.now() + 60 * 60_000).toISOString();
+  const query = supabase
+    .from("medical_services")
+    .select("id, etapa, nombre_completo, tipo_servicio, fecha_hora_programacion")
+    .in("etapa", ["PROGRAMADO", "CURSO"])
+    .not("fecha_hora_programacion", "is", null)
+    .lte("fecha_hora_programacion", en60)
+    .order("fecha_hora_programacion", { ascending: true })
+    .limit(500);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile)?.id ?? null);
+  return (data ?? []) as {
+    id: number;
+    etapa: string;
+    nombre_completo: string;
+    tipo_servicio: string;
+    fecha_hora_programacion: string;
+  }[];
+}
+
+export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
+  // SISRES pide la etapa como select obligatorio al registrar
+  // (registroServicios.php) — permite loguear directo un servicio que ya
+  // sucedió (ej. FALLIDO, NO EFECTIVO) sin pasarlo primero por PROGRAMADO.
+  const etapa = ETAPAS_SERVICIO.find((e) => e === etapaInicial);
+  if (!etapa) return { error: "Debes seleccionar la etapa del servicio" };
+
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
+  const profile = await getProfile();
+  const fila = aFilaServicio(parsed.data);
 
   const { data, error } = await supabase
     .from("medical_services")
     .insert({
-      ...aFilaServicio(parsed.data),
-      etapa: "PROGRAMADO",
+      ...fila,
+      etapa,
+      operational_center_id: await centroDelServicio(supabase, fila.vehicle_id, profile?.operational_center_id ?? null),
       created_by: userData.user?.id ?? null,
     })
     .select()
     .single();
   if (error) return { error: error.message };
-  await notificarEtapaServicio(supabase, data.id, "PROGRAMADO", data.tipo_servicio, data.patient_id);
+  await notificarEtapaServicio(supabase, data.id, etapa, data.tipo_servicio, data.patient_id);
+  await auditar("INSERTAR", "servicios", data.id, `Servicio creado (${data.tipo_servicio}, etapa ${etapa})`);
   revalidatePath("/servicios");
   return { success: true, data };
 }
@@ -157,9 +341,17 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
+  const fila = aFilaServicio(parsed.data);
+  // Solo el vehículo redefine el centro al editar: sin vehículo se conserva
+  // el que ya tenía, no el de quien edita.
+  const centro = fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
   const { data, error } = await supabase
     .from("medical_services")
-    .update({ ...aFilaServicio(parsed.data), updated_at: new Date().toISOString() })
+    .update({
+      ...fila,
+      ...(centro !== null ? { operational_center_id: centro } : {}),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", idParsed.data)
     .select("id");
   if (error) return { error: error.message };
@@ -170,6 +362,7 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
     // ADMIN/ANALISTA/REGULACION (migración 055).
     return { error: "No tiene permiso para editar este servicio — si ya está FINALIZADO, solo Regulación, Analista o Administrador pueden modificarlo." };
   }
+  await auditar("MODIFICAR", "servicios", idParsed.data, "Servicio actualizado");
   revalidatePath("/servicios");
   return { success: true };
 }
@@ -201,6 +394,7 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
+  await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}`);
   revalidatePath("/servicios");
   return { success: true };
 }
@@ -245,6 +439,7 @@ export async function marcarPasoServicio(
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   if (nueva) await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
+  await auditar("MODIFICAR", "servicios", data[0].id, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`);
   revalidatePath("/servicios");
   revalidatePath("/ovem");
   return { success: true };
@@ -257,19 +452,73 @@ export async function eliminarServicioMedico(id: number) {
   const supabase = createClient();
   const { error } = await supabase.from("medical_services").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "servicios", idParsed.data, "Servicio eliminado");
   revalidatePath("/servicios");
   return { success: true };
+}
+
+/**
+ * Boleta de Salida — equivalente a la columna `imagen` de SISRES
+ * (editarServicio.php: subida real de foto al editar el servicio, ya
+ * existente en producción). Bucket privado (migración 057): se guarda
+ * la ruta, no una URL pública — ver getUrlBoletaSalida() para mostrarla.
+ */
+export async function subirBoletaSalida(servicioId: number, file: File) {
+  await requireRole(ROLES_BOLETA_SALIDA);
+
+  const idParsed = z.number().int().positive().safeParse(servicioId);
+  if (!idParsed.success) return { error: "ID inválido" };
+  if (!BOLETA_TIPOS_PERMITIDOS.includes(file.type)) {
+    return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
+  }
+  if (file.size > BOLETA_TAMANO_MAXIMO) {
+    return { error: "La imagen no puede pesar más de 8MB" };
+  }
+
+  const supabase = createClient();
+  const extension = file.name.split(".").pop() || "jpg";
+  const ruta = `servicio-${idParsed.data}-${Date.now()}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage.from("servicios-boletas").upload(ruta, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (uploadError) return { error: uploadError.message };
+
+  const { error } = await supabase
+    .from("medical_services")
+    .update({ imagen_boleta_salida: ruta, updated_at: new Date().toISOString() })
+    .eq("id", idParsed.data);
+  if (error) return { error: error.message };
+
+  revalidatePath("/servicios");
+  return { success: true, ruta };
+}
+
+export async function getUrlBoletaSalida(ruta: string) {
+  const parsed = z.string().trim().min(1).safeParse(ruta);
+  if (!parsed.success) return null;
+
+  const supabase = createClient();
+  const { data, error } = await supabase.storage.from("servicios-boletas").createSignedUrl(parsed.data, 3600);
+  if (error || !data) return null;
+  return data.signedUrl;
 }
 
 export async function getCatalogoCie(busqueda: string) {
   const parsed = z.string().trim().min(1).max(60).safeParse(busqueda);
   if (!parsed.success) return [];
 
+  // PostgREST lee , ( ) " como sintaxis del filtro .or() — sin quitarlos, el
+  // texto del usuario puede agregar condiciones propias al filtro.
+  const termino = parsed.data.replace(/[,()"*%\\]/g, " ").trim();
+  if (!termino) return [];
+
   const supabase = createClient();
   const { data } = await supabase
     .from("cie10")
     .select("codigo, descripcion")
-    .or(`codigo.ilike.%${parsed.data}%,descripcion.ilike.%${parsed.data}%`)
+    .or(`codigo.ilike.%${termino}%,descripcion.ilike.%${termino}%`)
     .limit(20);
   return data || [];
 }

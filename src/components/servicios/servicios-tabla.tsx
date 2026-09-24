@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,9 +25,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateShort } from "@/lib/utils";
+import { fechaHora24, horasEstancado } from "@/lib/servicios-lista";
+import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
+import { PatientSearchCombobox, nombreCompletoDe } from "@/components/forms/patient-search-combobox";
 import { DateTimeField } from "@/components/forms/date-time-field";
 import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { PRESTADORES_SISRES } from "@/lib/catalogos-sisres";
@@ -42,14 +44,21 @@ import {
   PERIMETRO_OPCIONES,
   PERFIL_FORMULARIO_SERVICIO,
   perfilFormularioServicio,
+  ETAPAS_SERVICIO,
+  MOTIVO_EXTERNO_OPCIONES,
+  MOTIVO_INTERNO_OPCIONES,
+  ESTADO_SERVICIO_OPCIONES,
 } from "@/lib/validations";
 import {
   crearServicioMedico,
   actualizarServicioMedico,
   cambiarEtapaServicio,
+  eliminarServicioMedico,
   getCatalogoCie,
+  subirBoletaSalida,
+  getUrlBoletaSalida,
 } from "@/app/api/actions/servicios-medicos";
-import { buscarPacientePorCedula } from "@/app/api/actions/pacientes";
+import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 
@@ -61,6 +70,7 @@ export interface ServicioRow {
   tipo_servicio: string;
   vehicle_id: string | null;
   movil_placa: string | null;
+  imagen_boleta_salida: string | null;
   etapa: string;
   ciudad_origen: string | null;
   ciudad_destino: string | null;
@@ -93,7 +103,7 @@ const ETAPAS_DESTINO = (etapaActual: string): EtapaServicio[] =>
 // es el mismo TAB SIMPLE, variante de captura duplicada) — pero sigue
 // existiendo en PERFIL_FORMULARIO_SERVICIO (validations.ts) para que los
 // servicios históricos que ya tienen ese valor sigan abriendo bien.
-const TIPOS_SERVICIO = [
+export const TIPOS_SERVICIO = [
   "MEDICINA DOMICILIARIA",
   "TAB SIMPLE",
   "TAB DOBLE",
@@ -103,6 +113,12 @@ const TIPOS_SERVICIO = [
   "ENFERMERIA DOMICILIARIA",
   "TRASLADO AEREO",
 ];
+
+// SISRES no ofrece ENFERMERIA DOMICILIARIA/TELEMEDICINA/TRASLADO AEREO al
+// Regulador (cargo=4) en el formulario de registro — solo al crear
+// (registroServicios.php, $esRegulador). No se aplica al editar un servicio
+// ya existente (editarServicio.php es otro flujo, fuera de este alcance).
+const TIPOS_SERVICIO_REGULACION = ["MEDICINA DOMICILIARIA", "TAB SIMPLE", "TAB DOBLE", "TAM SIMPLE", "TAM DOBLE"];
 
 type Perfil = keyof typeof PERFIL_FORMULARIO_SERVICIO;
 type CampoDef = { name: keyof MedicalServiceFormData; label: string; type?: string; placeholder?: string; perfiles?: Perfil[] };
@@ -125,10 +141,6 @@ const CAMPOS_PROGRAMACION: CampoDef[] = [
   { name: "autorizacion", label: "Autorización", placeholder: "Número de autorización" },
   { name: "asesor", label: "Asesor quien solicita", placeholder: "Nombre del asesor", perfiles: ["TRASLADO"] },
   { name: "soporte", label: "Soporte", placeholder: "Oxígeno, ventilación, máscaras, control de líquidos…", perfiles: ["TRASLADO"] },
-  { name: "condicion", label: "Condición", placeholder: "Condición del paciente", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "medio_asignacion", label: "Medio de asignación", placeholder: "Cómo llegó la solicitud (llamada, WhatsApp, correo…)", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "poliza", label: "Póliza", placeholder: "Número de póliza", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
-  { name: "motivo_consulta", label: "Motivo de consulta", placeholder: "Motivo de la consulta de telemedicina", perfiles: ["TELEMEDICINA"] },
 ];
 
 // Ciudad origen/destino ya no están acá: tienen catálogo real en cascada
@@ -150,21 +162,12 @@ const CAMPOS_RUTA: CampoDef[] = [
 // Proveedor ya no está acá: mismo catálogo real que Prestador
 // (PRESTADORES_SISRES — en SISRES es la misma tabla `proveedores` para
 // ambos campos), se renderiza aparte, más abajo.
+// usuario_recibe/usuario_despacha (select de Reguladores reales),
+// motivo_externo/motivo_interno (catálogos fijos) y estado_servicio
+// (ACTIVO/INACTIVO) ya no están acá: SISRES los resuelve con <select>, no
+// texto libre — se renderizan aparte, más abajo.
 const CAMPOS_CIERRE: CampoDef[] = [
-  { name: "usuario_recibe", label: "Usuario que recibe", placeholder: "Quién recibe el servicio" },
-  { name: "usuario_despacha", label: "Usuario que despacha", placeholder: "Quién despacha el servicio" },
-  { name: "motivo_externo", label: "Motivo externo", placeholder: "Motivo externo (si aplica)" },
-  { name: "motivo_interno", label: "Motivo interno", placeholder: "Motivo interno (si aplica)" },
-  { name: "estado_servicio", label: "Estado del servicio", placeholder: "Estado del servicio" },
   { name: "ciudad_registro", label: "Ciudad de registro", placeholder: "Ciudad donde se registra el servicio" },
-  { name: "turno_facturacion", label: "Turno de facturación", placeholder: "Turno en que se factura el servicio", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "deducible", label: "Deducible", placeholder: "Valor o porcentaje del deducible", perfiles: ["MEDICINA_DOMICILIARIA", "TELEMEDICINA"] },
-  { name: "incapa", label: "INCAPA", placeholder: "Información INCAPA", perfiles: ["MEDICINA_DOMICILIARIA"] },
-  { name: "situacion", label: "Situación", placeholder: "Situación del servicio", perfiles: ["TRASLADO", "TELEMEDICINA"] },
-  { name: "tiempo_a_restar", label: "Tiempo a restar (min)", type: "number", placeholder: "0", perfiles: ["TRASLADO"] },
-  { name: "funcionario_aseguradora", label: "Funcionario aseguradora", placeholder: "Nombre del funcionario", perfiles: ["TELEMEDICINA"] },
-  { name: "codigo_telemedicina", label: "Código", placeholder: "Código de telemedicina", perfiles: ["TELEMEDICINA"] },
-  { name: "correo_electronico", label: "Correo electrónico", type: "email", placeholder: "correo@ejemplo.com", perfiles: ["TELEMEDICINA"] },
 ];
 
 type PersonaTripulacion = { user_id: string; nombre_completo: string | null; email: string | null };
@@ -176,6 +179,10 @@ interface ServiciosTablaProps {
   puedeEditar: boolean;
   /** Médicos activos disponibles para asignar directo a un servicio (sin vehículo/OVEM) — típico de Medicina Domiciliaria con prestador externo. */
   medicosDisponibles: PersonaTripulacion[];
+  /** Reguladores activos — reemplaza el texto libre de "usuario que recibe/despacha" por un select real (SISRES: usuarios cargo=4). */
+  reguladoresDisponibles: PersonaTripulacion[];
+  /** Nombre de quien ve el formulario — precarga "recibe/despacha" igual que la sesión en SISRES. */
+  viewerNombreCompleto?: string | null;
   /** Tripulación activa hoy por vehículo (armada en Regulación) — para autocompletar al elegir móvil. */
   tripulacionPorVehiculo: Record<
     string,
@@ -212,19 +219,26 @@ export function ServiciosTabla({
   clientes,
   puedeEditar,
   medicosDisponibles,
+  reguladoresDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
   viewerRole,
+  viewerNombreCompleto,
 }: ServiciosTablaProps) {
   const router = useRouter();
-  const [busqueda, setBusqueda] = useState("");
-  const [filtroEtapa, setFiltroEtapa] = useState<string>("TODAS");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<ServicioRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [cedulaBusqueda, setCedulaBusqueda] = useState("");
+  // Etapa inicial — solo aplica al crear (SISRES: registroServicios.php la
+  // pide como select obligatorio; editarServicio.php es otro flujo, la
+  // etapa de un servicio existente se cambia desde "Cambiar etapa" en la
+  // tabla). Se maneja fuera del schema de react-hook-form/zod a propósito:
+  // así nunca se cuela en el payload de actualizarServicioMedico y pisa la
+  // etapa real de un servicio ya existente.
+  const [etapaInicial, setEtapaInicial] = useState<string>("");
 
   const { register, handleSubmit, reset, setValue, watch, formState } =
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
@@ -248,6 +262,17 @@ export function ServiciosTabla({
   const proveedorSeleccionado = watch("proveedor");
   const ciudadOrigenSeleccionada = watch("ciudad_origen");
   const ciudadDestinoSeleccionada = watch("ciudad_destino");
+  const usuarioRecibeSeleccionado = watch("usuario_recibe");
+  const usuarioDespachaSeleccionado = watch("usuario_despacha");
+  const motivoExternoSeleccionado = watch("motivo_externo");
+  const motivoInternoSeleccionado = watch("motivo_interno");
+  const estadoServicioSeleccionado = watch("estado_servicio");
+
+  // SISRES oculta 3 tipos de servicio para el Regulador al registrar
+  // (registroServicios.php, $esRegulador) — solo al crear, no al editar uno
+  // ya existente con un tipo fuera de esa lista.
+  const esRegulador = viewerRole === "REGULACION";
+  const tiposServicioDisponibles = !editando && esRegulador ? TIPOS_SERVICIO_REGULACION : TIPOS_SERVICIO;
 
   // Perfil del formulario según el tipo de servicio — define qué secciones
   // se muestran (Regulación, QA 2026-07-22): Medicina/Enfermería
@@ -309,36 +334,14 @@ export function ServiciosTabla({
 
   const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionPorVehiculo[vehiculoSeleccionado] : undefined;
 
-  const filtrados = useMemo(() => {
-    let lista = servicios;
-    if (filtroEtapa !== "TODAS") lista = lista.filter((s) => s.etapa === filtroEtapa);
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return lista;
-    return lista.filter(
-      (s) =>
-        s.nombre_completo.toLowerCase().includes(q) ||
-        (s.patients?.cedula ?? "").toLowerCase().includes(q) ||
-        (s.vehicles?.placa ?? s.movil_placa ?? "").toLowerCase().includes(q) ||
-        s.tipo_servicio.toLowerCase().includes(q) ||
-        (s.cliente ?? "").toLowerCase().includes(q)
-    );
-  }, [servicios, busqueda, filtroEtapa]);
+  // Los filtros se aplican en el servidor (ServiciosFiltros): la tabla muestra la página tal cual.
+  const filtrados = servicios;
 
-  const buscarPaciente = async () => {
-    if (!cedulaBusqueda.trim()) return;
-    const paciente = await buscarPacientePorCedula(cedulaBusqueda.trim());
-    if (!paciente) {
-      setError("Paciente no encontrado — regístralo primero en el módulo Pacientes");
-      return;
-    }
+  const seleccionarPaciente = (paciente: PacienteTypeahead) => {
     setError(null);
     setValue("patient_id", paciente.id);
-    setValue(
-      "nombre_completo",
-      [paciente.nombre1, paciente.nombre2, paciente.apellido1, paciente.apellido2]
-        .filter(Boolean)
-        .join(" ")
-    );
+    setValue("nombre_completo", nombreCompletoDe(paciente));
+    setCedulaBusqueda(`${paciente.cedula} — ${nombreCompletoDe(paciente)}`);
   };
 
   const abrirNuevo = () => {
@@ -346,6 +349,7 @@ export function ServiciosTabla({
     setError(null);
     setCedulaBusqueda("");
     setCieLabel("");
+    setEtapaInicial("");
     // Ciudad de origen por defecto = ciudad del usuario logueado (Fase D).
     // Ahora que ciudad depende de un departamento elegido, hace falta
     // encontrar a qué departamento pertenece esa ciudad para dejar los dos
@@ -356,6 +360,17 @@ export function ServiciosTabla({
       tipo_servicio: "",
       departamento_origen: ubicacionDefault?.departamento ?? "",
       ciudad_origen: ubicacionDefault?.ciudad ?? "",
+      // SISRES precarga "Recibe" con la sesión y preselecciona "Despacha"
+      // al mismo usuario cuando es Regulador (registroServicios.php,
+      // $esRegulador) — y fuerza método de pago a N/A porque el Regulador
+      // no lo decide en este punto del flujo.
+      ...(esRegulador
+        ? {
+            usuario_recibe: viewerNombreCompleto ?? "",
+            usuario_despacha: viewerNombreCompleto ?? "",
+            metodo_pago: "N/A",
+          }
+        : {}),
     } as MedicalServiceFormData);
     setDialogOpen(true);
   };
@@ -363,10 +378,12 @@ export function ServiciosTabla({
   const abrirEdicion = (s: ServicioRow) => {
     setEditando(s);
     setError(null);
-    setCedulaBusqueda(s.patients?.cedula ?? "");
+    setCedulaBusqueda(s.patients?.cedula ? `${s.patients.cedula} — ${s.nombre_completo}` : "");
     setCieLabel("");
+    setEtapaInicial("");
     const str = (k: string) => (s[k] ? String(s[k]) : "");
-    const fecha = (k: string) => (s[k] ? String(s[k]).slice(0, 16) : "");
+    // La base guarda en UTC: el formulario se precarga en hora de Colombia.
+    const fecha = (k: string) => aTextoLocalColombia(s[k] as string | null);
     reset({
       patient_id: s.patient_id ?? undefined,
       nombre_completo: s.nombre_completo,
@@ -415,28 +432,31 @@ export function ServiciosTabla({
       motivo_interno: str("motivo_interno"),
       estado_servicio: str("estado_servicio"),
       ciudad_registro: str("ciudad_registro"),
-      condicion: str("condicion"),
-      medio_asignacion: str("medio_asignacion"),
-      turno_facturacion: str("turno_facturacion"),
-      deducible: str("deducible"),
-      incapa: str("incapa"),
-      situacion: str("situacion"),
-      tiempo_a_restar: (s.tiempo_a_restar as number | null) ?? undefined,
-      poliza: str("poliza"),
-      funcionario_aseguradora: str("funcionario_aseguradora"),
-      codigo_telemedicina: str("codigo_telemedicina"),
-      correo_electronico: str("correo_electronico"),
-      motivo_consulta: str("motivo_consulta"),
     });
     setDialogOpen(true);
   };
 
+  // Sin esto, un campo inválido deja el botón "Guardar" sin efecto visible:
+  // el usuario cree que el sistema no responde.
+  const onInvalid = (errores: Record<string, { message?: string }>) => {
+    const primero = Object.entries(errores)[0];
+    setError(
+      primero
+        ? `Revisa el formulario: ${primero[1]?.message ?? "campo inválido"} (${primero[0].replaceAll("_", " ")})`
+        : "Revisa el formulario: hay campos sin completar."
+    );
+  };
+
   const onSubmit = async (values: MedicalServiceFormData) => {
+    if (!editando && !etapaInicial) {
+      setError("Debes seleccionar la etapa del servicio");
+      return;
+    }
     setGuardando(true);
     setError(null);
     const res = editando
       ? await actualizarServicioMedico(editando.id, values)
-      : await crearServicioMedico(values);
+      : await crearServicioMedico(values, etapaInicial);
     setGuardando(false);
     if (res.error) {
       setError(res.error);
@@ -454,43 +474,64 @@ export function ServiciosTabla({
     else router.refresh();
   };
 
+  // Borrado físico — igual que SISRES (delete.php, tabla=servicios: DELETE
+  // real, no soft delete). RLS de medical_services (migración 054) ya lo
+  // restringe a ADMIN a nivel de base de datos; el botón solo se muestra
+  // acá para ese rol para no ofrecer una acción que el servidor va a
+  // rechazar.
+  const puedeEliminar = viewerRole === "ADMIN";
+  const handleEliminar = async (servicio: ServicioRow) => {
+    if (!confirm(`¿Está seguro que desea eliminar el registro con id ${servicio.id}?`)) return;
+    setBusyId(servicio.id);
+    const res = await eliminarServicioMedico(servicio.id);
+    setBusyId(null);
+    if (res.error) alert(res.error);
+    else router.refresh();
+  };
+
+  // Boleta de Salida — equivalente a la columna `imagen` de SISRES
+  // (editarServicio.php, sección oculta para Médico/Auxiliar). Solo
+  // aplica al editar: SISRES tampoco la ofrece en el registro inicial.
+  const [subiendoBoleta, setSubiendoBoleta] = useState(false);
+  const handleSubirBoleta = async (file: File) => {
+    if (!editando) return;
+    setSubiendoBoleta(true);
+    const res = await subirBoletaSalida(editando.id, file);
+    setSubiendoBoleta(false);
+    if (res.error) {
+      alert(res.error);
+      return;
+    }
+    setEditando({ ...editando, imagen_boleta_salida: res.ruta ?? null });
+    router.refresh();
+  };
+  const handleVerBoleta = async () => {
+    if (!editando?.imagen_boleta_salida) return;
+    const url = await getUrlBoletaSalida(editando.imagen_boleta_salida);
+    if (url) window.open(url, "_blank");
+    else alert("No se pudo generar el enlace de la imagen");
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Input
-            placeholder="Buscar por paciente, placa, tipo o cliente…"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="sm:w-72"
-          />
-          <Select value={filtroEtapa} onValueChange={setFiltroEtapa}>
-            <SelectTrigger className="sm:w-44">
-              <SelectValue placeholder="Etapa" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="TODAS">Todas las etapas</SelectItem>
-              {Object.keys(ETAPA_BADGE).map((etapa) => (
-                <SelectItem key={etapa} value={etapa}>
-                  {etapa}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {puedeEditar && (
+        <div className="flex justify-end">
+          <Button onClick={abrirNuevo}>+ Registrar</Button>
         </div>
-        {puedeEditar && <Button onClick={abrirNuevo}>Nuevo servicio</Button>}
-      </div>
+      )}
 
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Registro</TableHead>
+              <TableHead>ID</TableHead>
+              <TableHead>Etapa</TableHead>
               <TableHead>Paciente</TableHead>
+              <TableHead>Registro</TableHead>
+              <TableHead>Programado</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Móvil</TableHead>
               <TableHead>Origen → Destino</TableHead>
-              <TableHead>Etapa</TableHead>
               {puedeCambiarEtapaLibre && <TableHead>Cambiar etapa</TableHead>}
               {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
@@ -499,19 +540,44 @@ export function ServiciosTabla({
             {filtrados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6 + (puedeCambiarEtapaLibre ? 1 : 0) + (puedeEditar ? 1 : 0)}
+                  colSpan={8 + (puedeCambiarEtapaLibre ? 1 : 0) + (puedeEditar ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin servicios registrados
                 </TableCell>
               </TableRow>
             )}
-            {filtrados.map((s) => (
+            {filtrados.map((s) => {
+              const estancado = horasEstancado({
+                etapa: s.etapa,
+                fecha_hora_programacion: (s.fecha_hora_programacion as string | null) ?? null,
+              });
+              return (
               <TableRow key={s.id}>
-                <TableCell>{formatDateShort(s.fecha_hora_registro)}</TableCell>
+                <TableCell className="tabular-nums text-muted-foreground">{s.id}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa}</Badge>
+                    {estancado !== null && (
+                      <Badge
+                        variant="outline"
+                        className="border-transparent bg-foreground text-background"
+                        title={`Lleva ${estancado} h en ${s.etapa} sin avanzar`}
+                      >
+                        ⏰ {estancado}h
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <div className="font-medium">{s.nombre_completo}</div>
-                  <div className="text-xs text-muted-foreground">{s.patients?.cedula ?? "sin enlace"}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {s.patients?.cedula ?? (s.cedula_paciente as string | null) ?? "sin enlace"}
+                  </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">{fechaHora24(s.fecha_hora_registro)}</TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">
+                  {fechaHora24(s.fecha_hora_programacion as string | null) || "—"}
                 </TableCell>
                 <TableCell className="max-w-40">
                   <p className="truncate text-sm">{s.tipo_servicio}</p>
@@ -519,9 +585,6 @@ export function ServiciosTabla({
                 <TableCell>{s.vehicles?.placa ?? s.movil_placa ?? "—"}</TableCell>
                 <TableCell className="text-sm">
                   {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa}</Badge>
                 </TableCell>
                 {puedeCambiarEtapaLibre && (
                   <TableCell className="min-w-[10rem]">
@@ -544,7 +607,7 @@ export function ServiciosTabla({
                   </TableCell>
                 )}
                 {puedeEditar && (
-                  <TableCell className="text-right">
+                  <TableCell className="text-right space-x-2">
                     {puedeEditarServicio(s) ? (
                       <Button variant="outline" size="sm" onClick={() => abrirEdicion(s)}>
                         Editar
@@ -552,10 +615,22 @@ export function ServiciosTabla({
                     ) : (
                       <span className="text-xs text-muted-foreground">Finalizado — bloqueado</span>
                     )}
+                    {puedeEliminar && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        disabled={busyId === s.id}
+                        onClick={() => handleEliminar(s)}
+                      >
+                        Eliminar
+                      </Button>
+                    )}
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -576,11 +651,11 @@ export function ServiciosTabla({
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
             <section className="space-y-1 rounded-md border bg-muted/30 p-3">
               <Label>Tipo de servicio *</Label>
               <CatalogCombobox
-                options={TIPOS_SERVICIO}
+                options={tiposServicioDisponibles}
                 value={tipoSeleccionado ?? ""}
                 onChange={(v) => setValue("tipo_servicio", v, { shouldValidate: true })}
                 placeholder="Escribe para buscar el tipo…"
@@ -592,22 +667,41 @@ export function ServiciosTabla({
               </p>
             </section>
 
+            {!editando && (
+              <section className="space-y-1">
+                <Label>Etapa del servicio *</Label>
+                <Select value={etapaInicial} onValueChange={setEtapaInicial}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ETAPAS_SERVICIO.map((e) => (
+                      <SelectItem key={e} value={e}>
+                        {e}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Permite registrar directamente un servicio que ya sucedió (ej. FALLIDO, NO
+                  EFECTIVO) sin tener que pasarlo primero por PROGRAMADO.
+                </p>
+              </section>
+            )}
+
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground">Paciente</h3>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1 sm:col-span-1">
-                  <Label>Documento</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={cedulaBusqueda}
-                      onChange={(e) => setCedulaBusqueda(e.target.value)}
-                      placeholder="Cédula"
-                      disabled={soloLecturaLogistica}
-                    />
-                    <Button type="button" variant="outline" onClick={buscarPaciente} disabled={soloLecturaLogistica}>
-                      Buscar
-                    </Button>
-                  </div>
+                  <Label>Buscar paciente</Label>
+                  <PatientSearchCombobox
+                    valueLabel={cedulaBusqueda || undefined}
+                    onSelect={seleccionarPaciente}
+                    disabled={soloLecturaLogistica}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Por cédula o nombre — si no aparece, es un paciente nuevo: escribe el nombre a la derecha.
+                  </p>
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor="nombre_completo">Nombre completo *</Label>
@@ -905,28 +999,34 @@ export function ServiciosTabla({
                     step="0.01"
                     placeholder="0"
                     disabled={campoBloqueado("valor_servicio")}
-                    {...register("valor_servicio", { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                    {...register("valor_servicio", {
+                      setValueAs: (v) => (v === "" || v === null || Number.isNaN(Number(v)) ? undefined : Number(v)),
+                    })}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label>Método de pago</Label>
-                  <Select
-                    value={metodoPagoSeleccionado ?? ""}
-                    onValueChange={(v) => setValue("metodo_pago", v)}
-                    disabled={campoBloqueado("metodo_pago")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {METODO_PAGO_OPCIONES.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* SISRES fija método de pago en "N/A" (oculto) para el Regulador al
+                    registrar — no lo decide en este punto del flujo. */}
+                {!(esRegulador && !editando) && (
+                  <div className="space-y-1">
+                    <Label>Método de pago</Label>
+                    <Select
+                      value={metodoPagoSeleccionado ?? ""}
+                      onValueChange={(v) => setValue("metodo_pago", v)}
+                      disabled={campoBloqueado("metodo_pago")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {METODO_PAGO_OPCIONES.map((m) => (
+                          <SelectItem key={m} value={m}>
+                            {m}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label>Cliente / aseguradora</Label>
                   <CatalogCombobox
@@ -962,6 +1062,101 @@ export function ServiciosTabla({
                     />
                   </div>
                 ))}
+                <div className="space-y-1">
+                  <Label>Usuario que recibe</Label>
+                  <Select
+                    value={usuarioRecibeSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("usuario_recibe", v)}
+                    disabled={campoBloqueado("usuario_recibe")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reguladoresDisponibles.map((r) => (
+                        <SelectItem key={r.user_id} value={nombrePersona(r) ?? r.user_id}>
+                          {nombrePersona(r)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Usuario que despacha</Label>
+                  <Select
+                    value={usuarioDespachaSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("usuario_despacha", v)}
+                    disabled={campoBloqueado("usuario_despacha")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reguladoresDisponibles.map((r) => (
+                        <SelectItem key={r.user_id} value={nombrePersona(r) ?? r.user_id}>
+                          {nombrePersona(r)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Motivo externo</Label>
+                  <Select
+                    value={motivoExternoSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("motivo_externo", v)}
+                    disabled={campoBloqueado("motivo_externo")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MOTIVO_EXTERNO_OPCIONES.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Motivo interno</Label>
+                  <Select
+                    value={motivoInternoSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("motivo_interno", v)}
+                    disabled={campoBloqueado("motivo_interno")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MOTIVO_INTERNO_OPCIONES.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Estado del servicio</Label>
+                  <Select
+                    value={estadoServicioSeleccionado ?? ""}
+                    onValueChange={(v) => setValue("estado_servicio", v)}
+                    disabled={campoBloqueado("estado_servicio")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ESTADO_SERVICIO_OPCIONES.map((e) => (
+                        <SelectItem key={e.value} value={e.value}>
+                          {e.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="novedad_servicio">Novedad del servicio</Label>
@@ -989,6 +1184,34 @@ export function ServiciosTabla({
                 </p>
               )}
             </section>
+
+            {editando && !esMedicoAux && (
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground">Boleta de salida</h3>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={subiendoBoleta}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleSubirBoleta(file);
+                      e.target.value = "";
+                    }}
+                    className="max-w-xs"
+                  />
+                  {subiendoBoleta && <span className="text-xs text-muted-foreground">Subiendo…</span>}
+                  {editando.imagen_boleta_salida && (
+                    <Button type="button" variant="outline" size="sm" onClick={handleVerBoleta}>
+                      Ver / descargar
+                    </Button>
+                  )}
+                </div>
+                {!editando.imagen_boleta_salida && (
+                  <p className="text-xs text-muted-foreground">Al servicio le hace falta la boleta de salida.</p>
+                )}
+              </section>
+            )}
 
             {(error || Object.values(formState.errors)[0]?.message) && (
               <p className="text-sm text-destructive">

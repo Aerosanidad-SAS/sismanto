@@ -70,6 +70,37 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "054_revertir_delete_analista.sql",             file: "scripts/migrations/054_revertir_delete_analista.sql" },
   { name: "055_candado_finalizado_auditoria.sql",         file: "scripts/migrations/055_candado_finalizado_auditoria.sql" },
   { name: "056_company_settings_branding.sql",            file: "scripts/migrations/056_company_settings_branding.sql" },
+  { name: "057_paridad_estricta_servicios_sisres.sql",    file: "scripts/migrations/057_paridad_estricta_servicios_sisres.sql" },
+  { name: "058_etl_identidad_origen.sql",                 file: "scripts/migrations/058_etl_identidad_origen.sql" },
+  { name: "059_centro_operativo_servicios.sql",          file: "scripts/migrations/059_centro_operativo_servicios.sql" },
+  { name: "060_ovem_turno.sql",                          file: "scripts/migrations/060_ovem_turno.sql" },
+  { name: "061_dotacion_auxiliares.sql",                 file: "scripts/migrations/061_dotacion_auxiliares.sql" },
+  // 062_dotacion_catalogo.sql: se registra cuando esté la lista real de dotación.
+  { name: "063_servicios_lista_regulacion.sql",          file: "scripts/migrations/063_servicios_lista_regulacion.sql" },
+  { name: "064_notificaciones_vencimientos.sql",         file: "scripts/migrations/064_notificaciones_vencimientos.sql" },
+  { name: "068_valoraciones_activo.sql",                   file: "scripts/migrations/068_valoraciones_activo.sql" },
+  { name: "069_aeropuertos_aerolineas.sql",                file: "scripts/migrations/069_aeropuertos_aerolineas.sql" },
+  { name: "075_valoraciones_correo.sql",                   file: "scripts/migrations/075_valoraciones_correo.sql" },
+  { name: "070_formatos_ti_acta_entrega.sql",              file: "scripts/migrations/070_formatos_ti_acta_entrega.sql" },
+  { name: "071_formatos_ti_diagnostico.sql",               file: "scripts/migrations/071_formatos_ti_diagnostico.sql" },
+  { name: "072_formatos_ti_baja.sql",                      file: "scripts/migrations/072_formatos_ti_baja.sql" },
+  { name: "073_formatos_ti_prestamo.sql",                  file: "scripts/migrations/073_formatos_ti_prestamo.sql" },
+  { name: "074_formatos_ti_firma_remota.sql",              file: "scripts/migrations/074_formatos_ti_firma_remota.sql" },
+  { name: "065_biomedico_vencimiento_parche.sql",        file: "scripts/migrations/065_biomedico_vencimiento_parche.sql" },
+  { name: "066_biomedical_alerts_log.sql",               file: "scripts/migrations/066_biomedical_alerts_log.sql" },
+  { name: "067_biomedical_especificaciones_100.sql",     file: "scripts/migrations/067_biomedical_especificaciones_100.sql" },
+  { name: "065_tickets_soporte.sql",                     file: "scripts/migrations/065_tickets_soporte.sql" },
+  { name: "066_tickets_gestion.sql",                     file: "scripts/migrations/066_tickets_gestion.sql" },
+  { name: "067_tickets_config_indicadores.sql",          file: "scripts/migrations/067_tickets_config_indicadores.sql" },
+  { name: "078_campanas_pausa_cancelar.sql",               file: "scripts/migrations/078_campanas_pausa_cancelar.sql" },
+  { name: "080_campanas_media.sql",                        file: "scripts/migrations/080_campanas_media.sql" },
+  { name: "079_whatsapp_entrega_lectura.sql",              file: "scripts/migrations/079_whatsapp_entrega_lectura.sql" },
+  { name: "077_audit_log.sql",                             file: "scripts/migrations/077_audit_log.sql" },
+  { name: "081_audit_log_origen.sql",                     file: "scripts/migrations/081_audit_log_origen.sql" },
+  { name: "082_audit_log_exportar.sql",                   file: "scripts/migrations/082_audit_log_exportar.sql" },
+  { name: "076_roles_tecnico_aeropuerto.sql",              file: "scripts/migrations/076_roles_tecnico_aeropuerto.sql" },
+  { name: "080_captacion_aeroportuaria.sql",             file: "scripts/migrations/080_captacion_aeroportuaria.sql" },
+  { name: "081_sispro_catalogos.sql",                    file: "scripts/migrations/081_sispro_catalogos.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
@@ -188,7 +219,7 @@ Cómo obtenerla (Supabase):
 
   const client = new pg.Client({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
+    ssl: process.env.DATABASE_SSL === "off" ? false : { rejectUnauthorized: false },
   });
 
   try {

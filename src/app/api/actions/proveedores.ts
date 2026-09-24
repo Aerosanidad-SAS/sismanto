@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { SupplierFormData } from "@/lib/validations";
 import { supplierSchema } from "@/lib/validations";
@@ -45,6 +46,7 @@ export async function crearProveedor(formData: SupplierFormData) {
     .select()
     .single();
   if (error) return { error: error.message };
+  await auditar("INSERTAR", "proveedores", "", "Proveedor creado");
   revalidatePath("/configuracion");
   return { success: true, data };
 }
@@ -70,6 +72,7 @@ export async function actualizarProveedor(id: number, formData: SupplierFormData
     })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "proveedores", idParsed.data, "Proveedor actualizado");
   revalidatePath("/configuracion");
   return { success: true };
 }
@@ -85,6 +88,7 @@ export async function eliminarProveedor(id: number) {
     .update({ activo: false })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "proveedores", idParsed.data, "Proveedor desactivado");
   revalidatePath("/configuracion");
   return { success: true };
 }

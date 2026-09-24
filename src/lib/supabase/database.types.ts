@@ -9,6 +9,66 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+type AuditLogRow = {
+  id: number; at: string; user_id: string | null; user_label: string; role: string; action: string;
+  entity: string; entity_id: string; detail: string; ip: string
+}
+
+// Formatos TI (migración 070): las columnas de firma llevan ruta+hash; `numero_orden` es generada por la base.
+type TiActaEntregaRow = {
+  id: number; numero_orden: string; tipo_equipo: string;
+  func_nombre: string; func_cedula: string; func_cargo: string; func_sede: string; func_correo: string;
+  equipo_referencia: string; equipo_marca: string; equipo_modelo: string; equipo_placa: string;
+  equipo_imei: string; equipo_sim: string; equipo_activo: string; equipo_tarjeta_sd: string; equipo_operador: string;
+  checklist: Json; fecha_entrega: string; lugar_entrega: string;
+  entrega_nombre: string; firma_entrega_ruta: string; firma_entrega_hash: string;
+  recibe_nombre: string; firma_recibe_ruta: string; firma_recibe_hash: string;
+  fecha_devolucion: string | null; lugar_devolucion: string | null;
+  devolucion_entrega_nombre: string | null; firma_devolucion_entrega_ruta: string | null; firma_devolucion_entrega_hash: string | null;
+  devolucion_recibe_nombre: string | null; firma_devolucion_recibe_ruta: string | null; firma_devolucion_recibe_hash: string | null;
+  observaciones: string; firmas_png: Json; sisres_id: number | null;
+  created_by: string | null; created_at: string; updated_at: string
+}
+
+type TiDiagnosticoRow = {
+  id: number; numero_orden: string; fecha_diagnostico: string; equipo: string; marca: string; modelo: string;
+  usuario_equipo: string; serial: string; ubicacion: string; responsable_equipo: string; fecha_orden: string | null;
+  sede: string; placa: string; codigo_institucional: string; tipo_mtto: string;
+  diagnostico: Json; descripcion_falla: string; checklist: Json;
+  equipo_apto_uso: boolean; equipo_averiado: boolean; requirio_reparacion: boolean; partes_buen_estado: boolean;
+  observaciones: string; realizo_nombre: string; realizo_cargo: string; firma_realizo_ruta: string; firma_realizo_hash: string;
+  reviso_nombre: string; reviso_cargo: string; firma_reviso_ruta: string; firma_reviso_hash: string;
+  firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+type TiDiagnosticoRepuestoRow = { id: number; diagnostico_id: number; repuesto: string; referencia_serial: string; cantidad: number }
+
+type TiBajaEquipoRow = {
+  id: number; numero_orden: string; tipo_equipo: string;
+  fecha_ingreso_reporte: string | null; numero_inventario: string | null; sede: string | null; ubicacion_sanidad: string | null;
+  mayor_dos_anios: boolean; nombre_equipo: string; marca: string; modelo: string; serie: string;
+  causa_baja: string; causa_baja_detalle: string; concepto_tecnico_radicado: string; proveedor_garantia: string;
+  denuncio: string; costo_historico: string; fecha_compra: string | null;
+  telecom_tipo: string; telecom_marca: string; telecom_modelo: string; telecom_imei: string; telecom_operador: string;
+  accesorios: Json; observaciones: string; responsable_nombre: string; firma_responsable_ruta: string; firma_responsable_hash: string;
+  firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+
+type TiPrestamoEquipoRow = {
+  id: number; numero_orden: string; fecha_entrega: string; equipo_descripcion: string; equipo_placa: string; equipo_incluye: string;
+  usuario_recibe_nombre: string; usuario_recibe_cargo: string; firma_usuario_recibe_ruta: string; firma_usuario_recibe_hash: string;
+  func_entrega_nombre: string; func_entrega_cargo: string; firma_func_entrega_ruta: string; firma_func_entrega_hash: string;
+  fecha_devolucion: string | null; gestion_recibe_nombre: string | null; gestion_recibe_cargo: string | null;
+  firma_gestion_recibe_ruta: string | null; firma_gestion_recibe_hash: string | null;
+  usuario_entrega_dev_nombre: string | null; usuario_entrega_dev_cargo: string | null;
+  firma_usuario_entrega_dev_ruta: string | null; firma_usuario_entrega_dev_hash: string | null;
+  observaciones: string; firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+
+type TiFirmaTokenRow = {
+  id: number; tabla: string; registro_id: number; campo_firma: string; token_hash: string; nombre_firmante: string;
+  correo_destino: string; usado: boolean; expira_en: string; ip_firmante: string | null; created_at: string; firmado_en: string | null
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -1148,9 +1208,9 @@ export type Database = {
         Relationships: []
       }
       medical_services: {
-        Row: { id: number; patient_id: number | null; nombre_completo: string; fecha_hora_registro: string; tipo_servicio: string; vehicle_id: string | null; movil_placa: string | null; ovem_user_id: string | null; medico_user_id: string | null; auxiliar_user_id: string | null; fecha_hora_inicio_desplazamiento: string | null; fecha_hora_programacion: string | null; oportunidad_atencion: number | null; turno_programacion: string | null; autorizacion: string | null; asesor: string | null; prestador: string | null; cie_codigo: string | null; requiere_aislamiento: string | null; soporte: string | null; departamento_origen: string | null; ciudad_origen: string | null; departamento_destino: string | null; ciudad_destino: string | null; perimetro: string | null; direccion_origen: string | null; fecha_hora_llegada_origen: string | null; fecha_hora_salida_origen: string | null; tiempo_total_origen: number | null; direccion_intermedia: string | null; fecha_hora_llegada_intermedia: string | null; fecha_hora_salida_intermedia: string | null; tiempo_espera_intermedia: number | null; direccion_destino: string | null; fecha_hora_llegada_destino: string | null; fecha_hora_salida_destino: string | null; tiempo_espera_destino: number | null; tiempo_total: number | null; finalidad_traslado: string | null; acepta_ips: string | null; valor_servicio: number | null; metodo_pago: string | null; cliente: string | null; proveedor: string | null; medico: string | null; auxiliar: string | null; ovem: string | null; usuario_recibe: string | null; usuario_despacha: string | null; novedad_servicio: string | null; observaciones: string | null; motivo_externo: string | null; motivo_interno: string | null; etapa: string; estado_servicio: string | null; ciudad_registro: string | null; condicion: string | null; medio_asignacion: string | null; turno_facturacion: string | null; deducible: string | null; incapa: string | null; situacion: string | null; tiempo_a_restar: number | null; poliza: string | null; funcionario_aseguradora: string | null; codigo_telemedicina: string | null; correo_electronico: string | null; motivo_consulta: string | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: number; patient_id?: number | null; nombre_completo: string; fecha_hora_registro?: string; tipo_servicio: string; vehicle_id?: string | null; movil_placa?: string | null; ovem_user_id?: string | null; medico_user_id?: string | null; auxiliar_user_id?: string | null; fecha_hora_inicio_desplazamiento?: string | null; fecha_hora_programacion?: string | null; oportunidad_atencion?: number | null; turno_programacion?: string | null; autorizacion?: string | null; asesor?: string | null; prestador?: string | null; cie_codigo?: string | null; requiere_aislamiento?: string | null; soporte?: string | null; departamento_origen?: string | null; ciudad_origen?: string | null; departamento_destino?: string | null; ciudad_destino?: string | null; perimetro?: string | null; direccion_origen?: string | null; fecha_hora_llegada_origen?: string | null; fecha_hora_salida_origen?: string | null; tiempo_total_origen?: number | null; direccion_intermedia?: string | null; fecha_hora_llegada_intermedia?: string | null; fecha_hora_salida_intermedia?: string | null; tiempo_espera_intermedia?: number | null; direccion_destino?: string | null; fecha_hora_llegada_destino?: string | null; fecha_hora_salida_destino?: string | null; tiempo_espera_destino?: number | null; tiempo_total?: number | null; finalidad_traslado?: string | null; acepta_ips?: string | null; valor_servicio?: number | null; metodo_pago?: string | null; cliente?: string | null; proveedor?: string | null; medico?: string | null; auxiliar?: string | null; ovem?: string | null; usuario_recibe?: string | null; usuario_despacha?: string | null; novedad_servicio?: string | null; observaciones?: string | null; motivo_externo?: string | null; motivo_interno?: string | null; etapa?: string; estado_servicio?: string | null; ciudad_registro?: string | null; condicion?: string | null; medio_asignacion?: string | null; turno_facturacion?: string | null; deducible?: string | null; incapa?: string | null; situacion?: string | null; tiempo_a_restar?: number | null; poliza?: string | null; funcionario_aseguradora?: string | null; codigo_telemedicina?: string | null; correo_electronico?: string | null; motivo_consulta?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: number; patient_id?: number | null; nombre_completo?: string; fecha_hora_registro?: string; tipo_servicio?: string; vehicle_id?: string | null; movil_placa?: string | null; ovem_user_id?: string | null; medico_user_id?: string | null; auxiliar_user_id?: string | null; fecha_hora_inicio_desplazamiento?: string | null; fecha_hora_programacion?: string | null; oportunidad_atencion?: number | null; turno_programacion?: string | null; autorizacion?: string | null; asesor?: string | null; prestador?: string | null; cie_codigo?: string | null; requiere_aislamiento?: string | null; soporte?: string | null; departamento_origen?: string | null; ciudad_origen?: string | null; departamento_destino?: string | null; ciudad_destino?: string | null; perimetro?: string | null; direccion_origen?: string | null; fecha_hora_llegada_origen?: string | null; fecha_hora_salida_origen?: string | null; tiempo_total_origen?: number | null; direccion_intermedia?: string | null; fecha_hora_llegada_intermedia?: string | null; fecha_hora_salida_intermedia?: string | null; tiempo_espera_intermedia?: number | null; direccion_destino?: string | null; fecha_hora_llegada_destino?: string | null; fecha_hora_salida_destino?: string | null; tiempo_espera_destino?: number | null; tiempo_total?: number | null; finalidad_traslado?: string | null; acepta_ips?: string | null; valor_servicio?: number | null; metodo_pago?: string | null; cliente?: string | null; proveedor?: string | null; medico?: string | null; auxiliar?: string | null; ovem?: string | null; usuario_recibe?: string | null; usuario_despacha?: string | null; novedad_servicio?: string | null; observaciones?: string | null; motivo_externo?: string | null; motivo_interno?: string | null; etapa?: string; estado_servicio?: string | null; ciudad_registro?: string | null; condicion?: string | null; medio_asignacion?: string | null; turno_facturacion?: string | null; deducible?: string | null; incapa?: string | null; situacion?: string | null; tiempo_a_restar?: number | null; poliza?: string | null; funcionario_aseguradora?: string | null; codigo_telemedicina?: string | null; correo_electronico?: string | null; motivo_consulta?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: number; patient_id: number | null; nombre_completo: string; fecha_hora_registro: string; tipo_servicio: string; vehicle_id: string | null; operational_center_id: number | null; movil_placa: string | null; ovem_user_id: string | null; medico_user_id: string | null; auxiliar_user_id: string | null; fecha_hora_inicio_desplazamiento: string | null; fecha_hora_programacion: string | null; oportunidad_atencion: number | null; turno_programacion: string | null; autorizacion: string | null; asesor: string | null; prestador: string | null; cie_codigo: string | null; requiere_aislamiento: string | null; soporte: string | null; departamento_origen: string | null; ciudad_origen: string | null; departamento_destino: string | null; ciudad_destino: string | null; perimetro: string | null; direccion_origen: string | null; fecha_hora_llegada_origen: string | null; fecha_hora_salida_origen: string | null; tiempo_total_origen: number | null; direccion_intermedia: string | null; fecha_hora_llegada_intermedia: string | null; fecha_hora_salida_intermedia: string | null; tiempo_espera_intermedia: number | null; direccion_destino: string | null; fecha_hora_llegada_destino: string | null; fecha_hora_salida_destino: string | null; tiempo_espera_destino: number | null; tiempo_total: number | null; finalidad_traslado: string | null; acepta_ips: string | null; valor_servicio: number | null; metodo_pago: string | null; cliente: string | null; proveedor: string | null; medico: string | null; auxiliar: string | null; ovem: string | null; usuario_recibe: string | null; usuario_despacha: string | null; novedad_servicio: string | null; observaciones: string | null; motivo_externo: string | null; motivo_interno: string | null; etapa: string; estado_servicio: string | null; ciudad_registro: string | null; imagen_boleta_salida: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; patient_id?: number | null; nombre_completo: string; fecha_hora_registro?: string; tipo_servicio: string; vehicle_id?: string | null; operational_center_id?: number | null; movil_placa?: string | null; ovem_user_id?: string | null; medico_user_id?: string | null; auxiliar_user_id?: string | null; fecha_hora_inicio_desplazamiento?: string | null; fecha_hora_programacion?: string | null; oportunidad_atencion?: number | null; turno_programacion?: string | null; autorizacion?: string | null; asesor?: string | null; prestador?: string | null; cie_codigo?: string | null; requiere_aislamiento?: string | null; soporte?: string | null; departamento_origen?: string | null; ciudad_origen?: string | null; departamento_destino?: string | null; ciudad_destino?: string | null; perimetro?: string | null; direccion_origen?: string | null; fecha_hora_llegada_origen?: string | null; fecha_hora_salida_origen?: string | null; tiempo_total_origen?: number | null; direccion_intermedia?: string | null; fecha_hora_llegada_intermedia?: string | null; fecha_hora_salida_intermedia?: string | null; tiempo_espera_intermedia?: number | null; direccion_destino?: string | null; fecha_hora_llegada_destino?: string | null; fecha_hora_salida_destino?: string | null; tiempo_espera_destino?: number | null; tiempo_total?: number | null; finalidad_traslado?: string | null; acepta_ips?: string | null; valor_servicio?: number | null; metodo_pago?: string | null; cliente?: string | null; proveedor?: string | null; medico?: string | null; auxiliar?: string | null; ovem?: string | null; usuario_recibe?: string | null; usuario_despacha?: string | null; novedad_servicio?: string | null; observaciones?: string | null; motivo_externo?: string | null; motivo_interno?: string | null; etapa?: string; estado_servicio?: string | null; ciudad_registro?: string | null; imagen_boleta_salida?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; patient_id?: number | null; nombre_completo?: string; fecha_hora_registro?: string; tipo_servicio?: string; vehicle_id?: string | null; operational_center_id?: number | null; movil_placa?: string | null; ovem_user_id?: string | null; medico_user_id?: string | null; auxiliar_user_id?: string | null; fecha_hora_inicio_desplazamiento?: string | null; fecha_hora_programacion?: string | null; oportunidad_atencion?: number | null; turno_programacion?: string | null; autorizacion?: string | null; asesor?: string | null; prestador?: string | null; cie_codigo?: string | null; requiere_aislamiento?: string | null; soporte?: string | null; departamento_origen?: string | null; ciudad_origen?: string | null; departamento_destino?: string | null; ciudad_destino?: string | null; perimetro?: string | null; direccion_origen?: string | null; fecha_hora_llegada_origen?: string | null; fecha_hora_salida_origen?: string | null; tiempo_total_origen?: number | null; direccion_intermedia?: string | null; fecha_hora_llegada_intermedia?: string | null; fecha_hora_salida_intermedia?: string | null; tiempo_espera_intermedia?: number | null; direccion_destino?: string | null; fecha_hora_llegada_destino?: string | null; fecha_hora_salida_destino?: string | null; tiempo_espera_destino?: number | null; tiempo_total?: number | null; finalidad_traslado?: string | null; acepta_ips?: string | null; valor_servicio?: number | null; metodo_pago?: string | null; cliente?: string | null; proveedor?: string | null; medico?: string | null; auxiliar?: string | null; ovem?: string | null; usuario_recibe?: string | null; usuario_despacha?: string | null; novedad_servicio?: string | null; observaciones?: string | null; motivo_externo?: string | null; motivo_interno?: string | null; etapa?: string; estado_servicio?: string | null; ciudad_registro?: string | null; imagen_boleta_salida?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: [
           {
             foreignKeyName: "medical_services_patient_id_fkey"
@@ -1169,9 +1229,9 @@ export type Database = {
         ]
       }
       medical_assessments: {
-        Row: { id: number; patient_id: number | null; cedula: string; nombre_completo: string; fecha_nacimiento: string | null; genero: string | null; aerolinea: string | null; fecha_hora_vuelo: string | null; acompanante: string | null; origen: string | null; destino: string | null; hc: string | null; concepto_medico: string | null; tiempo_estimado: string | null; recomendaciones: string | null; valoracion: string | null; medico: string | null; pasajero: string | null; estado: string | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: number; patient_id?: number | null; cedula: string; nombre_completo: string; fecha_nacimiento?: string | null; genero?: string | null; aerolinea?: string | null; fecha_hora_vuelo?: string | null; acompanante?: string | null; origen?: string | null; destino?: string | null; hc?: string | null; concepto_medico?: string | null; tiempo_estimado?: string | null; recomendaciones?: string | null; valoracion?: string | null; medico?: string | null; pasajero?: string | null; estado?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: number; patient_id?: number | null; cedula?: string; nombre_completo?: string; fecha_nacimiento?: string | null; genero?: string | null; aerolinea?: string | null; fecha_hora_vuelo?: string | null; acompanante?: string | null; origen?: string | null; destino?: string | null; hc?: string | null; concepto_medico?: string | null; tiempo_estimado?: string | null; recomendaciones?: string | null; valoracion?: string | null; medico?: string | null; pasajero?: string | null; estado?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: number; patient_id: number | null; cedula: string; nombre_completo: string; fecha_nacimiento: string | null; genero: string | null; aerolinea: string | null; fecha_hora_vuelo: string | null; acompanante: string | null; origen: string | null; destino: string | null; hc: string | null; concepto_medico: string | null; tiempo_estimado: string | null; recomendaciones: string | null; valoracion: string | null; medico: string | null; pasajero: string | null; estado: string | null; activo: boolean; correo: string | null; certificado_enviado_at: string | null; certificado_enviado_a: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; patient_id?: number | null; cedula: string; nombre_completo: string; fecha_nacimiento?: string | null; genero?: string | null; aerolinea?: string | null; fecha_hora_vuelo?: string | null; acompanante?: string | null; origen?: string | null; destino?: string | null; hc?: string | null; concepto_medico?: string | null; tiempo_estimado?: string | null; recomendaciones?: string | null; valoracion?: string | null; medico?: string | null; pasajero?: string | null; estado?: string | null; activo?: boolean; correo?: string | null; certificado_enviado_at?: string | null; certificado_enviado_a?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; patient_id?: number | null; cedula?: string; nombre_completo?: string; fecha_nacimiento?: string | null; genero?: string | null; aerolinea?: string | null; fecha_hora_vuelo?: string | null; acompanante?: string | null; origen?: string | null; destino?: string | null; hc?: string | null; concepto_medico?: string | null; tiempo_estimado?: string | null; recomendaciones?: string | null; valoracion?: string | null; medico?: string | null; pasajero?: string | null; estado?: string | null; activo?: boolean; correo?: string | null; certificado_enviado_at?: string | null; certificado_enviado_a?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: [
           {
             foreignKeyName: "medical_assessments_patient_id_fkey"
@@ -1202,15 +1262,69 @@ export type Database = {
           }
         ]
       }
+      audit_log: {
+        Row: AuditLogRow
+        Insert: Partial<Omit<AuditLogRow, "id">>
+        Update: never
+        Relationships: []
+      }
+      airlines: {
+        Row: { id: number; nombre: string; activo: boolean; sisres_id: number | null; created_at: string; updated_at: string }
+        Insert: { id?: number; nombre: string; activo?: boolean; sisres_id?: number | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; nombre?: string; activo?: boolean; sisres_id?: number | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      airports: {
+        Row: { id: number; sisres_id: number | null; ident: string | null; tipo: string | null; nombre: string; municipio: string | null; pais: string | null; region: string | null; iata_code: string | null; icao_code: string | null; servicio_regular: boolean; latitud: number | null; longitud: number | null; elevacion_ft: number | null }
+        Insert: { id?: number; sisres_id?: number | null; ident?: string | null; tipo?: string | null; nombre: string; municipio?: string | null; pais?: string | null; region?: string | null; iata_code?: string | null; icao_code?: string | null; servicio_regular?: boolean; latitud?: number | null; longitud?: number | null; elevacion_ft?: number | null }
+        Update: { id?: number; sisres_id?: number | null; ident?: string | null; tipo?: string | null; nombre?: string; municipio?: string | null; pais?: string | null; region?: string | null; iata_code?: string | null; icao_code?: string | null; servicio_regular?: boolean; latitud?: number | null; longitud?: number | null; elevacion_ft?: number | null }
+        Relationships: []
+      }
+      ti_acta_entrega: {
+        Row: TiActaEntregaRow
+        Insert: Partial<Omit<TiActaEntregaRow, "numero_orden">>
+        Update: Partial<Omit<TiActaEntregaRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_diagnostico: {
+        Row: TiDiagnosticoRow
+        Insert: Partial<Omit<TiDiagnosticoRow, "numero_orden">>
+        Update: Partial<Omit<TiDiagnosticoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_diagnostico_repuestos: {
+        Row: TiDiagnosticoRepuestoRow
+        Insert: Partial<TiDiagnosticoRepuestoRow>
+        Update: Partial<TiDiagnosticoRepuestoRow>
+        Relationships: []
+      }
+      ti_baja_equipo: {
+        Row: TiBajaEquipoRow
+        Insert: Partial<Omit<TiBajaEquipoRow, "numero_orden">>
+        Update: Partial<Omit<TiBajaEquipoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_prestamo_equipo: {
+        Row: TiPrestamoEquipoRow
+        Insert: Partial<Omit<TiPrestamoEquipoRow, "numero_orden">>
+        Update: Partial<Omit<TiPrestamoEquipoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_firma_tokens: {
+        Row: TiFirmaTokenRow
+        Insert: Partial<TiFirmaTokenRow>
+        Update: Partial<TiFirmaTokenRow>
+        Relationships: []
+      }
       wa_campaigns: {
-        Row: { id: number; nombre: string; plantilla: string; idioma: string; estado: string; media_tipo: string | null; media_id: string | null; media_nombre: string | null; total_destinatarios: number; total_enviados: number; total_fallidos: number; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: number; nombre: string; plantilla: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: number; nombre?: string; plantilla?: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: number; nombre: string; plantilla: string; idioma: string; estado: string; media_tipo: string | null; media_id: string | null; media_nombre: string | null; total_destinatarios: number; total_enviados: number; total_fallidos: number; total_entregados: number; total_leidos: number; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; nombre: string; plantilla: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; total_entregados?: number; total_leidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; nombre?: string; plantilla?: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; total_entregados?: number; total_leidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       wa_campaign_recipients: {
-        Row: { id: number; campaign_id: number; telefono: string; nombre: string | null; parametros: Json | null; estado: string; wamid: string | null; error: string | null; sent_at: string | null; created_at: string }
-        Insert: { id?: number; campaign_id: number; telefono: string; nombre?: string | null; parametros?: Json | null; estado?: string; wamid?: string | null; error?: string | null; sent_at?: string | null; created_at?: string }
+        Row: { id: number; campaign_id: number; telefono: string; nombre: string | null; parametros: Json | null; estado: string; wamid: string | null; error: string | null; sent_at: string | null; entregado_at: string | null; leido_at: string | null; estado_meta: string | null; created_at: string }
+        Insert: { id?: number; campaign_id: number; telefono: string; nombre?: string | null; parametros?: Json | null; estado?: string; wamid?: string | null; error?: string | null; sent_at?: string | null; entregado_at?: string | null; leido_at?: string | null; estado_meta?: string | null; created_at?: string }
         Update: { id?: number; campaign_id?: number; telefono?: string; nombre?: string | null; parametros?: Json | null; estado?: string; wamid?: string | null; error?: string | null; sent_at?: string | null; created_at?: string }
         Relationships: [
           {
@@ -1238,6 +1352,128 @@ export type Database = {
         Row: { id: number; medical_service_id: number; changed_by: string | null; changed_by_role: string | null; changed_at: string; valores_anteriores: Json; valores_nuevos: Json }
         Insert: { id?: number; medical_service_id: number; changed_by?: string | null; changed_by_role?: string | null; changed_at?: string; valores_anteriores: Json; valores_nuevos: Json }
         Update: { id?: number; medical_service_id?: number; changed_by?: string | null; changed_by_role?: string | null; changed_at?: string; valores_anteriores?: Json; valores_nuevos?: Json }
+        Relationships: []
+      }
+      tickets: {
+        Row: { id: number; sisres_id: number | null; categoria: string; prioridad: string; asunto: string; descripcion: string; adjunto_path: string | null; estado: string; solicitante_id: string; nombre_solicitante: string; celular_contacto: string; registrado_por_id: string | null; nombre_registrado_por: string | null; sede: string; area: string; tecnico_id: string | null; nombre_tecnico: string | null; solucion: string | null; created_at: string; fecha_primer_contacto: string | null; fecha_resuelto: string | null; fecha_cierre: string | null }
+        Insert: { id?: number; sisres_id?: number | null; categoria: string; prioridad: string; asunto: string; descripcion: string; adjunto_path?: string | null; estado?: string; solicitante_id: string; nombre_solicitante: string; celular_contacto: string; registrado_por_id?: string | null; nombre_registrado_por?: string | null; sede: string; area: string; tecnico_id?: string | null; nombre_tecnico?: string | null; solucion?: string | null; created_at?: string; fecha_primer_contacto?: string | null; fecha_resuelto?: string | null; fecha_cierre?: string | null }
+        Update: { id?: number; sisres_id?: number | null; categoria?: string; prioridad?: string; asunto?: string; descripcion?: string; adjunto_path?: string | null; estado?: string; solicitante_id?: string; nombre_solicitante?: string; celular_contacto?: string; registrado_por_id?: string | null; nombre_registrado_por?: string | null; sede?: string; area?: string; tecnico_id?: string | null; nombre_tecnico?: string | null; solucion?: string | null; created_at?: string; fecha_primer_contacto?: string | null; fecha_resuelto?: string | null; fecha_cierre?: string | null }
+        Relationships: []
+      }
+      ticket_historial: {
+        Row: { id: number; ticket_id: number; tipo_evento: string; estado_anterior: string | null; estado_nuevo: string | null; nota: string | null; usuario_id: string | null; nombre_usuario: string; created_at: string }
+        Insert: { id?: number; ticket_id: number; tipo_evento: string; estado_anterior?: string | null; estado_nuevo?: string | null; nota?: string | null; usuario_id?: string | null; nombre_usuario: string; created_at?: string }
+        Update: { id?: number; ticket_id?: number; tipo_evento?: string; estado_anterior?: string | null; estado_nuevo?: string | null; nota?: string | null; usuario_id?: string | null; nombre_usuario?: string; created_at?: string }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_historial_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      ticket_areas: {
+        Row: { id: number; nombre: string; activo: boolean }
+        Insert: { id?: number; nombre: string; activo?: boolean }
+        Update: { id?: number; nombre?: string; activo?: boolean }
+        Relationships: []
+      }
+      ticket_categorias: {
+        Row: { id: number; nombre: string; activo: boolean }
+        Insert: { id?: number; nombre: string; activo?: boolean }
+        Update: { id?: number; nombre?: string; activo?: boolean }
+        Relationships: []
+      }
+      ticket_sedes: {
+        Row: { id: number; nombre: string; activo: boolean }
+        Insert: { id?: number; nombre: string; activo?: boolean }
+        Update: { id?: number; nombre?: string; activo?: boolean }
+        Relationships: []
+      }
+      ticket_config: {
+        Row: {
+          id: number
+          sla_baja_horas: number
+          sla_media_horas: number
+          sla_alta_horas: number
+          sla_urgente_horas: number
+          horario_dias: number[]
+          horario_inicio: string
+          horario_fin: string
+          mensaje_adicional: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: number
+          sla_baja_horas?: number
+          sla_media_horas?: number
+          sla_alta_horas?: number
+          sla_urgente_horas?: number
+          horario_dias?: number[]
+          horario_inicio?: string
+          horario_fin?: string
+          mensaje_adicional?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: number
+          sla_baja_horas?: number
+          sla_media_horas?: number
+          sla_alta_horas?: number
+          sla_urgente_horas?: number
+          horario_dias?: number[]
+          horario_inicio?: string
+          horario_fin?: string
+          mensaje_adicional?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      tickets_disponibilidad_mensual: {
+        Row: { anio: number; mes: number; porcentaje: number; notas: string | null; registrado_por: string | null; registrado_at: string }
+        Insert: { anio: number; mes: number; porcentaje: number; notas?: string | null; registrado_por?: string | null; registrado_at?: string }
+        Update: { anio?: number; mes?: number; porcentaje?: number; notas?: string | null; registrado_por?: string | null; registrado_at?: string }
+        Relationships: []
+      }
+      ticket_correos_gestores: {
+        Row: { id: number; correo: string }
+        Insert: { id?: number; correo: string }
+        Update: { id?: number; correo?: string }
+        Relationships: []
+      }
+      captaciones_aeroportuarias: {
+        Row: { id: number; sisres_id: number | null; fecha_atencion: string; aeropuerto_atencion: string; paciente_id: number | null; tipo_identificacion: string; numero_identificacion: string; primer_nombre: string; segundo_nombre: string | null; primer_apellido: string; segundo_apellido: string | null; fecha_nacimiento: string | null; sexo: string | null; nacionalidad: string; pais_residencia: string; pais_procedencia: string; aeropuerto_procedencia: string | null; telefono: string | null; tipo_usuario: number; momento_atencion: number; motivo_consulta: number; tipo_egreso: number; tipo_atencion: string | null; resultado_autorizacion: string | null; lugar_atencion: string | null; lado_atencion: string | null; ubicacion_atencion: string | null; detalle_ubicacion: string | null; tiempo_activacion: string | null; tiempo_llegada: string | null; condicion: string | null; cie10: string | null; patologia_sistema: string | null; otra_patologia: string | null; post_operatorio: string | null; accidente_especial: string | null; notificacion_obligatoria: string | null; tipo_vuelo: string | null; aerolinea: string | null; procedimientos: string[]; emergencia_tipo: string | null; emergencia_notas: string | null; remision: boolean; ips_receptora: string | null; origen: string | null; destino: string | null; recibio_medicamentos: boolean; medicamento: string | null; evento_adverso_medicamento: boolean | null; uso_dispositivo: boolean; dispositivo: string | null; evento_adverso_dispositivo: boolean | null; medico_atendio: string | null; activo: boolean; registrado_por_id: string | null; nombre_registrado_por: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; sisres_id?: number | null; fecha_atencion: string; aeropuerto_atencion: string; paciente_id?: number | null; tipo_identificacion: string; numero_identificacion: string; primer_nombre: string; segundo_nombre?: string | null; primer_apellido: string; segundo_apellido?: string | null; fecha_nacimiento?: string | null; sexo?: string | null; nacionalidad: string; pais_residencia: string; pais_procedencia: string; aeropuerto_procedencia?: string | null; telefono?: string | null; tipo_usuario: number; momento_atencion: number; motivo_consulta: number; tipo_egreso: number; tipo_atencion?: string | null; resultado_autorizacion?: string | null; lugar_atencion?: string | null; lado_atencion?: string | null; ubicacion_atencion?: string | null; detalle_ubicacion?: string | null; tiempo_activacion?: string | null; tiempo_llegada?: string | null; condicion?: string | null; cie10?: string | null; patologia_sistema?: string | null; otra_patologia?: string | null; post_operatorio?: string | null; accidente_especial?: string | null; notificacion_obligatoria?: string | null; tipo_vuelo?: string | null; aerolinea?: string | null; procedimientos: string[]; emergencia_tipo?: string | null; emergencia_notas?: string | null; remision: boolean; ips_receptora?: string | null; origen?: string | null; destino?: string | null; recibio_medicamentos: boolean; medicamento?: string | null; evento_adverso_medicamento?: boolean | null; uso_dispositivo: boolean; dispositivo?: string | null; evento_adverso_dispositivo?: boolean | null; medico_atendio?: string | null; activo?: boolean; registrado_por_id?: string | null; nombre_registrado_por?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; sisres_id?: number | null; fecha_atencion?: string; aeropuerto_atencion?: string; paciente_id?: number | null; tipo_identificacion?: string; numero_identificacion?: string; primer_nombre?: string; segundo_nombre?: string | null; primer_apellido?: string; segundo_apellido?: string | null; fecha_nacimiento?: string | null; sexo?: string | null; nacionalidad?: string; pais_residencia?: string; pais_procedencia?: string; aeropuerto_procedencia?: string | null; telefono?: string | null; tipo_usuario?: number; momento_atencion?: number; motivo_consulta?: number; tipo_egreso?: number; tipo_atencion?: string | null; resultado_autorizacion?: string | null; lugar_atencion?: string | null; lado_atencion?: string | null; ubicacion_atencion?: string | null; detalle_ubicacion?: string | null; tiempo_activacion?: string | null; tiempo_llegada?: string | null; condicion?: string | null; cie10?: string | null; patologia_sistema?: string | null; otra_patologia?: string | null; post_operatorio?: string | null; accidente_especial?: string | null; notificacion_obligatoria?: string | null; tipo_vuelo?: string | null; aerolinea?: string | null; procedimientos?: string[]; emergencia_tipo?: string | null; emergencia_notas?: string | null; remision?: boolean; ips_receptora?: string | null; origen?: string | null; destino?: string | null; recibio_medicamentos?: boolean; medicamento?: string | null; evento_adverso_medicamento?: boolean | null; uso_dispositivo?: boolean; dispositivo?: string | null; evento_adverso_dispositivo?: boolean | null; medico_atendio?: string | null; activo?: boolean; registrado_por_id?: string | null; nombre_registrado_por?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      sispro_paises: {
+        Row: { nombre: string; codigo: string }
+        Insert: { nombre: string; codigo: string }
+        Update: { nombre?: string; codigo?: string }
+        Relationships: []
+      }
+      sispro_ips: {
+        Row: { nombre: string; codigo: string }
+        Insert: { nombre: string; codigo: string }
+        Update: { nombre?: string; codigo?: string }
+        Relationships: []
+      }
+      sispro_aeropuertos: {
+        Row: { nombre: string; ciudad: string; codigo_ciudad: string | null; oaci: string | null; pais: string | null; ambito: string | null }
+        Insert: { nombre: string; ciudad: string; codigo_ciudad?: string | null; oaci?: string | null; pais?: string | null; ambito?: string | null }
+        Update: { nombre?: string; ciudad?: string; codigo_ciudad?: string | null; oaci?: string | null; pais?: string | null; ambito?: string | null }
+        Relationships: []
+      }
+      sispro_aeropuertos_atencion: {
+        Row: { nombre: string; oaci: string | null; ciudad: string | null; departamento: string | null }
+        Insert: { nombre: string; oaci?: string | null; ciudad?: string | null; departamento?: string | null }
+        Update: { nombre?: string; oaci?: string | null; ciudad?: string | null; departamento?: string | null }
         Relationships: []
       }
     }
@@ -1270,13 +1506,53 @@ export type Database = {
         Args: { p_user_id?: string }
         Returns: number | null
       }
+      es_gestor_tickets: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      reabrir_ticket: {
+        Args: { p_ticket_id: number; p_nota: string }
+        Returns: undefined
+      }
+      tomar_ticket: {
+        Args: { p_ticket_id: number }
+        Returns: undefined
+      }
+      registrar_contacto_ticket: {
+        Args: { p_ticket_id: number; p_nota?: string | null }
+        Returns: undefined
+      }
+      cambiar_estado_ticket: {
+        Args: { p_ticket_id: number; p_estado: string; p_solucion?: string | null; p_nota?: string | null }
+        Returns: undefined
+      }
+      cambiar_prioridad_ticket: {
+        Args: { p_ticket_id: number; p_prioridad: string }
+        Returns: undefined
+      }
+      buscar_usuarios_ticket: {
+        Args: { p_busqueda: string }
+        Returns: { user_id: string; nombre_completo: string | null; cedula: string | null }[]
+      }
+      nombre_solicitante_ticket: {
+        Args: { p_user_id: string }
+        Returns: string | null
+      }
+      guardar_catalogo_ticket: {
+        Args: { p_tipo: string; p_nombres: string[] }
+        Returns: undefined
+      }
+      puede_captacion: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
     }
     Enums: {
       vehicle_status: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
       maintenance_type: 'PREVENTIVO' | 'CORRECTIVO'
       severity_level: 'BAJA' | 'MEDIA' | 'ALTA'
       incident_status: 'ABIERTO' | 'EN_PROCESO' | 'CERRADO'
-      operational_center: 'CRA_MEDELLIN' | 'CRA_BOGOTA' | 'AIRPLAN' | 'CTG'
+      operational_center: 'CRA_MEDELLIN' | 'CRA_BOGOTA' | 'AIRPLAN' | 'CTG' | 'ADO'
     }
     CompositeTypes: {
       [_ in never]: never

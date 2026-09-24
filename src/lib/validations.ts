@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
@@ -165,7 +166,9 @@ export const dateRangeSchema = z
   );
 
 export const signInSchema = z.object({
-  email: z.string().email("Email inválido"),
+  // Cédula (usuarios migrados de SISRES) o correo (usuarios de Aeromanto) —
+  // se resuelve al email de Supabase Auth en resolverEmailLogin (auth.ts).
+  identificador: z.string().trim().min(1, "Ingrese su cédula o correo").max(254),
   password: z.string().min(1, "Contraseña requerida"),
 });
 
@@ -184,16 +187,16 @@ export const createUserAsAdminSchema = z.object({
   nombreCompleto: z.string().min(2, "Nombre demasiado corto"),
   cedula: z.string().trim().min(4, "Documento inválido").max(20).optional().or(z.literal("")),
   ciudad: z.string().trim().max(100).optional().or(z.literal("")),
+  operationalCenterId: z.number().int().positive("Centro inválido").nullable().optional(),
   roleCodigo: userRoleEnum,
 });
 
-export const updateUserCiudadSchema = z.object({
+export const updateUserAsAdminSchema = z.object({
   userId: z.string().uuid("ID de usuario inválido"),
+  nombreCompleto: z.string().trim().min(2, "Nombre demasiado corto").max(200),
+  cedula: z.string().trim().min(4, "Documento inválido").max(20).optional().or(z.literal("")),
   ciudad: z.string().trim().max(100).optional().or(z.literal("")),
-});
-
-export const updateUserRoleSchema = z.object({
-  userId: z.string().uuid("ID de usuario inválido"),
+  operationalCenterId: z.number().int().positive("Centro inválido").nullable(),
   roleCodigo: userRoleEnum,
 });
 
@@ -224,6 +227,65 @@ export const dailyCheckSchema = z.object({
     )
     .optional(),
 });
+
+const checklistResultItemSchema = z.object({
+  checklistItemId: z.number().int().positive(),
+  estado: z.enum(["OK", "FALLA", "NO_APLICA"]),
+  cantidadOk: z.number().int().nonnegative().optional(),
+  observacion: z.string().optional(),
+});
+
+/** Dotación e insumos verificados al recibir la ambulancia. */
+export const supplyCheckSchema = z.object({
+  vehicleId: z.string().uuid("ID de vehículo inválido"),
+  observaciones: z.string().max(1000).optional(),
+  items: z.array(checklistResultItemSchema).min(1, "No hay ítems de dotación para guardar"),
+});
+
+/** Tanqueo registrado por el OVEM desde el portal. */
+export const ovemFuelLogSchema = z.object({
+  vehicleId: z.string().uuid("Seleccione un vehículo"),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
+  kilometraje: z.number().int().positive("El kilometraje es obligatorio"),
+  galones: z.number().positive("Los galones deben ser mayores a cero").max(100, "Revise los galones: más de 100 no cabe en un tanque"),
+  costo: z.number().nonnegative().optional(),
+  numeroVenta: z.string().trim().max(40).optional(),
+});
+
+/** Siniestro vial reportado por el OVEM. */
+export const roadAccidentSchema = z
+  .object({
+    vehicleId: z.string().uuid("Seleccione un vehículo"),
+    fechaHora: z.string().min(1, "Indique fecha y hora"),
+    lugar: z.string().trim().min(5, "Indique dirección o punto de referencia"),
+    descripcion: z.string().trim().min(10, "Mínimo 10 caracteres"),
+    pacienteABordo: z.boolean(),
+    hayLesionados: z.boolean(),
+    lesionadosDetalle: z.string().trim().optional(),
+    hayTerceros: z.boolean(),
+    terceroPlaca: z.string().trim().max(10).optional(),
+    terceroNombre: z.string().trim().max(200).optional(),
+    terceroTelefono: z.string().trim().max(30).optional(),
+    terceroAseguradora: z.string().trim().max(120).optional(),
+    intervinoAutoridad: z.boolean(),
+    numeroIpat: z.string().trim().max(40).optional(),
+    vehiculoOperativo: z.boolean(),
+  })
+  .superRefine((row, ctx) => {
+    if (Number.isNaN(Date.parse(row.fechaHora))) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Fecha y hora inválidas", path: ["fechaHora"] });
+    } else if (Date.parse(row.fechaHora) > Date.now() + 5 * 60_000) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "La fecha no puede ser futura", path: ["fechaHora"] });
+    }
+    if (row.hayLesionados && !row.lesionadosDetalle) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Describa los lesionados", path: ["lesionadosDetalle"] });
+    }
+    if (row.hayTerceros && !row.terceroPlaca && !row.terceroNombre) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Indique al menos placa o nombre del tercero", path: ["terceroPlaca"] });
+    }
+  });
+
+export type RoadAccidentFormData = z.infer<typeof roadAccidentSchema>;
 
 export const updateKilometrajeOdometerSchema = z.object({
   userId: z.string().uuid("ID de usuario inválido"),
@@ -430,6 +492,14 @@ export const operationalCenterUpdateNombreSchema = z.object({
 
 const optStr = z.string().trim().max(255).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
 const optText = z.string().trim().max(5000).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
+/** Select cerrado opcional: vacío o uno de los valores permitidos (con mensaje claro si no lo es). */
+const optEnum = (valores: readonly string[], mensaje: string) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => v === "" || valores.includes(v), mensaje)
+    .optional()
+    .transform((v) => (v ? v : undefined));
 
 // Catálogo real — verificado contra el <select> de sisres/registroPacientes.php
 // (Ronda de QA, 2026-07-21). No son valores inventados.
@@ -519,6 +589,29 @@ export const FINALIDAD_TRASLADO_OPCIONES = [
 
 export const PERIMETRO_OPCIONES = ["METROPOLITANO", "URBANO", "RURAL"] as const;
 
+// Catálogos reales de motivo de no-efectividad — verificados contra
+// registroServicios.php de SISRES (selects fijos, no texto libre).
+export const MOTIVO_EXTERNO_OPCIONES = [
+  "No aceptan disponibilidad",
+  "Solo por cotizar",
+  "Sin Cobertura",
+] as const;
+
+export const MOTIVO_INTERNO_OPCIONES = [
+  "Tiempo de desplazamiento",
+  "Por fuera del horario de servicio",
+  "Sin capacidad instalada",
+  "Tripulación en otro servicio",
+  "Sin Cobertura",
+] as const;
+
+// SISRES guarda el estado como "0"/"1" (estadoServicio, select binario) —
+// no es texto libre.
+export const ESTADO_SERVICIO_OPCIONES = [
+  { value: "0", label: "ACTIVO" },
+  { value: "1", label: "INACTIVO" },
+] as const;
+
 export const METODO_PAGO_OPCIONES = [
   "N/A",
   "QR BANCOLOMBIA",
@@ -570,7 +663,12 @@ export const medicalServiceSchema = z.object({
   fecha_hora_salida_destino: optStr,
   finalidad_traslado: optStr,
   acepta_ips: optStr,
-  valor_servicio: z.number().nonnegative().optional(),
+  // Campo opcional en SISRES: vacío llega como "" o NaN desde el input
+  // numérico y no debe romper el guardado con "Expected number, received nan".
+  valor_servicio: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? undefined : Number(v)),
+    z.number().nonnegative("El valor del servicio no puede ser negativo").optional()
+  ),
   metodo_pago: optStr,
   cliente: optStr,
   proveedor: optStr,
@@ -585,21 +683,6 @@ export const medicalServiceSchema = z.object({
   motivo_interno: optStr,
   estado_servicio: optStr,
   ciudad_registro: optStr,
-  // Medicina Domiciliaria
-  condicion: optStr,
-  medio_asignacion: optStr,
-  turno_facturacion: optStr,
-  deducible: optStr,
-  incapa: optStr,
-  // TAM/TAB
-  situacion: optStr,
-  tiempo_a_restar: z.number().optional(),
-  // Telemedicina (+ poliza también aplica a MD)
-  poliza: optStr,
-  funcionario_aseguradora: optStr,
-  codigo_telemedicina: optStr,
-  correo_electronico: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
-  motivo_consulta: optText,
 });
 export type MedicalServiceFormData = z.input<typeof medicalServiceSchema>;
 
@@ -620,71 +703,7 @@ export function perfilFormularioServicio(tipoServicio: string): keyof typeof PER
   return null;
 }
 
-// Secuencia de botones de estado que ve la tripulación (OVEM/médico/auxiliar)
-// desde "Mis servicios" — cada paso graba un timestamp que ya usa
-// calcularTiempos() en servicios-medicos.ts para el tiempo facturable, así
-// que no se inventa ninguna columna nueva de aquí en adelante (Daniel,
-// 2026-07: "el tiempo de espera es importante para que facturación pueda
-// facturar el servicio", ya cubierto por los campos llegada/salida).
-// Medicina Domiciliaria no tiene "origen" (el médico va directo al
-// domicilio del paciente) y colapsa llegada+inicio de atención en un solo
-// paso: el listado real de Regulación solo tiene una columna "HORA
-// ATENCIÓN", no dos — a confirmar en campo si hiciera falta separarlas.
-export const CAMPOS_PASO_SERVICIO = [
-  "fecha_hora_inicio_desplazamiento",
-  "fecha_hora_llegada_origen",
-  "fecha_hora_salida_origen",
-  "fecha_hora_llegada_destino",
-  "fecha_hora_salida_destino",
-] as const;
-export type CampoPasoServicio = (typeof CAMPOS_PASO_SERVICIO)[number];
-
-export interface PasoServicio {
-  campo: CampoPasoServicio;
-  etiqueta: string;
-  etapaDestino?: "CURSO" | "FINALIZADO";
-}
-
-const PASOS_TRASLADO: PasoServicio[] = [
-  { campo: "fecha_hora_inicio_desplazamiento", etiqueta: "Inicio de desplazamiento", etapaDestino: "CURSO" },
-  { campo: "fecha_hora_llegada_origen", etiqueta: "Llegada a origen" },
-  { campo: "fecha_hora_salida_origen", etiqueta: "Salida de origen" },
-  { campo: "fecha_hora_llegada_destino", etiqueta: "Llegada a destino" },
-  { campo: "fecha_hora_salida_destino", etiqueta: "Finalización del servicio", etapaDestino: "FINALIZADO" },
-];
-
-const PASOS_MEDICINA_DOMICILIARIA: PasoServicio[] = [
-  { campo: "fecha_hora_inicio_desplazamiento", etiqueta: "Inicio de desplazamiento", etapaDestino: "CURSO" },
-  { campo: "fecha_hora_llegada_destino", etiqueta: "Llegada / inicio de atención" },
-  { campo: "fecha_hora_salida_destino", etiqueta: "Finalización de la atención", etapaDestino: "FINALIZADO" },
-];
-
-/** Telemedicina no tiene desplazamiento físico — se maneja con cambio de etapa simple, sin pasos. */
-export function pasosServicio(perfil: keyof typeof PERFIL_FORMULARIO_SERVICIO | null): PasoServicio[] {
-  if (perfil === "TRASLADO") return PASOS_TRASLADO;
-  if (perfil === "MEDICINA_DOMICILIARIA") return PASOS_MEDICINA_DOMICILIARIA;
-  return [];
-}
-
-// Sub-estado dentro de "en curso" para el tablero de Regulación — deriva del
-// primer paso de pasosServicio() sin timestamp, así que se mantiene en
-// sincronía automática con la secuencia real de botones de Mis Servicios.
-const SUB_ESTADOS_POR_PERFIL: Partial<Record<keyof typeof PERFIL_FORMULARIO_SERVICIO, string[]>> = {
-  TRASLADO: ["Por iniciar", "En camino a origen", "En origen", "En camino a destino", "En destino"],
-  MEDICINA_DOMICILIARIA: ["Por iniciar", "En camino", "En atención"],
-};
-
-export function subEstadoServicio(
-  tipoServicio: string,
-  servicio: Record<string, unknown>
-): string | null {
-  const perfil = perfilFormularioServicio(tipoServicio);
-  const pasos = pasosServicio(perfil);
-  if (pasos.length === 0) return null;
-  const idx = pasos.findIndex((p) => !servicio[p.campo]);
-  if (idx === -1) return "Completado, pendiente de cierre";
-  return (perfil && SUB_ESTADOS_POR_PERFIL[perfil]?.[idx]) || pasos[idx].etiqueta;
-}
+// Pasos y estados operativos del servicio: src/lib/estado-servicio.ts.
 
 export const assessmentSchema = z.object({
   cedula: z.string().trim().min(4, "Documento inválido").max(20),
@@ -700,10 +719,20 @@ export const assessmentSchema = z.object({
   concepto_medico: optText,
   tiempo_estimado: optStr,
   recomendaciones: optText,
-  valoracion: optStr,
-  medico: optStr,
-  pasajero: optStr,
-  estado: optStr,
+  // Correo del pasajero (dato personal): opcional; si viene, debe ser un correo. Destino del certificado por correo.
+  correo: z
+    .string()
+    .trim()
+    .max(150)
+    .refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Correo inválido")
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  // Selects cerrados como en registroValoracion.php de SISRES (antes eran texto libre:
+  // "apto", "NO  APTO"… y el conteo de aptos no era confiable).
+  valoracion: optEnum(VALORACION_OPCIONES, "Valoración: elige APTO o NO APTO"),
+  estado: optEnum(ESTADO_VALORACION_OPCIONES, "Estado: elige ACTIVO o INACTIVO"),
+  // `medico` y `pasajero` ya no vienen del formulario: los pone el servidor (médico = usuario que
+  // registra; pasajero = nombre del paciente), como los campos ocultos de SISRES.
 });
 export type AssessmentFormData = z.input<typeof assessmentSchema>;
 
@@ -735,6 +764,8 @@ export const biomedicalEquipmentSchema = z.object({
   proximo_mantenimiento: optStr,
   ultima_calibracion: optStr,
   proxima_calibracion: optStr,
+  vencimiento_parche_adulto: optStr,
+  vencimiento_parche_pediatrico: optStr,
   frec_mantenimiento: optStr,
   frec_calibracion: optStr,
   ubicacion_interna: optStr,
@@ -801,3 +832,136 @@ export const waCampaignSchema = z.object({
     .max(2000, "Máximo 2000 destinatarios por campaña"),
 });
 export type WaCampaignFormData = z.input<typeof waCampaignSchema>;
+
+// ─── Soporte técnico (tickets) — ver migración 065 ───────────────────────────
+export const TICKET_PRIORIDADES = ["BAJA", "MEDIA", "ALTA", "URGENTE"] as const;
+export const TICKET_ESTADOS = ["ABIERTO", "EN_PROCESO", "RESUELTO", "CERRADO"] as const;
+
+export const ticketSchema = z.object({
+  sede: z.string().trim().min(1, "Selecciona la sede").max(100),
+  area: z.string().trim().min(1, "Selecciona el área que solicita el soporte").max(100),
+  categoria: z.string().trim().min(1, "Selecciona la categoría").max(100),
+  prioridad: z.enum(TICKET_PRIORIDADES, { errorMap: () => ({ message: "Selecciona la prioridad" }) }),
+  celular: z
+    .string()
+    .trim()
+    .min(7, "Escribe un celular de contacto")
+    .max(20, "Máximo 20 caracteres")
+    .regex(/^[0-9+()\-\s]+$/, "El celular solo puede llevar números"),
+  asunto: z.string().trim().min(1, "El asunto es obligatorio").max(150, "Máximo 150 caracteres"),
+  descripcion: z.string().trim().min(1, "La descripción es obligatoria").max(5000, "Máximo 5000 caracteres"),
+});
+export type TicketFormData = z.input<typeof ticketSchema>;
+
+export const reabrirTicketSchema = z.object({
+  id: z.number().int().positive(),
+  nota: z.string().trim().min(1, "Tienes que explicar por qué reabres el ticket").max(1000, "Máximo 1000 caracteres"),
+});
+
+// ─── Soporte técnico: configuración — ver migración 067 ─────────────────────
+const horaHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Hora inválida (HH:MM)");
+
+export const ticketSlaSchema = z.object({
+  baja: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
+  media: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
+  alta: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
+  urgente: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
+});
+
+export const ticketHorarioSchema = z
+  .object({
+    dias: z.array(z.number().int().min(1).max(7)).min(1, "Elige al menos un día"),
+    inicio: horaHHMM,
+    fin: horaHHMM,
+  })
+  .refine((h) => h.fin > h.inicio, { message: "La hora de cierre debe ser posterior a la de apertura", path: ["fin"] });
+
+export const ticketDisponibilidadSchema = z.object({
+  anio: z.number().int().min(2020, "Año entre 2020 y 2100").max(2100, "Año entre 2020 y 2100"),
+  mes: z.number().int().min(1, "Mes entre 1 y 12").max(12, "Mes entre 1 y 12"),
+  porcentaje: z.number().min(0, "Entre 0 y 100").max(100, "Entre 0 y 100"),
+  notas: z.string().trim().max(500, "Máximo 500 caracteres").optional(),
+});
+
+export const ticketCorreoSchema = z.string().trim().toLowerCase().email("Correo inválido").max(254);
+export const ticketMensajeSchema = z.string().trim().max(500, "Máximo 500 caracteres");
+export const ticketCatalogoTipoSchema = z.enum(["sedes", "areas", "categorias"]);
+
+// ─── Captación aeroportuaria + SISPRO — ver migración 080 ────────────────────
+const textoOpc = (max: number) =>
+  z.string().trim().max(max, `Máximo ${max} caracteres`).optional().transform((v) => (v ? v : undefined));
+const textoReq = (max: number, msg: string) => z.string().trim().min(1, msg).max(max, `Máximo ${max} caracteres`);
+const codigo = (min: number, max: number, msg: string) => z.coerce.number({ invalid_type_error: msg }).int(msg).min(min, msg).max(max, msg);
+const vacioAUndefined = z.literal("").transform(() => undefined);
+
+export const captacionSchema = z
+  .object({
+    // "yyyy-MM-ddTHH:mm" en hora de Colombia (el servidor lo convierte con aTimestamptzColombia)
+    fecha_atencion: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Fecha y hora de la atención inválidas"),
+    aeropuerto_atencion: textoReq(150, "Selecciona el aeropuerto de atención"),
+    paciente_id: z.coerce.number().int().positive().optional().or(vacioAUndefined),
+    tipo_identificacion: z.enum(["CC", "RC", "TI", "CE", "PA", "MS", "AS", "CD", "NV"], {
+      errorMap: () => ({ message: "Selecciona el tipo de identificación" }),
+    }),
+    numero_identificacion: textoReq(18, "El número de identificación es obligatorio"),
+    primer_nombre: textoReq(30, "El primer nombre es obligatorio"),
+    segundo_nombre: textoOpc(30),
+    primer_apellido: textoReq(30, "El primer apellido es obligatorio"),
+    segundo_apellido: textoOpc(30),
+    fecha_nacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de nacimiento inválida").optional().or(vacioAUndefined),
+    sexo: z.enum(["F", "M"], { errorMap: () => ({ message: "Selecciona el sexo" }) }),
+    nacionalidad: textoReq(35, "La nacionalidad es obligatoria"),
+    pais_residencia: textoReq(80, "Selecciona el país de residencia"),
+    pais_procedencia: textoReq(80, "Selecciona el país de procedencia"),
+    aeropuerto_procedencia: textoReq(150, "Selecciona el aeropuerto de procedencia"),
+    telefono: z.string().trim().max(20).regex(/^[0-9+()\-\s]*$/, "El teléfono solo puede llevar números").optional().transform((v) => (v ? v : undefined)),
+    tipo_usuario: codigo(1, 4, "Selecciona el tipo de usuario"),
+    momento_atencion: codigo(1, 4, "Selecciona el momento de la atención"),
+    motivo_consulta: codigo(1, 6, "Selecciona el motivo de consulta"),
+    tipo_egreso: codigo(1, 3, "Selecciona el tipo de egreso"),
+    tipo_atencion: textoOpc(60),
+    resultado_autorizacion: z.enum(["APTO", "NO APTO"]).optional().or(vacioAUndefined),
+    lugar_atencion: z.enum(["SERVICIO", "EXTERNO"]).optional().or(vacioAUndefined),
+    lado_atencion: z.enum(["TIERRA", "AIRE"]).optional().or(vacioAUndefined),
+    ubicacion_atencion: textoOpc(40),
+    detalle_ubicacion: textoOpc(2000),
+    tiempo_activacion: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Hora inválida").optional().or(vacioAUndefined),
+    tiempo_llegada: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Hora inválida").optional().or(vacioAUndefined),
+    condicion: textoOpc(30),
+    cie10: z.string().trim().toUpperCase().regex(/^[A-Z]\d{2}[A-Z0-9]$/, "El CIE-10 debe tener 4 caracteres (ej. J449)"),
+    patologia_sistema: textoOpc(120),
+    otra_patologia: textoOpc(120),
+    post_operatorio: textoOpc(120),
+    accidente_especial: textoOpc(60),
+    notificacion_obligatoria: textoOpc(150),
+    tipo_vuelo: textoOpc(30),
+    aerolinea: textoOpc(150),
+    procedimientos: z.array(z.string().trim().min(1).max(120)).max(30).default([]),
+    emergencia_tipo: textoOpc(40),
+    emergencia_notas: textoOpc(2000),
+    remision: z.boolean(),
+    ips_receptora: textoOpc(200),
+    origen: textoOpc(100),
+    destino: textoOpc(100),
+    recibio_medicamentos: z.boolean(),
+    medicamento: textoOpc(150),
+    evento_adverso_medicamento: z.boolean().optional(),
+    uso_dispositivo: z.boolean(),
+    dispositivo: textoOpc(150),
+    evento_adverso_dispositivo: z.boolean().optional(),
+    medico_atendio: textoReq(100, "Indica el médico que atendió"),
+  })
+  .superRefine((d, ctx) => {
+    const falta = (path: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+    if (d.remision && !d.ips_receptora) falta("ips_receptora", "Selecciona la IPS receptora (999 si es desconocida)");
+    if (d.recibio_medicamentos && !d.medicamento) falta("medicamento", "Indica el nombre del medicamento");
+    if (d.recibio_medicamentos && d.evento_adverso_medicamento === undefined) falta("evento_adverso_medicamento", "Indica si hubo evento adverso");
+    if (d.uso_dispositivo && !d.dispositivo) falta("dispositivo", "Indica el nombre del dispositivo");
+    if (d.uso_dispositivo && d.evento_adverso_dispositivo === undefined) falta("evento_adverso_dispositivo", "Indica si hubo evento adverso");
+    if (d.tipo_atencion === "AUTORIZACION DE VUELO" && !d.resultado_autorizacion) falta("resultado_autorizacion", "Indica el resultado (APTO / NO APTO)");
+    if (d.lado_atencion && d.ubicacion_atencion) {
+      const validas = { TIERRA: ["AREA TERMINAL", "VIAS DE ACCESO"], AIRE: ["AREA MANIOBRAS", "PLATAFORMA"] }[d.lado_atencion];
+      if (!validas.includes(d.ubicacion_atencion)) falta("ubicacion_atencion", "La ubicación no corresponde al lado seleccionado");
+    }
+  });
+export type CaptacionFormData = z.input<typeof captacionSchema>;

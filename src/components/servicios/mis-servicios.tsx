@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import { marcarPasoServicio, cambiarEtapaServicio } from "@/app/api/actions/servicios-medicos";
-import { perfilFormularioServicio, pasosServicio, type CampoPasoServicio } from "@/lib/validations";
+import { estadoOperativo, pasosPorTipo, type CampoPasoServicio } from "@/lib/estado-servicio";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { MapPin, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,9 +16,10 @@ interface ServicioAsignado {
   etapa: string;
   ciudad_origen: string | null;
   direccion_origen: string | null;
+  ciudad_intermedia?: string | null;
+  direccion_intermedia?: string | null;
   ciudad_destino: string | null;
   direccion_destino: string | null;
-  motivo_consulta: string | null;
   fecha_hora_inicio_desplazamiento: string | null;
   fecha_hora_llegada_origen: string | null;
   fecha_hora_salida_origen: string | null;
@@ -36,7 +36,12 @@ function horaCorta(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Bogota",
+  });
 }
 
 export function MisServicios({ servicios }: MisServiciosProps) {
@@ -82,22 +87,62 @@ export function MisServicios({ servicios }: MisServiciosProps) {
         <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">{error}</div>
       )}
       {activos.map((s) => {
-        const perfil = perfilFormularioServicio(s.tipo_servicio);
-        const pasos = pasosServicio(perfil);
+        const pasos = pasosPorTipo(s.tipo_servicio);
+        const estado = estadoOperativo(s);
+        const completados = pasos.filter((p) => s[p.campo]).length;
         const siguientePaso = pasos.find((p) => !s[p.campo]);
         const ocupado = loadingId === s.id;
 
         return (
           <Card key={s.id}>
-            <CardHeader className="pb-3">
+            <CardHeader className="space-y-3 pb-3">
+              {/* Progreso del servicio: solo la etapa actual lleva nombre; las
+                  demás son puntos, para que quepa en la pantalla del celular. */}
+              {pasos.length > 0 && (
+                <div
+                  className="flex items-center gap-1"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={pasos.length}
+                  aria-valuenow={completados}
+                  aria-label={`Paso ${completados} de ${pasos.length}: ${estado.etiqueta}`}
+                >
+                  {completados === 0 && (
+                    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                      {estado.etiqueta}
+                    </span>
+                  )}
+                  {pasos.map((p, i) => {
+                    const hecho = i < completados;
+                    const actual = i === completados - 1;
+                    return (
+                      <Fragment key={p.campo}>
+                        {i > 0 && (
+                          <span className={cn("h-0.5 flex-1", hecho ? "bg-primary" : "bg-muted")} />
+                        )}
+                        {actual ? (
+                          <span className="shrink-0 whitespace-nowrap rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+                            {p.estado}
+                          </span>
+                        ) : (
+                          <span
+                            title={p.estado}
+                            className={cn(
+                              "h-2.5 w-2.5 shrink-0 rounded-full",
+                              hecho ? "bg-primary" : "bg-muted"
+                            )}
+                          />
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              )}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <CardTitle className="text-base">{s.tipo_servicio}</CardTitle>
                   <p className="text-sm text-muted-foreground truncate">{s.nombre_completo}</p>
                 </div>
-                <Badge variant={s.etapa === "CURSO" ? "default" : "secondary"} className="shrink-0">
-                  {s.etapa === "CURSO" ? "En curso" : "Programado"}
-                </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -111,6 +156,12 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                         {s.direccion_origen || s.ciudad_origen}
                       </p>
                     )}
+                    {(s.ciudad_intermedia || s.direccion_intermedia) && (
+                      <p>
+                        <span className="text-muted-foreground">Punto intermedio: </span>
+                        {s.direccion_intermedia || s.ciudad_intermedia}
+                      </p>
+                    )}
                     {(s.ciudad_destino || s.direccion_destino) && (
                       <p>
                         <span className="text-muted-foreground">Destino: </span>
@@ -119,13 +170,6 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                     )}
                   </div>
                 </div>
-              )}
-
-              {s.motivo_consulta && (
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Motivo: </span>
-                  {s.motivo_consulta}
-                </p>
               )}
 
               {pasos.length > 0 ? (
@@ -142,7 +186,7 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                           )}
                         >
                           {valor && <CheckCircle2 className="h-3 w-3" />}
-                          {p.etiqueta}
+                          {p.hito}
                           {valor && ` — ${horaCorta(valor)}`}
                         </span>
                       );
@@ -154,7 +198,7 @@ export function MisServicios({ servicios }: MisServiciosProps) {
                       disabled={ocupado}
                       onClick={() => avanzarPaso(s, siguientePaso.campo, siguientePaso.etapaDestino)}
                     >
-                      {ocupado ? "Guardando..." : siguientePaso.etiqueta}
+                      {ocupado ? "Guardando..." : siguientePaso.accion}
                     </Button>
                   ) : (
                     <p className="text-sm text-green-700 flex items-center gap-1">

@@ -6,9 +6,6 @@ import {
   Bar,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -17,8 +14,6 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { EstadisticasServicios } from "@/app/api/actions/estadisticas-servicios";
-
-const COLORES = ["#22a7bf", "#f59e0b", "#22c55e", "#ef4444", "#8b5cf6", "#64748b", "#ec4899"];
 
 interface EstadisticasChartsProps {
   stats: EstadisticasServicios;
@@ -50,32 +45,6 @@ export function EstadisticasCharts({ stats }: EstadisticasChartsProps) {
               <Line type="monotone" dataKey="cantidad" name="Registrados" stroke="#22a7bf" strokeWidth={2} />
               <Line type="monotone" dataKey="finalizados" name="Finalizados" stroke="#22c55e" strokeWidth={2} />
             </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Distribución por etapa</CardTitle>
-        </CardHeader>
-        <CardContent className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={stats.porEtapa}
-                dataKey="cantidad"
-                nameKey="etapa"
-                cx="50%"
-                cy="50%"
-                outerRadius={90}
-                label={(entry) => `${entry.etapa} (${entry.cantidad})`}
-              >
-                {stats.porEtapa.map((_, i) => (
-                  <Cell key={i} fill={COLORES[i % COLORES.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>

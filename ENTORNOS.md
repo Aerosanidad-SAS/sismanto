@@ -6,7 +6,7 @@ Decisión de Daniel (2026-07-21): dejar de trabajar todo sobre `integration/sisr
 
 | Rama | Quién pushea | Para qué | Base de datos |
 |---|---|---|---|
-| `dev` | Daniel y León, en paralelo | Trabajo activo del día a día. Se prueba acá primero. | Supabase de staging (la misma que se venía usando) |
+| `dev` | Nadie directo: entra por PR desde `feat/<nombre>-<tema>` (Daniel, León y David en paralelo — reglas en `CLAUDE.md` → "Team workflow") | Trabajo activo del día a día. Se prueba acá primero. | Supabase de staging (la misma que se venía usando) |
 | `staging` | Solo por promoción desde `dev` (merge), nunca commits directos | Gate de QA antes de producción — cuando algo en `dev` ya se probó y se dio por bueno | Misma Supabase de staging |
 | `main` | Solo por promoción desde `staging`, cuando hay un lote de cambios sustanciales validados | Producción real, usuarios reales | Supabase de producción |
 
@@ -22,21 +22,33 @@ Promoción = Pull Request de una rama a la siguiente (`dev→staging`, `staging�
 
 ## Despliegues
 
-Cada rama tiene su propio dominio estable de Vercel:
+`dev` y `staging` se despliegan desde GitHub Actions (`.github/workflows/deploy.yml`) con la CLI de Vercel, al proyecto `sismanto` del team `tecnicoaerosanidad` (cuenta de la empresa, plan Hobby mientras sea pre-producción). **No** se usa la integración nativa de Vercel con GitHub: en Hobby rechaza los repos privados de una organización.
 
-| Rama | Dominio |
-|---|---|
-| `dev` | `sismanto-dev.vercel.app` |
-| `staging` | `sismanto-staging.vercel.app` (el que ya existía — se re-apunta de `integration/sisres` a `staging`) |
-| `main` | dominio de producción de Aeromanto (el de siempre) |
+| Rama | Entorno Vercel | URL |
+|---|---|---|
+| `dev` | Preview | `sismanto-dev.vercel.app` |
+| `staging` | Preview | `sismanto-staging.vercel.app` |
+| `main` | Production | lo despliega Daniel a mano hasta el go-live (dominio final por definir) |
 
-**Por qué no es el Git-integration nativo de Vercel:** el plan Hobby bloquea despliegues disparados por un commit de alguien que no sea el dueño del proyecto, en un repo privado (esto es lo que le pasó a León hoy). En vez de pagar Vercel Pro, `dev` y `staging` se despliegan vía **Deploy Hook** (`.github/workflows/deploy-dev.yml` y `deploy-staging.yml`) — un webhook de Vercel que reconstruye la rama sin mirar quién hizo el commit. `main` sigue con el Git-integration nativo porque ahí, por ahora, solo commitea Daniel.
+La base de datos se migra aparte, en GitHub Actions: `.github/workflows/db-migrate.yml` corre `npm run db:apply` contra `SISMANTO_Staging` en cada push a `dev` o `staging` (o sea, solo tras mergear un PR). Ya nadie aplica migraciones a mano sobre staging. Producción **no** se migra desde GitHub: no hay credenciales de producción en el repo hasta el go-live.
 
-## Setup pendiente en Vercel (una sola vez)
+## Setup (una sola vez)
 
-1. **Deploy Hooks**: Project Settings → Git → Deploy Hooks → crear uno apuntando a `dev` y otro a `staging`. Cada uno da una URL — esas dos URLs van como secretos de GitHub (`VERCEL_DEPLOY_HOOK_DEV`, `VERCEL_DEPLOY_HOOK_STAGING`).
-2. **Dominios**: Project Settings → Domains → agregar `sismanto-dev.vercel.app` apuntado a la rama `dev`; re-apuntar `sismanto-staging.vercel.app` de `integration/sisres` a `staging`.
-3. **Deployment Protection**: confirmar que sigue deshabilitada (o con Preview Deployment Suite en modo "Only Preview Deployments" sin protección) para que León pueda abrir las URLs sin login de Vercel.
+1. **Supabase**: proyecto `SISMANTO_Staging` en `aerosanidad's Org`. La integración Supabase↔Vercel sincroniza `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` a Production y Preview. Hoy Production también apunta a staging porque aún no existe la base de producción.
+2. **Secretos del repo**: `VERCEL_TOKEN` (token creado en el team `tecnicoaerosanidad`), `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, y `DATABASE_URL_STAGING`: URI de *Session pooler* de `SISMANTO_Staging` (Supabase → Connect). El host directo es solo IPv6 y los runners de GitHub no lo alcanzan.
+3. **Deployment Protection**: *Vercel Authentication* desactivada. Hobby solo admite un miembro en el team, así que con la protección activa León y David no podrían abrir las previews. Se vuelve a activar en el go-live. Mientras tanto no compartas esas URLs fuera del equipo.
+4. **Variables pendientes en Vercel**: `AZURE_*`, `ONEDRIVE_*`, `ANTHROPIC_API_KEY` (facturas y chat de IA), `NOTIFICATIONS_MAIL_FROM` (correos de vencimientos) y `CRON_SECRET`. Sin ellas esas funciones no operan; el resto de la app sí.
+5. **Supabase Free**: pausa los proyectos tras 7 días sin actividad; `.github/workflows/supabase-keepalive.yml` los mantiene activos (variable del repo `SUPABASE_KEEPALIVE_TARGETS`: una línea `<url> <anon key>` por proyecto).
+
+## Checklist de go-live
+
+Antes de recibir usuarios reales:
+
+- **Vercel Pro**: uso comercial, más miembros y protección de despliegues activa de nuevo.
+- **Supabase Pro para producción**: el plan Free no tiene backups ni PITR y el sistema guarda datos de pacientes.
+- **GitHub Team**: branch protection sobre `dev`/`staging`/`main` (PR + CI + aprobación) y environment `production` con aprobación de Daniel; recién entonces se agrega `DATABASE_URL_PRODUCTION` y su workflow.
+- Apuntar Azure/Microsoft Graph (redirect URIs y webhook de OneDrive) a la URL final.
+- Apagar las cuentas personales: proyecto Vercel `aeromanto` de `daniel891025`, org `innovizar@…` de Supabase y el remote `aeromanto-legacy`.
 
 ## Prioridad #1 ahora mismo
 

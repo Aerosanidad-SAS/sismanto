@@ -45,6 +45,8 @@ interface RegulacionFleetProps {
   ovemUsers: TripulacionUser[];
   medicoUsers: TripulacionUser[];
   auxiliarUsers: TripulacionUser[];
+  /** Tarjetas de disponibles / fuera de servicio. El tablero de Regulación las oculta. */
+  mostrarResumen?: boolean;
 }
 
 const ROL_LABEL: Record<string, string> = {
@@ -145,7 +147,13 @@ function VehicleTile({
   );
 }
 
-export function RegulacionFleet({ fleet, ovemUsers, medicoUsers, auxiliarUsers }: RegulacionFleetProps) {
+export function RegulacionFleet({
+  fleet,
+  ovemUsers,
+  medicoUsers,
+  auxiliarUsers,
+  mostrarResumen = true,
+}: RegulacionFleetProps) {
   const router = useRouter();
   const [assigningVehicle, setAssigningVehicle] = useState<string | null>(null);
   const [selectedRol, setSelectedRol] = useState<(typeof ROLES_TRIPULACION)[number]>("OVEM");
@@ -221,6 +229,7 @@ export function RegulacionFleet({ fleet, ovemUsers, medicoUsers, auxiliarUsers }
 
   return (
     <div className="space-y-4">
+      {mostrarResumen && (
       <div className="grid gap-3 md:grid-cols-2">
         <Card className="min-w-0">
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 pt-4">
@@ -267,6 +276,7 @@ export function RegulacionFleet({ fleet, ovemUsers, medicoUsers, auxiliarUsers }
           </CardContent>
         </Card>
       </div>
+      )}
 
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>

@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/app/api/actions/auth";
-import { isAdminLike } from "@/lib/auth-utils";
+import { centroVisible, isAdminLike } from "@/lib/auth-utils";
 import { OvemPortal } from "@/components/ovem/ovem-portal";
 import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
 import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
+import { fechaBogota } from "@/lib/vencimientos";
 
 export default async function OvemPage() {
   const supabase = createClient();
@@ -17,12 +18,17 @@ export default async function OvemPage() {
     redirect("/");
   }
 
-  const { data: vehicles = [] } = await supabase
+  let vehiclesQuery = supabase
     .from("vehicles")
-    .select("id, placa, marca, modelo, estado_actual, centro_operativo")
+    .select(
+      "id, placa, marca, modelo, estado_actual, centro_operativo, vencimiento_soat, vencimiento_rtm, vencimiento_tecnicomecanica, fecha_pase_aeroportuario"
+    )
     .order("placa");
+  const centro = centroVisible(profile);
+  if (centro) vehiclesQuery = vehiclesQuery.eq("centro_operativo", centro.codigo);
+  const { data: vehicles = [] } = await vehiclesQuery;
 
-  const checklistItems = await getChecklistItemsActivos();
+  const checklistItems = await getChecklistItemsActivos("PREOPERACIONAL");
   const servicios = profile.role_codigo === "OVEM" ? await getServiciosMedicos() : [];
 
   return (
@@ -30,7 +36,7 @@ export default async function OvemPage() {
       <div>
         <h1 className="text-3xl">Portal OVEM</h1>
         <p className="mt-2 text-muted-foreground">
-          Checklist pre-operacional, kilometraje y reporte de novedades
+          Preoperacional, tanqueos, novedades y siniestros
         </p>
       </div>
 
@@ -39,6 +45,7 @@ export default async function OvemPage() {
         userName={profile.nombre_completo || profile.email || "Usuario"}
         vehicles={vehicles ?? []}
         checklistItems={checklistItems}
+        hoyBogota={fechaBogota(new Date())}
         servicios={servicios as any}
         isAdmin={isAdminLike(profile.role_codigo)}
         viewerRole={profile.role_codigo === "OVEM" ? "OVEM" : "ADMIN"}

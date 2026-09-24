@@ -35,7 +35,7 @@ async function getDatosGerenciales() {
   const [{ data: vehiclesRaw }, estadisticasCiudad, resumenHoy, biomedicos, { data: revenueRaw }] = await Promise.all([
     supabase.from("vehicles").select("placa, estado_actual, centro_operativo, vencimiento_soat, vencimiento_rtm, vencimiento_tecnicomecanica, fecha_pase_aeroportuario"),
     getEstadisticasServiciosPorCiudad(),
-    getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso, ciudad: "Todas" }),
+    getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
     getAlertasBiomedicos(),
     supabase
       .from("vehicle_service_revenue")
@@ -111,7 +111,7 @@ export default async function GerencialPage() {
           <HelpTrigger text="Segmentado por texto libre (ciudad de origen del servicio) — no hay un catálogo cerrado de ciudad todavía, así que es una cifra aproximada, no exacta." />
         </div>
         <ResumenOperativo inicial={datos.resumenHoy} />
-        <ServiciosPorCiudadChart datos={datos.estadisticasCiudad} />
+        <ServiciosPorCiudadChart inicial={datos.estadisticasCiudad} />
       </section>
 
       {/* Estado de flota */}
