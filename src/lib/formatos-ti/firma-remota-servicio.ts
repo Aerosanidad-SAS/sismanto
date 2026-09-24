@@ -48,7 +48,7 @@ export async function contextoFirma(db: Cliente, token: string): Promise<Context
  * Guarda la firma de quien recibe. El token se reclama de forma atómica: un enlace firma una sola vez.
  * Si algo falla DESPUÉS de reclamarlo y antes de guardar, el token se libera para que pueda reintentar con el mismo enlace.
  */
-export async function procesarFirmaRemota(db: Cliente, token: string, dataUri: string, ip: string | null): Promise<{ success: true } | { error: string }> {
+export async function procesarFirmaRemota(db: Cliente, token: string, dataUri: string, ip: string | null): Promise<{ success: true; registroId: number } | { error: string }> {
   // La imagen se valida ANTES de reclamar el token: una firma corrupta no debe quemar el enlace.
   if (!validarFirmaPng(dataUri)) return { error: "La firma no es válida. Dibújala de nuevo." };
 
@@ -93,5 +93,5 @@ export async function procesarFirmaRemota(db: Cliente, token: string, dataUri: s
     }
     return { error: "Esta acta ya está firmada." };
   }
-  return { success: true };
+  return { success: true, registroId: t.registro_id };
 }
