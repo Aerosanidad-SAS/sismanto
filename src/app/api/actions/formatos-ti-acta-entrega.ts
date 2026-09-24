@@ -144,6 +144,8 @@ export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: Firm
     .single();
   if (error || !creada) return { error: error?.message ?? "No se pudo crear el acta" };
   const fila = { ...(creada as unknown as ActaEntregaFila), created_at: creadoEn };
+  // Primero el alta y después (si aplica) el envío del enlace: así la bitácora queda en el orden en que ocurrió.
+  await auditar("INSERTAR", "formatos_ti", fila.id, `Acta de entrega ${fila.numero_orden} creada`);
 
   const { cambios, png, avisos } = await motor.resolverFirmas(supabase, "acta-entrega", fila.id, fila, firmasAqui, LADOS_ACTA_ENTREGA, clavesActa(fila), (l) => l.clave === "devolucion" && d.tipo_equipo !== "CELULAR");
   if (Object.keys(cambios).length > 0) {
@@ -162,7 +164,6 @@ export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: Firm
     if (!envio.ok) avisos.push(`El acta se guardó, pero ${envio.error} Puedes reenviarlo desde el listado.`);
     else await auditar("NOTIFICAR", "formatos_ti", fila.id, `Enlace de firma enviado por correo (acta ${fila.numero_orden})`);
   }
-  await auditar("INSERTAR", "formatos_ti", fila.id, `Acta de entrega ${fila.numero_orden} creada`);
   revalidatePath("/formatos-ti/acta-entrega");
   return { success: true, id: fila.id, numero_orden: fila.numero_orden, avisos };
 }

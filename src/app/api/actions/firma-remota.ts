@@ -22,5 +22,6 @@ export async function firmarRemoto(token: string, dataUri: string): Promise<{ su
     await auditar("MODIFICAR", "formatos_ti", res.registroId, "Firma remota registrada por el funcionario (enlace por correo)", { userId: null, label: "firma remota (enlace por correo)", role: "" });
     revalidatePath("/formatos-ti/acta-entrega");
   }
-  return res;
+  // Al firmante (público) solo se le confirma el resultado: el id del registro es interno.
+  return "success" in res ? { success: true } : res;
 }
