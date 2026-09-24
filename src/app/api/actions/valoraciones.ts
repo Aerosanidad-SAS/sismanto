@@ -11,6 +11,11 @@ import {
   VALORACIONES_POR_PAGINA,
   palabrasBusquedaValoraciones,
 } from "@/lib/valoraciones-lista";
+import { renderToBuffer } from "@react-pdf/renderer";
+import { createElement } from "react";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { CertificadoValoracionPdf, type CertificadoValoracionDatos } from "@/lib/pdf/certificado-valoracion";
 import { z } from "zod";
 
 /**
@@ -117,4 +122,42 @@ export async function eliminarValoracion(id: number) {
   if (error) return { error: error.message };
   revalidatePath("/valoraciones");
   return { success: true };
+}
+
+/**
+ * Certificado PDF de una valoración (equivalente a DescargarValoracion_PDF.php de SISRES).
+ * Devuelve el PDF en base64, mismo patrón que `generarHojaVidaPdf` (sin Route Handler).
+ * La lectura pasa por RLS: solo quien puede ver la valoración puede descargarla.
+ */
+export async function generarCertificadoValoracionPdf(id: number) {
+  const idParsed = z.number().int().positive().safeParse(id);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const supabase = createClient();
+  const { data: valoracion } = await supabase
+    .from("medical_assessments")
+    .select("*")
+    .eq("id", idParsed.data)
+    .maybeSingle();
+  if (!valoracion) return { error: "Valoración no encontrada" };
+
+  // El logo es opcional: si el archivo no está en el despliegue, el certificado sale igual, sin logo.
+  let logo: Buffer | undefined;
+  try {
+    logo = await readFile(path.join(process.cwd(), "public", "brand", "alianza.png"));
+  } catch {
+    logo = undefined;
+  }
+
+  try {
+    const buffer = await renderToBuffer(
+      createElement(CertificadoValoracionPdf, {
+        valoracion: valoracion as CertificadoValoracionDatos,
+        logo,
+      })
+    );
+    return { success: true, data: buffer.toString("base64"), filename: `certificado-valoracion-${valoracion.id}.pdf` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo generar el PDF" };
+  }
 }

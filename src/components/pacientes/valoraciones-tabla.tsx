@@ -31,7 +31,7 @@ import {
   estadoLegible,
   nombreCompletoPaciente,
 } from "@/lib/valoraciones-lista";
-import { crearValoracion, actualizarValoracion } from "@/app/api/actions/valoraciones";
+import { crearValoracion, actualizarValoracion, generarCertificadoValoracionPdf } from "@/app/api/actions/valoraciones";
 import { buscarPacientePorCedula } from "@/app/api/actions/pacientes";
 
 export interface ValoracionRow {
@@ -85,6 +85,7 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
   const [guardando, setGuardando] = useState(false);
   const [buscandoPaciente, setBuscandoPaciente] = useState(false);
   const [avisoPaciente, setAvisoPaciente] = useState<string | null>(null);
+  const [descargandoId, setDescargandoId] = useState<number | null>(null);
 
   const { register, handleSubmit, reset, setValue, watch, getValues, formState } = useForm<AssessmentFormData>({
     resolver: zodResolver(assessmentSchema),
@@ -97,6 +98,24 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
   // Si el registro trae un género fuera de la lista (datos viejos), se conserva como opción para no perderlo al editar.
   const opcionesGenero: string[] = [...SEXO_OPCIONES];
   if (generoSeleccionado && !opcionesGenero.includes(generoSeleccionado)) opcionesGenero.push(generoSeleccionado);
+
+  const descargarCertificado = async (id: number) => {
+    setDescargandoId(id);
+    const res = await generarCertificadoValoracionPdf(id);
+    setDescargandoId(null);
+    if ("error" in res && res.error) {
+      alert(res.error);
+      return;
+    }
+    if (!("data" in res) || !res.data) return;
+    const bytes = Uint8Array.from(atob(res.data), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = res.filename ?? "certificado-valoracion.pdf";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const abrirNuevo = () => {
     setEditando(null);
@@ -225,13 +244,13 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
               <TableHead>Valoración</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Médico</TableHead>
-              {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
+              <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {valoraciones.length === 0 && (
               <TableRow>
-                <TableCell colSpan={puedeEditar ? 12 : 11} className="text-center text-muted-foreground">
+                <TableCell colSpan={12} className="text-center text-muted-foreground">
                   {busqueda ? "Sin resultados para la búsqueda" : "Sin valoraciones registradas"}
                 </TableCell>
               </TableRow>
@@ -259,13 +278,21 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
                     </Badge>
                   </TableCell>
                   <TableCell>{v.medico ?? "—"}</TableCell>
-                  {puedeEditar && (
-                    <TableCell className="text-right">
+                  <TableCell className="space-x-2 whitespace-nowrap text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => descargarCertificado(v.id)}
+                      disabled={descargandoId === v.id}
+                    >
+                      {descargandoId === v.id ? "Generando…" : "PDF"}
+                    </Button>
+                    {puedeEditar && (
                       <Button variant="outline" size="sm" onClick={() => abrirEdicion(v)}>
                         Editar
                       </Button>
-                    </TableCell>
-                  )}
+                    )}
+                  </TableCell>
                 </TableRow>
               );
             })}
