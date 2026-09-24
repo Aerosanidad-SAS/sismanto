@@ -1,10 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState, useCallback } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname,
+  useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Truck,
@@ -34,6 +38,11 @@ import {
   PackageCheck,
   Handshake,
   Building2,
+  Plane,
+  PlaneTakeoff,
+  FileSignature,
+  HandCoins,
+  Trash2,
   Headset,
   LifeBuoy,
 } from "lucide-react";
@@ -139,6 +148,20 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
         hint: "Conceptos de aptitud médica para vuelo (origen SISRES).",
       },
+      {
+        name: "Aerolíneas",
+        href: "/aerolineas",
+        icon: PlaneTakeoff,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aerolíneas para las valoraciones (origen SISRES).",
+      },
+      {
+        name: "Aeropuertos",
+        href: "/aeropuertos",
+        icon: Plane,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aeropuertos para origen y destino de vuelo (origen SISRES).",
+      },
     ],
   },
   {
@@ -183,6 +206,39 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Activity,
         roles: ["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"],
         hint: "Inventario, mantenimientos y hoja de vida de equipos médicos (origen SISRES).",
+      },
+    ],
+  },
+  {
+    label: "Formatos TI",
+    items: [
+      {
+        name: "Acta de entrega",
+        href: "/formatos-ti/acta-entrega",
+        icon: FileSignature,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Acta de entrega de equipos y celulares con firma digital (G-TECN-F 028 / 031, origen SISRES).",
+      },
+      {
+        name: "Diagnóstico de equipos",
+        href: "/formatos-ti/diagnostico",
+        icon: ClipboardCheck,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Diagnóstico y mantenimiento de equipos informáticos con listado de chequeo y firma (G-TECN-F 047, origen SISRES).",
+      },
+      {
+        name: "Baja de equipos",
+        href: "/formatos-ti/baja",
+        icon: Trash2,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Baja de dispositivos informáticos y biomédicos con firma del responsable (G-TECN-F 020, origen SISRES).",
+      },
+      {
+        name: "Entrega y préstamo",
+        href: "/formatos-ti/prestamo",
+        icon: HandCoins,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Entrega y préstamo de equipos informáticos con entrega y devolución firmadas (G-TECN-F 018, origen SISRES).",
       },
     ],
   },
@@ -271,6 +327,18 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Users,
         roles: ["ADMIN", "ANALISTA"],
         hint: "Alta, roles y estado de cuentas del personal.",
+      },
+    ],
+  },
+  {
+    label: "Aeroportuaria",
+    items: [
+      {
+        name: "Captación aeroportuaria",
+        href: "/captacion",
+        icon: Plane,
+        roles: ["ADMIN", "ANALISTA", "COORDINACION", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA"],
+        hint: "Registra las atenciones en aeropuertos y genera el reporte SISPRO del mes.",
       },
     ],
   },
@@ -398,7 +466,7 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "COORDINACION" &&
-          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte"].some(
+          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte", "/captacion"].some(
             (b) => pathname === b || pathname.startsWith(`${b}/`)
           )
         ) {
