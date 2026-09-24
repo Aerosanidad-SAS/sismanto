@@ -214,7 +214,9 @@ export async function exportarDetalleCampana(campaignId: number) {
   const supabase = createClient();
   const { data: camp } = await supabase.from("wa_campaigns").select("nombre").eq("id", idParsed.data).maybeSingle();
   if (!camp) return { error: "Campaña no encontrada" };
-  const { data } = await supabase.from("wa_campaign_recipients").select("*").eq("campaign_id", idParsed.data).order("id").limit(20000);
+  const { data, error } = await supabase.from("wa_campaign_recipients").select("*").eq("campaign_id", idParsed.data).order("id").limit(20000);
+  // Un fallo de la base NO es un Excel vacío ni una exportación que registrar.
+  if (error) return { error: error.message };
   // Los destinatarios son teléfonos de personas: queda quién los exportó y cuántos (no el contenido).
   await auditar("EXPORTAR", "campanas", idParsed.data, `Exportación del detalle de la campaña (${(data ?? []).length} destinatarios)`);
   return {
@@ -228,7 +230,8 @@ export async function exportarHistorialCampanas() {
   const profile = await getProfile();
   if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
   const supabase = createClient();
-  const { data } = await supabase.from("wa_campaigns").select("*").order("created_at", { ascending: false }).limit(5000);
+  const { data, error } = await supabase.from("wa_campaigns").select("*").order("created_at", { ascending: false }).limit(5000);
+  if (error) return { error: error.message };
   await auditar("EXPORTAR", "campanas", "", `Exportación del historial de campañas (${(data ?? []).length} campañas)`);
   return { success: true as const, filas: filasHistorial((data ?? []) as unknown as Record<string, unknown>[]) };
 }
