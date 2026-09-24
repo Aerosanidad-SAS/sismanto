@@ -48,6 +48,17 @@ type TiBajaEquipoRow = {
   firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
 }
 
+type TiPrestamoEquipoRow = {
+  id: number; numero_orden: string; fecha_entrega: string; equipo_descripcion: string; equipo_placa: string; equipo_incluye: string;
+  usuario_recibe_nombre: string; usuario_recibe_cargo: string; firma_usuario_recibe_ruta: string; firma_usuario_recibe_hash: string;
+  func_entrega_nombre: string; func_entrega_cargo: string; firma_func_entrega_ruta: string; firma_func_entrega_hash: string;
+  fecha_devolucion: string | null; gestion_recibe_nombre: string | null; gestion_recibe_cargo: string | null;
+  firma_gestion_recibe_ruta: string | null; firma_gestion_recibe_hash: string | null;
+  usuario_entrega_dev_nombre: string | null; usuario_entrega_dev_cargo: string | null;
+  firma_usuario_entrega_dev_ruta: string | null; firma_usuario_entrega_dev_hash: string | null;
+  observaciones: string; firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -1263,6 +1274,12 @@ export type Database = {
         Row: TiBajaEquipoRow
         Insert: Partial<Omit<TiBajaEquipoRow, "numero_orden">>
         Update: Partial<Omit<TiBajaEquipoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_prestamo_equipo: {
+        Row: TiPrestamoEquipoRow
+        Insert: Partial<Omit<TiPrestamoEquipoRow, "numero_orden">>
+        Update: Partial<Omit<TiPrestamoEquipoRow, "numero_orden">>
         Relationships: []
       }
       wa_campaigns: {

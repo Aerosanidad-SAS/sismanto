@@ -34,6 +34,7 @@ import {
   Handshake,
   Building2,
   FileSignature,
+  HandCoins,
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -208,6 +209,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Trash2,
         roles: ["ADMIN", "ANALISTA"],
         hint: "Baja de dispositivos informáticos y biomédicos con firma del responsable (G-TECN-F 020, origen SISRES).",
+      },
+      {
+        name: "Entrega y préstamo",
+        href: "/formatos-ti/prestamo",
+        icon: HandCoins,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Entrega y préstamo de equipos informáticos con entrega y devolución firmadas (G-TECN-F 018, origen SISRES).",
       },
     ],
   },
