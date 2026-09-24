@@ -876,3 +876,82 @@ export const ticketDisponibilidadSchema = z.object({
 export const ticketCorreoSchema = z.string().trim().toLowerCase().email("Correo inválido").max(254);
 export const ticketMensajeSchema = z.string().trim().max(500, "Máximo 500 caracteres");
 export const ticketCatalogoTipoSchema = z.enum(["sedes", "areas", "categorias"]);
+
+// ─── Captación aeroportuaria + SISPRO — ver migración 080 ────────────────────
+const textoOpc = (max: number) =>
+  z.string().trim().max(max, `Máximo ${max} caracteres`).optional().transform((v) => (v ? v : undefined));
+const textoReq = (max: number, msg: string) => z.string().trim().min(1, msg).max(max, `Máximo ${max} caracteres`);
+const codigo = (min: number, max: number, msg: string) => z.coerce.number({ invalid_type_error: msg }).int(msg).min(min, msg).max(max, msg);
+const vacioAUndefined = z.literal("").transform(() => undefined);
+
+export const captacionSchema = z
+  .object({
+    // "yyyy-MM-ddTHH:mm" en hora de Colombia (el servidor lo convierte con aTimestamptzColombia)
+    fecha_atencion: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Fecha y hora de la atención inválidas"),
+    aeropuerto_atencion: textoReq(150, "Selecciona el aeropuerto de atención"),
+    paciente_id: z.coerce.number().int().positive().optional().or(vacioAUndefined),
+    tipo_identificacion: z.enum(["CC", "RC", "TI", "CE", "PA", "MS", "AS", "CD", "NV"], {
+      errorMap: () => ({ message: "Selecciona el tipo de identificación" }),
+    }),
+    numero_identificacion: textoReq(18, "El número de identificación es obligatorio"),
+    primer_nombre: textoReq(30, "El primer nombre es obligatorio"),
+    segundo_nombre: textoOpc(30),
+    primer_apellido: textoReq(30, "El primer apellido es obligatorio"),
+    segundo_apellido: textoOpc(30),
+    fecha_nacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de nacimiento inválida").optional().or(vacioAUndefined),
+    sexo: z.enum(["F", "M"], { errorMap: () => ({ message: "Selecciona el sexo" }) }),
+    nacionalidad: textoReq(35, "La nacionalidad es obligatoria"),
+    pais_residencia: textoReq(80, "Selecciona el país de residencia"),
+    pais_procedencia: textoReq(80, "Selecciona el país de procedencia"),
+    aeropuerto_procedencia: textoReq(150, "Selecciona el aeropuerto de procedencia"),
+    telefono: z.string().trim().max(20).regex(/^[0-9+()\-\s]*$/, "El teléfono solo puede llevar números").optional().transform((v) => (v ? v : undefined)),
+    tipo_usuario: codigo(1, 4, "Selecciona el tipo de usuario"),
+    momento_atencion: codigo(1, 4, "Selecciona el momento de la atención"),
+    motivo_consulta: codigo(1, 6, "Selecciona el motivo de consulta"),
+    tipo_egreso: codigo(1, 3, "Selecciona el tipo de egreso"),
+    tipo_atencion: textoOpc(60),
+    resultado_autorizacion: z.enum(["APTO", "NO APTO"]).optional().or(vacioAUndefined),
+    lugar_atencion: z.enum(["SERVICIO", "EXTERNO"]).optional().or(vacioAUndefined),
+    lado_atencion: z.enum(["TIERRA", "AIRE"]).optional().or(vacioAUndefined),
+    ubicacion_atencion: textoOpc(40),
+    detalle_ubicacion: textoOpc(2000),
+    tiempo_activacion: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Hora inválida").optional().or(vacioAUndefined),
+    tiempo_llegada: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Hora inválida").optional().or(vacioAUndefined),
+    condicion: textoOpc(30),
+    cie10: z.string().trim().toUpperCase().regex(/^[A-Z]\d{2}[A-Z0-9]$/, "El CIE-10 debe tener 4 caracteres (ej. J449)"),
+    patologia_sistema: textoOpc(120),
+    otra_patologia: textoOpc(120),
+    post_operatorio: textoOpc(120),
+    accidente_especial: textoOpc(60),
+    notificacion_obligatoria: textoOpc(150),
+    tipo_vuelo: textoOpc(30),
+    aerolinea: textoOpc(150),
+    procedimientos: z.array(z.string().trim().min(1).max(120)).max(30).default([]),
+    emergencia_tipo: textoOpc(40),
+    emergencia_notas: textoOpc(2000),
+    remision: z.boolean(),
+    ips_receptora: textoOpc(200),
+    origen: textoOpc(100),
+    destino: textoOpc(100),
+    recibio_medicamentos: z.boolean(),
+    medicamento: textoOpc(150),
+    evento_adverso_medicamento: z.boolean().optional(),
+    uso_dispositivo: z.boolean(),
+    dispositivo: textoOpc(150),
+    evento_adverso_dispositivo: z.boolean().optional(),
+    medico_atendio: textoReq(100, "Indica el médico que atendió"),
+  })
+  .superRefine((d, ctx) => {
+    const falta = (path: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+    if (d.remision && !d.ips_receptora) falta("ips_receptora", "Selecciona la IPS receptora (999 si es desconocida)");
+    if (d.recibio_medicamentos && !d.medicamento) falta("medicamento", "Indica el nombre del medicamento");
+    if (d.recibio_medicamentos && d.evento_adverso_medicamento === undefined) falta("evento_adverso_medicamento", "Indica si hubo evento adverso");
+    if (d.uso_dispositivo && !d.dispositivo) falta("dispositivo", "Indica el nombre del dispositivo");
+    if (d.uso_dispositivo && d.evento_adverso_dispositivo === undefined) falta("evento_adverso_dispositivo", "Indica si hubo evento adverso");
+    if (d.tipo_atencion === "AUTORIZACION DE VUELO" && !d.resultado_autorizacion) falta("resultado_autorizacion", "Indica el resultado (APTO / NO APTO)");
+    if (d.lado_atencion && d.ubicacion_atencion) {
+      const validas = { TIERRA: ["AREA TERMINAL", "VIAS DE ACCESO"], AIRE: ["AREA MANIOBRAS", "PLATAFORMA"] }[d.lado_atencion];
+      if (!validas.includes(d.ubicacion_atencion)) falta("ubicacion_atencion", "La ubicación no corresponde al lado seleccionado");
+    }
+  });
+export type CaptacionFormData = z.input<typeof captacionSchema>;
