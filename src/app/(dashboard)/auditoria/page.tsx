@@ -26,6 +26,7 @@ const VARIANTE: Record<string, "default" | "secondary" | "destructive" | "succes
   LOGIN: "secondary",
   LOGOUT: "outline",
   NOTIFICAR: "secondary",
+  EXPORTAR: "secondary",
 };
 
 /** "24/09/2026 09:15:03" en hora de Colombia. */
