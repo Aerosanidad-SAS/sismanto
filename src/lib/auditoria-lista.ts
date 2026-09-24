@@ -3,7 +3,7 @@
  * la acción de lectura y el ayudante que escribe. Sin dependencias de servidor.
  */
 
-export const ACCIONES_AUDITORIA = ["INSERTAR", "MODIFICAR", "ELIMINAR", "LOGIN", "LOGOUT", "NOTIFICAR", "ERROR"] as const;
+export const ACCIONES_AUDITORIA = ["INSERTAR", "MODIFICAR", "ELIMINAR", "LOGIN", "LOGOUT", "NOTIFICAR", "ERROR", "EXPORTAR"] as const;
 export type AccionAuditoria = (typeof ACCIONES_AUDITORIA)[number];
 
 /** Módulos que registran hoy: alimenta el filtro "Módulo". Una entidad nueva funciona igual; solo falta añadirla aquí para filtrarla. */

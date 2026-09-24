@@ -262,6 +262,8 @@ export async function exportarServicios(filtros: FiltrosServicios) {
     filas.push(...((data ?? []) as Record<string, unknown>[]));
     if (!data || data.length < LOTE) break;
   }
+  // Quién sacó datos de servicios (pacientes, diagnósticos) a un archivo y cuántas filas: solo la cuenta, no el contenido.
+  await auditar("EXPORTAR", "servicios", "", `Exportación de servicios (${filas.length} filas${filas.length >= EXPORT_MAX_FILAS ? ", truncada" : ""})`);
   return {
     filas: filas.map((s) => ({
       ...s,

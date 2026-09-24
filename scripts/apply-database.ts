@@ -82,6 +82,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "066_tickets_gestion.sql",                     file: "scripts/migrations/066_tickets_gestion.sql" },
   { name: "067_tickets_config_indicadores.sql",          file: "scripts/migrations/067_tickets_config_indicadores.sql" },
   { name: "077_audit_log.sql",                             file: "scripts/migrations/077_audit_log.sql" },
+  { name: "082_audit_log_exportar.sql",                   file: "scripts/migrations/082_audit_log_exportar.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
