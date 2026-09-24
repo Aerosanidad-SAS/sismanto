@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { getProfile } from "@/app/api/actions/auth";
 import type { WaCampaignFormData } from "@/lib/validations";
@@ -115,6 +116,10 @@ export async function procesarLoteCampana(campaignId: number) {
     pausaEntreEnviosMs: PAUSA_ENTRE_ENVIOS_MS,
     tamanoLote: LOTE_CAMPANA,
   });
+  // Un registro por campaña al terminar (no uno por lote de 5 mensajes: inundaría la bitácora).
+  if ("success" in res && res.estado === "COMPLETADA" && res.restantes === 0 && res.procesados > 0) {
+    await auditar("NOTIFICAR", "campanas", idParsed.data, "Envío de la campaña completado");
+  }
   revalidatePath("/comunicaciones");
   return res;
 }
@@ -126,7 +131,10 @@ async function cambiarEstado(campaignId: number, accion: AccionCampana) {
   if (!idParsed.success) return { error: "ID inválido" };
 
   const res = await cambiarEstadoCampana(createClient(), idParsed.data, accion);
-  if ("success" in res) revalidatePath("/comunicaciones");
+  if ("success" in res) {
+    await auditar("MODIFICAR", "campanas", idParsed.data, `Campaña ${{ pausar: "pausada", reanudar: "reanudada", cancelar: "cancelada" }[accion]}`);
+    revalidatePath("/comunicaciones");
+  }
   return res;
 }
 
@@ -174,7 +182,10 @@ export async function adjuntarMediaCampana(campaignId: number, ruta: string) {
     userId: profile.user_id,
     subir: subirMediaMeta,
   });
-  if ("success" in res) revalidatePath("/comunicaciones");
+  if ("success" in res) {
+    await auditar("MODIFICAR", "campanas", idParsed.data, `Adjunto agregado a la campaña (${res.tipo})`);
+    revalidatePath("/comunicaciones");
+  }
   return res;
 }
 
@@ -186,7 +197,10 @@ export async function quitarMediaCampana(campaignId: number) {
 
   const supabase = createClient();
   const res = await quitarMedia(supabase, almacenMedia(supabase), idParsed.data);
-  if ("success" in res) revalidatePath("/comunicaciones");
+  if ("success" in res) {
+    await auditar("MODIFICAR", "campanas", idParsed.data, "Adjunto quitado de la campaña");
+    revalidatePath("/comunicaciones");
+  }
   return res;
 }
 
