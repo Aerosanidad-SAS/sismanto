@@ -1203,14 +1203,14 @@ export type Database = {
         ]
       }
       wa_campaigns: {
-        Row: { id: number; nombre: string; plantilla: string; idioma: string; estado: string; media_tipo: string | null; media_id: string | null; media_nombre: string | null; total_destinatarios: number; total_enviados: number; total_fallidos: number; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: number; nombre: string; plantilla: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: number; nombre?: string; plantilla?: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: number; nombre: string; plantilla: string; idioma: string; estado: string; media_tipo: string | null; media_id: string | null; media_nombre: string | null; total_destinatarios: number; total_enviados: number; total_fallidos: number; total_entregados: number; total_leidos: number; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; nombre: string; plantilla: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; total_entregados?: number; total_leidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; nombre?: string; plantilla?: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; total_entregados?: number; total_leidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       wa_campaign_recipients: {
-        Row: { id: number; campaign_id: number; telefono: string; nombre: string | null; parametros: Json | null; estado: string; wamid: string | null; error: string | null; sent_at: string | null; created_at: string }
-        Insert: { id?: number; campaign_id: number; telefono: string; nombre?: string | null; parametros?: Json | null; estado?: string; wamid?: string | null; error?: string | null; sent_at?: string | null; created_at?: string }
+        Row: { id: number; campaign_id: number; telefono: string; nombre: string | null; parametros: Json | null; estado: string; wamid: string | null; error: string | null; sent_at: string | null; entregado_at: string | null; leido_at: string | null; estado_meta: string | null; created_at: string }
+        Insert: { id?: number; campaign_id: number; telefono: string; nombre?: string | null; parametros?: Json | null; estado?: string; wamid?: string | null; error?: string | null; sent_at?: string | null; entregado_at?: string | null; leido_at?: string | null; estado_meta?: string | null; created_at?: string }
         Update: { id?: number; campaign_id?: number; telefono?: string; nombre?: string | null; parametros?: Json | null; estado?: string; wamid?: string | null; error?: string | null; sent_at?: string | null; created_at?: string }
         Relationships: [
           {
