@@ -48,6 +48,8 @@ export interface EquipoRow {
   proximo_mantenimiento: string | null;
   ultima_calibracion: string | null;
   proxima_calibracion: string | null;
+  vencimiento_parche_adulto: string | null;
+  vencimiento_parche_pediatrico: string | null;
   ubicacion_interna: string | null;
   aeropuerto: string | null;
   ciudad: string | null;
@@ -81,6 +83,8 @@ const CAMPOS_EQUIPO: { name: keyof BiomedicalEquipmentFormData; label: string; t
   { name: "proximo_mantenimiento", label: "Próximo mantenimiento", type: "date" },
   { name: "ultima_calibracion", label: "Última calibración", type: "date" },
   { name: "proxima_calibracion", label: "Próxima calibración", type: "date" },
+  { name: "vencimiento_parche_adulto", label: "Vencimiento parche adulto (solo BIOMÉDICA)", type: "date" },
+  { name: "vencimiento_parche_pediatrico", label: "Vencimiento parche pediátrico (solo BIOMÉDICA)", type: "date" },
   { name: "frec_mantenimiento", label: "Frecuencia mantenimiento" },
   { name: "frec_calibracion", label: "Frecuencia calibración" },
   { name: "ubicacion_interna", label: "Ubicación interna" },
@@ -342,6 +346,8 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
                     ["Próximo mantenimiento", hojaDeVida.proximo_mantenimiento],
                     ["Última calibración", hojaDeVida.ultima_calibracion],
                     ["Próxima calibración", hojaDeVida.proxima_calibracion],
+                    ["Vencimiento parche adulto", hojaDeVida.vencimiento_parche_adulto],
+                    ["Vencimiento parche pediátrico", hojaDeVida.vencimiento_parche_pediatrico],
                     ["Voltaje", hojaDeVida.voltaje as string | null],
                     ["Dimensiones", hojaDeVida.dimensiones as string | null],
                     ["Peso", hojaDeVida.peso as string | null],

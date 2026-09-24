@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:apply": "tsx scripts/apply-database.ts",
+    "db:check": "tsx scripts/check-migrations-registered.ts",
     "fuel:load": "tsx scripts/load-fuel-logs.ts",
     "etl:sisres": "tsx scripts/etl-sisres.ts"
   },

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/app/api/actions/auth";
 import { puedeGestionarTickets } from "@/lib/auth-utils";
+import { auditar } from "@/lib/auditoria";
 import { reabrirTicketSchema, ticketSchema, TICKET_ESTADOS } from "@/lib/validations";
 
 // Soporte técnico (tickets) — lado del solicitante. Esquema y RLS: migración 065.
@@ -199,6 +200,8 @@ export async function crearTicket(formData: FormData) {
     return { error: error?.message ?? "No se pudo registrar el ticket" };
   }
 
+  // Solo categoría/prioridad/sede: el asunto y la descripción pueden traer datos personales y no van a la bitácora.
+  await auditar("INSERTAR", "tickets", (data as { id: number }).id, `Ticket creado (${datos.categoria}/${datos.prioridad}, sede ${datos.sede})${solicitanteId === user.id ? "" : " a nombre de otra persona"}`);
   revalidatePath("/soporte");
   return { success: true as const, id: (data as { id: number }).id };
 }
@@ -213,6 +216,7 @@ export async function reabrirTicket(ticketId: number, nota: string) {
   const { error } = await supabase.rpc("reabrir_ticket", { p_ticket_id: parsed.data.id, p_nota: parsed.data.nota });
   if (error) return { error: error.message };
 
+  await auditar("MODIFICAR", "tickets", parsed.data.id, "Ticket reabierto");
   revalidatePath("/soporte");
   return { success: true as const };
 }

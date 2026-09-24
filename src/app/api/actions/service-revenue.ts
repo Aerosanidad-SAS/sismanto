@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/app/api/actions/auth";
 import { z } from "zod";
@@ -51,6 +52,7 @@ export async function createServiceType(raw: z.infer<typeof createServiceTypeSch
   });
 
   if (error) return { error: error.message };
+  await auditar("INSERTAR", "configuracion", "", "Tipo de servicio creado");
   revalidatePath("/configuracion");
   return { success: true };
 }
@@ -93,6 +95,7 @@ export async function upsertVehicleServiceRevenue(raw: z.infer<typeof upsertReve
   );
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", parsed.data.vehicleId, `Ingreso por servicio registrado (periodo ${parsed.data.periodo})`);
   revalidatePath(`/vehiculos/${parsed.data.vehicleId}`);
   revalidatePath("/configuracion");
   return { success: true };
@@ -107,6 +110,7 @@ export async function deleteVehicleServiceRevenue(id: number, vehicleId: string)
   const supabase = createClient();
   const { error } = await supabase.from("vehicle_service_revenue").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "vehiculos", vidParsed.data, "Ingreso por servicio eliminado");
   revalidatePath(`/vehiculos/${vidParsed.data}`);
   return { success: true };
 }

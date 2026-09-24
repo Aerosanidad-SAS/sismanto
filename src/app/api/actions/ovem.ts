@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { requireRole } from "./auth";
 import { revalidatePath } from "next/cache";
 import {
@@ -383,6 +384,8 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
     .select("id")
     .single();
   if (incidentError || !incident) return { error: incidentError?.message ?? "No se pudo crear la novedad" };
+  // Se registra en cuanto la novedad existe: si el detalle del siniestro falla más abajo, la novedad ya creada no queda sin rastro.
+  await auditar("INSERTAR", "novedades", incident.id as number, "Siniestro vial reportado");
 
   const { error } = await supabase.from("road_accidents").insert({
     vehicle_id: row.vehicleId,

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProfile } from "@/app/api/actions/auth";
 import { z } from "zod";
@@ -216,6 +217,7 @@ export async function crearTraining(input: unknown) {
     .single();
 
   if (error) return { error: error.message };
+  await auditar("INSERTAR", "capacitaciones", (data as unknown as { id: number }).id, "Capacitación creada");
   return { data, error: null };
 }
 
@@ -238,6 +240,7 @@ export async function actualizarTraining(id: number, input: unknown) {
     .eq("id", id);
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "capacitaciones", id, "Capacitación actualizada");
   return { error: null };
 }
 
@@ -252,6 +255,7 @@ export async function desactivarTraining(id: number) {
     .eq("id", id);
 
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "capacitaciones", id, "Capacitación desactivada");
   return { error: null };
 }
 
@@ -299,6 +303,7 @@ export async function guardarPregunta(input: unknown) {
     if (oErr) return { error: oErr.message };
   }
 
+  await auditar("INSERTAR", "capacitaciones", parsed.data.training_id, "Pregunta de capacitación agregada");
   return { data: q, error: null };
 }
 
@@ -313,6 +318,7 @@ export async function eliminarPregunta(questionId: number) {
     .eq("id", questionId);
 
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "capacitaciones", questionId, "Pregunta de capacitación desactivada");
   return { error: null };
 }
 
@@ -337,6 +343,7 @@ export async function asignarCapacitacion(input: unknown) {
     .upsert(registros, { onConflict: "training_id,user_id", ignoreDuplicates: true });
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "capacitaciones", parsed.data.training_id, `Capacitación asignada a ${parsed.data.user_ids.length} usuario(s)`);
   return { error: null };
 }
 
@@ -383,6 +390,7 @@ export async function asignarPorCicloMes(mes: number, fechaLimite?: string) {
     .upsert(rows, { onConflict: "training_id,user_id", ignoreDuplicates: true });
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "capacitaciones", "", `Asignación por ciclo (mes ${mes}): ${rows.length} asignaciones`);
   return { cantidad: rows.length, error: null };
 }
 
@@ -416,6 +424,7 @@ export async function calificarSesion(input: unknown) {
     .update({ completado: true })
     .eq("id", session.assignment_id);
 
+  await auditar("MODIFICAR", "capacitaciones", parsed.data.session_id, "Sesión de capacitación calificada");
   return { error: null };
 }
 

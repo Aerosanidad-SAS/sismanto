@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { IncidentFormData } from "@/lib/validations";
 import { incidentSchema, updateIncidentPrioridadSchema } from "@/lib/validations";
@@ -37,6 +38,7 @@ export async function createIncident(data: IncidentFormData) {
 
     // El trigger de la BD actualizará el estado del vehículo si afecta_operatividad = true
 
+    await auditar("INSERTAR", "novedades", (incident as unknown as { id: number }).id, `Novedad reportada (severidad ${severidad})`);
     revalidatePath("/");
     revalidatePath("/novedades");
     revalidatePath(`/vehiculos/${payload.vehicleId}`);
@@ -62,6 +64,7 @@ export async function updateIncidentPrioridad(incidentId: number, prioridad: "BA
     .eq("id", parsed.data.incidentId);
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "novedades", incidentId, `Prioridad de la novedad: ${parsed.data.prioridad ?? "sin prioridad"}`);
   revalidatePath("/novedades");
   revalidatePath("/");
   revalidatePath("/vehiculos");
@@ -113,6 +116,7 @@ export async function closeIncident(
     if (error) return { error: error.message };
   }
 
+  await auditar("MODIFICAR", "novedades", idParsed.data, "Novedad cerrada");
   revalidatePath("/novedades");
   revalidatePath("/");
   revalidatePath("/vehiculos");

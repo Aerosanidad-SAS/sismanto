@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { VehicleFormData } from "@/lib/validations";
 import {
@@ -126,6 +127,7 @@ export async function crearVehiculo(formData: VehicleFormData) {
   });
 
   if (error) return { error: error.message };
+  await auditar("INSERTAR", "vehiculos", "", "Vehículo creado");
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   return { success: true };
@@ -181,6 +183,7 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
     .eq("id", idParsed.data);
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", idParsed.data, "Vehículo actualizado");
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   revalidatePath(`/vehiculos/${idParsed.data}`);
@@ -212,6 +215,7 @@ export async function actualizarEspecificacionesVehiculo(formData: VehicleSpecsF
     .eq("id", fd.vehicleId);
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", fd.vehicleId, "Especificaciones del vehículo actualizadas");
   revalidatePath(`/vehiculos/${fd.vehicleId}`);
   revalidatePath("/vehiculos");
   revalidatePath("/");
@@ -252,6 +256,7 @@ export async function actualizarInformacionGeneralVehiculo(formData: VehicleGene
     .eq("id", fd.vehicleId);
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", fd.vehicleId, "Información general del vehículo actualizada");
   revalidatePath(`/vehiculos/${fd.vehicleId}`);
   revalidatePath("/vehiculos");
   revalidatePath("/");

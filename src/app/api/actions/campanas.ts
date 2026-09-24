@@ -14,6 +14,7 @@ import { adjuntarMedia, quitarMedia, resolverMediaEnvio, type AlmacenMedia } fro
 import { filasDetalle, filasHistorial } from "@/lib/campanas-exportar";
 import { leerDestinatariosDeBase } from "@/lib/campanas-base";
 import { mascararTelefono, normalizarDestinatarios, resumenOmitidos } from "@/lib/campanas-destinatarios";
+import { auditar } from "@/lib/auditoria";
 
 const ROLES_CAMPANAS = ["ADMIN", "COORDINACION"];
 
@@ -81,6 +82,8 @@ async function insertarCampana(
   );
   if (errDest) return { error: errDest.message };
 
+  // NOTIFICAR = envío masivo. Se registra quién la creó y cuántos destinatarios; nunca los teléfonos.
+  await auditar("NOTIFICAR", "campanas", campana.id, `Campaña creada con ${destinatarios.length} destinatarios`);
   revalidatePath("/comunicaciones");
   return { success: true as const, data: campana };
 }

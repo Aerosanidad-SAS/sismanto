@@ -1,10 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState, useCallback } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname,
+  useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Truck,
@@ -34,11 +38,17 @@ import {
   PackageCheck,
   Handshake,
   Building2,
+  History,
+  Plane,
+  PlaneTakeoff,
+  FileSignature,
+  HandCoins,
+  Trash2,
   Headset,
   LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getDefaultRoute } from "@/lib/auth-utils";
+import { esRolRestringido, getDefaultRoute, rutaPermitidaARolRestringido } from "@/lib/auth-utils";
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
 import { getCompanyBranding } from "@/app/api/actions/company-settings";
 import { Button } from "@/components/ui/button";
@@ -139,6 +149,20 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
         hint: "Conceptos de aptitud médica para vuelo (origen SISRES).",
       },
+      {
+        name: "Aerolíneas",
+        href: "/aerolineas",
+        icon: PlaneTakeoff,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aerolíneas para las valoraciones (origen SISRES).",
+      },
+      {
+        name: "Aeropuertos",
+        href: "/aeropuertos",
+        icon: Plane,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aeropuertos para origen y destino de vuelo (origen SISRES).",
+      },
     ],
   },
   {
@@ -183,6 +207,39 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Activity,
         roles: ["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"],
         hint: "Inventario, mantenimientos y hoja de vida de equipos médicos (origen SISRES).",
+      },
+    ],
+  },
+  {
+    label: "Formatos TI",
+    items: [
+      {
+        name: "Acta de entrega",
+        href: "/formatos-ti/acta-entrega",
+        icon: FileSignature,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Acta de entrega de equipos y celulares con firma digital (G-TECN-F 028 / 031, origen SISRES).",
+      },
+      {
+        name: "Diagnóstico de equipos",
+        href: "/formatos-ti/diagnostico",
+        icon: ClipboardCheck,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Diagnóstico y mantenimiento de equipos informáticos con listado de chequeo y firma (G-TECN-F 047, origen SISRES).",
+      },
+      {
+        name: "Baja de equipos",
+        href: "/formatos-ti/baja",
+        icon: Trash2,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Baja de dispositivos informáticos y biomédicos con firma del responsable (G-TECN-F 020, origen SISRES).",
+      },
+      {
+        name: "Entrega y préstamo",
+        href: "/formatos-ti/prestamo",
+        icon: HandCoins,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Entrega y préstamo de equipos informáticos con entrega y devolución firmadas (G-TECN-F 018, origen SISRES).",
       },
     ],
   },
@@ -272,6 +329,25 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         roles: ["ADMIN", "ANALISTA"],
         hint: "Alta, roles y estado de cuentas del personal.",
       },
+      {
+        name: "Bitácora",
+        href: "/auditoria",
+        icon: History,
+        roles: ["ADMIN"],
+        hint: "Quién hizo qué y cuándo (registro inmutable de auditoría).",
+      },
+    ],
+  },
+  {
+    label: "Aeroportuaria",
+    items: [
+      {
+        name: "Captación aeroportuaria",
+        href: "/captacion",
+        icon: Plane,
+        roles: ["ADMIN", "ANALISTA", "COORDINACION", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA"],
+        hint: "Registra las atenciones en aeropuertos y genera el reporte SISPRO del mes.",
+      },
     ],
   },
   {
@@ -281,21 +357,21 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Soporte técnico",
         href: "/soporte",
         icon: LifeBuoy,
-        roles: ["ADMIN", "OVEM", "REGULACION", "GERENCIAL", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "MEDICO", "AUXILIAR_ENFERMERIA", "VISTA"],
+        roles: ["ADMIN", "OVEM", "REGULACION", "GERENCIAL", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "MEDICO", "AUXILIAR_ENFERMERIA", "VISTA", "TECNICO", "AEROPUERTO"],
         hint: "Reporta un problema de tecnología y sigue tu ticket hasta que se resuelva.",
       },
       {
         name: "Gestión de tickets",
         href: "/soporte/gestion",
         icon: Headset,
-        roles: ["ADMIN", "COORDINACION", "ANALISTA"],
+        roles: ["ADMIN", "COORDINACION", "ANALISTA", "TECNICO"],
         hint: "Toma, atiende y cierra los tickets de soporte técnico.",
       },
       {
         name: "Indicadores de soporte",
         href: "/soporte/indicadores",
         icon: BarChart3,
-        roles: ["ADMIN", "COORDINACION", "ANALISTA"],
+        roles: ["ADMIN", "COORDINACION", "ANALISTA", "TECNICO"],
         hint: "Tiempos de respuesta, SLA, resolución y disponibilidad del soporte.",
       },
       {
@@ -320,6 +396,8 @@ const ROLE_BADGE_STYLES: Record<UserRole, string> = {
   MEDICO: "bg-[#16A34A] text-white",
   AUXILIAR_ENFERMERIA: "bg-[#65A30D] text-white",
   VISTA: "bg-[#94A3B8] text-white",
+  TECNICO: "bg-[#0F766E] text-white",
+  AEROPUERTO: "bg-[#B45309] text-white",
 };
 
 const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
@@ -366,6 +444,10 @@ export default function DashboardLayout({
       setProfile(p);
       setLoading(false);
       if (p) {
+        // Roles de soporte: solo ven el soporte técnico (la barrera real es la RLS restrictiva de la migración 076).
+        if (esRolRestringido(p.role_codigo) && !rutaPermitidaARolRestringido(pathname)) {
+          router.replace("/soporte");
+        }
         if (
           p.role_codigo === "OVEM" &&
           (pathname === "/" ||
@@ -392,7 +474,7 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "COORDINACION" &&
-          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte"].some(
+          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte", "/captacion"].some(
             (b) => pathname === b || pathname.startsWith(`${b}/`)
           )
         ) {
