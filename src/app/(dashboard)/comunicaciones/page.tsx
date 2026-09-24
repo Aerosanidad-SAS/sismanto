@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCampanas } from "@/app/api/actions/campanas";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { CampanasPanel } from "@/components/comunicaciones/campanas-panel";
 
 const ROLES_EDICION = ["ADMIN", "COORDINACION", "ANALISTA"];
@@ -10,6 +10,7 @@ const ROLES_EDICION = ["ADMIN", "COORDINACION", "ANALISTA"];
 export const maxDuration = 60;
 
 export default async function ComunicacionesPage() {
+  await requireRole(["ADMIN", "COORDINACION", "ANALISTA"]);
   const [profile, campanas] = await Promise.all([getProfile(), getCampanas()]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const whatsappConfigurado = Boolean(
