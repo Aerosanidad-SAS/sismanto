@@ -384,6 +384,8 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
     .select("id")
     .single();
   if (incidentError || !incident) return { error: incidentError?.message ?? "No se pudo crear la novedad" };
+  // Se registra en cuanto la novedad existe: si el detalle del siniestro falla más abajo, la novedad ya creada no queda sin rastro.
+  await auditar("INSERTAR", "novedades", incident.id as number, "Siniestro vial reportado");
 
   const { error } = await supabase.from("road_accidents").insert({
     vehicle_id: row.vehicleId,
@@ -408,7 +410,6 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
     return { error: `La novedad #${incident.id} quedó creada, pero el detalle del siniestro no se guardó: ${error.message}` };
   }
 
-  await auditar("INSERTAR", "novedades", incident.id as number, "Siniestro vial reportado");
   revalidatePath("/ovem");
   revalidatePath("/novedades");
   revalidatePath("/regulacion");
