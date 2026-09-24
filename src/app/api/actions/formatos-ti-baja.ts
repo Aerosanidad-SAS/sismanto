@@ -172,6 +172,8 @@ export async function exportarBajas(filtros: Omit<FiltrosBaja, "pagina">) {
   const { data, error } = await aplicarFiltros(consulta, { ...filtros, pagina: 1 });
   if (error) return { error: error.message };
   const filas = (data ?? []) as unknown as BajaFila[];
+  // Nombres y cédulas de funcionarios salen del sistema: queda quién lo hizo y cuántas filas (no el contenido).
+  await auditar("EXPORTAR", "formatos_ti", "", `Exportación de bajas de equipos (${Math.min(filas.length, EXPORT_MAX)} filas${filas.length > EXPORT_MAX ? ", truncada" : ""})`);
   return { filas: filas.slice(0, EXPORT_MAX), truncado: filas.length > EXPORT_MAX };
 }
 

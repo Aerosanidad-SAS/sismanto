@@ -300,6 +300,8 @@ export async function exportarActasEntrega(filtros: Omit<FiltrosActaEntrega, "pa
   const { data, error } = await aplicarFiltros(consulta, { ...filtros, pagina: 1 });
   if (error) return { error: error.message };
   const filas = (data ?? []) as unknown as ActaEntregaFila[];
+  // Nombres y cédulas de funcionarios salen del sistema: queda quién lo hizo y cuántas filas (no el contenido).
+  await auditar("EXPORTAR", "formatos_ti", "", `Exportación de actas de entrega (${Math.min(filas.length, EXPORT_MAX)} filas${filas.length > EXPORT_MAX ? ", truncada" : ""})`);
   return { filas: filas.slice(0, EXPORT_MAX), truncado: filas.length > EXPORT_MAX };
 }
 
