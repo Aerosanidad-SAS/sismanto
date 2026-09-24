@@ -1267,6 +1267,8 @@ export type Database = {
         Row: { id: number; sisres_id: number | null; ident: string | null; tipo: string | null; nombre: string; municipio: string | null; pais: string | null; region: string | null; iata_code: string | null; icao_code: string | null; servicio_regular: boolean; latitud: number | null; longitud: number | null; elevacion_ft: number | null }
         Insert: { id?: number; sisres_id?: number | null; ident?: string | null; tipo?: string | null; nombre: string; municipio?: string | null; pais?: string | null; region?: string | null; iata_code?: string | null; icao_code?: string | null; servicio_regular?: boolean; latitud?: number | null; longitud?: number | null; elevacion_ft?: number | null }
         Update: { id?: number; sisres_id?: number | null; ident?: string | null; tipo?: string | null; nombre?: string; municipio?: string | null; pais?: string | null; region?: string | null; iata_code?: string | null; icao_code?: string | null; servicio_regular?: boolean; latitud?: number | null; longitud?: number | null; elevacion_ft?: number | null }
+        Relationships: []
+      }
       ti_acta_entrega: {
         Row: TiActaEntregaRow
         Insert: Partial<Omit<TiActaEntregaRow, "numero_orden">>
