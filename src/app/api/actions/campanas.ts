@@ -14,7 +14,6 @@ import { adjuntarMedia, quitarMedia, resolverMediaEnvio, type AlmacenMedia } fro
 import { filasDetalle, filasHistorial } from "@/lib/campanas-exportar";
 import { leerDestinatariosDeBase } from "@/lib/campanas-base";
 import { mascararTelefono, normalizarDestinatarios, resumenOmitidos } from "@/lib/campanas-destinatarios";
-import { auditar } from "@/lib/auditoria";
 
 const ROLES_CAMPANAS = ["ADMIN", "COORDINACION"];
 
