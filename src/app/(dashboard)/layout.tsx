@@ -38,7 +38,7 @@ import {
   LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getDefaultRoute } from "@/lib/auth-utils";
+import { esRolRestringido, getDefaultRoute, rutaPermitidaARolRestringido } from "@/lib/auth-utils";
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
 import { getCompanyBranding } from "@/app/api/actions/company-settings";
 import { Button } from "@/components/ui/button";
@@ -281,21 +281,21 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Soporte técnico",
         href: "/soporte",
         icon: LifeBuoy,
-        roles: ["ADMIN", "OVEM", "REGULACION", "GERENCIAL", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "MEDICO", "AUXILIAR_ENFERMERIA", "VISTA"],
+        roles: ["ADMIN", "OVEM", "REGULACION", "GERENCIAL", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "MEDICO", "AUXILIAR_ENFERMERIA", "VISTA", "TECNICO", "AEROPUERTO"],
         hint: "Reporta un problema de tecnología y sigue tu ticket hasta que se resuelva.",
       },
       {
         name: "Gestión de tickets",
         href: "/soporte/gestion",
         icon: Headset,
-        roles: ["ADMIN", "COORDINACION", "ANALISTA"],
+        roles: ["ADMIN", "COORDINACION", "ANALISTA", "TECNICO"],
         hint: "Toma, atiende y cierra los tickets de soporte técnico.",
       },
       {
         name: "Indicadores de soporte",
         href: "/soporte/indicadores",
         icon: BarChart3,
-        roles: ["ADMIN", "COORDINACION", "ANALISTA"],
+        roles: ["ADMIN", "COORDINACION", "ANALISTA", "TECNICO"],
         hint: "Tiempos de respuesta, SLA, resolución y disponibilidad del soporte.",
       },
       {
@@ -320,6 +320,8 @@ const ROLE_BADGE_STYLES: Record<UserRole, string> = {
   MEDICO: "bg-[#16A34A] text-white",
   AUXILIAR_ENFERMERIA: "bg-[#65A30D] text-white",
   VISTA: "bg-[#94A3B8] text-white",
+  TECNICO: "bg-[#0F766E] text-white",
+  AEROPUERTO: "bg-[#B45309] text-white",
 };
 
 const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
@@ -366,6 +368,10 @@ export default function DashboardLayout({
       setProfile(p);
       setLoading(false);
       if (p) {
+        // Roles de soporte: solo ven el soporte técnico (la barrera real es la RLS restrictiva de la migración 076).
+        if (esRolRestringido(p.role_codigo) && !rutaPermitidaARolRestringido(pathname)) {
+          router.replace("/soporte");
+        }
         if (
           p.role_codigo === "OVEM" &&
           (pathname === "/" ||
