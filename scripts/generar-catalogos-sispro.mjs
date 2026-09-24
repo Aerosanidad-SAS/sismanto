@@ -1,4 +1,4 @@
-// Genera scripts/migrations/081_sispro_catalogos.sql a partir de las hojas de referencia
+// Genera scripts/migrations/081_sispro_catalogos.sql y 083_sispro_cie10.sql a partir de las hojas de referencia
 // del libro "SISPRO 2026.xlsx" (PAISES, IPS, AEROPUERTOS, AEROPUERTOS NAL).
 // Son catálogos oficiales del reporte, sin datos de personas. Solo hace falta volver a
 // correrlo si el Ministerio cambia los catálogos:
@@ -116,3 +116,26 @@ ${lote(
 
 writeFileSync(new URL("./migrations/081_sispro_catalogos.sql", import.meta.url), salida);
 console.log(`081_sispro_catalogos.sql: ${paises.length} países, ${ips.length} IPS, ${aeropuertos.length} aeropuertos, ${nal.length} aeropuertos de atención`);
+
+// ─── CIE-10 (hoja DIAGNOSTICOS) → migración 083 ─────────────────────────────
+// Ninguna migración cargaba la tabla `cie10` (solo el ETL de SISRES, `cie10.csv`), así que en una
+// base sin ETL la captación rechazaba todo código. Se siembra con el catálogo oficial del libro
+// (códigos de 4 caracteres, los que exige SISPRO). ON CONFLICT DO NOTHING: no pisa lo que ya cargó el ETL.
+const cie10 = filas("DIAGNOSTICOS")
+  .slice(1)
+  .map((r) => [String(r[0]).trim().toUpperCase(), limpio(r[1])])
+  .filter(([c, n]) => /^[A-Z]\d{2}[A-Z0-9]$/.test(c) && n);
+
+const salidaCie = `-- ============================================================
+-- Migración 083: catálogo CIE-10 oficial del reporte SISPRO
+--
+-- Generada con scripts/generar-catalogos-sispro.mjs (hoja DIAGNOSTICOS del libro "SISPRO 2026").
+-- Siembra la tabla \`cie10\` con ${cie10.length} códigos de 4 caracteres. La captación aeroportuaria valida
+-- el CIE-10 contra esta tabla y el reporte SISPRO resuelve el nombre del diagnóstico con ella.
+-- No pisa lo que ya haya cargado el ETL de SISRES (ON CONFLICT DO NOTHING). Idempotente.
+-- ============================================================
+
+${lote("cie10", "codigo, descripcion", cie10.map(([c, n]) => `(${sql(c)}, ${sql(n)})`))}
+`;
+writeFileSync(new URL("./migrations/083_sispro_cie10.sql", import.meta.url), salidaCie);
+console.log(`083_sispro_cie10.sql: ${cie10.length} diagnósticos CIE-10`);

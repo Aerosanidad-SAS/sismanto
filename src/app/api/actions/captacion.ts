@@ -159,7 +159,7 @@ async function validarContraCatalogos(d: z.output<typeof captacionSchema>): Prom
   if (!(await existe("sispro_paises", d.pais_procedencia))) return "El país de procedencia no está en el catálogo";
   if (d.remision && d.ips_receptora && !(await existe("sispro_ips", d.ips_receptora))) return "La IPS receptora no está en el catálogo";
   const { data: cie } = await s.from("cie10").select("codigo").eq("codigo", d.cie10).maybeSingle();
-  if (!cie) return "El código CIE-10 no existe en el catálogo";
+  if (!cie) return `El código CIE-10 "${d.cie10}" no existe en el catálogo. Búscalo por nombre con el botón Buscar (ej.: Z000 = examen médico general).`;
   return null;
 }
 
