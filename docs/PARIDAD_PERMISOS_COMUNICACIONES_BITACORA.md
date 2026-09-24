@@ -137,3 +137,20 @@ SISMANTO: **no hay bitácora general.** Solo existen registros específicos: `05
 | 5 | **GPS**: portar el calculador de rutas o descartarlo | decisión de León |
 
 **Hallazgos a comunicar aparte:** la clave de Google Maps en `segumientoAmbulanciasMaps.php` (revisar restricciones) y que la documentación de SISRES (`DOCUMENTACION.md` §3 y §14) dice 9 cargos / 90 funcionalidades cuando la base tiene 12 / 112.
+
+---
+
+## 6. Decisiones de León (2026-09-24) y estado
+
+| Tema | Decisión | Estado |
+|---|---|---|
+| Captación aeroportuaria | La construye **David** | fuera de esta línea de trabajo |
+| Matriz de permisos | "Como recomiendes en seguridad y blindaje" → **mapa fijo con barrera en la base** (opción A del §1, sin pantalla editable por ahora) | PR #44: roles nuevos + política RLS **restrictiva** en toda tabla con RLS + comprobaciones para CI |
+| Cargos "Aeropuerto" | Personal del aeropuerto que **solo registra tickets** → un solo rol `AEROPUERTO` | PR #44 |
+| Cargo Técnico | **Muy distinto**: es quien **gestiona** los tickets → rol `TECNICO` (entra en `es_gestor_tickets()`) | PR #44 |
+| Mapeo de los 194 usuarios | 1→ADMIN, 2→COORDINACION, 3→ANALISTA, 4→REGULACION, 5→MEDICO, 6→AUXILIAR_ENFERMERIA, 7→OVEM, 8→VISTA, 9→TECNICO, 10/11/12→AEROPUERTO | `scripts/cargo-sisres-a-rol.ts` (PR #44) |
+| GPS | **Queda por fuera.** Más adelante se construye un **cotizador de rutas** (no un calculador copiado) | descartado por ahora |
+| Bitácora | **Integrarla** | PR #45 |
+| WhatsApp | Se integró también la **pausa / cancelación** (W6), que era lo primero de la lista | PR #46 |
+
+**Queda pendiente de esta auditoría:** WhatsApp W4 (destinatarios desde la base o Excel), W7 (imagen en el encabezado), W8 (**webhook de entregas/lecturas**, exige cambiar la URL de callback en Meta) y W9 (exportar); instrumentar con `auditar()` los módulos que aún viven en otros PRs (Valoraciones, Formatos TI, catálogos, soporte y las acciones de campañas); migrar el histórico de la bitácora de SISRES; y decidir la retención de la bitácora. La clave de Google Maps de SISRES (`segumientoAmbulanciasMaps.php`, línea 285) sigue siendo un hallazgo de seguridad de SISRES a revisar aunque el GPS no se porte.
