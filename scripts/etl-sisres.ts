@@ -148,6 +148,8 @@ const v = (f: Fila, ...nombres: string[]): string | null => {
 };
 
 const entero = (raw: string | null): number | null => (raw !== null && /^-?\d+$/.test(raw) ? Number(raw) : null);
+/** Bandera 0/1 de SISRES → boolean. Sin dato = activa (el DEFAULT de `estado` en SISRES es 1). */
+const bandera = (raw: string | null): boolean => raw === null || !/^(0|false|f|no)$/i.test(raw.trim());
 
 function requerirId(f: Fila): number {
   const id = entero(v(f, "id"));
@@ -621,7 +623,7 @@ async function cargarValoraciones(client: pg.Client, dir: string) {
   const columnas = [
     "sisres_id", "patient_id", "cedula", "nombre_completo", "fecha_nacimiento", "genero", "aerolinea",
     "fecha_hora_vuelo", "acompanante", "origen", "destino", "hc", "concepto_medico", "tiempo_estimado",
-    "recomendaciones", "valoracion", "medico", "pasajero", "estado",
+    "recomendaciones", "valoracion", "medico", "pasajero", "estado", "activo",
   ];
   const carga = transformar("medical_assessments", filas, (f, ctx) => {
     const cedula = v(f, "cedula");
@@ -631,7 +633,10 @@ async function cargarValoraciones(client: pg.Client, dir: string) {
       fecha(ctx, "fechaNacimiento"), v(f, "genero"), v(f, "aerolinea"), fecha(ctx, "fechaHoraVuelo"),
       v(f, "acompañante", "acompanante"), v(f, "origen"), v(f, "destino"), v(f, "hc"), v(f, "conceptoMedico"),
       v(f, "tiempoEstimado"), v(f, "recomendaciones"), v(f, "valoracion"), v(f, "medico"), v(f, "pasajero"),
-      v(f, "estadoServicio", "estado"),
+      // Son dos campos distintos en SISRES: `estadoServicio` es el select ACTIVO(0)/INACTIVO(1) del formulario
+      // y `estado` es la bandera de borrado suave (1 = activa, 0 = eliminada con delete.php). Antes se mezclaban y
+      // una valoración eliminada entraba como normal.
+      v(f, "estadoServicio"), bandera(v(f, "estado")),
     ];
   });
   await enTransaccion(client, "medical_assessments", async () => {

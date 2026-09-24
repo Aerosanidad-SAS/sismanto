@@ -7,6 +7,7 @@ import type { AssessmentFormData } from "@/lib/validations";
 import { assessmentSchema } from "@/lib/validations";
 import { getProfile } from "@/app/api/actions/auth";
 import {
+  ROLES_ELIMINAR_VALORACION,
   COLUMNAS_BUSQUEDA_VALORACIONES,
   VALORACIONES_POR_PAGINA,
   palabrasBusquedaValoraciones,
@@ -30,6 +31,7 @@ export async function buscarValoraciones(q: string, pagina: number) {
   let query = supabase
     .from("medical_assessments")
     .select("*", { count: "exact" })
+    .eq("activo", true)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range(desde, desde + VALORACIONES_POR_PAGINA - 1);
@@ -44,7 +46,8 @@ export async function buscarValoraciones(q: string, pagina: number) {
 /** Totales de las tarjetas: sobre TODAS las valoraciones, no sobre la página ni la búsqueda. */
 export async function getResumenValoraciones() {
   const supabase = createClient();
-  const todas = () => supabase.from("medical_assessments").select("id", { count: "exact", head: true });
+  const todas = () =>
+    supabase.from("medical_assessments").select("id", { count: "exact", head: true }).eq("activo", true);
   // ilike sin comodines = igualdad sin distinguir mayúsculas: "APTO" no incluye a "NO APTO".
   const [total, aptos, noAptos] = await Promise.all([
     todas(),
@@ -113,12 +116,25 @@ export async function actualizarValoracion(id: number, formData: AssessmentFormD
   return { success: true };
 }
 
+/**
+ * Eliminar = desactivar (borrado suave), como delete.php de SISRES (accion 'soft'): la valoración deja de
+ * listarse y de contarse pero sigue en la base. En SISRES el permiso act_eliminar_valoracion viene
+ * activo solo para los dos primeros roles; acá equivale a ADMIN y ANALISTA (paridad de ANALISTA con ADMIN, migración 046).
+ */
 export async function eliminarValoracion(id: number) {
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
 
+  const profile = await getProfile();
+  if (!ROLES_ELIMINAR_VALORACION.includes(profile?.role_codigo ?? "")) {
+    return { error: "No tienes permiso para eliminar valoraciones" };
+  }
+
   const supabase = createClient();
-  const { error } = await supabase.from("medical_assessments").delete().eq("id", idParsed.data);
+  const { error } = await supabase
+    .from("medical_assessments")
+    .update({ activo: false, updated_at: new Date().toISOString() })
+    .eq("id", idParsed.data);
   if (error) return { error: error.message };
   revalidatePath("/valoraciones");
   return { success: true };

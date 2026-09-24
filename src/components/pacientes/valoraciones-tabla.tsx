@@ -31,7 +31,7 @@ import {
   estadoLegible,
   nombreCompletoPaciente,
 } from "@/lib/valoraciones-lista";
-import { crearValoracion, actualizarValoracion, generarCertificadoValoracionPdf } from "@/app/api/actions/valoraciones";
+import { crearValoracion, actualizarValoracion, eliminarValoracion, generarCertificadoValoracionPdf } from "@/app/api/actions/valoraciones";
 import { buscarPacientePorCedula } from "@/app/api/actions/pacientes";
 
 export interface ValoracionRow {
@@ -73,11 +73,13 @@ const hoyBogota = () => new Date().toLocaleDateString("en-CA", { timeZone: "Amer
 interface ValoracionesTablaProps {
   valoraciones: ValoracionRow[];
   puedeEditar: boolean;
+  /** Eliminar = desactivar; solo ADMIN y ANALISTA (ver ROLES_ELIMINAR_VALORACION). */
+  puedeEliminar: boolean;
   /** Texto de la búsqueda actual (parámetro `q` de la URL); la búsqueda se hace en el servidor. */
   busqueda: string;
 }
 
-export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: ValoracionesTablaProps) {
+export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, busqueda }: ValoracionesTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<ValoracionRow | null>(null);
@@ -115,6 +117,16 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
     a.download = res.filename ?? "certificado-valoracion.pdf";
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const eliminar = async (v: ValoracionRow) => {
+    if (!confirm(`¿Eliminar la valoración de ${v.nombre_completo} (documento ${v.cedula})? Dejará de listarse.`)) return;
+    const res = await eliminarValoracion(v.id);
+    if ("error" in res && res.error) {
+      alert(res.error);
+      return;
+    }
+    router.refresh();
   };
 
   const abrirNuevo = () => {
@@ -290,6 +302,11 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
                     {puedeEditar && (
                       <Button variant="outline" size="sm" onClick={() => abrirEdicion(v)}>
                         Editar
+                      </Button>
+                    )}
+                    {puedeEliminar && (
+                      <Button variant="outline" size="sm" onClick={() => eliminar(v)}>
+                        Eliminar
                       </Button>
                     )}
                   </TableCell>
