@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/app/api/actions/auth";
+import { puedeGestionarTickets } from "@/lib/auth-utils";
 import { reabrirTicketSchema, ticketSchema, TICKET_ESTADOS } from "@/lib/validations";
 
 // Soporte técnico (tickets) — lado del solicitante. Esquema y RLS: migración 065.
@@ -116,6 +117,20 @@ export async function crearTicket(formData: FormData) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const datos = parsed.data;
 
+  // Un gestor puede registrar el ticket a nombre de otra persona (SISRES: "registrar
+  // para otro"). El nombre del solicitante se relee en el servidor, nunca del formulario.
+  let solicitanteId = user.id;
+  let nombreSolicitante = profile.nombre_completo ?? profile.email ?? "Usuario";
+  const aNombreDe = formData.get("solicitante_id");
+  if (typeof aNombreDe === "string" && aNombreDe && aNombreDe !== user.id) {
+    if (!puedeGestionarTickets(profile.role_codigo)) return { error: "Sin permisos para registrar a nombre de otra persona" };
+    if (!z.string().uuid().safeParse(aNombreDe).success) return { error: "Persona inválida" };
+    const { data: nombre } = await createClient().rpc("nombre_solicitante_ticket", { p_user_id: aNombreDe });
+    if (!nombre) return { error: "No se encontró a la persona seleccionada" };
+    solicitanteId = aNombreDe;
+    nombreSolicitante = nombre as unknown as string;
+  }
+
   // Categoría, área y sede deben estar en el catálogo activo (mismo control que insertarTicket.php).
   const catalogos = await getCatalogosTickets();
   if (
@@ -134,7 +149,7 @@ export async function crearTicket(formData: FormData) {
   const { data: duplicado } = await supabase
     .from("tickets")
     .select("id")
-    .eq("solicitante_id", user.id)
+    .eq("solicitante_id", solicitanteId)
     .eq("categoria", datos.categoria)
     .eq("asunto", datos.asunto)
     .eq("descripcion", datos.descripcion)
@@ -168,8 +183,10 @@ export async function crearTicket(formData: FormData) {
       asunto: datos.asunto,
       descripcion: datos.descripcion,
       adjunto_path: adjuntoPath,
-      solicitante_id: user.id,
-      nombre_solicitante: profile.nombre_completo ?? profile.email ?? "Usuario",
+      solicitante_id: solicitanteId,
+      nombre_solicitante: nombreSolicitante,
+      registrado_por_id: solicitanteId === user.id ? null : user.id,
+      nombre_registrado_por: solicitanteId === user.id ? null : (profile.nombre_completo ?? profile.email ?? "Gestor"),
       celular_contacto: datos.celular,
       sede: datos.sede,
       area: datos.area,

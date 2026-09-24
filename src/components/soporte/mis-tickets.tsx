@@ -23,49 +23,24 @@ import {
   type TicketHistorialRow,
   type TicketRow,
 } from "@/app/api/actions/tickets";
-
-const ETIQUETA_ESTADO: Record<string, string> = {
-  ABIERTO: "Abierto",
-  EN_PROCESO: "En proceso",
-  RESUELTO: "Resuelto",
-  CERRADO: "Cerrado",
-};
-const ETIQUETA_PRIORIDAD: Record<string, string> = { BAJA: "Baja", MEDIA: "Media", ALTA: "Alta", URGENTE: "Urgente" };
-const ETIQUETA_EVENTO: Record<string, string> = {
-  CREACION: "Ticket creado",
-  ASIGNACION: "Tomado por un técnico",
-  CONTACTO: "Primer contacto",
-  CAMBIO_ESTADO: "Cambio de estado",
-  CAMBIO_PRIORIDAD: "Cambio de prioridad",
-  CIERRE_CONFIRMADO: "Cierre",
-  REAPERTURA: "Ticket reabierto",
-};
-
-function varianteEstado(estado: string) {
-  if (estado === "CERRADO") return "success" as const;
-  if (estado === "EN_PROCESO") return "warning" as const;
-  if (estado === "RESUELTO") return "secondary" as const;
-  return "default" as const;
-}
-function variantePrioridad(prioridad: string) {
-  if (prioridad === "URGENTE") return "destructive" as const;
-  if (prioridad === "ALTA") return "warning" as const;
-  if (prioridad === "MEDIA") return "secondary" as const;
-  return "outline" as const;
-}
-
-// La operación es en Colombia y el navegador puede estar en otra zona: se muestra siempre hora de Bogotá.
-function fechaHora(iso: string | null) {
-  if (!iso) return "—";
-  return new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short", timeZone: "America/Bogota" }).format(new Date(iso));
-}
+import { buscarUsuariosTicket, type UsuarioBuscado } from "@/app/api/actions/tickets-gestion";
+import {
+  ETIQUETA_ESTADO,
+  ETIQUETA_EVENTO,
+  ETIQUETA_PRIORIDAD,
+  fechaHora,
+  variantePrioridad,
+  varianteEstado,
+} from "@/components/soporte/etiquetas";
 
 interface MisTicketsProps {
   tickets: TicketRow[];
   catalogos: CatalogosTickets;
+  /** Gestores: pueden registrar el ticket a nombre de otra persona. */
+  puedeRegistrarParaOtro?: boolean;
 }
 
-export function MisTickets({ tickets, catalogos }: MisTicketsProps) {
+export function MisTickets({ tickets, catalogos, puedeRegistrarParaOtro = false }: MisTicketsProps) {
   const router = useRouter();
   const [filtroEstado, setFiltroEstado] = useState<string>("TODOS");
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
@@ -73,6 +48,11 @@ export function MisTickets({ tickets, catalogos }: MisTicketsProps) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+
+  const [busquedaPersona, setBusquedaPersona] = useState("");
+  const [personas, setPersonas] = useState<UsuarioBuscado[]>([]);
+  const [persona, setPersona] = useState<UsuarioBuscado | null>(null);
+  const [buscandoPersona, setBuscandoPersona] = useState(false);
 
   const [reabriendo, setReabriendo] = useState<TicketRow | null>(null);
   const [notaReapertura, setNotaReapertura] = useState("");
@@ -108,6 +88,9 @@ export function MisTickets({ tickets, catalogos }: MisTicketsProps) {
     reset({ prioridad: "MEDIA", sede: "", area: "", categoria: "", celular: "", asunto: "", descripcion: "" });
     setAdjunto(null);
     setError(null);
+    setPersona(null);
+    setPersonas([]);
+    setBusquedaPersona("");
     setNuevoAbierto(true);
   }
 
@@ -117,6 +100,7 @@ export function MisTickets({ tickets, catalogos }: MisTicketsProps) {
     const formData = new FormData();
     Object.entries(datos).forEach(([clave, valor]) => formData.append(clave, String(valor ?? "")));
     if (adjunto) formData.append("adjunto", adjunto);
+    if (persona) formData.append("solicitante_id", persona.user_id);
 
     const resultado = await crearTicket(formData);
     setGuardando(false);
@@ -127,6 +111,12 @@ export function MisTickets({ tickets, catalogos }: MisTicketsProps) {
     setNuevoAbierto(false);
     setAviso(`Ticket #${"id" in resultado ? resultado.id : ""} registrado correctamente.`);
     router.refresh();
+  }
+
+  async function buscarPersona() {
+    setBuscandoPersona(true);
+    setPersonas(await buscarUsuariosTicket(busquedaPersona));
+    setBuscandoPersona(false);
   }
 
   async function confirmarReapertura() {
@@ -275,6 +265,56 @@ export function MisTickets({ tickets, catalogos }: MisTicketsProps) {
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
+              {puedeRegistrarParaOtro && (
+                <div className="space-y-2 rounded-md border p-3 sm:col-span-2">
+                  <Label htmlFor="ticket-persona">Registrar a nombre de otra persona (opcional)</Label>
+                  {persona ? (
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span>
+                        {persona.nombre_completo ?? "Sin nombre"}
+                        {persona.cedula ? ` · CC ${persona.cedula}` : ""}
+                      </span>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setPersona(null)}>
+                        Quitar
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <Input
+                          id="ticket-persona"
+                          placeholder="Cédula o nombre (mín. 3 letras)"
+                          value={busquedaPersona}
+                          maxLength={60}
+                          onChange={(e) => setBusquedaPersona(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void buscarPersona();
+                            }
+                          }}
+                        />
+                        <Button type="button" variant="outline" disabled={buscandoPersona || busquedaPersona.trim() === ""} onClick={() => void buscarPersona()}>
+                          {buscandoPersona ? "Buscando…" : "Buscar"}
+                        </Button>
+                      </div>
+                      {personas.length > 0 && (
+                        <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
+                          {personas.map((p) => (
+                            <li key={p.user_id}>
+                              <button type="button" className="w-full rounded px-2 py-1 text-left hover:bg-muted" onClick={() => setPersona(p)}>
+                                {p.nombre_completo ?? "Sin nombre"}
+                                {p.cedula ? ` · CC ${p.cedula}` : ""}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
+                  )}
+                  <p className="text-xs text-muted-foreground">Si no eliges a nadie, el ticket queda a tu nombre.</p>
+                </div>
+              )}
               <div className="space-y-1">
                 <Label>Sede *</Label>
                 <Select value={sede ?? ""} onValueChange={(v) => setValue("sede", v, { shouldValidate: true })}>

@@ -1316,6 +1316,30 @@ export type Database = {
         Args: { p_ticket_id: number; p_nota: string }
         Returns: undefined
       }
+      tomar_ticket: {
+        Args: { p_ticket_id: number }
+        Returns: undefined
+      }
+      registrar_contacto_ticket: {
+        Args: { p_ticket_id: number; p_nota?: string | null }
+        Returns: undefined
+      }
+      cambiar_estado_ticket: {
+        Args: { p_ticket_id: number; p_estado: string; p_solucion?: string | null; p_nota?: string | null }
+        Returns: undefined
+      }
+      cambiar_prioridad_ticket: {
+        Args: { p_ticket_id: number; p_prioridad: string }
+        Returns: undefined
+      }
+      buscar_usuarios_ticket: {
+        Args: { p_busqueda: string }
+        Returns: { user_id: string; nombre_completo: string | null; cedula: string | null }[]
+      }
+      nombre_solicitante_ticket: {
+        Args: { p_user_id: string }
+        Returns: string | null
+      }
     }
     Enums: {
       vehicle_status: 'OPERATIVO' | 'FUERA_DE_SERVICIO'

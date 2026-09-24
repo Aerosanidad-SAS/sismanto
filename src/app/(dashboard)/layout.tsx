@@ -33,6 +33,7 @@ import {
   PackageCheck,
   Handshake,
   Building2,
+  Headset,
   LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -281,6 +282,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: LifeBuoy,
         roles: ["ADMIN", "OVEM", "REGULACION", "GERENCIAL", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "MEDICO", "AUXILIAR_ENFERMERIA", "VISTA"],
         hint: "Reporta un problema de tecnología y sigue tu ticket hasta que se resuelva.",
+      },
+      {
+        name: "Gestión de tickets",
+        href: "/soporte/gestion",
+        icon: Headset,
+        roles: ["ADMIN", "COORDINACION", "ANALISTA"],
+        hint: "Toma, atiende y cierra los tickets de soporte técnico.",
       },
     ],
   },
