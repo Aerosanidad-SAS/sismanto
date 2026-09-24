@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/app/api/actions/auth";
 import {
@@ -229,6 +230,7 @@ export async function importarMantenimientos(
     resultado.errores.push(...erroresLote);
   }
 
+  await auditar("INSERTAR", "carga_masiva", "", `Carga masiva de mantenimientos (${resultado.exitosos} registros, ${resultado.errores.length} con error)`);
   revalidatePath("/mantenimientos");
   return resultado;
 }
@@ -305,6 +307,7 @@ export async function importarCombustible(filas: FilaCombustible[]): Promise<Res
     resultado.errores.push(...erroresLote);
   }
 
+  await auditar("INSERTAR", "carga_masiva", "", `Carga masiva de combustible (${resultado.exitosos} registros, ${resultado.errores.length} con error)`);
   revalidatePath("/combustible");
   return resultado;
 }
@@ -448,6 +451,7 @@ export async function importarVehiculos(filas: FilaVehiculo[]): Promise<Resultad
     resultado.errores.push(...erroresLote);
   }
 
+  await auditar("INSERTAR", "carga_masiva", "", `Carga masiva de vehículos (${resultado.exitosos} registros, ${resultado.errores.length} con error)`);
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   return resultado;
@@ -569,6 +573,7 @@ export async function importarProveedores(filas: FilaProveedor[]): Promise<Resul
     resultado.errores.push(...erroresLote);
   }
 
+  await auditar("INSERTAR", "carga_masiva", "", `Carga masiva de proveedores (${resultado.exitosos} registros, ${resultado.errores.length} con error)`);
   revalidatePath("/configuracion");
   return resultado;
 }

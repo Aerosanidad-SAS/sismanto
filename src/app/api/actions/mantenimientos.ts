@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { MaintenanceFormData } from "@/lib/validations";
 import { maintenanceSchema } from "@/lib/validations";
@@ -105,6 +106,7 @@ export async function crearMantenimiento(formData: MaintenanceFormData) {
       }
     }
 
+    await auditar("INSERTAR", "mantenimientos", payload.vehicleId, "Mantenimiento registrado");
     revalidatePath("/mantenimientos");
     revalidatePath(`/vehiculos/${payload.vehicleId}`);
     revalidatePath("/");
@@ -151,6 +153,7 @@ export async function actualizarMantenimientoCampo(
 
   if (error) return { error: error.message };
 
+  await auditar("MODIFICAR", "mantenimientos", idManto, "Mantenimiento actualizado");
   revalidatePath("/mantenimientos");
   revalidatePath("/");
   return { success: true };

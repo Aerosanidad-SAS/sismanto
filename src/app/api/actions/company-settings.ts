@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/app/api/actions/auth";
 
@@ -42,6 +43,7 @@ export async function updateCompanyLogo(file: File) {
 
   if (error) return { error: error.message };
 
+  await auditar("MODIFICAR", "configuracion", "company_settings", "Logo de la empresa actualizado");
   revalidatePath("/configuracion");
   revalidatePath("/", "layout");
   return { success: true, logo_url: pub.publicUrl };

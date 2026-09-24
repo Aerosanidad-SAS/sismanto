@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireAuth } from "@/app/api/actions/auth";
 import { puedeConfigurarTickets, puedeGestionarTickets } from "@/lib/auth-utils";
+import { auditar } from "@/lib/auditoria";
 import {
   ticketCatalogoTipoSchema,
   ticketCorreoSchema,
@@ -61,7 +62,7 @@ export async function getConfigTickets(): Promise<ConfigTickets> {
   };
 }
 
-async function actualizarConfig(campos: Record<string, unknown>) {
+async function actualizarConfig(campos: Record<string, unknown>, detalle: string) {
   const profile = await admin();
   if (!profile) return { error: "Solo un Administrador puede configurar el soporte técnico" };
   const { data, error } = await createClient()
@@ -71,6 +72,7 @@ async function actualizarConfig(campos: Record<string, unknown>) {
     .select("id");
   if (error) return { error: error.message };
   if (!data || data.length === 0) return { error: "No se pudo guardar (la configuración no existe todavía)" };
+  await auditar("MODIFICAR", "configuracion", "ticket_config", detalle);
   revalidatePath("/soporte/configuracion");
   revalidatePath("/soporte");
   return { success: true as const };
@@ -84,7 +86,7 @@ export async function guardarSlaTickets(datos: z.input<typeof ticketSlaSchema>) 
     sla_media_horas: p.data.media,
     sla_alta_horas: p.data.alta,
     sla_urgente_horas: p.data.urgente,
-  });
+  }, `Tiempos de respuesta actualizados (horas: baja ${p.data.baja}, media ${p.data.media}, alta ${p.data.alta}, urgente ${p.data.urgente})`);
 }
 
 export async function guardarHorarioTickets(datos: z.input<typeof ticketHorarioSchema>) {
@@ -94,13 +96,13 @@ export async function guardarHorarioTickets(datos: z.input<typeof ticketHorarioS
     horario_dias: [...new Set(p.data.dias)].sort(),
     horario_inicio: p.data.inicio,
     horario_fin: p.data.fin,
-  });
+  }, `Horario laboral actualizado (días ${[...new Set(p.data.dias)].sort().join(",")} ${p.data.inicio}-${p.data.fin})`);
 }
 
 export async function guardarMensajeTickets(mensaje: string) {
   const p = ticketMensajeSchema.safeParse(mensaje);
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Datos inválidos" };
-  return actualizarConfig({ mensaje_adicional: p.data || null });
+  return actualizarConfig({ mensaje_adicional: p.data || null }, "Mensaje adicional de tickets actualizado");
 }
 
 export async function guardarCatalogoTickets(tipo: string, nombres: string[]) {
@@ -111,6 +113,7 @@ export async function guardarCatalogoTickets(tipo: string, nombres: string[]) {
 
   const { error } = await createClient().rpc("guardar_catalogo_ticket", { p_tipo: t.data, p_nombres: n.data } as never);
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "configuracion", `catalogo_${t.data}`, `Catálogo «${t.data}» actualizado (${n.data.length} elementos)`);
   revalidatePath("/soporte/configuracion");
   revalidatePath("/soporte");
   return { success: true as const };
@@ -160,6 +163,7 @@ export async function guardarCorreosGestores(correos: string[]) {
     const { error } = await s.from("ticket_correos_gestores").delete().in("correo", sobran);
     if (error) return { error: error.message };
   }
+  if (nuevos.length || sobran.length) await auditar("MODIFICAR", "configuracion", "ticket_correos_gestores", `Correos de gestores actualizados (+${nuevos.length} / -${sobran.length})`);
   revalidatePath("/soporte/configuracion");
   return { success: true as const };
 }
@@ -208,6 +212,7 @@ export async function guardarDisponibilidad(datos: z.input<typeof ticketDisponib
       { onConflict: "anio,mes" },
     );
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "configuracion", "disponibilidad", `Disponibilidad ${p.data.anio}-${String(p.data.mes).padStart(2, "0")} = ${p.data.porcentaje}%`);
   revalidatePath("/soporte/configuracion");
   revalidatePath("/soporte/indicadores");
   return { success: true as const };

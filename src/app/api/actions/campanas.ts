@@ -7,6 +7,7 @@ import type { WaCampaignFormData } from "@/lib/validations";
 import { waCampaignSchema } from "@/lib/validations";
 import { sanitizarTelefono, enviarPlantilla, whatsappConfigurado } from "@/lib/notifications/whatsapp";
 import { z } from "zod";
+import { auditar } from "@/lib/auditoria";
 
 const ROLES_CAMPANAS = ["ADMIN", "COORDINACION"];
 
@@ -84,6 +85,8 @@ export async function crearCampana(formData: WaCampaignFormData) {
   );
   if (errDest) return { error: errDest.message };
 
+  // NOTIFICAR = envío masivo. Se registra quién la creó y cuántos destinatarios; nunca los teléfonos.
+  await auditar("NOTIFICAR", "campanas", campana.id, `Campaña creada con ${destinatarios.length} destinatarios`);
   revalidatePath("/comunicaciones");
   return { success: true, data: campana };
 }
