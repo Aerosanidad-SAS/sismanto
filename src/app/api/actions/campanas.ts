@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { getProfile } from "@/app/api/actions/auth";
 import type { WaCampaignFormData } from "@/lib/validations";
@@ -181,6 +182,10 @@ export async function procesarLoteCampana(campaignId: number) {
     pausaEntreEnviosMs: PAUSA_ENTRE_ENVIOS_MS,
     tamanoLote: LOTE_CAMPANA,
   });
+  // Un registro por campaña al terminar (no uno por lote de 5 mensajes: inundaría la bitácora).
+  if ("success" in res && res.estado === "COMPLETADA" && res.restantes === 0 && res.procesados > 0) {
+    await auditar("NOTIFICAR", "campanas", idParsed.data, "Envío de la campaña completado");
+  }
   revalidatePath("/comunicaciones");
   return res;
 }
@@ -192,7 +197,10 @@ async function cambiarEstado(campaignId: number, accion: AccionCampana) {
   if (!idParsed.success) return { error: "ID inválido" };
 
   const res = await cambiarEstadoCampana(createClient(), idParsed.data, accion);
-  if ("success" in res) revalidatePath("/comunicaciones");
+  if ("success" in res) {
+    await auditar("MODIFICAR", "campanas", idParsed.data, `Campaña ${{ pausar: "pausada", reanudar: "reanudada", cancelar: "cancelada" }[accion]}`);
+    revalidatePath("/comunicaciones");
+  }
   return res;
 }
 
@@ -240,7 +248,10 @@ export async function adjuntarMediaCampana(campaignId: number, ruta: string) {
     userId: profile.user_id,
     subir: subirMediaMeta,
   });
-  if ("success" in res) revalidatePath("/comunicaciones");
+  if ("success" in res) {
+    await auditar("MODIFICAR", "campanas", idParsed.data, `Adjunto agregado a la campaña (${res.tipo})`);
+    revalidatePath("/comunicaciones");
+  }
   return res;
 }
 
@@ -252,7 +263,10 @@ export async function quitarMediaCampana(campaignId: number) {
 
   const supabase = createClient();
   const res = await quitarMedia(supabase, almacenMedia(supabase), idParsed.data);
-  if ("success" in res) revalidatePath("/comunicaciones");
+  if ("success" in res) {
+    await auditar("MODIFICAR", "campanas", idParsed.data, "Adjunto quitado de la campaña");
+    revalidatePath("/comunicaciones");
+  }
   return res;
 }
 
@@ -266,7 +280,11 @@ export async function exportarDetalleCampana(campaignId: number) {
   const supabase = createClient();
   const { data: camp } = await supabase.from("wa_campaigns").select("nombre").eq("id", idParsed.data).maybeSingle();
   if (!camp) return { error: "Campaña no encontrada" };
-  const { data } = await supabase.from("wa_campaign_recipients").select("*").eq("campaign_id", idParsed.data).order("id").limit(20000);
+  const { data, error } = await supabase.from("wa_campaign_recipients").select("*").eq("campaign_id", idParsed.data).order("id").limit(20000);
+  // Un fallo de la base NO es un Excel vacío ni una exportación que registrar.
+  if (error) return { error: error.message };
+  // Los destinatarios son teléfonos de personas: queda quién los exportó y cuántos (no el contenido).
+  await auditar("EXPORTAR", "campanas", idParsed.data, `Exportación del detalle de la campaña (${(data ?? []).length} destinatarios)`);
   return {
     success: true as const,
     nombre: (camp as unknown as { nombre: string }).nombre,
@@ -278,6 +296,8 @@ export async function exportarHistorialCampanas() {
   const profile = await getProfile();
   if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
   const supabase = createClient();
-  const { data } = await supabase.from("wa_campaigns").select("*").order("created_at", { ascending: false }).limit(5000);
+  const { data, error } = await supabase.from("wa_campaigns").select("*").order("created_at", { ascending: false }).limit(5000);
+  if (error) return { error: error.message };
+  await auditar("EXPORTAR", "campanas", "", `Exportación del historial de campañas (${(data ?? []).length} campañas)`);
   return { success: true as const, filas: filasHistorial((data ?? []) as unknown as Record<string, unknown>[]) };
 }
