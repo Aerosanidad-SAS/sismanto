@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/app/api/actions/auth";
 import { z } from "zod";
@@ -24,7 +25,7 @@ const upsertRevenueSchema = z.object({
 });
 
 export async function listServiceTypesAdmin() {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const { data, error } = await supabase
     .from("service_types")
@@ -37,7 +38,7 @@ export async function listServiceTypesAdmin() {
 }
 
 export async function createServiceType(raw: z.infer<typeof createServiceTypeSchema>) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = createServiceTypeSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -51,12 +52,13 @@ export async function createServiceType(raw: z.infer<typeof createServiceTypeSch
   });
 
   if (error) return { error: error.message };
+  await auditar("INSERTAR", "configuracion", "", "Tipo de servicio creado");
   revalidatePath("/configuracion");
   return { success: true };
 }
 
 export async function listVehicleServiceRevenue(vehicleId: string) {
-  await requireRole(["ADMIN", "GERENCIAL"]);
+  await requireRole(["ADMIN", "ANALISTA", "GERENCIAL"]);
   const idParsed = z.string().uuid().safeParse(vehicleId);
   if (!idParsed.success) return { error: "Vehículo inválido", data: [] };
 
@@ -72,7 +74,7 @@ export async function listVehicleServiceRevenue(vehicleId: string) {
 }
 
 export async function upsertVehicleServiceRevenue(raw: z.infer<typeof upsertRevenueSchema>) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = upsertRevenueSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -93,13 +95,14 @@ export async function upsertVehicleServiceRevenue(raw: z.infer<typeof upsertReve
   );
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", parsed.data.vehicleId, `Ingreso por servicio registrado (periodo ${parsed.data.periodo})`);
   revalidatePath(`/vehiculos/${parsed.data.vehicleId}`);
   revalidatePath("/configuracion");
   return { success: true };
 }
 
 export async function deleteVehicleServiceRevenue(id: number, vehicleId: string) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
   const vidParsed = z.string().uuid().safeParse(vehicleId);
@@ -107,6 +110,7 @@ export async function deleteVehicleServiceRevenue(id: number, vehicleId: string)
   const supabase = createClient();
   const { error } = await supabase.from("vehicle_service_revenue").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "vehiculos", vidParsed.data, "Ingreso por servicio eliminado");
   revalidatePath(`/vehiculos/${vidParsed.data}`);
   return { success: true };
 }

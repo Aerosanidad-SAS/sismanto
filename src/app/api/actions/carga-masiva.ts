@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/app/api/actions/auth";
 import {
@@ -81,7 +82,7 @@ function buildMantenimientoDedupeKey(input: {
 export async function importarMantenimientos(
   filas: FilaMantenimiento[]
 ): Promise<ResultadoCarga> {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
@@ -229,12 +230,13 @@ export async function importarMantenimientos(
     resultado.errores.push(...erroresLote);
   }
 
+  await auditar("INSERTAR", "carga_masiva", "", `Carga masiva de mantenimientos (${resultado.exitosos} registros, ${resultado.errores.length} con error)`);
   revalidatePath("/mantenimientos");
   return resultado;
 }
 
 export async function importarCombustible(filas: FilaCombustible[]): Promise<ResultadoCarga> {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
@@ -305,12 +307,13 @@ export async function importarCombustible(filas: FilaCombustible[]): Promise<Res
     resultado.errores.push(...erroresLote);
   }
 
+  await auditar("INSERTAR", "carga_masiva", "", `Carga masiva de combustible (${resultado.exitosos} registros, ${resultado.errores.length} con error)`);
   revalidatePath("/combustible");
   return resultado;
 }
 
 export async function importarVehiculos(filas: FilaVehiculo[]): Promise<ResultadoCarga> {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
@@ -401,18 +404,22 @@ export async function importarVehiculos(filas: FilaVehiculo[]): Promise<Resultad
           linea: r.linea ?? null,
           tipo_combustible: tipoComb,
           combustible: tipoComb,
-          tipo_llantas: r.tipo_llantas ?? null,
+          // Estas 10 columnas son NOT NULL desde la migración 022 — el archivo de
+          // importación no siempre las trae, así que se usa el mismo valor de
+          // respaldo que ya usó el backfill de esa migración en vez de null
+          // (que rompía el INSERT con "violates not-null constraint").
+          tipo_llantas: r.tipo_llantas ?? "Pendiente definir",
           tipo_bombillos: r.tipo_bombillos ?? null,
-          bombilleria_farolas: r.bombilleria_farolas ?? null,
-          bombilleria_stops: r.bombilleria_stops ?? null,
-          bombilleria_direccionales: r.bombilleria_direccionales ?? null,
-          tipo_refrigerante: r.tipo_refrigerante ?? null,
-          aceite_usado: r.aceite_usado ?? null,
-          ref_filtro_aire_motor: r.ref_filtro_aire_motor ?? null,
-          ref_filtro_aceite: r.ref_filtro_aceite ?? null,
+          bombilleria_farolas: r.bombilleria_farolas ?? "Pendiente definir",
+          bombilleria_stops: r.bombilleria_stops ?? "Pendiente definir",
+          bombilleria_direccionales: r.bombilleria_direccionales ?? "Pendiente definir",
+          tipo_refrigerante: r.tipo_refrigerante ?? "Pendiente definir",
+          aceite_usado: r.aceite_usado ?? "Pendiente definir",
+          ref_filtro_aire_motor: r.ref_filtro_aire_motor ?? "Pendiente definir",
+          ref_filtro_aceite: r.ref_filtro_aceite ?? "Pendiente definir",
           ref_filtro_combustible: r.ref_filtro_combustible ?? null,
-          bateria_principal: r.bateria_principal ?? null,
-          bateria_auxiliar: r.bateria_auxiliar ?? null,
+          bateria_principal: r.bateria_principal ?? "Pendiente definir",
+          bateria_auxiliar: r.bateria_auxiliar ?? "Pendiente definir",
           notas: r.notas ?? null,
           vencimiento_soat: r.vencimiento_soat ?? null,
           vencimiento_tecnicomecanica: r.vencimiento_tecnicomecanica ?? null,
@@ -444,13 +451,14 @@ export async function importarVehiculos(filas: FilaVehiculo[]): Promise<Resultad
     resultado.errores.push(...erroresLote);
   }
 
+  await auditar("INSERTAR", "carga_masiva", "", `Carga masiva de vehículos (${resultado.exitosos} registros, ${resultado.errores.length} con error)`);
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   return resultado;
 }
 
 export async function importarProveedores(filas: FilaProveedor[]): Promise<ResultadoCarga> {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const supabase = createClient();
   const resultado: ResultadoCarga = { exitosos: 0, errores: [], omitidos: [] };
 
@@ -565,6 +573,7 @@ export async function importarProveedores(filas: FilaProveedor[]): Promise<Resul
     resultado.errores.push(...erroresLote);
   }
 
+  await auditar("INSERTAR", "carga_masiva", "", `Carga masiva de proveedores (${resultado.exitosos} registros, ${resultado.errores.length} con error)`);
   revalidatePath("/configuracion");
   return resultado;
 }

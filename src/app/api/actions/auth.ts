@@ -3,13 +3,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import { auditar } from "@/lib/auditoria";
+import { enmascararIdentificador } from "@/lib/auditoria-lista";
 import { revalidatePath } from "next/cache";
 import { type UserRole, getDefaultRoute } from "@/lib/auth-utils";
 import {
   createUserAsAdminSchema,
   signInSchema,
   toggleUserActiveSchema,
-  updateUserRoleSchema,
+  updateUserAsAdminSchema,
 } from "@/lib/validations";
 
 export type { UserRole };
@@ -21,6 +23,10 @@ export interface UserProfile {
   role_codigo: UserRole;
   nombre_completo: string | null;
   email: string | null;
+  ciudad: string | null;
+  operational_center_id: number | null;
+  centro_codigo: string | null;
+  centro_nombre: string | null;
   activo: boolean;
 }
 
@@ -43,8 +49,11 @@ export async function getProfile(): Promise<UserProfile | null> {
       role_id,
       nombre_completo,
       email,
+      ciudad,
+      operational_center_id,
       activo,
-      roles!inner(codigo)
+      roles!inner(codigo),
+      operational_centers(codigo, nombre)
     `)
     .eq("user_id", user.id)
     .eq("activo", true)
@@ -58,26 +67,95 @@ export async function getProfile(): Promise<UserProfile | null> {
     role_codigo: (data as any).roles?.codigo as UserRole,
     nombre_completo: data.nombre_completo,
     email: data.email || user.email || null,
+    ciudad: (data as any).ciudad ?? null,
+    operational_center_id: (data as any).operational_center_id ?? null,
+    centro_codigo: (data as any).operational_centers?.codigo ?? null,
+    centro_nombre: (data as any).operational_centers?.nombre ?? null,
     activo: data.activo,
   };
 }
 
-export async function signIn(email: string, password: string) {
-  const parsed = signInSchema.safeParse({ email, password });
+const CREDENCIALES_INVALIDAS = "Usuario o contraseña incorrectos";
+
+// Destino de los intentos con cédula inexistente. Dominio .invalid (RFC 2606):
+// nunca puede pertenecer a una cuenta real.
+const EMAIL_INEXISTENTE = "login-no-encontrado@sisres.invalid";
+
+/**
+ * Resuelve lo que el usuario escribe en el login al email de Supabase Auth.
+ * Los usuarios migrados de SISRES entran con su cédula, como en
+ * login_users.php, y tienen un email sintético que nunca ven; los de
+ * Aeromanto siguen entrando con su correo.
+ */
+async function resolverEmailLogin(identificador: string): Promise<string | null> {
+  if (identificador.includes("@")) return identificador.toLowerCase();
+
+  // Tolera cédulas escritas con puntos o espacios ("1.020.458.300").
+  const cedula = identificador.replace(/[\s.]/g, "");
+  if (!/^\d{5,15}$/.test(cedula)) return null;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
+
+  // Cliente admin: quien intenta entrar todavía no tiene sesión, y la RLS de
+  // user_profiles no deja leer perfiles ajenos sin ella.
+  const admin = createAdminClient();
+  const { data: perfil } = await admin
+    .from("user_profiles")
+    .select("user_id")
+    .eq("cedula", cedula)
+    .eq("activo", true)
+    .maybeSingle<{ user_id: string }>();
+  if (!perfil) return null;
+
+  const { data } = await admin.auth.admin.getUserById(perfil.user_id);
+  return data.user?.email ?? null;
+}
+
+export async function signIn(identificador: string, password: string) {
+  const parsed = signInSchema.safeParse({ identificador, password });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
+  // Una cédula inexistente también pasa por Supabase Auth: si respondiera
+  // antes, la diferencia de tiempo delataría qué cédulas tienen cuenta y el
+  // intento quedaría fuera del límite de intentos de Auth.
+  const email = (await resolverEmailLogin(parsed.data.identificador)) ?? EMAIL_INEXISTENTE;
+
   const supabase = createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: parsed.data.email,
+  const { data: sesion, error } = await supabase.auth.signInWithPassword({
+    email,
     password: parsed.data.password,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    // Intento fallido (o bloqueo por intentos): se registra con el identificador ENMASCARADO, para ver patrones sin
+    // guardar una cédula o un correo completos de alguien que ni siquiera entró.
+    if (error.status === 401 || error.status === 400 || error.status === 422 || error.status === 429) {
+      await auditar(
+        "ERROR",
+        "login",
+        "",
+        `${error.status === 429 ? "Bloqueo por demasiados intentos" : "Intento de login fallido"}: ${enmascararIdentificador(parsed.data.identificador)}`,
+        { userId: null, label: "anónimo" }
+      );
+    }
+    // Mismo mensaje para cédula inexistente y clave errada, para no revelar
+    // qué cédulas tienen cuenta. Solo el bloqueo por intentos se distingue.
+    if (error.status === 429) return { error: "Demasiados intentos. Espere unos minutos e intente de nuevo." };
+    // Sin status (fallo de red) o 5xx: Auth no respondió. No es una clave
+    // errada, y decirlo así haría pasar una caída por un problema del usuario.
+    if (!error.status || error.status >= 500) {
+      return { error: "No se pudo conectar con el servicio de autenticación. Intente de nuevo en unos minutos." };
+    }
+    return { error: CREDENCIALES_INVALIDAS };
+  }
+  // La sesión recién creada aún no está en las cookies de esta petición: se pasa el usuario explícitamente.
+  if (sesion.user) await auditar("LOGIN", "login", sesion.user.id, "Inicio de sesión", { userId: sesion.user.id });
   revalidatePath("/");
   return { success: true };
 }
 
 export async function signOut() {
   const supabase = createClient();
+  // Antes de cerrar la sesión: después ya no se sabría quién era.
+  await auditar("LOGOUT", "login", "", "Cierre de sesión");
   await supabase.auth.signOut();
   revalidatePath("/");
   redirect("/login");
@@ -106,11 +184,21 @@ export async function createUserAsAdmin(data: {
   email: string;
   password: string;
   nombreCompleto: string;
+  cedula?: string;
+  ciudad?: string;
+  operationalCenterId?: number | null;
   roleCodigo: UserRole;
 }) {
-  await requireRole(["ADMIN"]);
+  const caller = await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = createUserAsAdminSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  // Igual que SISRES (includes/insertar_usuarios.php): solo un ADMIN puede
+  // crear otro ADMIN — ANALISTA tiene paridad de creación de usuarios, pero
+  // no puede otorgar el rol más alto.
+  if (parsed.data.roleCodigo === "ADMIN" && caller.role_codigo !== "ADMIN") {
+    return { error: "Solo un Administrador puede crear otro Administrador" };
+  }
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { error: "SUPABASE_SERVICE_ROLE_KEY no configurado. Añada la clave en .env.local" };
@@ -134,35 +222,77 @@ export async function createUserAsAdmin(data: {
     role_id: role.id,
     nombre_completo: parsed.data.nombreCompleto,
     email: parsed.data.email,
+    cedula: parsed.data.cedula || null,
+    ciudad: parsed.data.ciudad || null,
+    operational_center_id: parsed.data.operationalCenterId ?? null,
     activo: true,
   });
 
   if (profileError) return { error: profileError.message };
+  await auditar("INSERTAR", "usuarios", newUser.user.id, `Usuario creado con rol ${parsed.data.roleCodigo}`);
   revalidatePath("/admin/usuarios");
   return { success: true };
 }
 
-export async function updateUserRole(userId: string, roleCodigo: UserRole) {
-  await requireRole(["ADMIN"]);
-  const parsed = updateUserRoleSchema.safeParse({ userId, roleCodigo });
+/**
+ * Edición de un usuario desde Administración → Usuarios: nombre, cédula,
+ * ciudad, centro operativo y rol en una sola operación. El email no se
+ * edita aquí: es la identidad de Supabase Auth.
+ */
+export async function updateUserAsAdmin(data: {
+  userId: string;
+  nombreCompleto: string;
+  cedula?: string;
+  ciudad?: string;
+  operationalCenterId: number | null;
+  roleCodigo: UserRole;
+}) {
+  const caller = await requireRole(["ADMIN", "ANALISTA"]);
+  const parsed = updateUserAsAdminSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
+  const { data: actual } = await supabase
+    .from("user_profiles")
+    .select("roles!inner(codigo)")
+    .eq("user_id", parsed.data.userId)
+    .maybeSingle();
+  if (!actual) return { error: "Usuario no encontrado" };
+
+  // Misma regla que createUserAsAdmin: solo un ADMIN otorga el rol ADMIN, y
+  // tampoco un no-ADMIN puede editar (ni degradar) a un ADMIN existente.
+  const rolActual = (actual as any).roles?.codigo as UserRole | undefined;
+  if (caller.role_codigo !== "ADMIN" && (parsed.data.roleCodigo === "ADMIN" || rolActual === "ADMIN")) {
+    return { error: "Solo un Administrador puede editar o asignar el rol de Administrador" };
+  }
+
   const { data: role } = await supabase.from("roles").select("id").eq("codigo", parsed.data.roleCodigo).single();
   if (!role) return { error: "Rol no encontrado" };
 
   const { error } = await supabase
     .from("user_profiles")
-    .update({ role_id: role.id, updated_at: new Date().toISOString() })
+    .update({
+      nombre_completo: parsed.data.nombreCompleto,
+      cedula: parsed.data.cedula || null,
+      ciudad: parsed.data.ciudad || null,
+      operational_center_id: parsed.data.operationalCenterId,
+      role_id: role.id,
+      updated_at: new Date().toISOString(),
+    })
     .eq("user_id", parsed.data.userId);
 
-  if (error) return { error: error.message };
+  if (error) {
+    // Índice único parcial sobre cédula (migración 043).
+    if (error.code === "23505") return { error: "Esa cédula ya está registrada en otro usuario" };
+    return { error: error.message };
+  }
+  await auditar("MODIFICAR", "usuarios", parsed.data.userId, `Usuario actualizado (rol ${parsed.data.roleCodigo})`);
   revalidatePath("/admin/usuarios");
   return { success: true };
 }
 
 export async function toggleUserActive(userId: string, activo: boolean) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = toggleUserActiveSchema.safeParse({ userId, activo });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -173,6 +303,7 @@ export async function toggleUserActive(userId: string, activo: boolean) {
     .eq("user_id", parsed.data.userId);
 
   if (error) return { error: error.message };
+  await auditar(parsed.data.activo ? "MODIFICAR" : "ELIMINAR", "usuarios", parsed.data.userId, parsed.data.activo ? "Usuario activado" : "Usuario desactivado");
   revalidatePath("/admin/usuarios");
   return { success: true };
 }

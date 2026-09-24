@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { MaintenanceFormData } from "@/lib/validations";
 import { maintenanceSchema } from "@/lib/validations";
@@ -31,7 +32,7 @@ async function countNovedadesAbiertas(vehicleId: string): Promise<number> {
 }
 
 export async function crearMantenimiento(formData: MaintenanceFormData) {
-  await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
   const parsed = maintenanceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -105,6 +106,7 @@ export async function crearMantenimiento(formData: MaintenanceFormData) {
       }
     }
 
+    await auditar("INSERTAR", "mantenimientos", payload.vehicleId, "Mantenimiento registrado");
     revalidatePath("/mantenimientos");
     revalidatePath(`/vehiculos/${payload.vehicleId}`);
     revalidatePath("/");
@@ -129,7 +131,7 @@ export async function actualizarMantenimientoCampo(
     descripcionTrabajo?: string;
   }
 ): Promise<{ success?: boolean; error?: string }> {
-  await requireRole(["ADMIN", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "MANTENIMIENTO"]);
 
   if (!idManto) return { error: "ID inválido" };
 
@@ -151,6 +153,7 @@ export async function actualizarMantenimientoCampo(
 
   if (error) return { error: error.message };
 
+  await auditar("MODIFICAR", "mantenimientos", idManto, "Mantenimiento actualizado");
   revalidatePath("/mantenimientos");
   revalidatePath("/");
   return { success: true };

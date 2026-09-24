@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateField } from "@/components/forms/date-field";
 import {
   Dialog,
   DialogContent,
@@ -78,14 +79,7 @@ export function VehicleKilometrajeForm({ vehicleId, placa }: VehicleKilometrajeF
           </div>
           <div>
             <Label htmlFor="fecha-km">Fecha de lectura</Label>
-            <Input
-              id="fecha-km"
-              type="date"
-              className="mt-1"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              required
-            />
+            <DateField id="fecha-km" value={fecha} onChange={setFecha} />
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <Button type="button" className="w-full" disabled={pending} onClick={guardar}>

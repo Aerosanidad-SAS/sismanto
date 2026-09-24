@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   toggleVehicleStatus,
-  assignVehicleToOvem,
+  asignarTripulacion,
   unassignVehicle,
 } from "@/app/api/actions/regulacion";
+import { ROLES_TRIPULACION } from "@/lib/validations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,10 +38,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
+type TripulacionUser = { user_id: string; nombre_completo: string | null; email: string | null };
+
 interface RegulacionFleetProps {
   fleet: any[];
-  ovemUsers: { user_id: string; nombre_completo: string | null; email: string | null }[];
+  ovemUsers: TripulacionUser[];
+  medicoUsers: TripulacionUser[];
+  auxiliarUsers: TripulacionUser[];
+  /** Tarjetas de disponibles / fuera de servicio. El tablero de Regulación las oculta. */
+  mostrarResumen?: boolean;
 }
+
+const ROL_LABEL: Record<string, string> = {
+  OVEM: "OVEM",
+  MEDICO: "Médico",
+  AUXILIAR_ENFERMERIA: "Auxiliar",
+};
 
 function VehicleTile({
   v,
@@ -82,6 +95,7 @@ function VehicleTile({
           <div className="space-y-0.5">
             {v.assignments.map((a: any) => (
               <div key={a.id} className="flex items-center gap-1">
+                <span className="shrink-0 font-medium text-foreground/70">{ROL_LABEL[a.rol_en_turno] ?? a.rol_en_turno}:</span>
                 <span className="min-w-0 truncate">{a.driver?.nombre_completo || a.driver?.email || "—"}</span>
                 <Button
                   variant="ghost"
@@ -89,8 +103,8 @@ function VehicleTile({
                   className="h-6 w-6 shrink-0 p-0 text-red-600"
                   onClick={() => requestUnassign(a.id)}
                   disabled={loading}
-                  aria-label="Desasignar OVEM"
-                  title="Quitar asignación de conductor"
+                  aria-label="Desasignar"
+                  title="Quitar de la tripulación"
                 >
                   <UserMinus className="h-3 w-3" />
                 </Button>
@@ -98,7 +112,7 @@ function VehicleTile({
             ))}
           </div>
         ) : (
-          <span className="italic">Sin OVEM asignado</span>
+          <span className="italic">Sin tripulación asignada</span>
         )}
       </div>
       <div className="mt-auto flex flex-wrap gap-1 pt-1.5">
@@ -123,27 +137,47 @@ function VehicleTile({
           className="h-7 shrink-0 px-2 text-[10px]"
           onClick={() => onAssignClick(v.id)}
           disabled={loading}
-          title="Asignar o cambiar conductor OVEM"
+          title="Asignar o cambiar tripulación"
         >
           <UserPlus className="mr-0.5 h-3 w-3" />
-          OVEM
+          Tripulación
         </Button>
       </div>
     </div>
   );
 }
 
-export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
+export function RegulacionFleet({
+  fleet,
+  ovemUsers,
+  medicoUsers,
+  auxiliarUsers,
+  mostrarResumen = true,
+}: RegulacionFleetProps) {
   const router = useRouter();
   const [assigningVehicle, setAssigningVehicle] = useState<string | null>(null);
-  const [selectedOvem, setSelectedOvem] = useState("");
+  const [selectedRol, setSelectedRol] = useState<(typeof ROLES_TRIPULACION)[number]>("OVEM");
+  const [selectedUserId, setSelectedUserId] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const USERS_POR_ROL: Record<string, TripulacionUser[]> = {
+    OVEM: ovemUsers,
+    MEDICO: medicoUsers,
+    AUXILIAR_ENFERMERIA: auxiliarUsers,
+  };
   const [error, setError] = useState<string | null>(null);
   const [unassignAssignmentId, setUnassignAssignmentId] = useState<number | null>(null);
   const hoy = new Date().toISOString().split("T")[0];
 
   const openUnassignDialog = (assignmentId: number) => {
     setUnassignAssignmentId(assignmentId);
+  };
+
+  const abrirAsignar = (vehicleId: string) => {
+    setSelectedRol("OVEM");
+    setSelectedUserId("");
+    setError(null);
+    setAssigningVehicle(vehicleId);
   };
 
   const disponibles = fleet.filter((v) => v.estado_actual === "OPERATIVO");
@@ -168,14 +202,14 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
   };
 
   const handleAssign = async () => {
-    if (!assigningVehicle || !selectedOvem) return;
+    if (!assigningVehicle || !selectedUserId) return;
     setLoading(true);
     setError(null);
-    const result = await assignVehicleToOvem(assigningVehicle, selectedOvem, hoy);
+    const result = await asignarTripulacion(assigningVehicle, selectedUserId, selectedRol, hoy);
     if (result?.error) setError(result.error);
     else {
       setAssigningVehicle(null);
-      setSelectedOvem("");
+      setSelectedUserId("");
       router.refresh();
     }
     setLoading(false);
@@ -195,6 +229,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
 
   return (
     <div className="space-y-4">
+      {mostrarResumen && (
       <div className="grid gap-3 md:grid-cols-2">
         <Card className="min-w-0">
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 pt-4">
@@ -241,6 +276,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
           </CardContent>
         </Card>
       </div>
+      )}
 
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
@@ -252,11 +288,11 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
             <div>
               <CardTitle className="flex items-center gap-2 text-lg uppercase tracking-wide">
                 Flota
-                <HelpTrigger text="Vista operativa: a la izquierda, disponibles separados por si tienen conductor OVEM asignado hoy (en operación) o no (disponibles pero sin despacho). A la derecha, unidades fuera de servicio en tarjetas compactas." />
+                <HelpTrigger text="Vista operativa: a la izquierda, disponibles separados por si tienen tripulación asignada hoy (OVEM/médico/auxiliar) o no. A la derecha, unidades fuera de servicio en tarjetas compactas." />
               </CardTitle>
               <CardDescription className="mt-1 max-w-3xl text-xs leading-relaxed">
-                Izquierda: disponibles en dos bloques (con OVEM hoy / sin OVEM). Derecha: fuera de servicio. Use el botón de estado en cada tarjeta para
-                operativo / FDS y el botón OVEM para asignación.
+                Izquierda: disponibles en dos bloques (con tripulación hoy / sin tripulación). Derecha: fuera de servicio. Use el botón de estado en cada tarjeta para
+                operativo / FDS y el botón Tripulación para asignar OVEM, médico o auxiliar.
               </CardDescription>
             </div>
           </div>
@@ -266,15 +302,15 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
             <div className="space-y-5 min-w-0">
               <section>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-semibold text-foreground">Con OVEM (en operación hoy)</h3>
-                  <HelpTrigger text="Vehículos disponibles con asignación activa cuya vigencia incluye la fecha de hoy: suelen estar en servicio o listos según regulación." />
+                  <h3 className="text-sm font-semibold text-foreground">Con tripulación (en operación hoy)</h3>
+                  <HelpTrigger text="Vehículos disponibles con al menos una persona (OVEM, médico o auxiliar) con asignación activa cuya vigencia incluye la fecha de hoy." />
                   <Badge variant="secondary" className="text-[10px]">
                     {conOvemHoy.length}
                   </Badge>
                 </div>
                 {conOvemHoy.length === 0 ? (
                   <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-                    No hay disponibles con OVEM asignado en este momento.
+                    No hay disponibles con tripulación asignada en este momento.
                   </p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -284,7 +320,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
                         v={v}
                         tone="available"
                         onToggle={handleToggle}
-                        onAssignClick={setAssigningVehicle}
+                        onAssignClick={abrirAsignar}
                         requestUnassign={openUnassignDialog}
                         loading={loading}
                       />
@@ -295,15 +331,15 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
 
               <section>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-semibold text-foreground">Disponibles sin OVEM</h3>
-                  <HelpTrigger text="Operativos en sistema pero sin conductor asignado para hoy: no salen a trabajar con OVEM hasta que se asigne uno desde esta pantalla." />
+                  <h3 className="text-sm font-semibold text-foreground">Disponibles sin tripulación</h3>
+                  <HelpTrigger text="Operativos en sistema pero sin nadie asignado para hoy: no salen a trabajar hasta que se les asigne tripulación desde esta pantalla." />
                   <Badge variant="outline" className="text-[10px]">
                     {sinOvem.length}
                   </Badge>
                 </div>
                 {sinOvem.length === 0 ? (
                   <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-                    Todos los disponibles tienen OVEM asignado, o no hay disponibles.
+                    Todos los disponibles tienen tripulación asignada, o no hay disponibles.
                   </p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -313,7 +349,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
                         v={v}
                         tone="available"
                         onToggle={handleToggle}
-                        onAssignClick={setAssigningVehicle}
+                        onAssignClick={abrirAsignar}
                         requestUnassign={openUnassignDialog}
                         loading={loading}
                       />
@@ -343,7 +379,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
                       v={v}
                       tone="fds"
                       onToggle={handleToggle}
-                      onAssignClick={setAssigningVehicle}
+                      onAssignClick={abrirAsignar}
                       requestUnassign={openUnassignDialog}
                       loading={loading}
                     />
@@ -358,9 +394,9 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
       <AlertDialog open={unassignAssignmentId != null} onOpenChange={(o) => !o && setUnassignAssignmentId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Desasignar conductor?</AlertDialogTitle>
+            <AlertDialogTitle>¿Desasignar de la tripulación?</AlertDialogTitle>
             <AlertDialogDescription>
-              El conductor dejará de estar asignado a esta unidad para la vigencia actual. Puede asignar otro OVEM después.
+              Esta persona dejará de estar asignada a esta unidad para la vigencia actual. Puede asignar a otra persona después.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -380,22 +416,51 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
       <Dialog open={!!assigningVehicle} onOpenChange={() => setAssigningVehicle(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Asignar conductor (OVEM)</DialogTitle>
-            <p className="text-sm text-muted-foreground">Seleccione el conductor para el vehículo</p>
+            <DialogTitle>Asignar tripulación</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Seleccione el rol y la persona para este vehículo. Puede repetir para agregar más de un rol.
+            </p>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Conductor</label>
-              <Select value={selectedOvem} onValueChange={setSelectedOvem}>
+              <label className="text-sm font-medium">Rol</label>
+              <Select
+                value={selectedRol}
+                onValueChange={(v) => {
+                  setSelectedRol(v as (typeof ROLES_TRIPULACION)[number]);
+                  setSelectedUserId("");
+                }}
+              >
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Seleccione un OVEM" />
+                  <SelectValue placeholder="Seleccione un rol" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ovemUsers.map((u) => (
-                    <SelectItem key={u.user_id} value={u.user_id}>
-                      {u.nombre_completo || u.email || u.user_id}
+                  {ROLES_TRIPULACION.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROL_LABEL[r] ?? r}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Persona</label>
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder={`Seleccione ${ROL_LABEL[selectedRol]?.toLowerCase() ?? "persona"}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(USERS_POR_ROL[selectedRol] ?? []).length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      No hay usuarios activos con este rol.
+                    </div>
+                  ) : (
+                    USERS_POR_ROL[selectedRol].map((u) => (
+                      <SelectItem key={u.user_id} value={u.user_id}>
+                        {u.nombre_completo || u.email || u.user_id}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -403,7 +468,7 @@ export function RegulacionFleet({ fleet, ovemUsers }: RegulacionFleetProps) {
               <Button variant="outline" onClick={() => setAssigningVehicle(null)}>
                 Cancelar
               </Button>
-              <Button onClick={handleAssign} disabled={!selectedOvem || loading}>
+              <Button onClick={handleAssign} disabled={!selectedUserId || loading}>
                 {loading ? "Asignando..." : "Asignar"}
               </Button>
             </div>

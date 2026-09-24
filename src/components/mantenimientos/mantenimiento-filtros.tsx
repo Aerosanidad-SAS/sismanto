@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateField } from "@/components/forms/date-field";
 import {
   Select,
   SelectContent,
@@ -72,11 +73,11 @@ export function MantenimientoFiltrosForm({ inicial }: { inicial: MantenimientoFi
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-xs text-muted-foreground">Desde</Label>
-          <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9" />
+          <DateField value={desde} onChange={setDesde} />
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-xs text-muted-foreground">Hasta</Label>
-          <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9" />
+          <DateField value={hasta} onChange={setHasta} />
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-xs text-muted-foreground">Categoría</Label>

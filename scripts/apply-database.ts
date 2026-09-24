@@ -47,6 +47,61 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "032_rtm_historico.sql",                   file: "scripts/migrations/032_rtm_historico.sql" },
   { name: "033_rtm_solo_desde_2024.sql",             file: "scripts/migrations/033_rtm_solo_desde_2024.sql" },
   { name: "034_corregir_historial_fds.sql",          file: "scripts/migrations/034_corregir_historial_fds.sql" },
+  // ─── Integración SISRES (PLAN_INTEGRACION_SISRES.md) ──────────────────────
+  { name: "035_sisres_roles.sql",                    file: "scripts/migrations/035_sisres_roles.sql" },
+  { name: "036_vehicles_campos_sisres.sql",          file: "scripts/migrations/036_vehicles_campos_sisres.sql" },
+  { name: "037_sisres_clientes_cie10.sql",           file: "scripts/migrations/037_sisres_clientes_cie10.sql" },
+  { name: "038_sisres_pacientes.sql",                file: "scripts/migrations/038_sisres_pacientes.sql" },
+  { name: "039_sisres_servicios_valoraciones.sql",   file: "scripts/migrations/039_sisres_servicios_valoraciones.sql" },
+  { name: "040_sisres_inventario_biomedico.sql",     file: "scripts/migrations/040_sisres_inventario_biomedico.sql" },
+  { name: "041_sisres_campanas.sql",                 file: "scripts/migrations/041_sisres_campanas.sql" },
+  { name: "042_centro_operativo_ado.sql",             file: "scripts/migrations/042_centro_operativo_ado.sql" },
+  { name: "043_user_profiles_cedula.sql",              file: "scripts/migrations/043_user_profiles_cedula.sql" },
+  { name: "044_enum_centro_operativo_ado.sql",          file: "scripts/migrations/044_enum_centro_operativo_ado.sql" },
+  { name: "045_etapa_servicio_no_efectivo_duplicado.sql", file: "scripts/migrations/045_etapa_servicio_no_efectivo_duplicado.sql" },
+  { name: "046_analista_paridad_admin.sql",               file: "scripts/migrations/046_analista_paridad_admin.sql" },
+  { name: "047_analista_paridad_admin_core.sql",          file: "scripts/migrations/047_analista_paridad_admin_core.sql" },
+  { name: "048_patients_tipo_documento_catalogo.sql",     file: "scripts/migrations/048_patients_tipo_documento_catalogo.sql" },
+  { name: "049_incidents_cierre_manual.sql",              file: "scripts/migrations/049_incidents_cierre_manual.sql" },
+  { name: "050_servicios_tripulacion_y_campos.sql",       file: "scripts/migrations/050_servicios_tripulacion_y_campos.sql" },
+  { name: "051_vehicle_assignments_rol_en_turno.sql",     file: "scripts/migrations/051_vehicle_assignments_rol_en_turno.sql" },
+  { name: "052_user_profiles_ciudad.sql",                 file: "scripts/migrations/052_user_profiles_ciudad.sql" },
+  { name: "053_medical_services_rls_tripulacion.sql",     file: "scripts/migrations/053_medical_services_rls_tripulacion.sql" },
+  { name: "054_revertir_delete_analista.sql",             file: "scripts/migrations/054_revertir_delete_analista.sql" },
+  { name: "055_candado_finalizado_auditoria.sql",         file: "scripts/migrations/055_candado_finalizado_auditoria.sql" },
+  { name: "056_company_settings_branding.sql",            file: "scripts/migrations/056_company_settings_branding.sql" },
+  { name: "057_paridad_estricta_servicios_sisres.sql",    file: "scripts/migrations/057_paridad_estricta_servicios_sisres.sql" },
+  { name: "058_etl_identidad_origen.sql",                 file: "scripts/migrations/058_etl_identidad_origen.sql" },
+  { name: "059_centro_operativo_servicios.sql",          file: "scripts/migrations/059_centro_operativo_servicios.sql" },
+  { name: "060_ovem_turno.sql",                          file: "scripts/migrations/060_ovem_turno.sql" },
+  { name: "061_dotacion_auxiliares.sql",                 file: "scripts/migrations/061_dotacion_auxiliares.sql" },
+  // 062_dotacion_catalogo.sql: se registra cuando esté la lista real de dotación.
+  { name: "063_servicios_lista_regulacion.sql",          file: "scripts/migrations/063_servicios_lista_regulacion.sql" },
+  { name: "064_notificaciones_vencimientos.sql",         file: "scripts/migrations/064_notificaciones_vencimientos.sql" },
+  { name: "068_valoraciones_activo.sql",                   file: "scripts/migrations/068_valoraciones_activo.sql" },
+  { name: "069_aeropuertos_aerolineas.sql",                file: "scripts/migrations/069_aeropuertos_aerolineas.sql" },
+  { name: "075_valoraciones_correo.sql",                   file: "scripts/migrations/075_valoraciones_correo.sql" },
+  { name: "070_formatos_ti_acta_entrega.sql",              file: "scripts/migrations/070_formatos_ti_acta_entrega.sql" },
+  { name: "071_formatos_ti_diagnostico.sql",               file: "scripts/migrations/071_formatos_ti_diagnostico.sql" },
+  { name: "072_formatos_ti_baja.sql",                      file: "scripts/migrations/072_formatos_ti_baja.sql" },
+  { name: "073_formatos_ti_prestamo.sql",                  file: "scripts/migrations/073_formatos_ti_prestamo.sql" },
+  { name: "074_formatos_ti_firma_remota.sql",              file: "scripts/migrations/074_formatos_ti_firma_remota.sql" },
+  { name: "065_biomedico_vencimiento_parche.sql",        file: "scripts/migrations/065_biomedico_vencimiento_parche.sql" },
+  { name: "066_biomedical_alerts_log.sql",               file: "scripts/migrations/066_biomedical_alerts_log.sql" },
+  { name: "067_biomedical_especificaciones_100.sql",     file: "scripts/migrations/067_biomedical_especificaciones_100.sql" },
+  { name: "065_tickets_soporte.sql",                     file: "scripts/migrations/065_tickets_soporte.sql" },
+  { name: "066_tickets_gestion.sql",                     file: "scripts/migrations/066_tickets_gestion.sql" },
+  { name: "067_tickets_config_indicadores.sql",          file: "scripts/migrations/067_tickets_config_indicadores.sql" },
+  { name: "078_campanas_pausa_cancelar.sql",               file: "scripts/migrations/078_campanas_pausa_cancelar.sql" },
+  { name: "080_campanas_media.sql",                        file: "scripts/migrations/080_campanas_media.sql" },
+  { name: "079_whatsapp_entrega_lectura.sql",              file: "scripts/migrations/079_whatsapp_entrega_lectura.sql" },
+  { name: "077_audit_log.sql",                             file: "scripts/migrations/077_audit_log.sql" },
+  { name: "081_audit_log_origen.sql",                     file: "scripts/migrations/081_audit_log_origen.sql" },
+  { name: "082_audit_log_exportar.sql",                   file: "scripts/migrations/082_audit_log_exportar.sql" },
+  { name: "083_sispro_cie10.sql",                        file: "scripts/migrations/083_sispro_cie10.sql" },
+  { name: "076_roles_tecnico_aeropuerto.sql",              file: "scripts/migrations/076_roles_tecnico_aeropuerto.sql" },
+  { name: "080_captacion_aeroportuaria.sql",             file: "scripts/migrations/080_captacion_aeroportuaria.sql" },
+  { name: "081_sispro_catalogos.sql",                    file: "scripts/migrations/081_sispro_catalogos.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
@@ -113,6 +168,16 @@ async function ensureTracker(client: pg.Client): Promise<boolean> {
   return existed; // false = primera vez (necesita seed)
 }
 
+async function hasExistingSchema(client: pg.Client): Promise<boolean> {
+  const { rows } = await client.query<{ exists: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'vehicles'
+    ) AS exists
+  `);
+  return rows[0]?.exists ?? false;
+}
+
 async function isApplied(client: pg.Client, name: string): Promise<boolean> {
   const { rows } = await client.query(
     "SELECT 1 FROM public.schema_migrations WHERE name = $1",
@@ -155,7 +220,7 @@ Cómo obtenerla (Supabase):
 
   const client = new pg.Client({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
+    ssl: process.env.DATABASE_SSL === "off" ? false : { rejectUnauthorized: false },
   });
 
   try {
@@ -184,19 +249,26 @@ Cómo obtenerla (Supabase):
   const trackerExisted = await ensureTracker(client);
 
   if (!trackerExisted) {
-    // Primera vez: el tracker no existía → DB ya tiene migraciones aplicadas sin él.
-    // Marcamos todas como aplicadas para que no se re-ejecuten.
-    console.log("ℹ  Tracker nuevo detectado — sembrando migraciones previas como ya aplicadas...");
-    for (const m of MIGRATIONS) {
-      await markApplied(client, m.name);
-    }
-    console.log(`   ${MIGRATIONS.length} migraciones marcadas. Futuras migraciones se ejecutarán normalmente.\n`);
+    // El tracker no existía. Dos escenarios posibles:
+    //  a) DB ya tiene el esquema aplicado (p.ej. producción) sin el tracker → sembrar sin re-ejecutar.
+    //  b) DB recién creada y completamente vacía (p.ej. nuevo proyecto Supabase de staging)
+    //     → sembrar la marcaría como "al día" sin haber corrido ni una migración.
+    if (await hasExistingSchema(client)) {
+      console.log("ℹ  Tracker nuevo detectado — sembrando migraciones previas como ya aplicadas...");
+      for (const m of MIGRATIONS) {
+        await markApplied(client, m.name);
+      }
+      console.log(`   ${MIGRATIONS.length} migraciones marcadas. Futuras migraciones se ejecutarán normalmente.\n`);
 
-    // Igual ejecutamos el bloque de ADMIN por si acaso (idempotente).
-    await ensureAdminProfile(client);
-    console.log("\n✅ Tracker inicializado.");
-    await client.end();
-    return;
+      // Igual ejecutamos el bloque de ADMIN por si acaso (idempotente).
+      await ensureAdminProfile(client);
+      console.log("\n✅ Tracker inicializado.");
+      await client.end();
+      return;
+    }
+
+    console.log("ℹ  Base de datos vacía detectada — se ejecutarán todas las migraciones desde cero.\n");
+    // No hacemos return: cae al loop normal de abajo, que aplicará las 29 migraciones en orden.
   }
 
   // Ejecución normal: aplicar solo las pendientes

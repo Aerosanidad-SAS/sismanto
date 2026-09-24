@@ -1,0 +1,146 @@
+/**
+ * Lista de servicios con la misma lógica de SISRES (mostrarServicios.php):
+ * filtros, paginación de 100, avisos por hora programada y servicios estancados.
+ * Sin dependencias de servidor: lo usan la página, las acciones y el cliente.
+ */
+
+export const SERVICIOS_POR_PAGINA = 100;
+/** Tope de exportación, igual que EXPORT_MAX_FILAS en export/exportExcel.php. */
+export const EXPORT_MAX_FILAS = 50000;
+
+export interface FiltrosServicios {
+  /** Rango sobre fecha_hora_programacion (YYYY-MM-DD); SISRES exige ambos extremos. */
+  desde?: string;
+  hasta?: string;
+  tipo?: string;
+  etapa?: string;
+  cliente?: string;
+  origen?: string;
+  destino?: string;
+  cedula?: string;
+}
+
+const CLAVES: (keyof FiltrosServicios)[] = ["desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula"];
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Lee filtros y página de los searchParams de la URL, descartando valores inválidos. */
+export function leerFiltros(params: Record<string, string | string[] | undefined>): {
+  filtros: FiltrosServicios;
+  pagina: number;
+} {
+  const filtros: FiltrosServicios = {};
+  for (const k of CLAVES) {
+    const v = params[k];
+    const s = (Array.isArray(v) ? v[0] : v)?.trim();
+    if (!s) continue;
+    if ((k === "desde" || k === "hasta") && !FECHA.test(s)) continue;
+    filtros[k] = s.slice(0, 120);
+  }
+  const p = Number(Array.isArray(params.pagina) ? params.pagina[0] : params.pagina);
+  return { filtros, pagina: Number.isInteger(p) && p > 0 ? p : 1 };
+}
+
+export function filtrosAQuery(filtros: FiltrosServicios, pagina = 1): string {
+  const sp = new URLSearchParams();
+  for (const k of CLAVES) if (filtros[k]) sp.set(k, filtros[k] as string);
+  if (pagina > 1) sp.set("pagina", String(pagina));
+  const q = sp.toString();
+  return q ? `?${q}` : "";
+}
+
+// ── Servicios estancados (includes/alertaEstancadoConfig.php) ──────────────
+// Horas desde la hora programada sin salir de la etapa. En SISRES son
+// configurables (configuracion_sistema); acá quedan fijas hasta que
+// Regulación confirme los valores de producción.
+export const UMBRAL_ESTANCADO_HORAS: Record<string, number> = { PROGRAMADO: 4, CURSO: 4 };
+
+/** Horas enteras de atraso si el servicio cruzó el umbral de su etapa; si no, null. */
+export function horasEstancado(
+  s: { etapa: string; fecha_hora_programacion?: string | null },
+  ahora: number = Date.now()
+): number | null {
+  const umbral = UMBRAL_ESTANCADO_HORAS[s.etapa];
+  if (!umbral || !s.fecha_hora_programacion) return null;
+  const prog = Date.parse(s.fecha_hora_programacion);
+  if (Number.isNaN(prog) || prog > ahora) return null;
+  const horas = (ahora - prog) / 3_600_000;
+  return horas >= umbral ? Math.floor(horas) : null;
+}
+
+/** Avisos antes de la hora programada, en minutos (verificarAlertasProximas). */
+export const UMBRALES_PROXIMOS_MIN = [60, 30, 15] as const;
+
+// ── Exportación (export/exportExcel.php) ───────────────────────────────────
+
+/** Columnas en el mismo orden y con los mismos títulos que el Excel de SISRES. */
+export const COLUMNAS_EXPORT: [titulo: string, campo: string][] = [
+  ["ID", "id"],
+  ["ETAPA SERVICIO", "etapa"],
+  ["NOMBRE COMPLETO", "nombre_completo"],
+  ["CEDULA", "cedula_paciente"],
+  ["FECHA HORA REGISTRO", "fecha_hora_registro"],
+  ["TIPO SERVICIO", "tipo_servicio"],
+  ["MOVIL", "movil"],
+  ["FECHA HORA PROGRAMACION", "fecha_hora_programacion"],
+  ["OPORTUNIDAD ATENCION (Minutos)", "oportunidad_atencion"],
+  ["TURNO PROGRAMACION", "turno_programacion"],
+  ["AUTORIZACION", "autorizacion"],
+  ["ASESOR", "asesor"],
+  ["PRESTADOR", "prestador"],
+  ["DIAGNOSTICO", "diagnostico"],
+  ["REQUIERE AISLAMIENTO", "requiere_aislamiento"],
+  ["SOPORTE", "soporte"],
+  ["DEPARTAMENTO ORIGEN", "departamento_origen"],
+  ["CIUDAD ORIGEN", "ciudad_origen"],
+  ["DEPARTAMENTO DESTINO", "departamento_destino"],
+  ["CIUDAD DESTINO", "ciudad_destino"],
+  ["PERIMETRO", "perimetro"],
+  ["DIRECCION", "direccion_origen"],
+  ["FECHA HORA LLEGADA ORIGEN", "fecha_hora_llegada_origen"],
+  ["FECHA HORA SALIDA ORIGEN", "fecha_hora_salida_origen"],
+  ["TIEMPO TOTAL ORIGEN", "tiempo_total_origen"],
+  ["DIRECCION INTERMEDIA", "direccion_intermedia"],
+  ["FECHA HORA LLEGADA INTERMEDIA", "fecha_hora_llegada_intermedia"],
+  ["FECHA HORA SALIDA INTERMEDIA", "fecha_hora_salida_intermedia"],
+  ["TIEMPO ESPERA INTERMEDIA", "tiempo_espera_intermedia"],
+  ["DIRECCION DESTINO SERVICIO", "direccion_destino"],
+  ["FECHA HORA LLEGADA DESTINO", "fecha_hora_llegada_destino"],
+  ["FECHA HORA SALIDA DESTINO", "fecha_hora_salida_destino"],
+  ["TIEMPO ESPERA DESTINO", "tiempo_espera_destino"],
+  ["TIEMPO TOTAL ESPERA DESTINO", "tiempo_total"],
+  ["FINALIDAD TRASLADO", "finalidad_traslado"],
+  ["ACEPTA IPS", "acepta_ips"],
+  ["VALOR SERVICIO", "valor_servicio"],
+  ["METODO DE PAGO", "metodo_pago"],
+  ["CLIENTE", "cliente"],
+  ["PROVEEDOR", "proveedor"],
+  ["MEDICO", "medico"],
+  ["AUXILIAR", "auxiliar"],
+  ["OVEM", "ovem"],
+  ["USUARIO RECIBE SERVICIO", "usuario_recibe"],
+  ["USUARIO DESPACHA SERVICIO", "usuario_despacha"],
+  ["NOVEDAD SERVICIO", "novedad_servicio"],
+  ["OBSERVACIONES", "observaciones"],
+  ["ESTADO SERVICIO", "estado_servicio"],
+  ["CIUDAD REGISTRO", "ciudad_registro"],
+];
+
+/**
+ * Evita inyección de fórmulas al abrir el archivo en Excel (celdaExcelSegura
+ * en SISRES): un texto que empieza por = + - @ o tabulador se antepone con '.
+ */
+export function celdaExcelSegura(valor: unknown): string | number {
+  if (valor === null || valor === undefined) return "";
+  if (typeof valor === "number") return valor;
+  const s = String(valor);
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+}
+
+/** "2026-09-22 08:45" en hora de Colombia, 24 h: el formato de las tablas de SISRES. */
+export function fechaHora24(iso: string | null | undefined, conSegundos = false): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const s = d.toLocaleString("sv-SE", { timeZone: "America/Bogota" });
+  return conSegundos ? s : s.slice(0, 16);
+}

@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { stripDashboardGlobalParams } from "@/lib/dashboard-search-params";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/forms/date-field";
 import {
   Select,
   SelectContent,
@@ -113,21 +114,19 @@ export function DashboardGlobalFiltros({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 flex-1 sm:flex-initial">
-      <Input
-        type="date"
+      <DateField
         value={fi}
-        onChange={(e) => setFi(e.target.value)}
-        className="h-8 w-[8.75rem] text-xs shrink-0"
-        aria-label="Período global desde"
-        title="Fecha inicio del período global"
+        onChange={setFi}
+        className="w-[10.5rem] shrink-0"
+        inputClassName="h-8 text-xs"
+        placeholder="dd/mm/aaaa"
       />
-      <Input
-        type="date"
+      <DateField
         value={ff}
-        onChange={(e) => setFf(e.target.value)}
-        className="h-8 w-[8.75rem] text-xs shrink-0"
-        aria-label="Período global hasta"
-        title="Fecha fin del período global"
+        onChange={setFf}
+        className="w-[10.5rem] shrink-0"
+        inputClassName="h-8 text-xs"
+        placeholder="dd/mm/aaaa"
       />
 
       <Select value={cen || SELECT_ALL} onValueChange={(v) => setCen(v === SELECT_ALL ? "" : v)}>

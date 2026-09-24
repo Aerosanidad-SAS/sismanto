@@ -16,7 +16,7 @@ import { HelpTrigger } from "@/components/ui/help-trigger";
 import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { type NovedadAbiertaResumen } from "@/components/dashboard/estado-flota-detalle";
 import { DashboardGlobalFiltros } from "@/components/dashboard/dashboard-global-filters";
-import { getOvemUsers } from "@/app/api/actions/regulacion";
+import { getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 import { ProximosVencimientosModal } from "@/components/dashboard/proximos-vencimientos-modal";
 import { EstadoFlotaTablaPaginada } from "@/components/dashboard/estado-flota-tabla-paginada";
@@ -317,18 +317,19 @@ export default async function DashboardPage({
   const puedeToggleEstadoEnTabla = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
   const canAssignOvem = profile?.role_codigo === "ADMIN" || profile?.role_codigo === "REGULACION";
 
-  let ovemUsers: Awaited<ReturnType<typeof getOvemUsers>> = [];
+  let ovemUsers: Awaited<ReturnType<typeof getUsuariosPorRol>> = [];
   let vehicleAssignmentMap: Record<string, { id: number; ovemName: string }> = {};
 
   if (canAssignOvem) {
     const supabaseDash = createClient();
     const hoyIso = new Date().toISOString().split("T")[0];
     const [ousers, assignments] = await Promise.all([
-      getOvemUsers(),
+      getUsuariosPorRol("OVEM"),
       supabaseDash
         .from("vehicle_assignments")
         .select("id, vehicle_id, user_id, user_profiles(nombre_completo, email)")
         .eq("activo", true)
+        .eq("rol_en_turno", "OVEM")
         .or(`fecha_fin.is.null,fecha_fin.gte.${hoyIso}`),
     ]);
     ovemUsers = ousers;

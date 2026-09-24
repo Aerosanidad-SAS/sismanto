@@ -31,7 +31,8 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = path === "/login" || path === "/pending" || path.startsWith("/api/");
+  // /firmar/<token>: enlace del correo de firma remota (el token es la credencial; no hay sesión).
+  const isPublic = path === "/login" || path === "/pending" || path.startsWith("/api/") || path.startsWith("/firmar/");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

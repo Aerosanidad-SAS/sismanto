@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DateField } from "@/components/forms/date-field";
 import {
   Select,
   SelectContent,
@@ -197,6 +198,7 @@ function AsignarDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [fechaLimite, setFechaLimite] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -212,17 +214,16 @@ function AsignarDialog({
     e.preventDefault();
     if (!selected.length) { setError("Selecciona al menos un OVEM"); return; }
     setError(null);
-    const fd = new FormData(e.currentTarget);
-    const fechaLimite = (fd.get("fecha_limite") as string) || null;
     startTransition(async () => {
       const res = await asignarCapacitacion({
         training_id: trainingId,
         user_ids: selected,
-        fecha_limite: fechaLimite,
+        fecha_limite: fechaLimite || null,
       });
       if (res.error) { setError(res.error); return; }
       setOpen(false);
       setSelected([]);
+      setFechaLimite("");
       router.refresh();
     });
   };
@@ -239,7 +240,7 @@ function AsignarDialog({
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-1">
             <Label htmlFor="fecha_limite">Fecha límite (opcional)</Label>
-            <Input id="fecha_limite" name="fecha_limite" type="date" />
+            <DateField id="fecha_limite" value={fechaLimite} onChange={setFechaLimite} />
           </div>
           <div className="space-y-2">
             <Label>Seleccionar OVEM</Label>

@@ -1,0 +1,143 @@
+# Revisión automática de cada Pull Request con Claude Code en el rol de Aegis
+# (checklist en .claude/agents/aegis.md). Es un check: falla si el veredicto
+# es BLOCKED o si la revisión no llegó a publicarse. Aprobar el PR sigue
+# siendo de una persona — este check solo decide si se puede mergear.
+#
+# Requiere el secreto CLAUDE_CODE_OAUTH_TOKEN (GitHub → Settings → Secrets and
+# variables → Actions), generado con `claude setup-token`. Lo carga un admin
+# del repo `Aerosanidad-SAS/sismanto`.
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  # La action pide un token OIDC si no recibe github_token; sin este permiso
+  # falla con "Unable to get ACTIONS_ID_TOKEN_REQUEST_URL".
+  id-token: write
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Verificar credenciales de Claude
+        env:
+          HAS_CREDENTIALS: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        run: |
+          if [ "$HAS_CREDENTIALS" != "true" ]; then
+            echo "::error::Falta el secreto CLAUDE_CODE_OAUTH_TOKEN (claude setup-token). Lo carga un admin del repo en Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run build` ignora errores de TypeScript (next.config.mjs), y el repo
+      # arrastra cientos de errores `never` preexistentes. Se comparan los errores
+      # de los archivos cambiados contra la rama base, sin números de línea, para
+      # quedarse solo con los que introduce este PR.
+      - name: Errores de tipos nuevos en archivos cambiados
+        run: |
+          git diff --name-only --diff-filter=AMR "origin/$BASE_REF...HEAD" -- '*.ts' '*.tsx' > changed-files.txt || true
+          touch tsc-new.txt
+          if [ ! -s changed-files.txt ]; then echo "Sin archivos TypeScript cambiados."; exit 0; fi
+
+          npx tsc --noEmit > tsc-head.txt 2>&1 || true
+
+          git worktree add ../base "origin/$BASE_REF" > /dev/null
+          ln -s "$PWD/node_modules" ../base/node_modules
+          (cd ../base && npx tsc --noEmit > "$GITHUB_WORKSPACE/tsc-base.txt" 2>&1) || true
+
+          normalize() { grep -F -f changed-files.txt "$1" | grep 'error TS' | sed -E 's/\([0-9]+,[0-9]+\)//' | sort; }
+          normalize tsc-head.txt > head.sorted
+          normalize tsc-base.txt > base.sorted
+          comm -13 base.sorted head.sorted > tsc-new.txt
+          echo "Errores de tipos nuevos: $(wc -l < tsc-new.txt)"
+          cat tsc-new.txt
+
+      - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"
+          prompt: |
+            Eres Aegis, el revisor de código de Aeromanto. Antes de revisar, lee
+            `.claude/agents/aegis.md` (rol, checklist y formato de salida) y
+            `CLAUDE.md` (convenciones y sección "Team workflow").
+
+            Contexto:
+            - Repositorio: ${{ github.repository }}
+            - PR: #${{ github.event.pull_request.number }} hacia `${{ github.event.pull_request.base.ref }}`
+            - Commit revisado: ${{ github.event.pull_request.head.sha }}
+
+            Pasos:
+            1. Obtén el diff con `gh pr diff ${{ github.event.pull_request.number }}` y la
+               descripción con `gh pr view ${{ github.event.pull_request.number }}`.
+            2. Cuando el diff no alcance para juzgar, lee el archivo completo y
+               busca los usos en el resto del código.
+            3. Lee `tsc-new.txt`: son los errores de tipos que introduce este PR.
+               Cada uno es al menos CHANGE; BLOCK si implica un fallo en ejecución.
+            4. Si hay migraciones, compara su número contra
+               `git show origin/${{ github.event.pull_request.base.ref }}:scripts/apply-database.ts`
+               para detectar colisiones con lo ya mergeado.
+            5. Aplica el checklist completo de aegis.md.
+
+            Publica exactamente UN comentario con `gh pr comment ${{ github.event.pull_request.number }} --body "..."`,
+            en español con tuteo, que empiece con la línea
+            `<!-- aegis-review:${{ github.event.pull_request.head.sha }} -->`
+            y siga el formato de salida de aegis.md, con una sola línea de veredicto
+            `### Verdict: APPROVED`, `### Verdict: CHANGES REQUESTED` o `### Verdict: BLOCKED`,
+            y que TERMINE con una última línea que repita ese veredicto exactamente así:
+            `<!-- aegis-verdict:APPROVED -->`, `<!-- aegis-verdict:CHANGES REQUESTED -->` o
+            `<!-- aegis-verdict:BLOCKED -->`. Nada después de esa línea.
+
+            No hagas commits, no edites archivos y no apruebes el PR: solo revisas y comentas.
+
+      - name: Aplicar veredicto
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Solo cuenta el marcador de la ÚLTIMA línea no vacía del comentario de
+          # este commit: la revisión puede citar veredictos en su propio texto.
+          verdict=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.body | contains("aegis-review:'"$HEAD_SHA"'")) | .body | gsub("\r"; "") | split("\n") | map(select(test("[^ \t]"))) | (last // "") | ((capture("^<!-- aegis-verdict:(?<v>APPROVED|CHANGES REQUESTED|BLOCKED) -->$") | .v) // "SIN_VEREDICTO")' | tail -n 1)
+          case "$verdict" in
+            "")
+              echo "::error::Claude no publicó la revisión del commit $HEAD_SHA."
+              exit 1 ;;
+            SIN_VEREDICTO)
+              echo "::error::La revisión del commit $HEAD_SHA no termina con el marcador <!-- aegis-verdict:... -->."
+              exit 1 ;;
+            BLOCKED)
+              echo "::error::Revisión de Claude: BLOCKED. Corrige los puntos BLOCK del comentario y vuelve a pushear."
+              exit 1 ;;
+            *)
+              echo "Veredicto de Claude: $verdict" ;;
+          esac

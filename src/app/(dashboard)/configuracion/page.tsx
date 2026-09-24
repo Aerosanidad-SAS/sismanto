@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
+import { isAdminLike } from "@/lib/auth-utils";
 import { ConfiguracionTabs } from "@/components/configuracion/configuracion-tabs";
+import { getCompanyBranding } from "@/app/api/actions/company-settings";
 
 async function getConfiguracionData() {
   try {
@@ -10,6 +12,7 @@ async function getConfiguracionData() {
       { data: vehicles },
       { data: centros },
       { data: proveedores },
+      { data: clientes },
     ] = await Promise.all([
       supabase
         .from("vehicles")
@@ -23,6 +26,11 @@ async function getConfiguracionData() {
         .from("suppliers")
         .select("*")
         .order("nombre"),
+      supabase
+        .from("clients")
+        .select("*")
+        .eq("activo", true)
+        .order("nombre"),
     ]);
 
     const serviceTypesRes = await supabase.from("service_types").select("*").order("orden");
@@ -32,20 +40,21 @@ async function getConfiguracionData() {
       vehicles: vehicles || [],
       centros: centros || [],
       proveedores: proveedores || [],
+      clientes: clientes || [],
       serviceTypes,
     };
   } catch {
-    return { vehicles: [], centros: [], proveedores: [], serviceTypes: [] };
+    return { vehicles: [], centros: [], proveedores: [], clientes: [], serviceTypes: [] };
   }
 }
 
 export default async function ConfiguracionPage() {
   const profile = await getProfile();
-  if (!profile || profile.role_codigo !== "ADMIN") {
+  if (!profile || !isAdminLike(profile.role_codigo)) {
     redirect("/");
   }
 
-  const data = await getConfiguracionData();
+  const [data, branding] = await Promise.all([getConfiguracionData(), getCompanyBranding()]);
 
   return (
     <div className="space-y-6">
@@ -60,7 +69,10 @@ export default async function ConfiguracionPage() {
         vehicles={data.vehicles}
         centros={data.centros}
         proveedores={data.proveedores}
+        clientes={data.clientes}
         serviceTypes={(data.serviceTypes || []) as any}
+        logoUrl={branding.logo_url}
+        esAdmin={profile.role_codigo === "ADMIN"}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { VehicleFormData } from "@/lib/validations";
 import {
@@ -25,7 +26,7 @@ const registrarKmVehSchema = z.object({
 });
 
 export async function registrarKilometrajeVehiculo(input: z.infer<typeof registrarKmVehSchema>) {
-  await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
   const parsed = registrarKmVehSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -81,7 +82,7 @@ export async function getVehiculoPorId(id: string) {
 }
 
 export async function crearVehiculo(formData: VehicleFormData) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = vehicleSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -126,13 +127,14 @@ export async function crearVehiculo(formData: VehicleFormData) {
   });
 
   if (error) return { error: error.message };
+  await auditar("INSERTAR", "vehiculos", "", "Vehículo creado");
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   return { success: true };
 }
 
 export async function actualizarVehiculo(id: string, formData: VehicleFormData) {
-  await requireRole(["ADMIN", "REGULACION"]);
+  await requireRole(["ADMIN", "ANALISTA", "REGULACION"]);
   const idParsed = z.string().uuid("ID de vehículo inválido").safeParse(id);
   if (!idParsed.success) return { error: idParsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -181,6 +183,7 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
     .eq("id", idParsed.data);
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", idParsed.data, "Vehículo actualizado");
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   revalidatePath(`/vehiculos/${idParsed.data}`);
@@ -188,7 +191,7 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
 }
 
 export async function actualizarEspecificacionesVehiculo(formData: VehicleSpecsFormData) {
-  await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
   const parsed = vehicleSpecsSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -212,6 +215,7 @@ export async function actualizarEspecificacionesVehiculo(formData: VehicleSpecsF
     .eq("id", fd.vehicleId);
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", fd.vehicleId, "Especificaciones del vehículo actualizadas");
   revalidatePath(`/vehiculos/${fd.vehicleId}`);
   revalidatePath("/vehiculos");
   revalidatePath("/");
@@ -219,7 +223,7 @@ export async function actualizarEspecificacionesVehiculo(formData: VehicleSpecsF
 }
 
 export async function actualizarInformacionGeneralVehiculo(formData: VehicleGeneralFormData) {
-  await requireRole(["ADMIN", "REGULACION", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
   const parsed = vehicleGeneralSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -252,6 +256,7 @@ export async function actualizarInformacionGeneralVehiculo(formData: VehicleGene
     .eq("id", fd.vehicleId);
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", fd.vehicleId, "Información general del vehículo actualizada");
   revalidatePath(`/vehiculos/${fd.vehicleId}`);
   revalidatePath("/vehiculos");
   revalidatePath("/");
@@ -259,7 +264,7 @@ export async function actualizarInformacionGeneralVehiculo(formData: VehicleGene
 }
 
 export async function eliminarVehiculo(id: string) {
-  await requireRole(["ADMIN"]);
+  await requireRole(["ADMIN", "ANALISTA"]);
   const idParsed = z.string().uuid("ID de vehículo inválido").safeParse(id);
   if (!idParsed.success) return { error: idParsed.error.issues[0]?.message ?? "Datos inválidos" };
 

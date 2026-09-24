@@ -1,10 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState, useCallback } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname,
+  useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Truck,
@@ -12,6 +16,7 @@ import {
   AlertTriangle,
   BarChart3,
   Settings,
+  Settings2,
   Fuel,
   ClipboardCheck,
   GraduationCap,
@@ -24,115 +29,359 @@ import {
   PanelLeft,
   MessageSquareText,
   Sparkles,
+  Ambulance,
+  HeartPulse,
+  Stethoscope,
+  Activity,
+  MessageCircle,
+  TrendingUp,
+  PackageCheck,
+  Handshake,
+  Building2,
+  History,
+  Plane,
+  PlaneTakeoff,
+  FileSignature,
+  HandCoins,
+  Trash2,
+  Headset,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { esRolRestringido, getDefaultRoute, rutaPermitidaARolRestringido } from "@/lib/auth-utils";
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
+import { getCompanyBranding } from "@/app/api/actions/company-settings";
 import { Button } from "@/components/ui/button";
 
-const ALL_NAV: {
+type NavItem = {
   name: string;
   href: string;
   icon: typeof LayoutDashboard;
   roles: UserRole[];
   hint: string;
-}[] = [
+};
+
+// Navegación unificada Aeromanto + SISRES — jerarquía por dominio de trabajo
+// (ver NAVEGACION_UNIFICADA.md). Cada grupo solo se muestra si el rol del
+// usuario tiene al menos un ítem visible dentro.
+const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   {
-    name: "Dashboard",
-    href: "/",
-    icon: LayoutDashboard,
-    roles: ["ADMIN", "GERENCIAL", "REGULACION", "MANTENIMIENTO"],
-    hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
+    label: null, // Inicio no lleva encabezado de grupo
+    items: [
+      {
+        name: "Dashboard",
+        href: "/",
+        icon: LayoutDashboard,
+        // Regulación entra a Servicios, como en SISRES; el resumen ejecutivo no es su trabajo diario.
+        roles: ["ADMIN", "GERENCIAL", "MANTENIMIENTO", "ANALISTA"],
+        hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
+      },
+      {
+        name: "Tablero ejecutivo",
+        href: "/gerencial",
+        icon: TrendingUp,
+        roles: ["ADMIN", "GERENCIAL"],
+        hint: "Vista de alto nivel para Gerencia y Junta Directiva: servicios por ciudad, flota, vencimientos, equipos biomédicos e ingresos.",
+      },
+      {
+        name: "Coordinación",
+        href: "/coordinacion",
+        roles: ["ADMIN", "COORDINACION"],
+        icon: Users,
+        hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
+      },
+    ],
   },
   {
-    name: "Coordinación",
-    href: "/coordinacion",
-    roles: ["COORDINACION"],
-    icon: Users,
-    hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
+    label: "Operación",
+    items: [
+      {
+        name: "Servicios",
+        href: "/servicios",
+        icon: Ambulance,
+        roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"],
+        hint: "Servicios registrados: filtros, registro, etapas, exportación y avisos sonoros.",
+      },
+      {
+        name: "Sala de control",
+        href: "/regulacion",
+        icon: Radio,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Servicios del día, flota disponible, tripulación y vencimientos del centro.",
+      },
+      {
+        name: "Clientes",
+        href: "/clientes",
+        icon: Handshake,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Directorio de clientes y aseguradoras (consulta).",
+      },
+      {
+        name: "Proveedores",
+        href: "/proveedores",
+        icon: Building2,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Directorio de prestadores y proveedores de servicios de salud (consulta).",
+      },
+      {
+        name: "Dotación e insumos",
+        href: "/dotacion",
+        icon: PackageCheck,
+        roles: ["ADMIN", "AUXILIAR_ENFERMERIA", "ANALISTA"],
+        hint: "Oxígeno, medicamentos y consumibles que la auxiliar verifica al recibir la ambulancia.",
+      },
+    ],
   },
   {
-    name: "Vehículos",
-    href: "/vehiculos",
-    icon: Truck,
-    roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"],
-    hint: "Inventario y fichas de ambulancias; kilometraje y datos técnicos.",
+    label: "Pacientes",
+    items: [
+      {
+        name: "Pacientes",
+        href: "/pacientes",
+        icon: HeartPulse,
+        roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "COORDINACION", "VISTA"],
+        hint: "Registro maestro de pacientes para servicios y valoraciones (origen SISRES).",
+      },
+      {
+        name: "Valoraciones",
+        href: "/valoraciones",
+        icon: Stethoscope,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Conceptos de aptitud médica para vuelo (origen SISRES).",
+      },
+      {
+        name: "Aerolíneas",
+        href: "/aerolineas",
+        icon: PlaneTakeoff,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aerolíneas para las valoraciones (origen SISRES).",
+      },
+      {
+        name: "Aeropuertos",
+        href: "/aeropuertos",
+        icon: Plane,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aeropuertos para origen y destino de vuelo (origen SISRES).",
+      },
+    ],
   },
   {
-    name: "Mantenimientos",
-    href: "/mantenimientos",
-    icon: Wrench,
-    roles: ["ADMIN", "MANTENIMIENTO"],
-    hint: "Registro e importación de órdenes de mantenimiento preventivo y correctivo.",
+    label: "Flota",
+    items: [
+      {
+        name: "Vehículos",
+        href: "/vehiculos",
+        icon: Truck,
+        roles: ["ADMIN", "REGULACION", "MANTENIMIENTO", "ANALISTA"],
+        hint: "Inventario y fichas de ambulancias; kilometraje y datos técnicos.",
+      },
+      {
+        name: "Mantenimientos",
+        href: "/mantenimientos",
+        icon: Wrench,
+        roles: ["ADMIN", "MANTENIMIENTO", "ANALISTA"],
+        hint: "Registro e importación de órdenes de mantenimiento preventivo y correctivo.",
+      },
+      {
+        name: "Novedades",
+        href: "/novedades",
+        icon: AlertTriangle,
+        roles: ["ADMIN", "REGULACION", "MANTENIMIENTO", "ANALISTA"],
+        hint: "Incidencias y seguimiento hasta cierre; impacto en operatividad.",
+      },
+      {
+        name: "Combustible",
+        href: "/combustible",
+        icon: Fuel,
+        roles: ["ADMIN", "GERENCIAL", "ANALISTA"],
+        hint: "Consumo, rendimiento km/gal y cargas por vehículo y centro.",
+      },
+    ],
   },
   {
-    name: "Novedades",
-    href: "/novedades",
-    icon: AlertTriangle,
-    roles: ["ADMIN", "REGULACION", "MANTENIMIENTO"],
-    hint: "Incidencias y seguimiento hasta cierre; impacto en operatividad.",
+    label: "Equipos Biomédicos",
+    items: [
+      {
+        name: "Inventario y hoja de vida",
+        href: "/equipos",
+        icon: Activity,
+        roles: ["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"],
+        hint: "Inventario, mantenimientos y hoja de vida de equipos médicos (origen SISRES).",
+      },
+    ],
   },
   {
-    name: "KPIs",
-    href: "/kpis",
-    icon: BarChart3,
-    roles: ["ADMIN", "GERENCIAL"],
-    hint: "Indicadores agregados: disponibilidad, CTO, ratio P/C y tiempos de resolución.",
+    label: "Formatos TI",
+    items: [
+      {
+        name: "Acta de entrega",
+        href: "/formatos-ti/acta-entrega",
+        icon: FileSignature,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Acta de entrega de equipos y celulares con firma digital (G-TECN-F 028 / 031, origen SISRES).",
+      },
+      {
+        name: "Diagnóstico de equipos",
+        href: "/formatos-ti/diagnostico",
+        icon: ClipboardCheck,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Diagnóstico y mantenimiento de equipos informáticos con listado de chequeo y firma (G-TECN-F 047, origen SISRES).",
+      },
+      {
+        name: "Baja de equipos",
+        href: "/formatos-ti/baja",
+        icon: Trash2,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Baja de dispositivos informáticos y biomédicos con firma del responsable (G-TECN-F 020, origen SISRES).",
+      },
+      {
+        name: "Entrega y préstamo",
+        href: "/formatos-ti/prestamo",
+        icon: HandCoins,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Entrega y préstamo de equipos informáticos con entrega y devolución firmadas (G-TECN-F 018, origen SISRES).",
+      },
+    ],
   },
   {
-    name: "Combustible",
-    href: "/combustible",
-    icon: Fuel,
-    roles: ["ADMIN", "GERENCIAL"],
-    hint: "Consumo, rendimiento km/gal y cargas por vehículo y centro.",
+    label: "Comunicaciones",
+    items: [
+      {
+        name: "Campañas WhatsApp",
+        href: "/comunicaciones",
+        icon: MessageCircle,
+        roles: ["ADMIN", "COORDINACION", "ANALISTA"],
+        hint: "Campañas masivas con plantillas aprobadas de Meta (origen SISRES).",
+      },
+    ],
   },
   {
-    name: "Regulación",
-    href: "/regulacion",
-    icon: Radio,
-    roles: ["ADMIN", "REGULACION"],
-    hint: "Despacho: disponibles vs fuera de servicio y asignación de conductores OVEM.",
+    label: "Formación",
+    items: [
+      {
+        name: "Capacitaciones",
+        href: "/capacitaciones",
+        icon: GraduationCap,
+        roles: ["ADMIN", "OVEM", "COORDINACION"],
+        hint: "Cursos, evaluaciones, resultados y evidencias de entrenamiento.",
+      },
+    ],
   },
   {
-    name: "Portal OVEM",
-    href: "/ovem",
-    icon: ClipboardCheck,
-    roles: ["ADMIN", "OVEM"],
-    hint: "Preoperacional, checklist y kilometraje del conductor asignado.",
+    label: "Reportes",
+    items: [
+      {
+        name: "KPIs de flota",
+        href: "/kpis",
+        icon: BarChart3,
+        roles: ["ADMIN", "GERENCIAL", "ANALISTA"],
+        hint: "Indicadores agregados: disponibilidad, CTO, ratio P/C y tiempos de resolución.",
+      },
+      {
+        name: "Estadísticas de servicios",
+        href: "/estadisticas",
+        icon: BarChart3,
+        roles: ["ADMIN", "GERENCIAL", "ANALISTA", "COORDINACION"],
+        hint: "Volumen, etapas, tipos y tiempos de los servicios médicos (origen SISRES).",
+      },
+      {
+        name: "AI Insights",
+        href: "/ai-insights",
+        icon: Sparkles,
+        roles: ["ADMIN", "GERENCIAL", "COORDINACION", "ANALISTA"],
+        hint: "Análisis inteligente: patrones de combustible, novedades y disponibilidad.",
+      },
+      {
+        name: "Chat IA",
+        href: "/ai-chat",
+        icon: MessageSquareText,
+        roles: ["ADMIN", "GERENCIAL", "ANALISTA"],
+        hint: "Consulta y registra operaciones de flota en lenguaje natural con IA.",
+      },
+    ],
   },
   {
-    name: "Capacitaciones",
-    href: "/capacitaciones",
-    icon: GraduationCap,
-    roles: ["ADMIN", "OVEM", "COORDINACION"],
-    hint: "Cursos, evaluaciones, resultados y evidencias de entrenamiento.",
+    label: "Portal OVEM",
+    items: [
+      {
+        name: "Portal OVEM",
+        href: "/ovem",
+        icon: ClipboardCheck,
+        roles: ["ADMIN", "OVEM"],
+        hint: "Preoperacional, checklist y kilometraje del conductor asignado.",
+      },
+    ],
   },
   {
-    name: "Configuración",
-    href: "/configuracion",
-    icon: Settings,
-    roles: ["ADMIN"],
-    hint: "Parámetros generales y catálogos administrados por administración.",
+    label: "Administración",
+    items: [
+      {
+        name: "Configuración",
+        href: "/configuracion",
+        icon: Settings,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Parámetros generales y catálogos: proveedores, clientes, centros y carga masiva.",
+      },
+      {
+        name: "Usuarios",
+        href: "/admin/usuarios",
+        icon: Users,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Alta, roles y estado de cuentas del personal.",
+      },
+      {
+        name: "Bitácora",
+        href: "/auditoria",
+        icon: History,
+        roles: ["ADMIN"],
+        hint: "Quién hizo qué y cuándo (registro inmutable de auditoría).",
+      },
+    ],
   },
   {
-    name: "Usuarios",
-    href: "/admin/usuarios",
-    icon: Users,
-    roles: ["ADMIN"],
-    hint: "Alta, roles y estado de cuentas del personal.",
+    label: "Aeroportuaria",
+    items: [
+      {
+        name: "Captación aeroportuaria",
+        href: "/captacion",
+        icon: Plane,
+        roles: ["ADMIN", "ANALISTA", "COORDINACION", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA"],
+        hint: "Registra las atenciones en aeropuertos y genera el reporte SISPRO del mes.",
+      },
+    ],
   },
   {
-    name: "Chat IA",
-    href: "/ai-chat",
-    icon: MessageSquareText,
-    roles: ["ADMIN", "GERENCIAL"],
-    hint: "Consulta y registra operaciones de flota en lenguaje natural con IA.",
-  },
-  {
-    name: "AI Insights",
-    href: "/ai-insights",
-    icon: Sparkles,
-    roles: ["ADMIN", "GERENCIAL", "COORDINACION"],
-    hint: "Análisis inteligente: patrones de combustible, novedades y disponibilidad.",
+    label: "Soporte",
+    items: [
+      {
+        name: "Soporte técnico",
+        href: "/soporte",
+        icon: LifeBuoy,
+        roles: ["ADMIN", "OVEM", "REGULACION", "GERENCIAL", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "MEDICO", "AUXILIAR_ENFERMERIA", "VISTA", "TECNICO", "AEROPUERTO"],
+        hint: "Reporta un problema de tecnología y sigue tu ticket hasta que se resuelva.",
+      },
+      {
+        name: "Gestión de tickets",
+        href: "/soporte/gestion",
+        icon: Headset,
+        roles: ["ADMIN", "COORDINACION", "ANALISTA", "TECNICO"],
+        hint: "Toma, atiende y cierra los tickets de soporte técnico.",
+      },
+      {
+        name: "Indicadores de soporte",
+        href: "/soporte/indicadores",
+        icon: BarChart3,
+        roles: ["ADMIN", "COORDINACION", "ANALISTA", "TECNICO"],
+        hint: "Tiempos de respuesta, SLA, resolución y disponibilidad del soporte.",
+      },
+      {
+        name: "Configuración de soporte",
+        href: "/soporte/configuracion",
+        icon: Settings2,
+        roles: ["ADMIN"],
+        hint: "Catálogos, SLA, horario laboral, correos y disponibilidad.",
+      },
+    ],
   },
 ];
 
@@ -143,6 +392,12 @@ const ROLE_BADGE_STYLES: Record<UserRole, string> = {
   OVEM: "bg-[#9C9B99] text-white",
   MANTENIMIENTO: "bg-[#666564] text-white",
   COORDINACION: "bg-[#0E7490] text-white",
+  ANALISTA: "bg-[#8B5CF6] text-white",
+  MEDICO: "bg-[#16A34A] text-white",
+  AUXILIAR_ENFERMERIA: "bg-[#65A30D] text-white",
+  VISTA: "bg-[#94A3B8] text-white",
+  TECNICO: "bg-[#0F766E] text-white",
+  AEROPUERTO: "bg-[#B45309] text-white",
 };
 
 const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
@@ -156,6 +411,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const [profile, setProfile] = useState<Awaited<ReturnType<typeof getProfile>>>(null);
   const [loading, setLoading] = useState(true);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   /** Solo lg+: barra lateral estrecha (iconos). En móvil el drawer siempre muestra texto completo. */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -168,6 +424,10 @@ export default function DashboardLayout({
     } catch {
       /* ignore */
     }
+  }, []);
+
+  useEffect(() => {
+    getCompanyBranding().then((b) => setLogoUrl(b.logo_url));
   }, []);
 
   const setCollapsedPersist = useCallback((next: boolean) => {
@@ -184,6 +444,10 @@ export default function DashboardLayout({
       setProfile(p);
       setLoading(false);
       if (p) {
+        // Roles de soporte: solo ven el soporte técnico (la barrera real es la RLS restrictiva de la migración 076).
+        if (esRolRestringido(p.role_codigo) && !rutaPermitidaARolRestringido(pathname)) {
+          router.replace("/soporte");
+        }
         if (
           p.role_codigo === "OVEM" &&
           (pathname === "/" ||
@@ -203,18 +467,27 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "GERENCIAL" &&
-          !["/", "/kpis", "/consumo", "/combustible"].includes(pathname) &&
+          !["/", "/kpis", "/consumo", "/combustible", "/estadisticas", "/ai-chat", "/ai-insights", "/gerencial", "/soporte"].includes(pathname) &&
           !pathname.startsWith("/admin")
         ) {
           router.replace("/");
         }
         if (
           p.role_codigo === "COORDINACION" &&
-          !["/coordinacion", "/capacitaciones"].includes(pathname) &&
-          !pathname.startsWith("/coordinacion/") &&
-          !pathname.startsWith("/capacitaciones/")
+          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte", "/captacion"].some(
+            (b) => pathname === b || pathname.startsWith(`${b}/`)
+          )
         ) {
           router.replace("/coordinacion");
+        }
+        // Roles clínicos de la integración SISRES y Regulación: llevarlos a su pantalla de trabajo.
+        // ANALISTA queda fuera — tiene paridad con ADMIN (ver migración 046) y
+        // aterriza en el dashboard como cualquier otro rol con acceso completo.
+        if (
+          ["MEDICO", "AUXILIAR_ENFERMERIA", "VISTA", "REGULACION"].includes(p.role_codigo) &&
+          pathname === "/"
+        ) {
+          router.replace(getDefaultRoute(p.role_codigo));
         }
       }
     });
@@ -238,7 +511,19 @@ export default function DashboardLayout({
     };
   }, [mobileNavOpen]);
 
-  const navItems = profile ? ALL_NAV.filter((n) => n.roles.includes(profile.role_codigo)) : [];
+  const navGroups = profile
+    ? NAV_GROUPS.map((g) => ({
+        ...g,
+        items: g.items.filter((n) => n.roles.includes(profile.role_codigo)),
+      }))
+        .filter((g) => g.items.length > 0)
+        // El OVEM entra a trabajar a su portal: va primero, antes de Formación.
+        .sort((a, b) =>
+          profile.role_codigo === "OVEM"
+            ? Number(b.label === "Portal OVEM") - Number(a.label === "Portal OVEM")
+            : 0
+        )
+    : [];
 
   if (loading) {
     return (
@@ -293,12 +578,13 @@ export default function DashboardLayout({
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="relative h-9 w-28 shrink-0 overflow-hidden rounded">
             <Image
-              src="/brand/alianza.png"
+              src={logoUrl ?? "/brand/alianza.png"}
               alt="Aerosanidad e Inter Assist"
               fill
               className="object-contain object-left"
               sizes="112px"
               priority
+              unoptimized={Boolean(logoUrl)}
             />
           </div>
           <div className="min-w-0 leading-tight">
@@ -342,12 +628,13 @@ export default function DashboardLayout({
             ) : (
               <div className="relative h-10 w-44 shrink-0 overflow-hidden rounded">
                 <Image
-                  src="/brand/alianza.png"
+                  src={logoUrl ?? "/brand/alianza.png"}
                   alt="Aerosanidad e Inter Assist"
                   fill
                   className="object-contain object-left"
                   sizes="176px"
                   priority
+                  unoptimized={Boolean(logoUrl)}
                 />
               </div>
             )}
@@ -429,31 +716,47 @@ export default function DashboardLayout({
             showCollapsedChrome && "lg:px-2"
           )}
         >
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                title={showCollapsedChrome ? `${item.name}: ${item.hint}` : item.hint}
-                className={cn(
-                  "flex items-center rounded-lg transition-colors touch-manipulation min-h-[44px] lg:min-h-10",
-                  showCollapsedChrome
-                    ? "lg:justify-center lg:px-2 lg:py-3"
-                    : "px-4 py-3.5 lg:py-3",
-                  isActive ? "bg-[#2BB6C7] text-white" : "text-[#666564] active:bg-muted hover:bg-[#F4EFE6] lg:hover:bg-[#F4EFE6]"
-                )}
-                onClick={() => setMobileNavOpen(false)}
-              >
-                <Icon className={cn("h-5 w-5 shrink-0", !showCollapsedChrome && "mr-3")} aria-hidden />
-                <span className={cn("text-sm font-medium truncate", showCollapsedChrome && "lg:sr-only")}>
-                  {item.name}
-                </span>
-              </Link>
-            );
-          })}
+          {navGroups.map((group, gi) => (
+            <div key={group.label ?? `grupo-${gi}`} className={cn(gi > 0 && "pt-3")}>
+              {group.label && (
+                <p
+                  className={cn(
+                    "px-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
+                    showCollapsedChrome && "lg:sr-only"
+                  )}
+                >
+                  {group.label}
+                </p>
+              )}
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive =
+                    pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      title={showCollapsedChrome ? `${item.name}: ${item.hint}` : item.hint}
+                      className={cn(
+                        "flex items-center rounded-lg transition-colors touch-manipulation min-h-[44px] lg:min-h-10",
+                        showCollapsedChrome
+                          ? "lg:justify-center lg:px-2 lg:py-3"
+                          : "px-4 py-3.5 lg:py-3",
+                        isActive ? "bg-[#2BB6C7] text-white" : "text-[#666564] active:bg-muted hover:bg-[#F4EFE6] lg:hover:bg-[#F4EFE6]"
+                      )}
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      <Icon className={cn("h-5 w-5 shrink-0", !showCollapsedChrome && "mr-3")} aria-hidden />
+                      <span className={cn("text-sm font-medium truncate", showCollapsedChrome && "lg:sr-only")}>
+                        {item.name}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div

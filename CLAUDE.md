@@ -14,7 +14,35 @@ npm run lint         # ESLint
 npm run db:apply     # Apply database migrations
 ```
 
-No test runner. CI: `.github/workflows/ci.yml` runs lint + build.
+No test runner. CI on every PR into `dev`/`staging`/`main`: `.github/workflows/ci.yml` (lint + build) and `.github/workflows/claude-review.yml` (Claude review as Aegis + new type errors; fails on BLOCK).
+
+## Branches & deploy — read `ENTORNOS.md` for full detail
+
+Every change enters by Pull Request — nobody pushes directly to `dev`, `staging` or `main`:
+
+```
+feat/<name>-<topic> → PR → dev → PR → staging (QA) → PR → main (production)
+```
+
+- `dev` and `staging` are deployed by `.github/workflows/deploy.yml` with the Vercel CLI (`VERCEL_TOKEN`, project `sismanto` in the `tecnicoaerosanidad` team). Vercel's native Git integration cannot be used while the team is on Hobby: it refuses private organization repos. Nobody but the token needs Vercel access. `main` → production is deployed by Daniel by hand until the go-live checklist in `ENTORNOS.md` is done.
+- `dev` and `staging` share the `SISMANTO_Staging` Supabase project (see `STAGING_SETUP.md`). `.github/workflows/db-migrate.yml` runs `npm run db:apply` against it on every push to those branches, i.e. only after a PR is merged, using the repo secret `DATABASE_URL_STAGING`.
+- `main` → production. No production database credentials live in GitHub for now, so production migrations and the production Supabase project are handled by Daniel by hand until the go-live checklist in `ENTORNOS.md` is done.
+
+Never suggest a direct push/commit to `dev`, `staging` or `main` — always a PR from the branch below it.
+
+## Team workflow (Daniel, León, David)
+
+Three people push to this repo in parallel, each with their own Claude Code. These rules apply to all of them:
+
+- **Branching:** start from fresh `origin/dev` as `feat/<name>-<topic>` or `fix/<name>-<topic>`. Rebase on `origin/dev` daily; keep branches under 3 days. Open the PR into `dev`.
+- **One PR = one concern.** No drive-by refactors or reformatting — it creates conflicts for the other two.
+- **Before opening a PR:** `npm run lint`, `npm run build`, and `npx tsc --noEmit` filtered to the files you touched (no *new* errors). Fill in `.github/pull_request_template.md` — roles affected, migrations, how it was verified (screenshot for UI).
+- **Shared database:** `dev` and `staging` use ONE Supabase project. Never run `npm run db:apply` by hand against it — `db-migrate.yml` applies migrations automatically after the PR is merged into `dev` (or `staging`). A `[DB-DESTRUCTIVE]` migration therefore runs the moment the PR merges: review it as if it were already running.
+- **Migration numbers:** right before opening the PR, check the highest number on `origin/dev`. If someone merged the same number, renumber the file and its entry in `scripts/apply-database.ts`. Any DROP or type change → PR title starts with `[DB-DESTRUCTIVE]`.
+- **Conflict-prone files — touch minimally:** `src/lib/validations.ts`, `src/lib/supabase/database.types.ts`, `src/app/(dashboard)/layout.tsx`, `scripts/apply-database.ts`.
+- **Merge into `dev`** requires: CI green + Claude review with no BLOCK + one approval from someone other than the author. Squash merge. `staging → main` is approved only by Daniel.
+- **Personal data:** real patient or staff data (ETL CSVs, cédulas, emails, `RESPUESTAS_LEON.md`) never goes into the repo, PR descriptions or review comments.
+- **Domain ownership** (who reviews first, not who is allowed to touch): León → servicios, pacientes, notificaciones, biomédico · Daniel → roles/RBAC, flota, infra, ETL · David → same domains as León, as his junior (León reviews and approves David's PRs).
 
 ## Tech Stack
 
@@ -38,16 +66,22 @@ Middleware (`src/middleware.ts`) protects `(dashboard)` and refreshes sessions.
 
 **Data flow:** Server Components → Supabase directly. Mutations via Server Actions (`src/app/api/actions/`) with Zod validation → `{ data, error }`. RLS enforces access at DB layer.
 
-## RBAC — 6 roles
+## RBAC — 10 roles
 
 | Role | Access |
 |------|--------|
-| OVEM | Driver portal: daily checks, km, own incidents |
-| Regulación | Fleet state, driver assignment, availability |
+| OVEM | Driver portal: daily checks, km, own incidents, own assigned services ("Mis servicios") |
+| Regulación | Fleet state, driver/crew assignment, availability, creates & dispatches medical services, services board |
 | Gerencial | Read-only dashboard and reports |
 | Admin | Full access + user management |
 | Mantenimiento | Maintenance records and inspection |
 | Coordinacion | Fleet overview, metrics, capacitaciones grading |
+| Analista | SISRES-origin: broad create/edit across most modules (scope still being finalized, see `ESTADO_INTEGRACION.md`) |
+| Medico | Patients, own assigned medical services ("Mis servicios") |
+| Auxiliar_enfermeria | Patients, own assigned medical services ("Mis servicios") |
+| Vista | Read-only across Pacientes/Servicios |
+
+Full role list lives in `src/lib/auth-utils.ts` (`UserRole` type) — treat this table as a summary, that file as the source of truth.
 
 ## Auth pattern — CRITICAL
 
@@ -66,9 +100,9 @@ profile.role   // ❌  →  profile.role_codigo  ✓
 
 ## Database Migrations
 
-Numbered SQL files in `scripts/migrations/` — **never modify existing ones, always add new**. Next migration: `024_*.sql`. Migrations are idempotent; RLS policies must live in migration files, not the Supabase dashboard.
+Numbered SQL files in `scripts/migrations/` — **never modify existing ones, always add new**. Migrations are idempotent; RLS policies must live in migration files, not the Supabase dashboard. Registered in `scripts/apply-database.ts`'s `MIGRATIONS` array — add new ones there too, or `npm run db:apply` won't pick them up.
 
-Last applied: `023_normalize_placas.sql` (plate normalization + OKL227 dedup).
+Check `ls scripts/migrations/ | sort | tail -1` for the actual latest number before naming a new one — don't trust a hardcoded number in this doc, it goes stale fast.
 
 ## Key Source Paths
 
@@ -94,6 +128,8 @@ Training tables live inside `Tables:`, before `Views:`. `Views:` block only cont
 ```bash
 npm run build 2>&1 | grep -E "Error:|error TS|Module not found|Failed" | head -30
 ```
+
+**`npm run build` does NOT type-check** — `next.config.mjs` sets `typescript.ignoreBuildErrors: true` (pre-existing, large codebase-wide `never`-typing issue from Supabase client inference, tolerated on purpose). A green build is not proof of type safety. After touching TypeScript files, also run `npx tsc --noEmit | grep <your-changed-files>` and confirm no *new* errors in them — ignore pre-existing noise in untouched files.
 
 ## Conventions
 
