@@ -78,6 +78,11 @@ const MIGRATIONS: { name: string; file: string }[] = [
   // 062_dotacion_catalogo.sql: se registra cuando esté la lista real de dotación.
   { name: "063_servicios_lista_regulacion.sql",          file: "scripts/migrations/063_servicios_lista_regulacion.sql" },
   { name: "064_notificaciones_vencimientos.sql",         file: "scripts/migrations/064_notificaciones_vencimientos.sql" },
+  { name: "070_formatos_ti_acta_entrega.sql",              file: "scripts/migrations/070_formatos_ti_acta_entrega.sql" },
+  { name: "071_formatos_ti_diagnostico.sql",               file: "scripts/migrations/071_formatos_ti_diagnostico.sql" },
+  { name: "072_formatos_ti_baja.sql",                      file: "scripts/migrations/072_formatos_ti_baja.sql" },
+  { name: "073_formatos_ti_prestamo.sql",                  file: "scripts/migrations/073_formatos_ti_prestamo.sql" },
+  { name: "074_formatos_ti_firma_remota.sql",              file: "scripts/migrations/074_formatos_ti_firma_remota.sql" },
   { name: "065_biomedico_vencimiento_parche.sql",        file: "scripts/migrations/065_biomedico_vencimiento_parche.sql" },
   { name: "066_biomedical_alerts_log.sql",               file: "scripts/migrations/066_biomedical_alerts_log.sql" },
   { name: "067_biomedical_especificaciones_100.sql",     file: "scripts/migrations/067_biomedical_especificaciones_100.sql" },

@@ -9,6 +9,61 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+// Formatos TI (migración 070): las columnas de firma llevan ruta+hash; `numero_orden` es generada por la base.
+type TiActaEntregaRow = {
+  id: number; numero_orden: string; tipo_equipo: string;
+  func_nombre: string; func_cedula: string; func_cargo: string; func_sede: string; func_correo: string;
+  equipo_referencia: string; equipo_marca: string; equipo_modelo: string; equipo_placa: string;
+  equipo_imei: string; equipo_sim: string; equipo_activo: string; equipo_tarjeta_sd: string; equipo_operador: string;
+  checklist: Json; fecha_entrega: string; lugar_entrega: string;
+  entrega_nombre: string; firma_entrega_ruta: string; firma_entrega_hash: string;
+  recibe_nombre: string; firma_recibe_ruta: string; firma_recibe_hash: string;
+  fecha_devolucion: string | null; lugar_devolucion: string | null;
+  devolucion_entrega_nombre: string | null; firma_devolucion_entrega_ruta: string | null; firma_devolucion_entrega_hash: string | null;
+  devolucion_recibe_nombre: string | null; firma_devolucion_recibe_ruta: string | null; firma_devolucion_recibe_hash: string | null;
+  observaciones: string; firmas_png: Json; sisres_id: number | null;
+  created_by: string | null; created_at: string; updated_at: string
+}
+
+type TiDiagnosticoRow = {
+  id: number; numero_orden: string; fecha_diagnostico: string; equipo: string; marca: string; modelo: string;
+  usuario_equipo: string; serial: string; ubicacion: string; responsable_equipo: string; fecha_orden: string | null;
+  sede: string; placa: string; codigo_institucional: string; tipo_mtto: string;
+  diagnostico: Json; descripcion_falla: string; checklist: Json;
+  equipo_apto_uso: boolean; equipo_averiado: boolean; requirio_reparacion: boolean; partes_buen_estado: boolean;
+  observaciones: string; realizo_nombre: string; realizo_cargo: string; firma_realizo_ruta: string; firma_realizo_hash: string;
+  reviso_nombre: string; reviso_cargo: string; firma_reviso_ruta: string; firma_reviso_hash: string;
+  firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+type TiDiagnosticoRepuestoRow = { id: number; diagnostico_id: number; repuesto: string; referencia_serial: string; cantidad: number }
+
+type TiBajaEquipoRow = {
+  id: number; numero_orden: string; tipo_equipo: string;
+  fecha_ingreso_reporte: string | null; numero_inventario: string | null; sede: string | null; ubicacion_sanidad: string | null;
+  mayor_dos_anios: boolean; nombre_equipo: string; marca: string; modelo: string; serie: string;
+  causa_baja: string; causa_baja_detalle: string; concepto_tecnico_radicado: string; proveedor_garantia: string;
+  denuncio: string; costo_historico: string; fecha_compra: string | null;
+  telecom_tipo: string; telecom_marca: string; telecom_modelo: string; telecom_imei: string; telecom_operador: string;
+  accesorios: Json; observaciones: string; responsable_nombre: string; firma_responsable_ruta: string; firma_responsable_hash: string;
+  firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+
+type TiPrestamoEquipoRow = {
+  id: number; numero_orden: string; fecha_entrega: string; equipo_descripcion: string; equipo_placa: string; equipo_incluye: string;
+  usuario_recibe_nombre: string; usuario_recibe_cargo: string; firma_usuario_recibe_ruta: string; firma_usuario_recibe_hash: string;
+  func_entrega_nombre: string; func_entrega_cargo: string; firma_func_entrega_ruta: string; firma_func_entrega_hash: string;
+  fecha_devolucion: string | null; gestion_recibe_nombre: string | null; gestion_recibe_cargo: string | null;
+  firma_gestion_recibe_ruta: string | null; firma_gestion_recibe_hash: string | null;
+  usuario_entrega_dev_nombre: string | null; usuario_entrega_dev_cargo: string | null;
+  firma_usuario_entrega_dev_ruta: string | null; firma_usuario_entrega_dev_hash: string | null;
+  observaciones: string; firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+
+type TiFirmaTokenRow = {
+  id: number; tabla: string; registro_id: number; campo_firma: string; token_hash: string; nombre_firmante: string;
+  correo_destino: string; usado: boolean; expira_en: string; ip_firmante: string | null; created_at: string; firmado_en: string | null
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -1201,6 +1256,42 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      ti_acta_entrega: {
+        Row: TiActaEntregaRow
+        Insert: Partial<Omit<TiActaEntregaRow, "numero_orden">>
+        Update: Partial<Omit<TiActaEntregaRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_diagnostico: {
+        Row: TiDiagnosticoRow
+        Insert: Partial<Omit<TiDiagnosticoRow, "numero_orden">>
+        Update: Partial<Omit<TiDiagnosticoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_diagnostico_repuestos: {
+        Row: TiDiagnosticoRepuestoRow
+        Insert: Partial<TiDiagnosticoRepuestoRow>
+        Update: Partial<TiDiagnosticoRepuestoRow>
+        Relationships: []
+      }
+      ti_baja_equipo: {
+        Row: TiBajaEquipoRow
+        Insert: Partial<Omit<TiBajaEquipoRow, "numero_orden">>
+        Update: Partial<Omit<TiBajaEquipoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_prestamo_equipo: {
+        Row: TiPrestamoEquipoRow
+        Insert: Partial<Omit<TiPrestamoEquipoRow, "numero_orden">>
+        Update: Partial<Omit<TiPrestamoEquipoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_firma_tokens: {
+        Row: TiFirmaTokenRow
+        Insert: Partial<TiFirmaTokenRow>
+        Update: Partial<TiFirmaTokenRow>
+        Relationships: []
       }
       wa_campaigns: {
         Row: { id: number; nombre: string; plantilla: string; idioma: string; estado: string; media_tipo: string | null; media_id: string | null; media_nombre: string | null; total_destinatarios: number; total_enviados: number; total_fallidos: number; created_by: string | null; created_at: string; updated_at: string }
