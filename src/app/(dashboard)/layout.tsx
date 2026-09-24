@@ -34,6 +34,7 @@ import {
   Handshake,
   Building2,
   FileSignature,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -200,6 +201,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: ClipboardCheck,
         roles: ["ADMIN", "ANALISTA"],
         hint: "Diagnóstico y mantenimiento de equipos informáticos con listado de chequeo y firma (G-TECN-F 047, origen SISRES).",
+      },
+      {
+        name: "Baja de equipos",
+        href: "/formatos-ti/baja",
+        icon: Trash2,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Baja de dispositivos informáticos y biomédicos con firma del responsable (G-TECN-F 020, origen SISRES).",
       },
     ],
   },

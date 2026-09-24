@@ -37,6 +37,17 @@ type TiDiagnosticoRow = {
 }
 type TiDiagnosticoRepuestoRow = { id: number; diagnostico_id: number; repuesto: string; referencia_serial: string; cantidad: number }
 
+type TiBajaEquipoRow = {
+  id: number; numero_orden: string; tipo_equipo: string;
+  fecha_ingreso_reporte: string | null; numero_inventario: string | null; sede: string | null; ubicacion_sanidad: string | null;
+  mayor_dos_anios: boolean; nombre_equipo: string; marca: string; modelo: string; serie: string;
+  causa_baja: string; causa_baja_detalle: string; concepto_tecnico_radicado: string; proveedor_garantia: string;
+  denuncio: string; costo_historico: string; fecha_compra: string | null;
+  telecom_tipo: string; telecom_marca: string; telecom_modelo: string; telecom_imei: string; telecom_operador: string;
+  accesorios: Json; observaciones: string; responsable_nombre: string; firma_responsable_ruta: string; firma_responsable_hash: string;
+  firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -1246,6 +1257,12 @@ export type Database = {
         Row: TiDiagnosticoRepuestoRow
         Insert: Partial<TiDiagnosticoRepuestoRow>
         Update: Partial<TiDiagnosticoRepuestoRow>
+        Relationships: []
+      }
+      ti_baja_equipo: {
+        Row: TiBajaEquipoRow
+        Insert: Partial<Omit<TiBajaEquipoRow, "numero_orden">>
+        Update: Partial<Omit<TiBajaEquipoRow, "numero_orden">>
         Relationships: []
       }
       wa_campaigns: {
