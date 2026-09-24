@@ -6,6 +6,9 @@
 
 export const VALORACIONES_POR_PAGINA = 25;
 
+/** Quién puede eliminar (desactivar): en SISRES act_eliminar_valoracion viene activo solo para los dos primeros roles. */
+export const ROLES_ELIMINAR_VALORACION: readonly string[] = ["ADMIN", "ANALISTA"];
+
 /** Concepto de aptitud: select cerrado en SISRES (registroValoracion.php), no texto libre. */
 export const VALORACION_OPCIONES = ["APTO", "NO APTO"] as const;
 

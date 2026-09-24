@@ -5,7 +5,7 @@ import { getTicketGestion } from "@/app/api/actions/tickets-gestion";
 import { DetalleTicketGestion } from "@/components/soporte/detalle-ticket-gestion";
 
 export default async function GestionTicketPage({ params }: { params: { id: string } }) {
-  const profile = await requireRole(["ADMIN", "ANALISTA", "COORDINACION"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "COORDINACION", "TECNICO"]);
 
   const id = Number(params.id);
   if (!Number.isInteger(id) || id <= 0) notFound();

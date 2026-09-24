@@ -3,7 +3,7 @@ import { getIndicadores } from "@/app/api/actions/tickets-config";
 import { IndicadoresSoporte } from "@/components/soporte/indicadores-soporte";
 
 export default async function IndicadoresSoportePage({ searchParams }: { searchParams: { desde?: string; hasta?: string } }) {
-  await requireRole(["ADMIN", "ANALISTA", "COORDINACION"]);
+  await requireRole(["ADMIN", "ANALISTA", "COORDINACION", "TECNICO"]);
   const indicadores = await getIndicadores(searchParams.desde, searchParams.hasta);
 
   return (
