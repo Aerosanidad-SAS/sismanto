@@ -31,7 +31,7 @@ import {
   estadoLegible,
   nombreCompletoPaciente,
 } from "@/lib/valoraciones-lista";
-import { crearValoracion, actualizarValoracion, eliminarValoracion, generarCertificadoValoracionPdf } from "@/app/api/actions/valoraciones";
+import { crearValoracion, actualizarValoracion, eliminarValoracion, enviarCertificadoValoracion, generarCertificadoValoracionPdf } from "@/app/api/actions/valoraciones";
 import { buscarPacientePorCedula } from "@/app/api/actions/pacientes";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AeropuertoCombobox } from "@/components/aeropuertos/aeropuerto-combobox";
@@ -55,6 +55,9 @@ export interface ValoracionRow {
   medico: string | null;
   pasajero: string | null;
   estado: string | null;
+  correo: string | null;
+  certificado_enviado_at: string | null;
+  certificado_enviado_a: string | null;
   created_at: string;
 }
 
@@ -63,6 +66,7 @@ const CAMPOS_TEXTO: { name: keyof AssessmentFormData; label: string; type?: stri
   { name: "fecha_nacimiento", label: "Fecha de nacimiento", type: "date" },
   { name: "fecha_hora_vuelo", label: "Fecha y hora del vuelo", type: "datetime-local" },
   { name: "acompanante", label: "Acompañante" },
+  { name: "correo", label: "Correo del pasajero (para enviarle el certificado)", type: "email" },
   { name: "tiempo_estimado", label: "Tiempo estimado del vuelo" },
 ];
 
@@ -89,6 +93,8 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, ae
   const [buscandoPaciente, setBuscandoPaciente] = useState(false);
   const [avisoPaciente, setAvisoPaciente] = useState<string | null>(null);
   const [descargandoId, setDescargandoId] = useState<number | null>(null);
+  const [enviandoId, setEnviandoId] = useState<number | null>(null);
+  const [avisoEnvio, setAvisoEnvio] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   const { register, handleSubmit, reset, setValue, watch, getValues, formState } = useForm<AssessmentFormData>({
     resolver: zodResolver(assessmentSchema),
@@ -125,6 +131,20 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, ae
     URL.revokeObjectURL(url);
   };
 
+  /** Manda el certificado al correo guardado en la valoración (nunca a uno elegido en el cliente). */
+  const enviarPorCorreo = async (v: ValoracionRow) => {
+    if (v.certificado_enviado_at && !confirm(`Este certificado ya se envió a ${v.certificado_enviado_a}. ¿Enviarlo de nuevo a ${v.correo}?`)) return;
+    setEnviandoId(v.id);
+    setAvisoEnvio(null);
+    const res = await enviarCertificadoValoracion(v.id);
+    setEnviandoId(null);
+    if ("error" in res && res.error) setAvisoEnvio({ tipo: "error", texto: res.error });
+    else {
+      setAvisoEnvio({ tipo: "ok", texto: `Certificado enviado a ${"destino" in res ? res.destino : v.correo}.` });
+      router.refresh();
+    }
+  };
+
   const eliminar = async (v: ValoracionRow) => {
     if (!confirm(`¿Eliminar la valoración de ${v.nombre_completo} (documento ${v.cedula})? Dejará de listarse.`)) return;
     const res = await eliminarValoracion(v.id);
@@ -155,6 +175,7 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, ae
       aerolinea: v.aerolinea ?? "",
       fecha_hora_vuelo: aTextoLocalColombia(v.fecha_hora_vuelo),
       acompanante: v.acompanante ?? "",
+      correo: v.correo ?? "",
       origen: v.origen ?? "",
       destino: v.destino ?? "",
       hc: v.hc ?? "",
@@ -247,6 +268,11 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, ae
         {puedeEditar && <Button onClick={abrirNuevo}>Nueva valoración</Button>}
       </div>
 
+      {avisoEnvio && (
+        <p className={avisoEnvio.tipo === "ok" ? "text-sm text-green-700" : "text-sm text-red-600"} role={avisoEnvio.tipo === "ok" ? "status" : "alert"}>
+          {avisoEnvio.texto}
+        </p>
+      )}
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -305,6 +331,17 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, ae
                     >
                       {descargandoId === v.id ? "Generando…" : "PDF"}
                     </Button>
+                    {puedeEditar && v.correo && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => enviarPorCorreo(v)}
+                        disabled={enviandoId === v.id}
+                        title={v.certificado_enviado_at ? `Enviado a ${v.certificado_enviado_a} el ${formatDateShort(v.certificado_enviado_at)}` : `Enviar el certificado a ${v.correo}`}
+                      >
+                        {enviandoId === v.id ? "Enviando…" : v.certificado_enviado_at ? "Reenviar" : "Enviar"}
+                      </Button>
+                    )}
                     {puedeEditar && (
                       <Button variant="outline" size="sm" onClick={() => abrirEdicion(v)}>
                         Editar

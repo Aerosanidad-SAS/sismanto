@@ -719,6 +719,14 @@ export const assessmentSchema = z.object({
   concepto_medico: optText,
   tiempo_estimado: optStr,
   recomendaciones: optText,
+  // Correo del pasajero (dato personal): opcional; si viene, debe ser un correo. Destino del certificado por correo.
+  correo: z
+    .string()
+    .trim()
+    .max(150)
+    .refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Correo inválido")
+    .optional()
+    .transform((v) => (v ? v : undefined)),
   // Selects cerrados como en registroValoracion.php de SISRES (antes eran texto libre:
   // "apto", "NO  APTO"… y el conteo de aptos no era confiable).
   valoracion: optEnum(VALORACION_OPCIONES, "Valoración: elige APTO o NO APTO"),

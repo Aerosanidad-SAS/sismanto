@@ -663,7 +663,7 @@ async function cargarValoraciones(client: pg.Client, dir: string) {
   const columnas = [
     "sisres_id", "patient_id", "cedula", "nombre_completo", "fecha_nacimiento", "genero", "aerolinea",
     "fecha_hora_vuelo", "acompanante", "origen", "destino", "hc", "concepto_medico", "tiempo_estimado",
-    "recomendaciones", "valoracion", "medico", "pasajero", "estado", "activo",
+    "recomendaciones", "valoracion", "medico", "pasajero", "estado", "activo", "correo",
   ];
   const carga = transformar("medical_assessments", filas, (f, ctx) => {
     const cedula = v(f, "cedula");
@@ -677,6 +677,8 @@ async function cargarValoraciones(client: pg.Client, dir: string) {
       // y `estado` es la bandera de borrado suave (1 = activa, 0 = eliminada con delete.php). Antes se mezclaban y
       // una valoración eliminada entraba como normal.
       v(f, "estadoServicio"), bandera(v(f, "estado")),
+      // Correo del pasajero: dato personal; se carga tal cual solo si parece un correo (SISRES lo guardaba sin validar).
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v(f, "correo") ?? "") ? v(f, "correo") : null,
     ];
   });
   await enTransaccion(client, "medical_assessments", async () => {
