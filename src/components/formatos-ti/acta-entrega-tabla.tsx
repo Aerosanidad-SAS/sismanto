@@ -33,11 +33,13 @@ import {
   actualizarActaEntrega,
   crearActaEntrega,
   eliminarActaEntrega,
+  reenviarEnlaceFirmaActa,
   exportarActasEntrega,
   generarActaEntregaPdf,
   urlFirmaActaEntrega,
   type ActaEntregaLista,
   type FirmasActaEntrega,
+  type ModoFirmaRecibe,
 } from "@/app/api/actions/formatos-ti-acta-entrega";
 
 const CLASE_SELECT =
@@ -77,6 +79,8 @@ export function ActaEntregaTabla({ actas, sedes, filtros }: ActaEntregaTablaProp
   const [descargandoId, setDescargandoId] = useState<number | null>(null);
   const [exportando, setExportando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [modoFirmaRecibe, setModoFirmaRecibe] = useState<ModoFirmaRecibe>("AQUI");
+  const [reenviandoId, setReenviandoId] = useState<number | null>(null);
 
   const celular = datos.tipo_equipo === "CELULAR";
   const catalogo = CHECKLIST_ACTA_ENTREGA[datos.tipo_equipo as TipoActaEntrega] ?? CHECKLIST_ACTA_ENTREGA.GENERAL;
@@ -97,6 +101,7 @@ export function ActaEntregaTabla({ actas, sedes, filtros }: ActaEntregaTablaProp
     setDatos(vacio());
     setFirmas({});
     setExistentes({});
+    setModoFirmaRecibe("AQUI");
     setError(null);
     setAbierto(true);
   };
@@ -129,7 +134,7 @@ export function ActaEntregaTabla({ actas, sedes, filtros }: ActaEntregaTablaProp
     e.preventDefault();
     setGuardando(true);
     setError(null);
-    const res = editando ? await actualizarActaEntrega(editando.id, datos, firmas) : await crearActaEntrega(datos, firmas);
+    const res = editando ? await actualizarActaEntrega(editando.id, datos, firmas) : await crearActaEntrega(datos, firmas, modoFirmaRecibe);
     setGuardando(false);
     if ("error" in res && res.error) {
       setError(res.error);
@@ -138,6 +143,19 @@ export function ActaEntregaTabla({ actas, sedes, filtros }: ActaEntregaTablaProp
     if ("avisos" in res && res.avisos && res.avisos.length > 0) setAviso(res.avisos.join(" · "));
     setAbierto(false);
     router.refresh();
+  };
+
+  /** Manda un enlace nuevo de firma al correo del funcionario (el anterior deja de servir). */
+  const reenviar = async (a: ActaEntregaLista) => {
+    setReenviandoId(a.id);
+    setAviso(null);
+    const res = await reenviarEnlaceFirmaActa(a.id);
+    setReenviandoId(null);
+    if ("error" in res && res.error) setAviso(res.error);
+    else {
+      setAviso(`Enlace de firma enviado a ${a.func_correo}.`);
+      router.refresh();
+    }
   };
 
   const eliminar = async (a: ActaEntregaLista) => {
@@ -294,10 +312,19 @@ export function ActaEntregaTabla({ actas, sedes, filtros }: ActaEntregaTablaProp
                   <InsigniaFirma estado={a.estadoFirmas.entrega} />
                 </TableCell>
                 <TableCell>
-                  <InsigniaFirma estado={a.estadoFirmas.recibe} />
+                  {a.estadoFirmas.recibe === "sin_firma" && a.firmaRemotaPendiente ? (
+                    <Badge variant="secondary">Pendiente por correo</Badge>
+                  ) : (
+                    <InsigniaFirma estado={a.estadoFirmas.recibe} />
+                  )}
                 </TableCell>
                 <TableCell>{estadoDevolucion(a)}</TableCell>
                 <TableCell className="space-x-2 whitespace-nowrap text-right">
+                  {a.estadoFirmas.recibe === "sin_firma" && a.func_correo && (
+                    <Button variant="outline" size="sm" onClick={() => reenviar(a)} disabled={reenviandoId === a.id}>
+                      {reenviandoId === a.id ? "Enviando…" : a.firmaRemotaPendiente ? "Reenviar correo" : "Enviar por correo"}
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={() => descargarPdf(a)} disabled={descargandoId === a.id}>
                     {descargandoId === a.id ? "Generando…" : "PDF"}
                   </Button>
@@ -417,7 +444,27 @@ export function ActaEntregaTabla({ actas, sedes, filtros }: ActaEntregaTablaProp
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <SignaturePad etiqueta="Firma de quien entrega" existente={existentes.entrega} onChange={(v) => setFirmas((f) => ({ ...f, entrega: v }))} />
-                <SignaturePad etiqueta="Firma de quien recibe" existente={existentes.recibe} onChange={(v) => setFirmas((f) => ({ ...f, recibe: v }))} />
+                {!editando && (
+                  <div className="space-y-2 rounded border p-3 sm:col-span-2">
+                    <span className="text-sm font-medium">¿Cómo firma quien recibe?</span>
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input type="radio" name="modo-firma-recibe" checked={modoFirmaRecibe === "AQUI"} onChange={() => setModoFirmaRecibe("AQUI")} />
+                        Aquí mismo
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input type="radio" name="modo-firma-recibe" checked={modoFirmaRecibe === "CORREO"} onChange={() => setModoFirmaRecibe("CORREO")} />
+                        Por correo (enlace de un solo uso, vence en 7 días)
+                      </label>
+                    </div>
+                    {modoFirmaRecibe === "CORREO" && (
+                      <p className="text-xs text-muted-foreground">Se enviará al correo del funcionario ({datos.func_correo || "escríbelo arriba"}). No necesita cuenta.</p>
+                    )}
+                  </div>
+                )}
+                {(editando || modoFirmaRecibe === "AQUI") && (
+                  <SignaturePad etiqueta="Firma de quien recibe" existente={existentes.recibe} onChange={(v) => setFirmas((f) => ({ ...f, recibe: v }))} />
+                )}
               </div>
             </fieldset>
 

@@ -59,6 +59,11 @@ type TiPrestamoEquipoRow = {
   observaciones: string; firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
 }
 
+type TiFirmaTokenRow = {
+  id: number; tabla: string; registro_id: number; campo_firma: string; token_hash: string; nombre_firmante: string;
+  correo_destino: string; usado: boolean; expira_en: string; ip_firmante: string | null; created_at: string; firmado_en: string | null
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -1280,6 +1285,12 @@ export type Database = {
         Row: TiPrestamoEquipoRow
         Insert: Partial<Omit<TiPrestamoEquipoRow, "numero_orden">>
         Update: Partial<Omit<TiPrestamoEquipoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_firma_tokens: {
+        Row: TiFirmaTokenRow
+        Insert: Partial<TiFirmaTokenRow>
+        Update: Partial<TiFirmaTokenRow>
         Relationships: []
       }
       wa_campaigns: {

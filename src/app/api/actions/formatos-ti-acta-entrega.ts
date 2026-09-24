@@ -23,7 +23,11 @@ import {
   type ActaEntregaFila,
   type LadoActaEntrega,
 } from "@/lib/formatos-ti/acta-entrega";
-import { errorSiNoEsTi } from "@/lib/formatos-ti/servidor";
+import { errorSiNoEsTi, urlBaseSitio } from "@/lib/formatos-ti/servidor";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarCorreo } from "@/lib/notifications/email";
+import { enviarEnlaceFirmaActa } from "@/lib/formatos-ti/enviar-firma";
+import { invalidarTokensPendientes, registrosConTokenPendiente } from "@/lib/formatos-ti/tokens-firma";
 import { borrarFirmas, urlFirmada } from "@/lib/formatos-ti/storage-firmas";
 import { ActaEntregaPdf } from "@/lib/pdf/acta-entrega";
 import type { FirmaPdf } from "@/lib/formatos-ti/comun";
@@ -38,7 +42,14 @@ export interface FiltrosActaEntrega {
 /** Firmas que llegan del formulario, por lado (data URI PNG de la firma dibujada; ausente = no se firmó/cambió). */
 export type FirmasActaEntrega = Partial<Record<LadoActaEntrega, string | null>>;
 
-export type ActaEntregaLista = ActaEntregaFila & { estadoFirmas: Record<LadoActaEntrega, EstadoFirma> };
+/** Cómo firma quien RECIBE al registrar el acta: dibujando aquí mismo, o desde un enlace enviado a su correo. */
+export type ModoFirmaRecibe = "AQUI" | "CORREO";
+
+export type ActaEntregaLista = ActaEntregaFila & {
+  estadoFirmas: Record<LadoActaEntrega, EstadoFirma>;
+  /** Hay un enlace de firma por correo vivo y todavía sin usar. */
+  firmaRemotaPendiente: boolean;
+};
 
 const COLUMNAS_BUSQUEDA = ["func_nombre", "func_cedula", "equipo_placa", "equipo_referencia", "numero_orden"] as const;
 const EXPORT_MAX = 5000;
@@ -85,19 +96,26 @@ export async function listarActasEntrega(filtros: FiltrosActaEntrega) {
 
   const filas = (data ?? []) as unknown as ActaEntregaFila[];
   const sedes = Array.from(new Set(((sedesRes.data ?? []) as { func_sede: string }[]).map((s) => s.func_sede))).sort();
+  // Solo las actas sin firma de "recibe" pueden tener un enlace pendiente.
+  const pendientes = await registrosConTokenPendiente(supabase, "ti_acta_entrega", "recibe", filas.filter((f) => !f.firma_recibe_ruta).map((f) => f.id));
   return {
-    actas: filas.map((f) => ({ ...f, estadoFirmas: estadoFirmas(f) })),
+    actas: filas.map((f) => ({ ...f, estadoFirmas: estadoFirmas(f), firmaRemotaPendiente: pendientes.has(f.id) })),
     total: count ?? 0,
     sedes,
   };
 }
 
-export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: FirmasActaEntrega) {
+export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: FirmasActaEntrega, modoFirmaRecibe: ModoFirmaRecibe = "AQUI") {
   const sinPermiso = await errorSiNoEsTi();
   if (sinPermiso) return { error: sinPermiso };
   const parsed = actaEntregaSchema.safeParse(entrada);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const d = parsed.data;
+  const porCorreo = modoFirmaRecibe === "CORREO";
+  // Para firmar por correo hace falta a dónde mandarlo: se avisa ANTES de crear, no después.
+  if (porCorreo && d.func_correo === "") return { error: "Escribe el correo del funcionario para poder enviarle el enlace de firma." };
+  // Si quien recibe firma por correo, cualquier firma de "recibe" dibujada aquí se ignora.
+  const firmasAqui: FirmasActaEntrega = porCorreo ? { ...firmas, recibe: null } : firmas;
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -126,10 +144,21 @@ export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: Firm
   if (error || !creada) return { error: error?.message ?? "No se pudo crear el acta" };
   const fila = { ...(creada as unknown as ActaEntregaFila), created_at: creadoEn };
 
-  const { cambios, png, avisos } = await motor.resolverFirmas(supabase, "acta-entrega", fila.id, fila, firmas, LADOS_ACTA_ENTREGA, clavesActa(fila), (l) => l.clave === "devolucion" && d.tipo_equipo !== "CELULAR");
+  const { cambios, png, avisos } = await motor.resolverFirmas(supabase, "acta-entrega", fila.id, fila, firmasAqui, LADOS_ACTA_ENTREGA, clavesActa(fila), (l) => l.clave === "devolucion" && d.tipo_equipo !== "CELULAR");
   if (Object.keys(cambios).length > 0) {
     const { error: e2 } = await supabase.from("ti_acta_entrega").update({ ...cambios, firmas_png: png }).eq("id", fila.id);
     if (e2) avisos.push(`El acta se creó pero no se pudieron enlazar las firmas: ${e2.message}`);
+  }
+  if (porCorreo) {
+    const envio = await enviarEnlaceFirmaActa(createAdminClient(), enviarCorreo, urlBaseSitio(), {
+      registroId: fila.id,
+      numeroOrden: fila.numero_orden,
+      nombre: d.recibe_nombre,
+      correo: d.func_correo,
+      equipo: [d.equipo_referencia, d.equipo_marca, d.equipo_modelo].filter(Boolean).join(" "),
+      placa: d.equipo_placa,
+    });
+    if (!envio.ok) avisos.push(`El acta se guardó, pero ${envio.error} Puedes reenviarlo desde el listado.`);
   }
   revalidatePath("/formatos-ti/acta-entrega");
   return { success: true, id: fila.id, numero_orden: fila.numero_orden, avisos };
@@ -184,8 +213,39 @@ export async function actualizarActaEntrega(id: number, entrada: ActaEntregaEntr
   if (error) return { error: error.message };
 
   await borrarFirmas(supabase, viejas); // limpieza de las firmas reemplazadas
+  // Se dibujó la firma de "recibe" en esta edición: un enlace de correo pendiente no debe poder pisarla después.
+  if (cambios.firma_recibe_ruta) await invalidarTokensPendientes(createAdminClient(), "ti_acta_entrega", previa.id, "recibe");
   revalidatePath("/formatos-ti/acta-entrega");
   return { success: true, avisos };
+}
+
+/**
+ * Reenvía el enlace de firma por correo (listado, acta con "Pendiente de firma por correo"). Crea un enlace nuevo
+ * e invalida el anterior. Solo si quien recibe todavía no firmó y el acta tiene correo.
+ */
+export async function reenviarEnlaceFirmaActa(id: number) {
+  const sinPermiso = await errorSiNoEsTi();
+  if (sinPermiso) return { error: sinPermiso };
+  const idParsed = z.number().int().positive().safeParse(id);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const supabase = createClient();
+  const { data } = await supabase.from("ti_acta_entrega").select("*").eq("id", idParsed.data).maybeSingle();
+  if (!data) return { error: "Acta no encontrada" };
+  const acta = data as unknown as ActaEntregaFila;
+  if (acta.firma_recibe_ruta) return { error: "Esta acta ya está firmada por quien recibe." };
+
+  const envio = await enviarEnlaceFirmaActa(createAdminClient(), enviarCorreo, urlBaseSitio(), {
+    registroId: acta.id,
+    numeroOrden: acta.numero_orden,
+    nombre: acta.recibe_nombre,
+    correo: acta.func_correo,
+    equipo: [acta.equipo_referencia, acta.equipo_marca, acta.equipo_modelo].filter(Boolean).join(" "),
+    placa: acta.equipo_placa,
+  });
+  if (!envio.ok) return { error: envio.error };
+  revalidatePath("/formatos-ti/acta-entrega");
+  return { success: true };
 }
 
 /** Eliminación física (igual que delete.php de SISRES para estos formatos) y limpieza de sus firmas. */
