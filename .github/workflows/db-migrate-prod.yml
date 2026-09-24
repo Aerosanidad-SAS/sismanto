@@ -1,0 +1,80 @@
+# Migra la base de PRODUCCIÓN. Es MANUAL (workflow_dispatch) y solo desde `main`: nada la dispara sola.
+# Producción no se migra en cada push como staging (db-migrate.yml): cada corrida es una decisión.
+#
+# Requisitos (los pone Daniel; ver docs/PRODUCCION_PASO_A_PASO.md):
+#   Entorno `Production` de GitHub (Settings → Environments), con «Required reviewers»:
+#     · secreto   DATABASE_URL_PROD          URI de «Session pooler» de la base de producción
+#     · variable  PRODUCTION_SUPABASE_REF    ref del proyecto Supabase de producción
+#     · variable  ADMIN_SETUP_EMAIL          (recomendada) correo al que `db:apply` da el perfil ADMIN
+#
+# Uso: Actions → «DB migrate PROD (manual)» → Run workflow (rama main):
+#   1) modo «revisar»  → solo lectura: muestra qué migraciones faltan. No cambia nada.
+#   2) modo «aplicar» y confirmación APLICAR-PRODUCCION → aplica las pendientes, en orden.
+name: DB migrate PROD (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "revisar = solo lectura · aplicar = ejecuta las migraciones pendientes"
+        type: choice
+        options: [revisar, aplicar]
+        default: revisar
+      confirmacion:
+        description: "Para «aplicar», escribe exactamente: APLICAR-PRODUCCION"
+        type: string
+        required: false
+
+# Nunca dos corridas a la vez sobre la misma base, ni cancelar una a medias.
+concurrency:
+  group: db-migrate-prod
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Production
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+      PRODUCTION_SUPABASE_REF: ${{ vars.PRODUCTION_SUPABASE_REF }}
+      ADMIN_SETUP_EMAIL: ${{ vars.ADMIN_SETUP_EMAIL }}
+    steps:
+      - name: Solo desde main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Este workflow solo se ejecuta desde la rama main (ahora: $GITHUB_REF). Producción se migra con el código de main."
+            exit 1
+          fi
+
+      - name: Validar la confirmación
+        if: ${{ inputs.modo == 'aplicar' }}
+        run: |
+          if [ "${{ inputs.confirmacion }}" != "APLICAR-PRODUCCION" ]; then
+            echo "::error::Para aplicar escribe exactamente APLICAR-PRODUCCION en «confirmacion»."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      # Solo lectura. Aborta si la URI es la de staging, si no contiene el ref de producción, si no es la
+      # base de SISMANTO o si le falta la tabla schema_migrations (ver el encabezado del script).
+      - name: Comprobar la base (solo lectura)
+        run: node scripts/prod-preflight.mjs
+
+      - name: Aplicar migraciones pendientes
+        if: ${{ inputs.modo == 'aplicar' }}
+        run: npm run db:apply
+
+      - name: Verificar que quedó al día
+        if: ${{ inputs.modo == 'aplicar' }}
+        env:
+          REQUIRE_ZERO: "1"
+        run: node scripts/prod-preflight.mjs
