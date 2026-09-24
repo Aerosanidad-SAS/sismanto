@@ -15,7 +15,6 @@ import {
   condicionOrPalabra,
   palabrasBusquedaPacientes,
 } from "@/lib/pacientes-lista";
-import { auditar } from "@/lib/auditoria";
 
 /**
  * Una página de pacientes activos (100) con búsqueda en el servidor. Antes se
