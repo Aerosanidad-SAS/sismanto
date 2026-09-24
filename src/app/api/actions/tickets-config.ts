@@ -163,7 +163,7 @@ export async function guardarCorreosGestores(correos: string[]) {
     const { error } = await s.from("ticket_correos_gestores").delete().in("correo", sobran);
     if (error) return { error: error.message };
   }
-  await auditar("MODIFICAR", "configuracion", "ticket_correos_gestores", `Correos de gestores actualizados (+${nuevos.length} / -${sobran.length})`);
+  if (nuevos.length || sobran.length) await auditar("MODIFICAR", "configuracion", "ticket_correos_gestores", `Correos de gestores actualizados (+${nuevos.length} / -${sobran.length})`);
   revalidatePath("/soporte/configuracion");
   return { success: true as const };
 }
