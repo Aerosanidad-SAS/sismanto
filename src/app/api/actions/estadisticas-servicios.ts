@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
 import { centroVisible } from "@/lib/auth-utils";
+import { leerTodo } from "@/lib/leer-todo";
 
 export interface EstadisticasServicios {
   total: number;
@@ -23,15 +24,17 @@ export async function getEstadisticasServicios(): Promise<EstadisticasServicios>
   const desde = new Date();
   desde.setMonth(desde.getMonth() - 12);
 
-  const { data } = await supabase
-    .from("medical_services")
-    .select(
-      "etapa, tipo_servicio, fecha_hora_registro, ciudad_origen, oportunidad_atencion, tiempo_total_origen, tiempo_espera_destino, tiempo_total"
-    )
-    .gte("fecha_hora_registro", desde.toISOString())
-    .limit(20000);
-
-  const filas = data || [];
+  // Por páginas: un solo .limit(20000) devuelve 1000 filas y las estadísticas salían incompletas.
+  const filas = await leerTodo((d, h) =>
+    supabase
+      .from("medical_services")
+      .select(
+        "etapa, tipo_servicio, fecha_hora_registro, ciudad_origen, oportunidad_atencion, tiempo_total_origen, tiempo_espera_destino, tiempo_total"
+      )
+      .gte("fecha_hora_registro", desde.toISOString())
+      .order("id")
+      .range(d, h),
+  );
 
   const porEtapaMap = new Map<string, number>();
   const porTipoMap = new Map<string, number>();
@@ -119,15 +122,16 @@ export async function getEstadisticasServiciosPorCiudad(params?: {
   const hace30dias = new Date();
   hace30dias.setDate(hace30dias.getDate() - 30);
 
-  const { data } = await supabase
-    .from("medical_services")
-    .select("etapa, fecha_hora_registro, ciudad_origen, tiempo_total")
-    .gte("fecha_hora_registro", desdeIso)
-    .lt("fecha_hora_registro", hastaExclusivoIso)
-    .not("ciudad_origen", "is", null)
-    .limit(20000);
-
-  const filas = data || [];
+  const filas = await leerTodo((d, h) =>
+    supabase
+      .from("medical_services")
+      .select("etapa, fecha_hora_registro, ciudad_origen, tiempo_total")
+      .gte("fecha_hora_registro", desdeIso)
+      .lt("fecha_hora_registro", hastaExclusivoIso)
+      .not("ciudad_origen", "is", null)
+      .order("id")
+      .range(d, h),
+  );
 
   return CIUDADES_JUNTA.map(({ ciudad, prefijo }) => {
     const deLaCiudad = filas.filter((s) => sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo));
@@ -277,21 +281,18 @@ export async function getResumenOperativoDiario(params: {
   const diaSiguiente = new Date(`${params.hasta}T00:00:00.000Z`);
   diaSiguiente.setDate(diaSiguiente.getDate() + 1);
 
-  let query = supabase
-    .from("medical_services")
-    .select("etapa, tipo_servicio, ciudad_origen")
-    .gte("fecha_hora_registro", desdeIso)
-    .lt("fecha_hora_registro", diaSiguiente.toISOString())
-    .limit(20000);
-
   // Mismo alcance que la lista de servicios: Regulación cuenta lo de su centro,
   // si no, el resumen muestra cifras de servicios que ni puede abrir.
   const centro = centroVisible(await getProfile());
-  if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
-
-  const { data } = await query;
-
-  const filas = data || [];
+  const filas = await leerTodo((d, h) => {
+    let query = supabase
+      .from("medical_services")
+      .select("etapa, tipo_servicio, ciudad_origen")
+      .gte("fecha_hora_registro", desdeIso)
+      .lt("fecha_hora_registro", diaSiguiente.toISOString());
+    if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+    return query.order("id").range(d, h);
+  });
 
   const porCiudad: ResumenOperativoCiudad[] = [...CIUDADES_JUNTA].reverse().map(({ ciudad, prefijo }) => ({
     ciudad,
