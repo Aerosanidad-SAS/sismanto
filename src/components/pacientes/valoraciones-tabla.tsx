@@ -33,6 +33,8 @@ import {
 } from "@/lib/valoraciones-lista";
 import { crearValoracion, actualizarValoracion, eliminarValoracion, generarCertificadoValoracionPdf } from "@/app/api/actions/valoraciones";
 import { buscarPacientePorCedula } from "@/app/api/actions/pacientes";
+import { CatalogCombobox } from "@/components/forms/catalog-combobox";
+import { AeropuertoCombobox } from "@/components/aeropuertos/aeropuerto-combobox";
 
 export interface ValoracionRow {
   id: number;
@@ -59,11 +61,8 @@ export interface ValoracionRow {
 /** Campos de texto simples. Género, valoración y estado son selects cerrados (como en SISRES); médico y pasajero los pone el servidor. */
 const CAMPOS_TEXTO: { name: keyof AssessmentFormData; label: string; type?: string }[] = [
   { name: "fecha_nacimiento", label: "Fecha de nacimiento", type: "date" },
-  { name: "aerolinea", label: "Aerolínea" },
   { name: "fecha_hora_vuelo", label: "Fecha y hora del vuelo", type: "datetime-local" },
   { name: "acompanante", label: "Acompañante" },
-  { name: "origen", label: "Origen" },
-  { name: "destino", label: "Destino" },
   { name: "tiempo_estimado", label: "Tiempo estimado del vuelo" },
 ];
 
@@ -75,11 +74,13 @@ interface ValoracionesTablaProps {
   puedeEditar: boolean;
   /** Eliminar = desactivar; solo ADMIN y ANALISTA (ver ROLES_ELIMINAR_VALORACION). */
   puedeEliminar: boolean;
+  /** Nombres de las aerolíneas activas del catálogo (select cerrado como en SISRES). */
+  aerolineas: string[];
   /** Texto de la búsqueda actual (parámetro `q` de la URL); la búsqueda se hace en el servidor. */
   busqueda: string;
 }
 
-export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, busqueda }: ValoracionesTablaProps) {
+export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, aerolineas, busqueda }: ValoracionesTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<ValoracionRow | null>(null);
@@ -96,6 +97,11 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, bu
   const generoSeleccionado = watch("genero") ?? "";
   const valoracionSeleccionada = watch("valoracion") ?? "";
   const estadoSeleccionado = watch("estado") ?? "";
+  const aerolineaSeleccionada = watch("aerolinea") ?? "";
+  const origenSeleccionado = watch("origen") ?? "";
+  const destinoSeleccionado = watch("destino") ?? "";
+  // Si el registro trae una aerolínea que ya no está activa en el catálogo (dato viejo), se conserva como opción para no perderla al editar.
+  const opcionesAerolinea = aerolineaSeleccionada && !aerolineas.includes(aerolineaSeleccionada) ? [...aerolineas, aerolineaSeleccionada] : aerolineas;
   const edadCalculada = edadEnAnios(watch("fecha_nacimiento") || null, hoyBogota());
   // Si el registro trae un género fuera de la lista (datos viejos), se conserva como opción para no perderlo al editar.
   const opcionesGenero: string[] = [...SEXO_OPCIONES];
@@ -349,6 +355,25 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, bu
                   <Input id={campo.name} type={campo.type ?? "text"} {...register(campo.name)} />
                 </div>
               ))}
+              <div className="space-y-1">
+                <Label htmlFor="aerolinea">Aerolínea</Label>
+                <CatalogCombobox
+                  id="aerolinea"
+                  options={opcionesAerolinea}
+                  value={aerolineaSeleccionada}
+                  onChange={(v) => setValue("aerolinea", v)}
+                  placeholder="Selecciona o busca…"
+                  allowCustom={false}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="origen">Origen</Label>
+                <AeropuertoCombobox id="origen" value={origenSeleccionado} onChange={(v) => setValue("origen", v)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="destino">Destino</Label>
+                <AeropuertoCombobox id="destino" value={destinoSeleccionado} onChange={(v) => setValue("destino", v)} />
+              </div>
               <div className="space-y-1">
                 <Label htmlFor="edad">Edad</Label>
                 <Input id="edad" value={edadCalculada === "" ? "" : `${edadCalculada} años`} readOnly disabled placeholder="Se calcula con la fecha de nacimiento" />

@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buscarValoraciones, getResumenValoraciones } from "@/app/api/actions/valoraciones";
 import { getProfile } from "@/app/api/actions/auth";
+import { getAerolineas } from "@/app/api/actions/aerolineas";
 import { ValoracionesTabla } from "@/components/pacientes/valoraciones-tabla";
 import { ValoracionesPaginacion } from "@/components/pacientes/valoraciones-paginacion";
 import { ROLES_ELIMINAR_VALORACION, leerBusquedaValoraciones } from "@/lib/valoraciones-lista";
@@ -14,10 +15,11 @@ export default async function ValoracionesPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const { q, pagina } = leerBusquedaValoraciones(searchParams);
-  const [profile, { valoraciones, total, error: errorLista }, resumen] = await Promise.all([
+  const [profile, { valoraciones, total, error: errorLista }, resumen, aerolineas] = await Promise.all([
     getProfile(),
     buscarValoraciones(q, pagina),
     getResumenValoraciones(),
+    getAerolineas(true),
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const puedeEliminar = ROLES_ELIMINAR_VALORACION.includes(profile?.role_codigo ?? "");
@@ -69,7 +71,7 @@ export default async function ValoracionesPage({
               No se pudo cargar la lista de valoraciones: {errorLista}
             </p>
           )}
-          <ValoracionesTabla valoraciones={valoraciones} puedeEditar={puedeEditar} puedeEliminar={puedeEliminar} busqueda={q} />
+          <ValoracionesTabla valoraciones={valoraciones} puedeEditar={puedeEditar} puedeEliminar={puedeEliminar} aerolineas={aerolineas.map((a) => a.nombre)} busqueda={q} />
           <ValoracionesPaginacion q={q} pagina={pagina} total={total} />
         </CardContent>
       </Card>

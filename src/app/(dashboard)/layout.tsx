@@ -33,6 +33,8 @@ import {
   PackageCheck,
   Handshake,
   Building2,
+  Plane,
+  PlaneTakeoff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -135,6 +137,20 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Stethoscope,
         roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
         hint: "Conceptos de aptitud médica para vuelo (origen SISRES).",
+      },
+      {
+        name: "Aerolíneas",
+        href: "/aerolineas",
+        icon: PlaneTakeoff,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aerolíneas para las valoraciones (origen SISRES).",
+      },
+      {
+        name: "Aeropuertos",
+        href: "/aeropuertos",
+        icon: Plane,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aeropuertos para origen y destino de vuelo (origen SISRES).",
       },
     ],
   },

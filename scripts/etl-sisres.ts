@@ -378,6 +378,46 @@ async function cargarClientes(client: pg.Client, dir: string) {
   });
 }
 
+async function cargarAerolineas(client: pg.Client, dir: string) {
+  const filas = leerCsv(dir, "aerolineas.csv");
+  if (!filas) return;
+  const columnas = ["sisres_id", "nombre", "activo"];
+  const carga = transformar("airlines", filas, (f) => {
+    const nombre = v(f, "nombre");
+    if (!nombre) throw new RechazoFila("sin nombre");
+    return [entero(v(f, "id")), nombre, activo(f)];
+  });
+  await enTransaccion(client, "airlines", async () => {
+    const ok = await upsertLote(client, "airlines", columnas,
+      `ON CONFLICT (nombre) DO UPDATE SET ${actualizar(columnas, ["nombre"])}, updated_at = NOW()`, carga);
+    console.log(`   ✔ airlines: ${ok}/${filas.length}`);
+  });
+}
+
+/** Dataset OurAirports (~85.818 filas): se carga con los nombres en español de SISMANTO; `scheduled_service` yes/no (en inglés, no si/no) → boolean. */
+async function cargarAeropuertos(client: pg.Client, dir: string) {
+  const filas = leerCsv(dir, "aeropuertos.csv");
+  if (!filas) return;
+  const columnas = [
+    "sisres_id", "ident", "tipo", "nombre", "municipio", "pais", "region", "iata_code", "icao_code",
+    "servicio_regular", "latitud", "longitud", "elevacion_ft",
+  ];
+  const carga = transformar("airports", filas, (f, ctx) => {
+    const nombre = v(f, "name");
+    if (!nombre) throw new RechazoFila("sin nombre");
+    return [
+      entero(v(f, "id")), v(f, "ident"), v(f, "type"), nombre, v(f, "municipality"), v(f, "iso_country"),
+      v(f, "iso_region"), v(f, "iata_code"), v(f, "icao_code"), (v(f, "scheduled_service") ?? "").toLowerCase() === "yes",
+      numero(ctx, "latitude_deg"), numero(ctx, "longitude_deg"), entero(v(f, "elevation_ft")),
+    ];
+  });
+  await enTransaccion(client, "airports", async () => {
+    const ok = await upsertLote(client, "airports", columnas,
+      `ON CONFLICT (sisres_id) DO UPDATE SET ${actualizar(columnas, ["sisres_id"])}`, carga);
+    console.log(`   ✔ airports: ${ok}/${filas.length}`);
+  });
+}
+
 async function cargarCie10(client: pg.Client, dir: string) {
   const filas = leerCsv(dir, "cie10.csv");
   if (!filas) return;
@@ -727,6 +767,8 @@ async function main() {
     await cargarClientes(client, dir);
     await cargarCie10(client, dir);
     await cargarEps(client, dir);
+    await cargarAerolineas(client, dir);
+    await cargarAeropuertos(client, dir);
     await cargarProveedores(client, dir);
     await cargarPacientes(client, dir);
     await cargarMovil(client, dir);
@@ -737,7 +779,7 @@ async function main() {
 
     console.log("\n📊 Conteos en destino (validar contra MySQL):");
     for (const tabla of [
-      "clients", "cie10", "eps", "medical_providers", "patients", "biomedical_equipment",
+      "clients", "cie10", "eps", "airlines", "airports", "medical_providers", "patients", "biomedical_equipment",
       "medical_services", "medical_assessments", "biomedical_maintenance",
     ]) {
       console.log(`   ${tabla}: ${await contar(client, tabla)}`);

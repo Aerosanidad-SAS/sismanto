@@ -1202,6 +1202,18 @@ export type Database = {
           }
         ]
       }
+      airlines: {
+        Row: { id: number; nombre: string; activo: boolean; sisres_id: number | null; created_at: string; updated_at: string }
+        Insert: { id?: number; nombre: string; activo?: boolean; sisres_id?: number | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; nombre?: string; activo?: boolean; sisres_id?: number | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      airports: {
+        Row: { id: number; sisres_id: number | null; ident: string | null; tipo: string | null; nombre: string; municipio: string | null; pais: string | null; region: string | null; iata_code: string | null; icao_code: string | null; servicio_regular: boolean; latitud: number | null; longitud: number | null; elevacion_ft: number | null }
+        Insert: { id?: number; sisres_id?: number | null; ident?: string | null; tipo?: string | null; nombre: string; municipio?: string | null; pais?: string | null; region?: string | null; iata_code?: string | null; icao_code?: string | null; servicio_regular?: boolean; latitud?: number | null; longitud?: number | null; elevacion_ft?: number | null }
+        Update: { id?: number; sisres_id?: number | null; ident?: string | null; tipo?: string | null; nombre?: string; municipio?: string | null; pais?: string | null; region?: string | null; iata_code?: string | null; icao_code?: string | null; servicio_regular?: boolean; latitud?: number | null; longitud?: number | null; elevacion_ft?: number | null }
+        Relationships: []
+      }
       wa_campaigns: {
         Row: { id: number; nombre: string; plantilla: string; idioma: string; estado: string; media_tipo: string | null; media_id: string | null; media_nombre: string | null; total_destinatarios: number; total_enviados: number; total_fallidos: number; created_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: number; nombre: string; plantilla: string; idioma?: string; estado?: string; media_tipo?: string | null; media_id?: string | null; media_nombre?: string | null; total_destinatarios?: number; total_enviados?: number; total_fallidos?: number; created_by?: string | null; created_at?: string; updated_at?: string }
