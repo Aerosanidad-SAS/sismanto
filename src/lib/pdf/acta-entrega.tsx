@@ -1,5 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import { etiquetaChequeo, fechaCorta } from "@/lib/formatos-ti/comun";
+import { etiquetaChequeo, fechaCorta, type FirmaPdf } from "@/lib/formatos-ti/comun";
 import {
   CHECKLIST_ACTA_ENTREGA,
   ETIQUETA_LADO_ACTA,
@@ -34,14 +34,6 @@ const styles = StyleSheet.create({
   warning: { fontSize: 7, color: "#B91C1C", fontFamily: "Helvetica-Bold", textAlign: "center" },
   footer: { position: "absolute", bottom: 18, left: 32, right: 32, fontSize: 7, color: "#9C9B99", textAlign: "center" },
 });
-
-/** Firma ya resuelta para el PDF: los bytes del PNG (o null) y si su hash dejó de coincidir con los datos. */
-export interface FirmaPdf {
-  imagen: Buffer | null;
-  modificada: boolean;
-  /** El registro dice que hay firma pero el archivo no está en Storage. */
-  faltante: boolean;
-}
 
 function Campo({ label, valor }: { label: string; valor: string | null | undefined }) {
   return (

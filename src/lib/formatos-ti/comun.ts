@@ -25,6 +25,14 @@ export const BUCKET_FIRMAS = "formatos-firmas";
 /** Estado de la integridad de una firma, para las insignias del listado y el PDF. */
 export type EstadoFirma = "sin_firma" | "ok" | "modificada";
 
+/** Firma ya resuelta para el PDF: los bytes del PNG (o null) y si su hash dejó de coincidir con los datos. */
+export interface FirmaPdf {
+  imagen: Buffer | null;
+  modificada: boolean;
+  /** El registro dice que hay firma pero el archivo no está en Storage. */
+  faltante: boolean;
+}
+
 /** Lee un parámetro de la URL como texto recortado. */
 export function paramTexto(params: Record<string, string | string[] | undefined>, clave: string, max = 80): string {
   const x = params[clave];

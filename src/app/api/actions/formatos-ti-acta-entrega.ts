@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getProfile } from "@/app/api/actions/auth";
 import {
@@ -13,7 +12,8 @@ import {
   palabrasBusqueda,
   type EstadoFirma,
 } from "@/lib/formatos-ti/comun";
-import { anclaFecha, integridadOk, calcularHashRegistro } from "@/lib/formatos-ti/firma";
+import { anclaFecha } from "@/lib/formatos-ti/firma";
+import * as motor from "@/lib/formatos-ti/firmas-registro";
 import {
   actaEntregaSchema,
   camposClaveDevolucion,
@@ -23,8 +23,10 @@ import {
   type ActaEntregaFila,
   type LadoActaEntrega,
 } from "@/lib/formatos-ti/acta-entrega";
-import { borrarFirmas, descargarFirma, errorSiNoEsTi, guardarFirma, urlFirmada } from "@/lib/formatos-ti/servidor";
-import { ActaEntregaPdf, type FirmaPdf } from "@/lib/pdf/acta-entrega";
+import { errorSiNoEsTi } from "@/lib/formatos-ti/servidor";
+import { borrarFirmas, urlFirmada } from "@/lib/formatos-ti/storage-firmas";
+import { ActaEntregaPdf } from "@/lib/pdf/acta-entrega";
+import type { FirmaPdf } from "@/lib/formatos-ti/comun";
 
 export interface FiltrosActaEntrega {
   q: string;
@@ -41,16 +43,12 @@ export type ActaEntregaLista = ActaEntregaFila & { estadoFirmas: Record<LadoActa
 const COLUMNAS_BUSQUEDA = ["func_nombre", "func_cedula", "equipo_placa", "equipo_referencia", "numero_orden"] as const;
 const EXPORT_MAX = 5000;
 
+/** Campos clave de cada juego de firmas del acta: los de entrega/recibe y los de devolución. */
+const clavesActa = (f: ActaEntregaFila) => ({ entrega: camposClaveEntrega(f), devolucion: camposClaveDevolucion(f) });
+
 /** Estado de integridad de cada firma con lo guardado (sin descargar los PNG). */
 function estadoFirmas(fila: ActaEntregaFila): Record<LadoActaEntrega, EstadoFirma> {
-  const claves = { entrega: camposClaveEntrega(fila), devolucion: camposClaveDevolucion(fila) };
-  const out = {} as Record<LadoActaEntrega, EstadoFirma>;
-  for (const l of LADOS_ACTA_ENTREGA) {
-    const ruta = fila[l.ruta];
-    if (!ruta) out[l.lado] = "sin_firma";
-    else out[l.lado] = integridadOk(claves[l.clave], fila.firmas_png?.[l.lado], fila.created_at, fila[l.hash]) ? "ok" : "modificada";
-  }
-  return out;
+  return motor.estadoFirmas(fila, LADOS_ACTA_ENTREGA, clavesActa(fila)) as Record<LadoActaEntrega, EstadoFirma>;
 }
 
 function aplicarFiltros<T extends { or: (f: string) => T; eq: (c: string, v: string) => T; ilike: (c: string, v: string) => T }>(
@@ -94,38 +92,6 @@ export async function listarActasEntrega(filtros: FiltrosActaEntrega) {
   };
 }
 
-/** Prepara las columnas de firma de un lado a partir de lo que llegó del formulario. */
-async function resolverFirmas(
-  supabase: ReturnType<typeof createClient>,
-  id: number,
-  fila: ActaEntregaFila,
-  firmas: FirmasActaEntrega,
-  celular: boolean
-) {
-  const claves = { entrega: camposClaveEntrega(fila), devolucion: camposClaveDevolucion(fila) };
-  const cambios: Record<string, string | null> = {};
-  const png: Record<string, string> = { ...(fila.firmas_png ?? {}) };
-  const viejas: string[] = [];
-  const avisos: string[] = [];
-  for (const l of LADOS_ACTA_ENTREGA) {
-    if (l.clave === "devolucion" && !celular) continue; // la devolución solo existe en Celular
-    const dataUri = firmas[l.lado];
-    if (!dataUri) continue;
-    try {
-      const g = await guardarFirma(supabase, "acta-entrega", id, l.lado, dataUri, claves[l.clave], fila.created_at);
-      if (!g) continue;
-      const anterior = fila[l.ruta];
-      if (anterior) viejas.push(anterior);
-      cambios[l.ruta] = g.ruta;
-      cambios[l.hash] = g.hash;
-      png[l.lado] = g.hashPng;
-    } catch (e) {
-      avisos.push(e instanceof Error ? e.message : "No se pudo guardar una firma");
-    }
-  }
-  return { cambios, png, viejas, avisos };
-}
-
 export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: FirmasActaEntrega) {
   const sinPermiso = await errorSiNoEsTi();
   if (sinPermiso) return { error: sinPermiso };
@@ -160,7 +126,7 @@ export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: Firm
   if (error || !creada) return { error: error?.message ?? "No se pudo crear el acta" };
   const fila = { ...(creada as unknown as ActaEntregaFila), created_at: creadoEn };
 
-  const { cambios, png, avisos } = await resolverFirmas(supabase, fila.id, fila, firmas, d.tipo_equipo === "CELULAR");
+  const { cambios, png, avisos } = await motor.resolverFirmas(supabase, "acta-entrega", fila.id, fila, firmas, LADOS_ACTA_ENTREGA, clavesActa(fila), (l) => l.clave === "devolucion" && d.tipo_equipo !== "CELULAR");
   if (Object.keys(cambios).length > 0) {
     const { error: e2 } = await supabase.from("ti_acta_entrega").update({ ...cambios, firmas_png: png }).eq("id", fila.id);
     if (e2) avisos.push(`El acta se creó pero no se pudieron enlazar las firmas: ${e2.message}`);
@@ -195,7 +161,7 @@ export async function actualizarActaEntrega(id: number, entrada: ActaEntregaEntr
     created_at: anclaFecha(previa.created_at),
   } as ActaEntregaFila;
 
-  const { cambios, png, viejas, avisos } = await resolverFirmas(supabase, previa.id, nueva, firmas, d.tipo_equipo === "CELULAR");
+  const { cambios, png, viejas, avisos } = await motor.resolverFirmas(supabase, "acta-entrega", previa.id, nueva, firmas, LADOS_ACTA_ENTREGA, clavesActa(nueva), (l) => l.clave === "devolucion" && d.tipo_equipo !== "CELULAR");
 
   const { error } = await supabase
     .from("ti_acta_entrega")
@@ -284,22 +250,7 @@ export async function generarActaEntregaPdf(id: number) {
   const { data } = await supabase.from("ti_acta_entrega").select("*").eq("id", idParsed.data).maybeSingle();
   if (!data) return { error: "Acta no encontrada" };
   const fila = data as unknown as ActaEntregaFila;
-  const claves = { entrega: camposClaveEntrega(fila), devolucion: camposClaveDevolucion(fila) };
-
-  const firmas: Partial<Record<LadoActaEntrega, FirmaPdf>> = {};
-  for (const l of LADOS_ACTA_ENTREGA) {
-    const ruta = fila[l.ruta];
-    if (!ruta) continue;
-    const bytes = await descargarFirma(supabase, ruta);
-    if (!bytes) {
-      firmas[l.lado] = { imagen: null, modificada: false, faltante: true };
-      continue;
-    }
-    const hashPng = createHash("sha256").update(bytes).digest("hex");
-    const coincideImagen = !fila.firmas_png?.[l.lado] || fila.firmas_png[l.lado] === hashPng;
-    const coincideRegistro = calcularHashRegistro(claves[l.clave], hashPng, fila.created_at) === fila[l.hash];
-    firmas[l.lado] = { imagen: bytes, modificada: !(coincideImagen && coincideRegistro), faltante: false };
-  }
+  const firmas = (await motor.firmasParaPdf(supabase, fila, LADOS_ACTA_ENTREGA, clavesActa(fila))) as Partial<Record<LadoActaEntrega, FirmaPdf>>;
 
   const profile = await getProfile();
   try {
