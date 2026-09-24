@@ -83,6 +83,14 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "072_formatos_ti_baja.sql",                      file: "scripts/migrations/072_formatos_ti_baja.sql" },
   { name: "073_formatos_ti_prestamo.sql",                  file: "scripts/migrations/073_formatos_ti_prestamo.sql" },
   { name: "074_formatos_ti_firma_remota.sql",              file: "scripts/migrations/074_formatos_ti_firma_remota.sql" },
+  { name: "065_biomedico_vencimiento_parche.sql",        file: "scripts/migrations/065_biomedico_vencimiento_parche.sql" },
+  { name: "066_biomedical_alerts_log.sql",               file: "scripts/migrations/066_biomedical_alerts_log.sql" },
+  { name: "067_biomedical_especificaciones_100.sql",     file: "scripts/migrations/067_biomedical_especificaciones_100.sql" },
+  { name: "065_tickets_soporte.sql",                     file: "scripts/migrations/065_tickets_soporte.sql" },
+  { name: "066_tickets_gestion.sql",                     file: "scripts/migrations/066_tickets_gestion.sql" },
+  { name: "067_tickets_config_indicadores.sql",          file: "scripts/migrations/067_tickets_config_indicadores.sql" },
+  { name: "080_captacion_aeroportuaria.sql",             file: "scripts/migrations/080_captacion_aeroportuaria.sql" },
+  { name: "081_sispro_catalogos.sql",                    file: "scripts/migrations/081_sispro_catalogos.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
@@ -201,7 +209,7 @@ Cómo obtenerla (Supabase):
 
   const client = new pg.Client({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
+    ssl: process.env.DATABASE_SSL === "off" ? false : { rejectUnauthorized: false },
   });
 
   try {

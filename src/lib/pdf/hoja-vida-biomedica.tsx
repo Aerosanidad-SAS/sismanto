@@ -36,6 +36,8 @@ export interface HojaVidaEquipo {
   proximo_mantenimiento: string | null;
   ultima_calibracion: string | null;
   proxima_calibracion: string | null;
+  vencimiento_parche_adulto: string | null;
+  vencimiento_parche_pediatrico: string | null;
   proveedor_nombre: string | null;
   operador: string | null;
 }
@@ -103,6 +105,8 @@ export function HojaVidaBiomedicaPdf({
           <Campo label="Próximo mantenimiento" valor={fmtFecha(equipo.proximo_mantenimiento)} />
           <Campo label="Última calibración" valor={fmtFecha(equipo.ultima_calibracion)} />
           <Campo label="Próxima calibración" valor={fmtFecha(equipo.proxima_calibracion)} />
+          <Campo label="Vencimiento parche adulto" valor={fmtFecha(equipo.vencimiento_parche_adulto)} />
+          <Campo label="Vencimiento parche pediátrico" valor={fmtFecha(equipo.vencimiento_parche_pediatrico)} />
         </View>
 
         <Text style={styles.sectionTitle}>Historial de mantenimientos ({mantenimientos.length})</Text>
