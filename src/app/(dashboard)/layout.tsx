@@ -33,6 +33,7 @@ import {
   PackageCheck,
   Handshake,
   Building2,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -271,6 +272,18 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
       },
     ],
   },
+  {
+    label: "Soporte",
+    items: [
+      {
+        name: "Soporte técnico",
+        href: "/soporte",
+        icon: LifeBuoy,
+        roles: ["ADMIN", "OVEM", "REGULACION", "GERENCIAL", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "MEDICO", "AUXILIAR_ENFERMERIA", "VISTA"],
+        hint: "Reporta un problema de tecnología y sigue tu ticket hasta que se resuelva.",
+      },
+    ],
+  },
 ];
 
 const ROLE_BADGE_STYLES: Record<UserRole, string> = {
@@ -349,14 +362,14 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "GERENCIAL" &&
-          !["/", "/kpis", "/consumo", "/combustible", "/estadisticas", "/ai-chat", "/ai-insights", "/gerencial"].includes(pathname) &&
+          !["/", "/kpis", "/consumo", "/combustible", "/estadisticas", "/ai-chat", "/ai-insights", "/gerencial", "/soporte"].includes(pathname) &&
           !pathname.startsWith("/admin")
         ) {
           router.replace("/");
         }
         if (
           p.role_codigo === "COORDINACION" &&
-          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights"].some(
+          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte"].some(
             (b) => pathname === b || pathname.startsWith(`${b}/`)
           )
         ) {

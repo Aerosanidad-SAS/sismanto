@@ -822,3 +822,28 @@ export const waCampaignSchema = z.object({
     .max(2000, "Máximo 2000 destinatarios por campaña"),
 });
 export type WaCampaignFormData = z.input<typeof waCampaignSchema>;
+
+// ─── Soporte técnico (tickets) — ver migración 065 ───────────────────────────
+export const TICKET_PRIORIDADES = ["BAJA", "MEDIA", "ALTA", "URGENTE"] as const;
+export const TICKET_ESTADOS = ["ABIERTO", "EN_PROCESO", "RESUELTO", "CERRADO"] as const;
+
+export const ticketSchema = z.object({
+  sede: z.string().trim().min(1, "Selecciona la sede").max(100),
+  area: z.string().trim().min(1, "Selecciona el área que solicita el soporte").max(100),
+  categoria: z.string().trim().min(1, "Selecciona la categoría").max(100),
+  prioridad: z.enum(TICKET_PRIORIDADES, { errorMap: () => ({ message: "Selecciona la prioridad" }) }),
+  celular: z
+    .string()
+    .trim()
+    .min(7, "Escribe un celular de contacto")
+    .max(20, "Máximo 20 caracteres")
+    .regex(/^[0-9+()\-\s]+$/, "El celular solo puede llevar números"),
+  asunto: z.string().trim().min(1, "El asunto es obligatorio").max(150, "Máximo 150 caracteres"),
+  descripcion: z.string().trim().min(1, "La descripción es obligatoria").max(5000, "Máximo 5000 caracteres"),
+});
+export type TicketFormData = z.input<typeof ticketSchema>;
+
+export const reabrirTicketSchema = z.object({
+  id: z.number().int().positive(),
+  nota: z.string().trim().min(1, "Tienes que explicar por qué reabres el ticket").max(1000, "Máximo 1000 caracteres"),
+});

@@ -1240,6 +1240,44 @@ export type Database = {
         Update: { id?: number; medical_service_id?: number; changed_by?: string | null; changed_by_role?: string | null; changed_at?: string; valores_anteriores?: Json; valores_nuevos?: Json }
         Relationships: []
       }
+      tickets: {
+        Row: { id: number; sisres_id: number | null; categoria: string; prioridad: string; asunto: string; descripcion: string; adjunto_path: string | null; estado: string; solicitante_id: string; nombre_solicitante: string; celular_contacto: string; registrado_por_id: string | null; nombre_registrado_por: string | null; sede: string; area: string; tecnico_id: string | null; nombre_tecnico: string | null; solucion: string | null; created_at: string; fecha_primer_contacto: string | null; fecha_resuelto: string | null; fecha_cierre: string | null }
+        Insert: { id?: number; sisres_id?: number | null; categoria: string; prioridad: string; asunto: string; descripcion: string; adjunto_path?: string | null; estado?: string; solicitante_id: string; nombre_solicitante: string; celular_contacto: string; registrado_por_id?: string | null; nombre_registrado_por?: string | null; sede: string; area: string; tecnico_id?: string | null; nombre_tecnico?: string | null; solucion?: string | null; created_at?: string; fecha_primer_contacto?: string | null; fecha_resuelto?: string | null; fecha_cierre?: string | null }
+        Update: { id?: number; sisres_id?: number | null; categoria?: string; prioridad?: string; asunto?: string; descripcion?: string; adjunto_path?: string | null; estado?: string; solicitante_id?: string; nombre_solicitante?: string; celular_contacto?: string; registrado_por_id?: string | null; nombre_registrado_por?: string | null; sede?: string; area?: string; tecnico_id?: string | null; nombre_tecnico?: string | null; solucion?: string | null; created_at?: string; fecha_primer_contacto?: string | null; fecha_resuelto?: string | null; fecha_cierre?: string | null }
+        Relationships: []
+      }
+      ticket_historial: {
+        Row: { id: number; ticket_id: number; tipo_evento: string; estado_anterior: string | null; estado_nuevo: string | null; nota: string | null; usuario_id: string | null; nombre_usuario: string; created_at: string }
+        Insert: { id?: number; ticket_id: number; tipo_evento: string; estado_anterior?: string | null; estado_nuevo?: string | null; nota?: string | null; usuario_id?: string | null; nombre_usuario: string; created_at?: string }
+        Update: { id?: number; ticket_id?: number; tipo_evento?: string; estado_anterior?: string | null; estado_nuevo?: string | null; nota?: string | null; usuario_id?: string | null; nombre_usuario?: string; created_at?: string }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_historial_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      ticket_areas: {
+        Row: { id: number; nombre: string; activo: boolean }
+        Insert: { id?: number; nombre: string; activo?: boolean }
+        Update: { id?: number; nombre?: string; activo?: boolean }
+        Relationships: []
+      }
+      ticket_categorias: {
+        Row: { id: number; nombre: string; activo: boolean }
+        Insert: { id?: number; nombre: string; activo?: boolean }
+        Update: { id?: number; nombre?: string; activo?: boolean }
+        Relationships: []
+      }
+      ticket_sedes: {
+        Row: { id: number; nombre: string; activo: boolean }
+        Insert: { id?: number; nombre: string; activo?: boolean }
+        Update: { id?: number; nombre?: string; activo?: boolean }
+        Relationships: []
+      }
     }
     Views: {
       vehicle_maintenance_alerts: {
@@ -1269,6 +1307,14 @@ export type Database = {
       get_user_center: {
         Args: { p_user_id?: string }
         Returns: number | null
+      }
+      es_gestor_tickets: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      reabrir_ticket: {
+        Args: { p_ticket_id: number; p_nota: string }
+        Returns: undefined
       }
     }
     Enums: {
