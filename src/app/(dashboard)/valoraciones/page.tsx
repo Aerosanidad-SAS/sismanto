@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buscarValoraciones, getResumenValoraciones } from "@/app/api/actions/valoraciones";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { getAerolineas } from "@/app/api/actions/aerolineas";
 import { ValoracionesTabla } from "@/components/pacientes/valoraciones-tabla";
 import { ValoracionesPaginacion } from "@/components/pacientes/valoraciones-paginacion";
@@ -14,6 +14,7 @@ export default async function ValoracionesPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
+  await requireRole(["ADMIN", "MEDICO", "ANALISTA", "VISTA"]);
   const { q, pagina } = leerBusquedaValoraciones(searchParams);
   const [profile, { valoraciones, total, error: errorLista }, resumen, aerolineas] = await Promise.all([
     getProfile(),

@@ -1,11 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getEquiposBiomedicos, getMantenimientosBiomedicos } from "@/app/api/actions/inventario-biomedico";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { EquiposTabla } from "@/components/equipos/equipos-tabla";
 
 const ROLES_EDICION = ["ADMIN", "MANTENIMIENTO", "ANALISTA"];
 
 export default async function EquiposPage() {
+  await requireRole(["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"]);
   const [profile, equipos, mantenimientos] = await Promise.all([
     getProfile(),
     getEquiposBiomedicos(),

@@ -33,6 +33,7 @@ import * as path from "path";
 import pg from "pg";
 import { sanitizarTelefono } from "../src/lib/notifications/whatsapp";
 import { resolverCiudad } from "../src/lib/colombia-geo";
+import { asignarPlacasUnicas, elegirPacientesUnicos } from "./etl-integridad";
 
 // ─── Env (mismo mecanismo que apply-database.ts) ─────────────────────────────
 function loadEnvFile(filePath: string) {
@@ -176,6 +177,8 @@ function numero(ctx: Ctx, ...nombres: string[]): number | null {
   let t = raw.replace(/[$\s]/g, "");
   if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
   else if (/^-?\d+,\d+$/.test(t)) t = t.replace(",", ".");
+  // Formato estadounidense ("201,010.00"): SISRES guarda texto libre y algunos valores vienen así.
+  else if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) t = t.replace(/,/g, "");
   const num = Number(t);
   if (t === "" || Number.isNaN(num)) {
     registrar(avisos, ctx.tabla, ctx.fila, `${nombres[0]}: número no reconocido "${raw}" — se cargó vacío`);
@@ -477,8 +480,25 @@ async function cargarProveedores(client: pg.Client, dir: string) {
 }
 
 async function cargarPacientes(client: pg.Client, dir: string) {
-  const filas = leerCsv(dir, "paciente.csv");
-  if (!filas) return;
+  const todas = leerCsv(dir, "paciente.csv");
+  if (!todas) return;
+  // En SISRES la cédula no es única en MySQL. Un ON CONFLICT (cedula) dejaría que la segunda fila
+  // pise a la primera en silencio (incluso si son personas distintas): se elige una por cédula y
+  // las demás van a rechazos con el motivo, para revisarlas a mano.
+  const CAMPOS_PACIENTE = ["nombre1", "nombre2", "apellido1", "apellido2", "fechanacimiento", "direccion", "barrio", "localidad", "departamento", "ciudad", "rh", "sexo", "estatura", "eps", "celular", "correo"];
+  const nombreNorm = (x: Fila) => `${v(x, "nombre1") ?? ""}|${v(x, "apellido1") ?? ""}`.toLowerCase();
+  const { conservar: filas, descartadas } = elegirPacientesUnicos(todas, {
+    cedulaDe: (x) => v(x, "cedula"),
+    idDe: (x) => entero(v(x, "id")) ?? Number.MAX_SAFE_INTEGER,
+    completitud: (x) => CAMPOS_PACIENTE.filter((c) => v(x, c) !== null).length,
+    mismaPersona: (a, b) => nombreNorm(a) === nombreNorm(b),
+  });
+  for (const d of descartadas) {
+    registrar(rechazos, "patients", d.fila,
+      d.mismaPersona
+        ? `cédula repetida en SISRES (mismo nombre): se conservó la fila más completa, id ${v(d.ganadora, "id")}`
+        : `cédula repetida en SISRES pero es OTRA PERSONA: se conservó id ${v(d.ganadora, "id")}; revisar a mano cuál cédula es la correcta`);
+  }
   const columnas = [
     "sisres_id", "cedula", "tipo_documento", "nombre1", "nombre2", "apellido1", "apellido2",
     "fecha_nacimiento", "direccion", "barrio", "localidad", "departamento", "ciudad", "rh", "sexo",
@@ -499,7 +519,7 @@ async function cargarPacientes(client: pg.Client, dir: string) {
   await enTransaccion(client, "patients", async () => {
     const ok = await upsertLote(client, "patients", columnas,
       `ON CONFLICT (cedula) DO UPDATE SET ${actualizar(columnas, ["cedula"])}, updated_at = NOW()`, carga);
-    console.log(`   ✔ patients: ${ok}/${filas.length}`);
+    console.log(`   ✔ patients: ${ok}/${todas.length}` + (descartadas.length ? ` (${descartadas.length} descartadas por cédula repetida — ver etl-rechazos-patients.csv)` : ""));
   });
 }
 
@@ -554,11 +574,18 @@ async function cargarInventario(client: pg.Client, dir: string) {
     "frec_mantenimiento", "frec_calibracion", "ubicacion_interna", "aeropuerto", "departamento", "ciudad",
     "adquisicion", "area", "observaciones", "voltaje", "corriente", "potencia", "frecuencia", "humedad",
     "dimensiones", "peso", "temperatura", "fecha_compra", "proveedor_nombre", "proveedor_contacto",
-    "operador", "activo",
+    "operador", "activo", "vencimiento_parche_adulto", "vencimiento_parche_pediatrico",
   ];
+  // La placa no es única en SISRES (ver etl-integridad.ts): cada equipo conserva su fila y, si su placa
+  // choca, se le asigna `<placa>-<id>`. La identidad del equipo es sisres_id, no la placa.
+  const placas = asignarPlacasUnicas(
+    filas.flatMap((x) => { const id = entero(v(x, "id")); return id === null ? [] : [{ id, placa: v(x, "placa") }]; })
+  );
   const carga = transformar("biomedical_equipment", filas, (f, ctx) => {
-    const placa = v(f, "placa");
-    if (!placa) throw new RechazoFila("sin placa de equipo");
+    const asignada = placas.get(entero(v(f, "id")) ?? -1);
+    if (!asignada) throw new RechazoFila("sin id de origen (columna id)");
+    const placa = asignada.placa;
+    if (asignada.motivo) registrar(avisos, ctx.tabla, f, asignada.motivo);
     const u = ubicacion(v(f, "departamento"), v(f, "ciudad"));
     return [
       entero(v(f, "id")), placa, v(f, "equipo") ?? "—", v(f, "marca"), v(f, "modelo"), v(f, "serie"),
@@ -569,13 +596,28 @@ async function cargarInventario(client: pg.Client, dir: string) {
       v(f, "corriente"), v(f, "potencia"), v(f, "frecuencia"), v(f, "humedad"), v(f, "dimensiones"),
       v(f, "peso"), v(f, "temperatura"), fecha(ctx, "fechaCompra"), v(f, "nomProveedor"),
       v(f, "contacProveedor"), v(f, "operador"), activo(f),
+      fecha(ctx, "ultimoVencimientoParche"), fecha(ctx, "ultimoVencimientoParchePediatrico"),
     ];
   });
   await enTransaccion(client, "biomedical_equipment", async () => {
     const ok = await upsertLote(client, "biomedical_equipment", columnas,
-      `ON CONFLICT (placa_equipo) DO UPDATE SET ${actualizar(columnas, ["placa_equipo"])}, updated_at = NOW()`, carga);
+      `ON CONFLICT (sisres_id) DO UPDATE SET ${actualizar(columnas, ["sisres_id"])}, updated_at = NOW()`, carga);
     console.log(`   ✔ biomedical_equipment: ${ok}/${filas.length}`);
   });
+}
+
+/**
+ * oportunidad_atencion es numeric(10,2). SISRES trae en algunas filas valores absurdos (hasta
+ * ~957 millones de minutos: resta de fechas mal calculada). Antes esa fila entera se rechazaba y el
+ * servicio se perdía; ahora el servicio se carga y solo ese dato queda vacío, con aviso.
+ */
+function oportunidadEnRango(ctx: Ctx): number | null {
+  const n = numero(ctx, "oportunidadAtencion");
+  if (n !== null && Math.abs(n) >= 1e8) {
+    registrar(avisos, ctx.tabla, ctx.fila, `oportunidadAtencion: valor fuera de rango (${n}) — se cargó vacío`);
+    return null;
+  }
+  return n;
 }
 
 async function cargarServicios(client: pg.Client, dir: string) {
@@ -626,7 +668,7 @@ async function cargarServicios(client: pg.Client, dir: string) {
     return [
       requerirId(f), patientId, cedula, v(f, "nombreCompleto") ?? "—", fecha(ctx, "fechaHoraRegistro"),
       v(f, "tipoServicio") ?? "OTRO", vehicleId, placa, fecha(ctx, "fechaHoraProgramacionServicio"),
-      numero(ctx, "oportunidadAtencion"), v(f, "turnoProgramacion"), v(f, "autorizacion"), v(f, "asesor"),
+      oportunidadEnRango(ctx), v(f, "turnoProgramacion"), v(f, "autorizacion"), v(f, "asesor"),
       v(f, "prestador"), codigoCie(cie), cie, v(f, "requiereAislamiento"), v(f, "soporte"),
       origen.departamento, origen.ciudad, destino.departamento, destino.ciudad, v(f, "perimetro"),
       v(f, "direccion"), fecha(ctx, "fechaHoraLlegadaOrigen"), fecha(ctx, "fechaHoraSalidaOrigen"),
@@ -695,7 +737,9 @@ async function cargarMantenimientos(client: pg.Client, dir: string) {
     "SELECT id, placa_equipo, sisres_id FROM biomedical_equipment"
   );
   const equipoPorSisresId = new Map(equipos.filter((e) => e.sisres_id !== null).map((e) => [e.sisres_id, e.id]));
-  const equipoPorPlaca = new Map(equipos.map((e) => [e.placa_equipo, e.id]));
+  // codigo_institucional se escribe a mano ("CTA - 014") y la placa del equipo es "CTA-014": se comparan sin espacios.
+  const sinEspacios = (x: string) => x.replace(/\s+/g, "");
+  const equipoPorPlaca = new Map(equipos.map((e) => [sinEspacios(e.placa_equipo), e.id]));
   const columnas = [
     "sisres_id", "equipment_id", "orden_numero", "fecha_mantenimiento", "tipo_mantenimiento",
     "codigo_institucional", "ubicacion", "sanidad", "chk_items", "chk_total", "chk_marcados",
@@ -709,7 +753,7 @@ async function cargarMantenimientos(client: pg.Client, dir: string) {
     const placa = v(f, "placa", "codigo_institucional");
     const equipmentId =
       (inventarioId !== null ? equipoPorSisresId.get(inventarioId) : undefined) ??
-      (placa ? equipoPorPlaca.get(placa) : undefined);
+      (placa ? equipoPorPlaca.get(sinEspacios(placa)) : undefined);
     if (!equipmentId) throw new RechazoFila(`equipo no encontrado (inventario_id=${inventarioId ?? "—"}, placa=${placa ?? "—"})`);
     const fechaMantenimiento = fecha(ctx, "fecha_mantenimiento");
     if (!fechaMantenimiento) throw new RechazoFila("sin fecha de mantenimiento válida");
@@ -759,7 +803,7 @@ async function main() {
   console.log(`📂 Origen: ${path.resolve(dir)}\n`);
 
   const inicio = Date.now();
-  const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+  const client = new pg.Client({ connectionString: url, ssl: process.env.DATABASE_SSL === "off" ? false : { rejectUnauthorized: false } });
   await client.connect();
   try {
     await client.query("SET TIME ZONE 'America/Bogota'");

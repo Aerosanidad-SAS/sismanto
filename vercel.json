@@ -2,6 +2,7 @@
   "crons": [
     { "path": "/api/cron/process-invoices",   "schedule": "0 8 * * *" },
     { "path": "/api/cron/renew-webhook",      "schedule": "0 8 * * *" },
-    { "path": "/api/cron/send-expiry-alerts", "schedule": "0 12 * * *" }
+    { "path": "/api/cron/send-expiry-alerts", "schedule": "0 12 * * *" },
+    { "path": "/api/cron/send-biomedical-alerts", "schedule": "15 12 * * *" }
   ]
 }

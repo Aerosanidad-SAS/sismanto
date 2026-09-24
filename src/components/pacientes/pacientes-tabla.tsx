@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -45,7 +46,7 @@ import {
   SEXO_OPCIONES,
   RH_OPCIONES,
 } from "@/lib/validations";
-import { DEPARTAMENTOS_COLOMBIA } from "@/lib/colombia-geo";
+import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { crearPaciente, actualizarPaciente, eliminarPaciente } from "@/app/api/actions/pacientes";
 
 /** null = no se pudo determinar (sin fecha de nacimiento o fecha inválida) */
@@ -98,30 +99,31 @@ function calcularEdad(fechaNacimiento: string | null): string {
 }
 
 // Campos de texto simples del formulario (los que tienen catálogo real —
-// tipo_documento, sexo, rh, departamento — se renderizan aparte más abajo).
-// Ciudad y EPS quedan como texto libre: SISRES sí las tiene como catálogo
-// (tabla subregiones / eps), pero requieren el export real de León para no
-// inventar datos — ver QA_HALLAZGOS.md.
+// tipo_documento, sexo, rh, departamento, ciudad, EPS — se renderizan
+// aparte más abajo). Ciudad va en cascada por departamento, igual que
+// registroPacientes.php en SISRES (PARIDAD_REGULACION.md, PAC-06).
 const CAMPOS_OPCIONALES: { name: keyof PatientFormData; label: string; type?: string }[] = [
   { name: "nombre2", label: "Segundo nombre" },
   { name: "apellido2", label: "Segundo apellido" },
-  { name: "eps", label: "EPS (catálogo pendiente — ver bolsa de QA)" },
   { name: "celular", label: "Celular" },
   { name: "correo", label: "Correo", type: "email" },
   { name: "direccion", label: "Dirección" },
   { name: "barrio", label: "Barrio" },
   { name: "localidad", label: "Localidad" },
-  { name: "ciudad", label: "Ciudad (catálogo pendiente — ver bolsa de QA)" },
 ];
 
 interface PacientesTablaProps {
   pacientes: PacienteRow[];
   puedeEditar: boolean;
+  /** Catálogo real de EPS (tabla `eps`, migración 058) — mismo select
+   * cerrado que SISRES. */
+  epsOptions: string[];
+  /** Texto de la búsqueda actual (parámetro `q` de la URL); la búsqueda se hace en el servidor. */
+  busqueda: string;
 }
 
-export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) {
+export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }: PacientesTablaProps) {
   const router = useRouter();
-  const [busqueda, setBusqueda] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<PacienteRow | null>(null);
   const [eliminando, setEliminando] = useState<PacienteRow | null>(null);
@@ -136,6 +138,18 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
   const sexoSeleccionado = watch("sexo");
   const rhSeleccionado = watch("rh");
   const departamentoSeleccionado = watch("departamento");
+  const ciudadSeleccionada = watch("ciudad");
+  const epsSeleccionada = watch("eps");
+  // Ciudad en cascada: solo las del departamento ya elegido (mismo criterio
+  // que servicios-tabla.tsx). Si cambia el departamento, se limpia la ciudad
+  // para no dejar una que ya no corresponde.
+  const ciudadesDisponibles = departamentoSeleccionado
+    ? MUNICIPIOS_POR_DEPARTAMENTO[departamentoSeleccionado] ?? []
+    : [];
+  const handleDepartamento = (v: string) => {
+    setValue("departamento", v);
+    setValue("ciudad", "");
+  };
   const edadCalculada = calcularEdadNumero(watch("fecha_nacimiento"));
   const esMenorDeEdad = edadCalculada !== null && edadCalculada < 18;
   const tiposDocumentoDisponibles = TIPOS_DOCUMENTO.filter((t) => {
@@ -143,18 +157,6 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
     if (esMenorDeEdad) return !(TIPOS_DOCUMENTO_SOLO_ADULTO as readonly string[]).includes(t);
     return !(TIPOS_DOCUMENTO_SOLO_MENOR as readonly string[]).includes(t);
   });
-
-  const filtrados = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return pacientes;
-    return pacientes.filter(
-      (p) =>
-        p.cedula.toLowerCase().includes(q) ||
-        nombreCompleto(p).toLowerCase().includes(q) ||
-        (p.eps ?? "").toLowerCase().includes(q) ||
-        (p.ciudad ?? "").toLowerCase().includes(q)
-    );
-  }, [pacientes, busqueda]);
 
   const abrirNuevo = () => {
     setEditando(null);
@@ -166,6 +168,10 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
   const abrirEdicion = (p: PacienteRow) => {
     setEditando(p);
     setError(null);
+    // Pacientes históricos con ciudad en texto libre y sin departamento:
+    // si la ciudad está en el catálogo, se completa el departamento para
+    // que la cascada quede coherente. Si no hay match, se conserva tal cual.
+    const ubicacion = p.departamento ? null : resolverCiudad(p.ciudad);
     reset({
       cedula: p.cedula,
       tipo_documento: p.tipo_documento,
@@ -177,8 +183,8 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
       direccion: p.direccion ?? "",
       barrio: p.barrio ?? "",
       localidad: p.localidad ?? "",
-      departamento: p.departamento ?? "",
-      ciudad: p.ciudad ?? "",
+      departamento: ubicacion?.departamento ?? p.departamento ?? "",
+      ciudad: ubicacion?.ciudad ?? p.ciudad ?? "",
       rh: p.rh ?? "",
       sexo: p.sexo ?? "",
       estatura: p.estatura ?? "",
@@ -213,12 +219,22 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          placeholder="Buscar por documento, nombre, EPS o ciudad…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="sm:max-w-sm"
-        />
+        <form action="/pacientes" method="get" role="search" className="flex flex-1 flex-wrap items-center gap-2">
+          <Input
+            name="q"
+            defaultValue={busqueda}
+            maxLength={80}
+            placeholder="Buscar por documento, nombre, EPS o ciudad…"
+            aria-label="Buscar pacientes"
+            className="sm:max-w-sm"
+          />
+          <Button type="submit" variant="outline">Buscar</Button>
+          {busqueda && (
+            <Link href="/pacientes" className="text-sm text-muted-foreground underline">
+              Limpiar
+            </Link>
+          )}
+        </form>
         {puedeEditar && <Button onClick={abrirNuevo}>Nuevo paciente</Button>}
       </div>
 
@@ -237,14 +253,14 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtrados.length === 0 && (
+            {pacientes.length === 0 && (
               <TableRow>
                 <TableCell colSpan={puedeEditar ? 8 : 7} className="text-center text-muted-foreground">
-                  Sin pacientes registrados
+                  {busqueda ? "Sin resultados para la búsqueda" : "Sin pacientes registrados"}
                 </TableCell>
               </TableRow>
             )}
-            {filtrados.map((p) => (
+            {pacientes.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">
                   <Badge variant="outline">{p.tipo_documento}</Badge> {p.cedula}
@@ -380,7 +396,30 @@ export function PacientesTabla({ pacientes, puedeEditar }: PacientesTablaProps) 
                   id="departamento"
                   options={[...DEPARTAMENTOS_COLOMBIA]}
                   value={departamentoSeleccionado ?? ""}
-                  onChange={(v) => setValue("departamento", v)}
+                  onChange={handleDepartamento}
+                  placeholder="Selecciona o busca…"
+                  allowCustom={false}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="ciudad">Ciudad</Label>
+                <CatalogCombobox
+                  id="ciudad"
+                  options={ciudadesDisponibles as string[]}
+                  value={ciudadSeleccionada ?? ""}
+                  onChange={(v) => setValue("ciudad", v)}
+                  placeholder={departamentoSeleccionado ? "Escribe para buscar la ciudad…" : "Primero elige el departamento"}
+                  allowCustom={false}
+                  disabled={!departamentoSeleccionado}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="eps">EPS</Label>
+                <CatalogCombobox
+                  id="eps"
+                  options={epsOptions}
+                  value={epsSeleccionada ?? ""}
+                  onChange={(v) => setValue("eps", v)}
                   placeholder="Selecciona o busca…"
                   allowCustom={false}
                 />
