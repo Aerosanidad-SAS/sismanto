@@ -3,9 +3,11 @@
 # privados de una organización ("Cannot deploy from a private GitHub
 # organization repository on the Hobby plan"). Con la CLI despliega el token
 # del proyecto, pero la CLI adjunta el autor del commit y Hobby bloquea el
-# despliegue (BLOCKED) si ese autor no es el dueño de la cuenta: solo pasan los
-# commits del dueño. El job lo detecta y falla rápido con el motivo de Vercel.
-# La salida limpia es Vercel Pro (o su prueba de 14 días).
+# despliegue (BLOCKED) si ese autor no es el dueño de la cuenta. Por eso el job
+# despliega desde una copia de la salida de `vercel build` sin .git, de modo que
+# el despliegue no lleva autor. Si Vercel aun así lo bloquea, el job falla
+# rápido con el motivo. Es un parche mientras el team es Hobby: la salida
+# limpia es Vercel Pro (o su prueba de 14 días), y con eso se borra este archivo.
 #
 # Proyecto: `sismanto` del team `tecnicoaerosanidad`. Requiere los secretos
 # VERCEL_TOKEN (token de ese team), VERCEL_ORG_ID y VERCEL_PROJECT_ID.
@@ -61,6 +63,13 @@ jobs:
       # ourselves and fail fast with the reason Vercel gives.
       - name: Deploy and wait for the result
         run: |
+          # Deploy from a copy of the prebuilt output that has no .git: the CLI
+          # then attaches no commit author and Hobby has nothing to compare to
+          # the account owner. Nothing is falsified — the deployment simply
+          # carries no git author. Tested: same project, READY, HTTP 200.
+          work=$(mktemp -d)
+          cp -r .vercel "$work/.vercel"
+          cd "$work"
           url=$(vercel deploy --prebuilt --archive=tgz --no-wait --token="$VERCEL_TOKEN")
           host="${url#https://}"
           echo "Deployment: $url"
