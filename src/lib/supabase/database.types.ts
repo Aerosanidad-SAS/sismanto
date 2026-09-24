@@ -12,6 +12,8 @@ export type Json =
 type AuditLogRow = {
   id: number; at: string; user_id: string | null; user_label: string; role: string; action: string;
   entity: string; entity_id: string; detail: string; ip: string
+}
+
 // Formatos TI (migración 070): las columnas de firma llevan ruta+hash; `numero_orden` es generada por la base.
 type TiActaEntregaRow = {
   id: number; numero_orden: string; tipo_equipo: string;
@@ -1264,6 +1266,8 @@ export type Database = {
         Row: AuditLogRow
         Insert: Partial<Omit<AuditLogRow, "id">>
         Update: never
+        Relationships: []
+      }
       airlines: {
         Row: { id: number; nombre: string; activo: boolean; sisres_id: number | null; created_at: string; updated_at: string }
         Insert: { id?: number; nombre: string; activo?: boolean; sisres_id?: number | null; created_at?: string; updated_at?: string }
