@@ -68,7 +68,8 @@ jobs:
           # the account owner. Nothing is falsified — the deployment simply
           # carries no git author. Tested: same project, READY, HTTP 200.
           work=$(mktemp -d)
-          cp -r .vercel "$work/.vercel"
+          # -L: la salida de `vercel build` trae enlaces relativos a node_modules; copiados tal cual quedarían rotos (ENOENT).
+          cp -rL .vercel "$work/.vercel"
           cd "$work"
           url=$(vercel deploy --prebuilt --archive=tgz --no-wait --token="$VERCEL_TOKEN")
           host="${url#https://}"
