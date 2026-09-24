@@ -51,6 +51,20 @@ export interface CatalogosCaptacion {
   ips: string[];
 }
 
+// PostgREST devuelve como máximo 1000 filas por consulta (max-rows) aunque se pida un .limit() mayor, y
+// lo hace en silencio. Los catálogos de aquí pasan de eso (aeropuertos: 1125; CIE-10: 12.634), así que
+// las listas grandes se leen por páginas y el CIE-10 se consulta solo por los códigos que se usan.
+const TAM_PAGINA = 1000;
+async function leerTodo<T>(pagina: (desde: number, hasta: number) => PromiseLike<{ data: unknown[] | null }>): Promise<T[]> {
+  const todo: T[] = [];
+  for (let desde = 0; ; desde += TAM_PAGINA) {
+    const { data } = await pagina(desde, desde + TAM_PAGINA - 1);
+    const filas = (data ?? []) as T[];
+    todo.push(...filas);
+    if (filas.length < TAM_PAGINA) return todo;
+  }
+}
+
 async function usuario() {
   const profile = await getProfile();
   return profile && puedeUsarCaptacion(profile.role_codigo) ? profile : null;
@@ -60,8 +74,8 @@ export async function getCatalogosCaptacion(): Promise<CatalogosCaptacion> {
   if (!(await usuario())) return { aeropuertosAtencion: [], aeropuertosProcedencia: [], paises: [], ips: [] };
   const s = createClient();
   const nombres = async (tabla: "sispro_aeropuertos_atencion" | "sispro_aeropuertos" | "sispro_paises" | "sispro_ips") => {
-    const { data } = await s.from(tabla).select("nombre").order("nombre").limit(2000);
-    return ((data ?? []) as unknown as { nombre: string }[]).map((r) => r.nombre);
+    const filas = await leerTodo<{ nombre: string }>((d, h) => s.from(tabla).select("nombre").order("nombre").range(d, h));
+    return filas.map((r) => r.nombre);
   };
   const [aeropuertosAtencion, aeropuertosProcedencia, paises, ips] = await Promise.all([
     nombres("sispro_aeropuertos_atencion"),
@@ -159,7 +173,7 @@ async function validarContraCatalogos(d: z.output<typeof captacionSchema>): Prom
   if (!(await existe("sispro_paises", d.pais_procedencia))) return "El país de procedencia no está en el catálogo";
   if (d.remision && d.ips_receptora && !(await existe("sispro_ips", d.ips_receptora))) return "La IPS receptora no está en el catálogo";
   const { data: cie } = await s.from("cie10").select("codigo").eq("codigo", d.cie10).maybeSingle();
-  if (!cie) return "El código CIE-10 no existe en el catálogo";
+  if (!cie) return `El código CIE-10 "${d.cie10}" no existe en el catálogo. Búscalo por nombre con el botón Buscar (ej.: Z000 = examen médico general).`;
   return null;
 }
 
@@ -313,7 +327,7 @@ export async function getFilasSisproMes(mes: string): Promise<{ filas: (string |
   const siguiente = num === 12 ? `${anio + 1}-01` : `${anio}-${String(num + 1).padStart(2, "0")}`;
   const s = createClient();
 
-  const [{ data: filas }, paises, aeropuertos, ips, cie] = await Promise.all([
+  const lista = await leerTodo<CaptacionRow>((d, h) =>
     s
       .from("captaciones_aeroportuarias")
       .select(COLUMNAS_LISTA)
@@ -322,26 +336,32 @@ export async function getFilasSisproMes(mes: string): Promise<{ filas: (string |
       .lt("fecha_atencion", `${siguiente}-01T00:00:00-05:00`)
       .order("fecha_atencion", { ascending: true })
       .order("id", { ascending: true })
-      .limit(5000),
-    s.from("sispro_paises").select("nombre, codigo").limit(2000),
-    s.from("sispro_aeropuertos").select("nombre, ciudad, codigo_ciudad").limit(3000),
-    s.from("sispro_ips").select("nombre, codigo").limit(2000),
-    s.from("cie10").select("codigo, descripcion").limit(30000),
+      .range(d, h),
+  );
+
+  // CIE-10: solo los códigos que aparecen en el mes (la tabla tiene 12.634 y la consulta corta en 1000).
+  const codigos = [...new Set(lista.map((c) => (c.cie10 ?? "").trim().toUpperCase()).filter(Boolean))];
+  const cie10 = new Map<string, string>();
+  for (let i = 0; i < codigos.length; i += 200) {
+    const { data } = await s.from("cie10").select("codigo, descripcion").in("codigo", codigos.slice(i, i + 200));
+    for (const r of (data ?? []) as unknown as { codigo: string; descripcion: string }[]) cie10.set(r.codigo, r.descripcion);
+  }
+
+  const [paises, aeropuertos, ips] = await Promise.all([
+    leerTodo<{ nombre: string; codigo: string }>((d, h) => s.from("sispro_paises").select("nombre, codigo").order("nombre").range(d, h)),
+    leerTodo<{ nombre: string; ciudad: string; codigo_ciudad: string | null }>((d, h) =>
+      s.from("sispro_aeropuertos").select("nombre, ciudad, codigo_ciudad").order("nombre").range(d, h),
+    ),
+    leerTodo<{ nombre: string; codigo: string }>((d, h) => s.from("sispro_ips").select("nombre, codigo").order("nombre").range(d, h)),
   ]);
 
   const cat: CatalogosSispro = {
-    paises: new Map(((paises.data ?? []) as unknown as { nombre: string; codigo: string }[]).map((r) => [r.nombre, r.codigo])),
-    aeropuertos: new Map(
-      ((aeropuertos.data ?? []) as unknown as { nombre: string; ciudad: string; codigo_ciudad: string | null }[]).map((r) => [
-        r.nombre,
-        { ciudad: r.ciudad, codigo_ciudad: r.codigo_ciudad },
-      ]),
-    ),
-    ips: new Map(((ips.data ?? []) as unknown as { nombre: string; codigo: string }[]).map((r) => [r.nombre, r.codigo])),
-    cie10: new Map(((cie.data ?? []) as unknown as { codigo: string; descripcion: string }[]).map((r) => [r.codigo, r.descripcion])),
+    paises: new Map(paises.map((r) => [r.nombre, r.codigo])),
+    aeropuertos: new Map(aeropuertos.map((r) => [r.nombre, { ciudad: r.ciudad, codigo_ciudad: r.codigo_ciudad }])),
+    ips: new Map(ips.map((r) => [r.nombre, r.codigo])),
+    cie10,
   };
 
-  const lista = (filas ?? []) as unknown as CaptacionRow[];
   // Garantía extra por si el rango de la consulta se desplazara: solo días del mes pedido (hora de Bogotá).
   const delMes = lista.filter((c) => diaColombia(c.fecha_atencion).startsWith(m.data));
   return { filas: delMes.map((c, i) => filaSispro(c, i + 1, cat)), total: delMes.length };
