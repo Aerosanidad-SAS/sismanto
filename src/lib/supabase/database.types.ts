@@ -1224,9 +1224,9 @@ export type Database = {
         ]
       }
       medical_assessments: {
-        Row: { id: number; patient_id: number | null; cedula: string; nombre_completo: string; fecha_nacimiento: string | null; genero: string | null; aerolinea: string | null; fecha_hora_vuelo: string | null; acompanante: string | null; origen: string | null; destino: string | null; hc: string | null; concepto_medico: string | null; tiempo_estimado: string | null; recomendaciones: string | null; valoracion: string | null; medico: string | null; pasajero: string | null; estado: string | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: number; patient_id?: number | null; cedula: string; nombre_completo: string; fecha_nacimiento?: string | null; genero?: string | null; aerolinea?: string | null; fecha_hora_vuelo?: string | null; acompanante?: string | null; origen?: string | null; destino?: string | null; hc?: string | null; concepto_medico?: string | null; tiempo_estimado?: string | null; recomendaciones?: string | null; valoracion?: string | null; medico?: string | null; pasajero?: string | null; estado?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: number; patient_id?: number | null; cedula?: string; nombre_completo?: string; fecha_nacimiento?: string | null; genero?: string | null; aerolinea?: string | null; fecha_hora_vuelo?: string | null; acompanante?: string | null; origen?: string | null; destino?: string | null; hc?: string | null; concepto_medico?: string | null; tiempo_estimado?: string | null; recomendaciones?: string | null; valoracion?: string | null; medico?: string | null; pasajero?: string | null; estado?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: number; patient_id: number | null; cedula: string; nombre_completo: string; fecha_nacimiento: string | null; genero: string | null; aerolinea: string | null; fecha_hora_vuelo: string | null; acompanante: string | null; origen: string | null; destino: string | null; hc: string | null; concepto_medico: string | null; tiempo_estimado: string | null; recomendaciones: string | null; valoracion: string | null; medico: string | null; pasajero: string | null; estado: string | null; activo: boolean; correo: string | null; certificado_enviado_at: string | null; certificado_enviado_a: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; patient_id?: number | null; cedula: string; nombre_completo: string; fecha_nacimiento?: string | null; genero?: string | null; aerolinea?: string | null; fecha_hora_vuelo?: string | null; acompanante?: string | null; origen?: string | null; destino?: string | null; hc?: string | null; concepto_medico?: string | null; tiempo_estimado?: string | null; recomendaciones?: string | null; valoracion?: string | null; medico?: string | null; pasajero?: string | null; estado?: string | null; activo?: boolean; correo?: string | null; certificado_enviado_at?: string | null; certificado_enviado_a?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; patient_id?: number | null; cedula?: string; nombre_completo?: string; fecha_nacimiento?: string | null; genero?: string | null; aerolinea?: string | null; fecha_hora_vuelo?: string | null; acompanante?: string | null; origen?: string | null; destino?: string | null; hc?: string | null; concepto_medico?: string | null; tiempo_estimado?: string | null; recomendaciones?: string | null; valoracion?: string | null; medico?: string | null; pasajero?: string | null; estado?: string | null; activo?: boolean; correo?: string | null; certificado_enviado_at?: string | null; certificado_enviado_a?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: [
           {
             foreignKeyName: "medical_assessments_patient_id_fkey"
@@ -1256,6 +1256,18 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      airlines: {
+        Row: { id: number; nombre: string; activo: boolean; sisres_id: number | null; created_at: string; updated_at: string }
+        Insert: { id?: number; nombre: string; activo?: boolean; sisres_id?: number | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; nombre?: string; activo?: boolean; sisres_id?: number | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      airports: {
+        Row: { id: number; sisres_id: number | null; ident: string | null; tipo: string | null; nombre: string; municipio: string | null; pais: string | null; region: string | null; iata_code: string | null; icao_code: string | null; servicio_regular: boolean; latitud: number | null; longitud: number | null; elevacion_ft: number | null }
+        Insert: { id?: number; sisres_id?: number | null; ident?: string | null; tipo?: string | null; nombre: string; municipio?: string | null; pais?: string | null; region?: string | null; iata_code?: string | null; icao_code?: string | null; servicio_regular?: boolean; latitud?: number | null; longitud?: number | null; elevacion_ft?: number | null }
+        Update: { id?: number; sisres_id?: number | null; ident?: string | null; tipo?: string | null; nombre?: string; municipio?: string | null; pais?: string | null; region?: string | null; iata_code?: string | null; icao_code?: string | null; servicio_regular?: boolean; latitud?: number | null; longitud?: number | null; elevacion_ft?: number | null }
+        Relationships: []
       }
       ti_acta_entrega: {
         Row: TiActaEntregaRow

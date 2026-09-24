@@ -31,8 +31,10 @@ import {
   estadoLegible,
   nombreCompletoPaciente,
 } from "@/lib/valoraciones-lista";
-import { crearValoracion, actualizarValoracion } from "@/app/api/actions/valoraciones";
+import { crearValoracion, actualizarValoracion, eliminarValoracion, enviarCertificadoValoracion, generarCertificadoValoracionPdf } from "@/app/api/actions/valoraciones";
 import { buscarPacientePorCedula } from "@/app/api/actions/pacientes";
+import { CatalogCombobox } from "@/components/forms/catalog-combobox";
+import { AeropuertoCombobox } from "@/components/aeropuertos/aeropuerto-combobox";
 
 export interface ValoracionRow {
   id: number;
@@ -53,17 +55,18 @@ export interface ValoracionRow {
   medico: string | null;
   pasajero: string | null;
   estado: string | null;
+  correo: string | null;
+  certificado_enviado_at: string | null;
+  certificado_enviado_a: string | null;
   created_at: string;
 }
 
 /** Campos de texto simples. Género, valoración y estado son selects cerrados (como en SISRES); médico y pasajero los pone el servidor. */
 const CAMPOS_TEXTO: { name: keyof AssessmentFormData; label: string; type?: string }[] = [
   { name: "fecha_nacimiento", label: "Fecha de nacimiento", type: "date" },
-  { name: "aerolinea", label: "Aerolínea" },
   { name: "fecha_hora_vuelo", label: "Fecha y hora del vuelo", type: "datetime-local" },
   { name: "acompanante", label: "Acompañante" },
-  { name: "origen", label: "Origen" },
-  { name: "destino", label: "Destino" },
+  { name: "correo", label: "Correo del pasajero (para enviarle el certificado)", type: "email" },
   { name: "tiempo_estimado", label: "Tiempo estimado del vuelo" },
 ];
 
@@ -73,11 +76,15 @@ const hoyBogota = () => new Date().toLocaleDateString("en-CA", { timeZone: "Amer
 interface ValoracionesTablaProps {
   valoraciones: ValoracionRow[];
   puedeEditar: boolean;
+  /** Eliminar = desactivar; solo ADMIN y ANALISTA (ver ROLES_ELIMINAR_VALORACION). */
+  puedeEliminar: boolean;
+  /** Nombres de las aerolíneas activas del catálogo (select cerrado como en SISRES). */
+  aerolineas: string[];
   /** Texto de la búsqueda actual (parámetro `q` de la URL); la búsqueda se hace en el servidor. */
   busqueda: string;
 }
 
-export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: ValoracionesTablaProps) {
+export function ValoracionesTabla({ valoraciones, puedeEditar, puedeEliminar, aerolineas, busqueda }: ValoracionesTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<ValoracionRow | null>(null);
@@ -85,6 +92,9 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
   const [guardando, setGuardando] = useState(false);
   const [buscandoPaciente, setBuscandoPaciente] = useState(false);
   const [avisoPaciente, setAvisoPaciente] = useState<string | null>(null);
+  const [descargandoId, setDescargandoId] = useState<number | null>(null);
+  const [enviandoId, setEnviandoId] = useState<number | null>(null);
+  const [avisoEnvio, setAvisoEnvio] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   const { register, handleSubmit, reset, setValue, watch, getValues, formState } = useForm<AssessmentFormData>({
     resolver: zodResolver(assessmentSchema),
@@ -93,10 +103,57 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
   const generoSeleccionado = watch("genero") ?? "";
   const valoracionSeleccionada = watch("valoracion") ?? "";
   const estadoSeleccionado = watch("estado") ?? "";
+  const aerolineaSeleccionada = watch("aerolinea") ?? "";
+  const origenSeleccionado = watch("origen") ?? "";
+  const destinoSeleccionado = watch("destino") ?? "";
+  // Si el registro trae una aerolínea que ya no está activa en el catálogo (dato viejo), se conserva como opción para no perderla al editar.
+  const opcionesAerolinea = aerolineaSeleccionada && !aerolineas.includes(aerolineaSeleccionada) ? [...aerolineas, aerolineaSeleccionada] : aerolineas;
   const edadCalculada = edadEnAnios(watch("fecha_nacimiento") || null, hoyBogota());
   // Si el registro trae un género fuera de la lista (datos viejos), se conserva como opción para no perderlo al editar.
   const opcionesGenero: string[] = [...SEXO_OPCIONES];
   if (generoSeleccionado && !opcionesGenero.includes(generoSeleccionado)) opcionesGenero.push(generoSeleccionado);
+
+  const descargarCertificado = async (id: number) => {
+    setDescargandoId(id);
+    const res = await generarCertificadoValoracionPdf(id);
+    setDescargandoId(null);
+    if ("error" in res && res.error) {
+      alert(res.error);
+      return;
+    }
+    if (!("data" in res) || !res.data) return;
+    const bytes = Uint8Array.from(atob(res.data), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = res.filename ?? "certificado-valoracion.pdf";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /** Manda el certificado al correo guardado en la valoración (nunca a uno elegido en el cliente). */
+  const enviarPorCorreo = async (v: ValoracionRow) => {
+    if (v.certificado_enviado_at && !confirm(`Este certificado ya se envió a ${v.certificado_enviado_a}. ¿Enviarlo de nuevo a ${v.correo}?`)) return;
+    setEnviandoId(v.id);
+    setAvisoEnvio(null);
+    const res = await enviarCertificadoValoracion(v.id);
+    setEnviandoId(null);
+    if ("error" in res && res.error) setAvisoEnvio({ tipo: "error", texto: res.error });
+    else {
+      setAvisoEnvio({ tipo: "ok", texto: `Certificado enviado a ${"destino" in res ? res.destino : v.correo}.` });
+      router.refresh();
+    }
+  };
+
+  const eliminar = async (v: ValoracionRow) => {
+    if (!confirm(`¿Eliminar la valoración de ${v.nombre_completo} (documento ${v.cedula})? Dejará de listarse.`)) return;
+    const res = await eliminarValoracion(v.id);
+    if ("error" in res && res.error) {
+      alert(res.error);
+      return;
+    }
+    router.refresh();
+  };
 
   const abrirNuevo = () => {
     setEditando(null);
@@ -118,6 +175,7 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
       aerolinea: v.aerolinea ?? "",
       fecha_hora_vuelo: aTextoLocalColombia(v.fecha_hora_vuelo),
       acompanante: v.acompanante ?? "",
+      correo: v.correo ?? "",
       origen: v.origen ?? "",
       destino: v.destino ?? "",
       hc: v.hc ?? "",
@@ -210,6 +268,11 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
         {puedeEditar && <Button onClick={abrirNuevo}>Nueva valoración</Button>}
       </div>
 
+      {avisoEnvio && (
+        <p className={avisoEnvio.tipo === "ok" ? "text-sm text-green-700" : "text-sm text-red-600"} role={avisoEnvio.tipo === "ok" ? "status" : "alert"}>
+          {avisoEnvio.texto}
+        </p>
+      )}
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -225,13 +288,13 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
               <TableHead>Valoración</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Médico</TableHead>
-              {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
+              <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {valoraciones.length === 0 && (
               <TableRow>
-                <TableCell colSpan={puedeEditar ? 12 : 11} className="text-center text-muted-foreground">
+                <TableCell colSpan={12} className="text-center text-muted-foreground">
                   {busqueda ? "Sin resultados para la búsqueda" : "Sin valoraciones registradas"}
                 </TableCell>
               </TableRow>
@@ -259,13 +322,37 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
                     </Badge>
                   </TableCell>
                   <TableCell>{v.medico ?? "—"}</TableCell>
-                  {puedeEditar && (
-                    <TableCell className="text-right">
+                  <TableCell className="space-x-2 whitespace-nowrap text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => descargarCertificado(v.id)}
+                      disabled={descargandoId === v.id}
+                    >
+                      {descargandoId === v.id ? "Generando…" : "PDF"}
+                    </Button>
+                    {puedeEditar && v.correo && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => enviarPorCorreo(v)}
+                        disabled={enviandoId === v.id}
+                        title={v.certificado_enviado_at ? `Enviado a ${v.certificado_enviado_a} el ${formatDateShort(v.certificado_enviado_at)}` : `Enviar el certificado a ${v.correo}`}
+                      >
+                        {enviandoId === v.id ? "Enviando…" : v.certificado_enviado_at ? "Reenviar" : "Enviar"}
+                      </Button>
+                    )}
+                    {puedeEditar && (
                       <Button variant="outline" size="sm" onClick={() => abrirEdicion(v)}>
                         Editar
                       </Button>
-                    </TableCell>
-                  )}
+                    )}
+                    {puedeEliminar && (
+                      <Button variant="outline" size="sm" onClick={() => eliminar(v)}>
+                        Eliminar
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               );
             })}
@@ -305,6 +392,25 @@ export function ValoracionesTabla({ valoraciones, puedeEditar, busqueda }: Valor
                   <Input id={campo.name} type={campo.type ?? "text"} {...register(campo.name)} />
                 </div>
               ))}
+              <div className="space-y-1">
+                <Label htmlFor="aerolinea">Aerolínea</Label>
+                <CatalogCombobox
+                  id="aerolinea"
+                  options={opcionesAerolinea}
+                  value={aerolineaSeleccionada}
+                  onChange={(v) => setValue("aerolinea", v)}
+                  placeholder="Selecciona o busca…"
+                  allowCustom={false}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="origen">Origen</Label>
+                <AeropuertoCombobox id="origen" value={origenSeleccionado} onChange={(v) => setValue("origen", v)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="destino">Destino</Label>
+                <AeropuertoCombobox id="destino" value={destinoSeleccionado} onChange={(v) => setValue("destino", v)} />
+              </div>
               <div className="space-y-1">
                 <Label htmlFor="edad">Edad</Label>
                 <Input id="edad" value={edadCalculada === "" ? "" : `${edadCalculada} años`} readOnly disabled placeholder="Se calcula con la fecha de nacimiento" />

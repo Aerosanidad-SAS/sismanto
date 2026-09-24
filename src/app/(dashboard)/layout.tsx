@@ -1,10 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState, useCallback } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname,
+  useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Truck,
@@ -34,12 +38,13 @@ import {
   PackageCheck,
   Handshake,
   Building2,
+  Plane,
+  PlaneTakeoff,
   FileSignature,
   HandCoins,
   Trash2,
   Headset,
   LifeBuoy,
-  Plane,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -142,6 +147,20 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Stethoscope,
         roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
         hint: "Conceptos de aptitud médica para vuelo (origen SISRES).",
+      },
+      {
+        name: "Aerolíneas",
+        href: "/aerolineas",
+        icon: PlaneTakeoff,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aerolíneas para las valoraciones (origen SISRES).",
+      },
+      {
+        name: "Aeropuertos",
+        href: "/aeropuertos",
+        icon: Plane,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aeropuertos para origen y destino de vuelo (origen SISRES).",
       },
     ],
   },

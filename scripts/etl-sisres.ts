@@ -149,6 +149,8 @@ const v = (f: Fila, ...nombres: string[]): string | null => {
 };
 
 const entero = (raw: string | null): number | null => (raw !== null && /^-?\d+$/.test(raw) ? Number(raw) : null);
+/** Bandera 0/1 de SISRES → boolean. Sin dato = activa (el DEFAULT de `estado` en SISRES es 1). */
+const bandera = (raw: string | null): boolean => raw === null || !/^(0|false|f|no)$/i.test(raw.trim());
 
 function requerirId(f: Fila): number {
   const id = entero(v(f, "id"));
@@ -376,6 +378,46 @@ async function cargarClientes(client: pg.Client, dir: string) {
     const ok = await upsertLote(client, "clients", columnas,
       `ON CONFLICT (numero) DO UPDATE SET ${actualizar(columnas, ["numero"])}, updated_at = NOW()`, carga);
     console.log(`   ✔ clients: ${ok}/${filas.length}`);
+  });
+}
+
+async function cargarAerolineas(client: pg.Client, dir: string) {
+  const filas = leerCsv(dir, "aerolineas.csv");
+  if (!filas) return;
+  const columnas = ["sisres_id", "nombre", "activo"];
+  const carga = transformar("airlines", filas, (f) => {
+    const nombre = v(f, "nombre");
+    if (!nombre) throw new RechazoFila("sin nombre");
+    return [entero(v(f, "id")), nombre, activo(f)];
+  });
+  await enTransaccion(client, "airlines", async () => {
+    const ok = await upsertLote(client, "airlines", columnas,
+      `ON CONFLICT (nombre) DO UPDATE SET ${actualizar(columnas, ["nombre"])}, updated_at = NOW()`, carga);
+    console.log(`   ✔ airlines: ${ok}/${filas.length}`);
+  });
+}
+
+/** Dataset OurAirports (~85.818 filas): se carga con los nombres en español de SISMANTO; `scheduled_service` yes/no (en inglés, no si/no) → boolean. */
+async function cargarAeropuertos(client: pg.Client, dir: string) {
+  const filas = leerCsv(dir, "aeropuertos.csv");
+  if (!filas) return;
+  const columnas = [
+    "sisres_id", "ident", "tipo", "nombre", "municipio", "pais", "region", "iata_code", "icao_code",
+    "servicio_regular", "latitud", "longitud", "elevacion_ft",
+  ];
+  const carga = transformar("airports", filas, (f, ctx) => {
+    const nombre = v(f, "name");
+    if (!nombre) throw new RechazoFila("sin nombre");
+    return [
+      entero(v(f, "id")), v(f, "ident"), v(f, "type"), nombre, v(f, "municipality"), v(f, "iso_country"),
+      v(f, "iso_region"), v(f, "iata_code"), v(f, "icao_code"), (v(f, "scheduled_service") ?? "").toLowerCase() === "yes",
+      numero(ctx, "latitude_deg"), numero(ctx, "longitude_deg"), entero(v(f, "elevation_ft")),
+    ];
+  });
+  await enTransaccion(client, "airports", async () => {
+    const ok = await upsertLote(client, "airports", columnas,
+      `ON CONFLICT (sisres_id) DO UPDATE SET ${actualizar(columnas, ["sisres_id"])}`, carga);
+    console.log(`   ✔ airports: ${ok}/${filas.length}`);
   });
 }
 
@@ -663,7 +705,7 @@ async function cargarValoraciones(client: pg.Client, dir: string) {
   const columnas = [
     "sisres_id", "patient_id", "cedula", "nombre_completo", "fecha_nacimiento", "genero", "aerolinea",
     "fecha_hora_vuelo", "acompanante", "origen", "destino", "hc", "concepto_medico", "tiempo_estimado",
-    "recomendaciones", "valoracion", "medico", "pasajero", "estado",
+    "recomendaciones", "valoracion", "medico", "pasajero", "estado", "activo", "correo",
   ];
   const carga = transformar("medical_assessments", filas, (f, ctx) => {
     const cedula = v(f, "cedula");
@@ -673,7 +715,12 @@ async function cargarValoraciones(client: pg.Client, dir: string) {
       fecha(ctx, "fechaNacimiento"), v(f, "genero"), v(f, "aerolinea"), fecha(ctx, "fechaHoraVuelo"),
       v(f, "acompañante", "acompanante"), v(f, "origen"), v(f, "destino"), v(f, "hc"), v(f, "conceptoMedico"),
       v(f, "tiempoEstimado"), v(f, "recomendaciones"), v(f, "valoracion"), v(f, "medico"), v(f, "pasajero"),
-      v(f, "estadoServicio", "estado"),
+      // Son dos campos distintos en SISRES: `estadoServicio` es el select ACTIVO(0)/INACTIVO(1) del formulario
+      // y `estado` es la bandera de borrado suave (1 = activa, 0 = eliminada con delete.php). Antes se mezclaban y
+      // una valoración eliminada entraba como normal.
+      v(f, "estadoServicio"), bandera(v(f, "estado")),
+      // Correo del pasajero: dato personal; se carga tal cual solo si parece un correo (SISRES lo guardaba sin validar).
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v(f, "correo") ?? "") ? v(f, "correo") : null,
     ];
   });
   await enTransaccion(client, "medical_assessments", async () => {
@@ -766,6 +813,8 @@ async function main() {
     await cargarClientes(client, dir);
     await cargarCie10(client, dir);
     await cargarEps(client, dir);
+    await cargarAerolineas(client, dir);
+    await cargarAeropuertos(client, dir);
     await cargarProveedores(client, dir);
     await cargarPacientes(client, dir);
     await cargarMovil(client, dir);
@@ -776,7 +825,7 @@ async function main() {
 
     console.log("\n📊 Conteos en destino (validar contra MySQL):");
     for (const tabla of [
-      "clients", "cie10", "eps", "medical_providers", "patients", "biomedical_equipment",
+      "clients", "cie10", "eps", "airlines", "airports", "medical_providers", "patients", "biomedical_equipment",
       "medical_services", "medical_assessments", "biomedical_maintenance",
     ]) {
       console.log(`   ${tabla}: ${await contar(client, tabla)}`);
