@@ -838,7 +838,7 @@ export const reabrirTicketSchema = z.object({
 });
 
 // ─── Soporte técnico: configuración — ver migración 067 ─────────────────────
-const horaHHMM = z.string().regex(/^([01]d|2[0-3]):[0-5]d$/, "Hora inválida (HH:MM)");
+const horaHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Hora inválida (HH:MM)");
 
 export const ticketSlaSchema = z.object({
   baja: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
