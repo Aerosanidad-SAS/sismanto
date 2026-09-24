@@ -215,6 +215,8 @@ export async function exportarDetalleCampana(campaignId: number) {
   const { data: camp } = await supabase.from("wa_campaigns").select("nombre").eq("id", idParsed.data).maybeSingle();
   if (!camp) return { error: "Campaña no encontrada" };
   const { data } = await supabase.from("wa_campaign_recipients").select("*").eq("campaign_id", idParsed.data).order("id").limit(20000);
+  // Los destinatarios son teléfonos de personas: queda quién los exportó y cuántos (no el contenido).
+  await auditar("EXPORTAR", "campanas", idParsed.data, `Exportación del detalle de la campaña (${(data ?? []).length} destinatarios)`);
   return {
     success: true as const,
     nombre: (camp as unknown as { nombre: string }).nombre,
@@ -227,5 +229,6 @@ export async function exportarHistorialCampanas() {
   if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
   const supabase = createClient();
   const { data } = await supabase.from("wa_campaigns").select("*").order("created_at", { ascending: false }).limit(5000);
+  await auditar("EXPORTAR", "campanas", "", `Exportación del historial de campañas (${(data ?? []).length} campañas)`);
   return { success: true as const, filas: filasHistorial((data ?? []) as unknown as Record<string, unknown>[]) };
 }
