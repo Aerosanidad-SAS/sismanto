@@ -77,6 +77,12 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "061_dotacion_auxiliares.sql",                 file: "scripts/migrations/061_dotacion_auxiliares.sql" },
   // 062_dotacion_catalogo.sql: se registra cuando esté la lista real de dotación.
   { name: "063_servicios_lista_regulacion.sql",          file: "scripts/migrations/063_servicios_lista_regulacion.sql" },
+  { name: "064_notificaciones_vencimientos.sql",         file: "scripts/migrations/064_notificaciones_vencimientos.sql" },
+  { name: "065_tickets_soporte.sql",                     file: "scripts/migrations/065_tickets_soporte.sql" },
+  { name: "066_tickets_gestion.sql",                     file: "scripts/migrations/066_tickets_gestion.sql" },
+  { name: "067_tickets_config_indicadores.sql",          file: "scripts/migrations/067_tickets_config_indicadores.sql" },
+  { name: "080_captacion_aeroportuaria.sql",             file: "scripts/migrations/080_captacion_aeroportuaria.sql" },
+  { name: "081_sispro_catalogos.sql",                    file: "scripts/migrations/081_sispro_catalogos.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

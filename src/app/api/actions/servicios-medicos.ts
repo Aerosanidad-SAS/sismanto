@@ -8,6 +8,7 @@ import { CAMPOS_PASO_SERVICIO } from "@/lib/estado-servicio";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
+import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { z } from "zod";
 import {
   EXPORT_MAX_FILAS,
@@ -105,9 +106,21 @@ function calcularTiempos(d: {
   };
 }
 
+/** Campos de fecha/hora que el formulario captura sin zona (hora de Colombia). */
+const CAMPOS_FECHA_SERVICIO = [
+  "fecha_hora_programacion",
+  "fecha_hora_inicio_desplazamiento",
+  "fecha_hora_llegada_origen",
+  "fecha_hora_salida_origen",
+  "fecha_hora_llegada_intermedia",
+  "fecha_hora_salida_intermedia",
+  "fecha_hora_llegada_destino",
+  "fecha_hora_salida_destino",
+] as const;
+
 function aFilaServicio(parsed: z.output<typeof medicalServiceSchema>) {
   const tiempos = calcularTiempos(parsed);
-  return {
+  return filaConHoraColombia({
     ...parsed,
     patient_id: parsed.patient_id ?? null,
     vehicle_id: parsed.vehicle_id ?? null,
@@ -120,7 +133,7 @@ function aFilaServicio(parsed: z.output<typeof medicalServiceSchema>) {
     fecha_hora_llegada_destino: parsed.fecha_hora_llegada_destino || null,
     fecha_hora_salida_destino: parsed.fecha_hora_salida_destino || null,
     ...tiempos,
-  };
+  }, CAMPOS_FECHA_SERVICIO);
 }
 
 /**

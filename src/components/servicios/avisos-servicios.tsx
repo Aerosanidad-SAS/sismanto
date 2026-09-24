@@ -79,6 +79,13 @@ function escribirStorage(storage: "local" | "session", clave: string, valor: str
   }
 }
 
+/** ¿Hay un diálogo abierto o el foco en un campo? Entonces no se refresca. */
+function hayTrabajoEnCurso(): boolean {
+  if (document.querySelector('[role="dialog"][data-state="open"]')) return true;
+  const activo = document.activeElement;
+  return !!activo?.matches('input, textarea, select, [contenteditable="true"]');
+}
+
 export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<number, string> }) {
   const router = useRouter();
   const [sonidoOn, setSonidoOn] = useState(true);
@@ -175,7 +182,10 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
     revisar();
     marcar();
     const t = setInterval(() => {
-      router.refresh();
+      // Refrescar re-renderiza el árbol del servidor: si hay un formulario
+      // abierto o el usuario está escribiendo, le borraría lo que lleva y
+      // aborta el guardado en curso. Los avisos sí se siguen revisando.
+      if (!hayTrabajoEnCurso()) router.refresh();
       revisar();
       marcar();
     }, REFRESCO_MS);

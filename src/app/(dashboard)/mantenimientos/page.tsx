@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, Upload } from "lucide-react";
 import { MantenimientoFiltrosForm } from "@/components/mantenimientos/mantenimiento-filtros";
 import { MantenimientosTabla } from "@/components/mantenimientos/mantenimientos-tabla";
+import { requireRole } from "@/app/api/actions/auth";
 
 async function fetchCategorias() {
   try {
@@ -93,6 +94,7 @@ export default async function MantenimientosPage({
     mFac?: string;
   };
 }) {
+  await requireRole(["ADMIN", "MANTENIMIENTO", "ANALISTA"]);
   const [mantenimientos, categories] = await Promise.all([
     fetchMantenimientos(searchParams),
     fetchCategorias(),

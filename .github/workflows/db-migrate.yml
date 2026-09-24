@@ -1,0 +1,58 @@
+# Applies pending migrations to the shared staging Supabase project whenever
+# `dev` or `staging` moves, i.e. only after a PR is merged. Replaces running
+# `npm run db:apply` by hand, and the rule "never apply from an unmerged branch".
+#
+# Vercel deploys the branches on its own (native Git integration), so this
+# workflow only handles the database. Migrations are additive/idempotent, so a
+# deploy that lands a few seconds before them is harmless.
+#
+# Production is NOT migrated from here: no production credentials live in
+# GitHub until the org moves to a plan with protected branches/environments.
+#
+# Requires the repo secret DATABASE_URL_STAGING (Supabase → Connect →
+# "Session pooler" URI of SISMANTO_Staging; the direct host is IPv6-only and
+# GitHub runners cannot reach it).
+name: DB migrate
+
+on:
+  push:
+    branches: [dev, staging]
+
+# dev and staging share ONE database: serialize every run, never cancel one
+# midway through a migration.
+concurrency:
+  group: db-migrate-staging
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+      # Supabase project ref of SISMANTO_Staging. Guards against pasting the
+      # production connection string into the staging secret.
+      STAGING_REF: oanbqlfvdmdpckrcwfqi
+    steps:
+      - name: Check the connection string targets staging
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Missing secret DATABASE_URL_STAGING (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          case "$DATABASE_URL" in
+            *"$STAGING_REF"*) ;;
+            *) echo "::error::DATABASE_URL_STAGING does not point to the staging project ($STAGING_REF). Refusing to run."; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply pending migrations
+        run: npm run db:apply
