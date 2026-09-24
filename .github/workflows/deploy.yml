@@ -67,10 +67,10 @@ jobs:
           # then attaches no commit author and Hobby has nothing to compare to
           # the account owner. Nothing is falsified — the deployment simply
           # carries no git author. Tested: same project, READY, HTTP 200.
-          work=$(mktemp -d)
-          # -L: la salida de `vercel build` trae enlaces relativos a node_modules; copiados tal cual quedarían rotos (ENOENT).
-          cp -rL .vercel "$work/.vercel"
-          cd "$work"
+          # Se despliega desde la raíz del repo (la salida de `vercel build` referencia
+          # node_modules con rutas relativas a ella; copiarla a otra carpeta las rompe
+          # con ENOENT) pero sin `.git`. El runner es efímero: borrarla no afecta a nada.
+          rm -rf .git
           url=$(vercel deploy --prebuilt --archive=tgz --no-wait --token="$VERCEL_TOKEN")
           host="${url#https://}"
           echo "Deployment: $url"
