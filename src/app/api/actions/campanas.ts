@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
+import { leerTodo } from "@/lib/leer-todo";
 import { revalidatePath } from "next/cache";
 import { getProfile } from "@/app/api/actions/auth";
 import type { WaCampaignFormData } from "@/lib/validations";
@@ -282,9 +283,15 @@ export async function exportarDetalleCampana(campaignId: number) {
   const supabase = createClient();
   const { data: camp } = await supabase.from("wa_campaigns").select("nombre").eq("id", idParsed.data).maybeSingle();
   if (!camp) return { error: "Campaña no encontrada" };
-  const { data, error } = await supabase.from("wa_campaign_recipients").select("*").eq("campaign_id", idParsed.data).order("id").limit(20000);
+  // Por páginas: el tope de PostgREST es 1000 filas y una campaña puede tener más destinatarios.
+  let errorLectura: string | null = null;
+  const data = await leerTodo(async (d, h) => {
+    const r = await supabase.from("wa_campaign_recipients").select("*").eq("campaign_id", idParsed.data).order("id").range(d, h);
+    if (r.error) errorLectura = r.error.message;
+    return r;
+  });
   // Un fallo de la base NO es un Excel vacío ni una exportación que registrar.
-  if (error) return { error: error.message };
+  if (errorLectura) return { error: errorLectura };
   // Los destinatarios son teléfonos de personas: queda quién los exportó y cuántos (no el contenido).
   await auditar("EXPORTAR", "campanas", idParsed.data, `Exportación del detalle de la campaña (${(data ?? []).length} destinatarios)`);
   return {
