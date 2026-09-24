@@ -7,6 +7,8 @@ import type { WaCampaignFormData } from "@/lib/validations";
 import { waCampaignSchema } from "@/lib/validations";
 import { sanitizarTelefono, enviarPlantilla, whatsappConfigurado } from "@/lib/notifications/whatsapp";
 import { z } from "zod";
+import { procesarLote, cambiarEstadoCampana } from "@/lib/campanas-lote";
+import type { AccionCampana } from "@/lib/campanas-estado";
 
 const ROLES_CAMPANAS = ["ADMIN", "COORDINACION"];
 
@@ -89,10 +91,10 @@ export async function crearCampana(formData: WaCampaignFormData) {
 }
 
 /**
- * Procesa un lote de destinatarios PENDIENTES (LOTE_CAMPANA por invocación,
- * con pausa entre envíos, como procesarLoteCampana.php) — la UI lo invoca
- * repetidamente hasta completar. Sin credenciales de WhatsApp configuradas
- * simula el envío sin pausas (modo staging).
+ * Procesa un lote de destinatarios PENDIENTES (LOTE_CAMPANA por invocación, con pausa entre envíos, como
+ * procesarLoteCampana.php) — la UI lo invoca repetidamente hasta completar o hasta que la campaña se pause/cancele.
+ * Sin credenciales de WhatsApp configuradas simula el envío sin pausas (modo staging).
+ * La lógica (reclamo atómico por destinatario, corte al pausar, contadores recalculados) está en `campanas-lote.ts`.
  */
 export async function procesarLoteCampana(campaignId: number) {
   const profile = await getProfile();
@@ -101,76 +103,40 @@ export async function procesarLoteCampana(campaignId: number) {
   const idParsed = z.number().int().positive().safeParse(campaignId);
   if (!idParsed.success) return { error: "ID inválido" };
 
-  const supabase = createClient();
-  const { data: campana } = await supabase
-    .from("wa_campaigns")
-    .select("*")
-    .eq("id", idParsed.data)
-    .single();
-  if (!campana) return { error: "Campaña no encontrada" };
-  if (campana.estado === "COMPLETADA" || campana.estado === "CANCELADA") {
-    return { error: `La campaña ya está ${campana.estado}` };
-  }
-
-  const { data: pendientes } = await supabase
-    .from("wa_campaign_recipients")
-    .select("*")
-    .eq("campaign_id", campana.id)
-    .eq("estado", "PENDIENTE")
-    .order("id")
-    .limit(LOTE_CAMPANA);
-
-  if (!pendientes || pendientes.length === 0) {
-    await supabase
-      .from("wa_campaigns")
-      .update({ estado: "COMPLETADA", updated_at: new Date().toISOString() })
-      .eq("id", campana.id);
-    revalidatePath("/comunicaciones");
-    return { success: true, procesados: 0, restantes: 0 };
-  }
-
-  await supabase
-    .from("wa_campaigns")
-    .update({ estado: "EN_PROCESO", updated_at: new Date().toISOString() })
-    .eq("id", campana.id);
-
-  let enviados = 0;
-  let fallidos = 0;
-  const envioReal = whatsappConfigurado();
-  for (let i = 0; i < pendientes.length; i++) {
-    const dest = pendientes[i];
-    if (envioReal && i > 0) await esperar(PAUSA_ENTRE_ENVIOS_MS);
-    const params = Array.isArray(dest.parametros) ? (dest.parametros as string[]).map(String) : [];
-    const resultado = await enviarPlantilla(dest.telefono, campana.plantilla, campana.idioma, params);
-    if (resultado.ok) enviados++;
-    else fallidos++;
-    await supabase
-      .from("wa_campaign_recipients")
-      .update({
-        estado: resultado.ok ? "ENVIADO" : "FALLIDO",
-        wamid: resultado.wamid,
-        error: resultado.error,
-        sent_at: new Date().toISOString(),
-      })
-      .eq("id", dest.id);
-  }
-
-  const { count: restantes } = await supabase
-    .from("wa_campaign_recipients")
-    .select("id", { count: "exact", head: true })
-    .eq("campaign_id", campana.id)
-    .eq("estado", "PENDIENTE");
-
-  await supabase
-    .from("wa_campaigns")
-    .update({
-      total_enviados: campana.total_enviados + enviados,
-      total_fallidos: campana.total_fallidos + fallidos,
-      estado: (restantes ?? 0) === 0 ? "COMPLETADA" : "EN_PROCESO",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", campana.id);
-
+  const res = await procesarLote(createClient(), idParsed.data, {
+    enviar: enviarPlantilla,
+    esperar,
+    ahora: () => new Date(),
+    envioReal: whatsappConfigurado(),
+    pausaEntreEnviosMs: PAUSA_ENTRE_ENVIOS_MS,
+    tamanoLote: LOTE_CAMPANA,
+  });
   revalidatePath("/comunicaciones");
-  return { success: true, procesados: pendientes.length, restantes: restantes ?? 0, simulado: !envioReal };
+  return res;
+}
+
+async function cambiarEstado(campaignId: number, accion: AccionCampana) {
+  const profile = await getProfile();
+  if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
+  const idParsed = z.number().int().positive().safeParse(campaignId);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const res = await cambiarEstadoCampana(createClient(), idParsed.data, accion);
+  if ("success" in res) revalidatePath("/comunicaciones");
+  return res;
+}
+
+/** Detiene el envío de una campaña EN_PROCESO; lo ya enviado queda enviado y el resto PENDIENTE. */
+export async function pausarCampana(campaignId: number) {
+  return cambiarEstado(campaignId, "pausar");
+}
+
+/** Retoma una campaña PAUSADA (el panel vuelve a llamar los lotes). */
+export async function reanudarCampana(campaignId: number) {
+  return cambiarEstado(campaignId, "reanudar");
+}
+
+/** Cancela definitivamente: los destinatarios que no se alcanzaron a enviar quedan PENDIENTE y ya no se envían. */
+export async function cancelarCampana(campaignId: number) {
+  return cambiarEstado(campaignId, "cancelar");
 }

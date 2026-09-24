@@ -17,7 +17,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDateShort } from "@/lib/utils";
-import { crearCampana, procesarLoteCampana } from "@/app/api/actions/campanas";
+import { cancelarCampana, crearCampana, pausarCampana, procesarLoteCampana, reanudarCampana } from "@/app/api/actions/campanas";
+import { ESTADOS_SIN_ENVIO, ESTADO_BADGE, accionesDisponibles } from "@/lib/campanas-estado";
 
 export interface CampanaRow {
   id: number;
@@ -30,13 +31,6 @@ export interface CampanaRow {
   total_fallidos: number;
   created_at: string;
 }
-
-const ESTADO_BADGE: Record<string, "default" | "secondary" | "destructive" | "outline" | "success"> = {
-  BORRADOR: "outline",
-  EN_PROCESO: "default",
-  COMPLETADA: "success",
-  CANCELADA: "destructive",
-};
 
 interface CampanasPanelProps {
   campanas: CampanaRow[];
@@ -103,11 +97,26 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
       }
       const restantes = "restantes" in res ? (res.restantes ?? 0) : 0;
       setProgreso(`Enviados ${"procesados" in res ? res.procesados : 0} — quedan ${restantes}`);
+      // Se pausó o canceló (desde aquí o desde otra pestaña): el lote ya cortó y el ciclo debe parar.
+      if ("estado" in res && (ESTADOS_SIN_ENVIO as readonly string[]).includes(res.estado)) break;
       if (restantes === 0) break;
     }
     setProcesandoId(null);
     setProgreso(null);
     router.refresh();
+  };
+
+  /** Pausar, reanudar o cancelar. Al reanudar se vuelven a llamar los lotes. */
+  const cambiarEstado = async (c: CampanaRow, accion: "pausar" | "reanudar" | "cancelar") => {
+    if (accion === "cancelar" && !confirm(`¿Cancelar la campaña "${c.nombre}"? Los mensajes que no se alcanzaron a enviar ya no se enviarán. No se puede deshacer.`)) return;
+    const res = await { pausar: pausarCampana, reanudar: reanudarCampana, cancelar: cancelarCampana }[accion](c.id);
+    if ("error" in res && res.error) {
+      alert(res.error);
+      router.refresh();
+      return;
+    }
+    router.refresh();
+    if (accion === "reanudar") await procesar(c.id);
   };
 
   return (
@@ -156,7 +165,12 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
                   <Badge variant={ESTADO_BADGE[c.estado] ?? "outline"}>{c.estado.replace("_", " ")}</Badge>
                 </TableCell>
                 {puedeEditar && (
-                  <TableCell className="text-right">
+                  <TableCell className="space-x-2 whitespace-nowrap text-right">
+                    {accionesDisponibles(c.estado).map((a) => (
+                      <Button key={a} size="sm" variant="outline" disabled={procesandoId === c.id && a !== "pausar" && a !== "cancelar"} onClick={() => cambiarEstado(c, a)}>
+                        {{ pausar: "Pausar", reanudar: "Reanudar", cancelar: "Cancelar" }[a]}
+                      </Button>
+                    ))}
                     {(c.estado === "BORRADOR" || c.estado === "EN_PROCESO") && (
                       <Button
                         size="sm"
