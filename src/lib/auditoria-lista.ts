@@ -16,6 +16,8 @@ export const ENTIDADES_AUDITORIA = [
   "login",
   "valoraciones",
   "formatos_ti",
+  "tickets",
+  "configuracion",
 ] as const;
 
 export const AUDITORIA_POR_PAGINA = 50;
