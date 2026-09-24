@@ -1278,6 +1278,60 @@ export type Database = {
         Update: { id?: number; nombre?: string; activo?: boolean }
         Relationships: []
       }
+      ticket_config: {
+        Row: {
+          id: number
+          sla_baja_horas: number
+          sla_media_horas: number
+          sla_alta_horas: number
+          sla_urgente_horas: number
+          horario_dias: number[]
+          horario_inicio: string
+          horario_fin: string
+          mensaje_adicional: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: number
+          sla_baja_horas?: number
+          sla_media_horas?: number
+          sla_alta_horas?: number
+          sla_urgente_horas?: number
+          horario_dias?: number[]
+          horario_inicio?: string
+          horario_fin?: string
+          mensaje_adicional?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: number
+          sla_baja_horas?: number
+          sla_media_horas?: number
+          sla_alta_horas?: number
+          sla_urgente_horas?: number
+          horario_dias?: number[]
+          horario_inicio?: string
+          horario_fin?: string
+          mensaje_adicional?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      tickets_disponibilidad_mensual: {
+        Row: { anio: number; mes: number; porcentaje: number; notas: string | null; registrado_por: string | null; registrado_at: string }
+        Insert: { anio: number; mes: number; porcentaje: number; notas?: string | null; registrado_por?: string | null; registrado_at?: string }
+        Update: { anio?: number; mes?: number; porcentaje?: number; notas?: string | null; registrado_por?: string | null; registrado_at?: string }
+        Relationships: []
+      }
+      ticket_correos_gestores: {
+        Row: { id: number; correo: string }
+        Insert: { id?: number; correo: string }
+        Update: { id?: number; correo?: string }
+        Relationships: []
+      }
     }
     Views: {
       vehicle_maintenance_alerts: {
@@ -1339,6 +1393,10 @@ export type Database = {
       nombre_solicitante_ticket: {
         Args: { p_user_id: string }
         Returns: string | null
+      }
+      guardar_catalogo_ticket: {
+        Args: { p_tipo: string; p_nombres: string[] }
+        Returns: undefined
       }
     }
     Enums: {
