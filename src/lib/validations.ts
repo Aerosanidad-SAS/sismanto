@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
@@ -491,6 +492,14 @@ export const operationalCenterUpdateNombreSchema = z.object({
 
 const optStr = z.string().trim().max(255).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
 const optText = z.string().trim().max(5000).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
+/** Select cerrado opcional: vacío o uno de los valores permitidos (con mensaje claro si no lo es). */
+const optEnum = (valores: readonly string[], mensaje: string) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => v === "" || valores.includes(v), mensaje)
+    .optional()
+    .transform((v) => (v ? v : undefined));
 
 // Catálogo real — verificado contra el <select> de sisres/registroPacientes.php
 // (Ronda de QA, 2026-07-21). No son valores inventados.
@@ -710,10 +719,12 @@ export const assessmentSchema = z.object({
   concepto_medico: optText,
   tiempo_estimado: optStr,
   recomendaciones: optText,
-  valoracion: optStr,
-  medico: optStr,
-  pasajero: optStr,
-  estado: optStr,
+  // Selects cerrados como en registroValoracion.php de SISRES (antes eran texto libre:
+  // "apto", "NO  APTO"… y el conteo de aptos no era confiable).
+  valoracion: optEnum(VALORACION_OPCIONES, "Valoración: elige APTO o NO APTO"),
+  estado: optEnum(ESTADO_VALORACION_OPCIONES, "Estado: elige ACTIVO o INACTIVO"),
+  // `medico` y `pasajero` ya no vienen del formulario: los pone el servidor (médico = usuario que
+  // registra; pasajero = nombre del paciente), como los campos ocultos de SISRES.
 });
 export type AssessmentFormData = z.input<typeof assessmentSchema>;
 
@@ -811,3 +822,28 @@ export const waCampaignSchema = z.object({
     .max(2000, "Máximo 2000 destinatarios por campaña"),
 });
 export type WaCampaignFormData = z.input<typeof waCampaignSchema>;
+
+// ─── Soporte técnico (tickets) — ver migración 065 ───────────────────────────
+export const TICKET_PRIORIDADES = ["BAJA", "MEDIA", "ALTA", "URGENTE"] as const;
+export const TICKET_ESTADOS = ["ABIERTO", "EN_PROCESO", "RESUELTO", "CERRADO"] as const;
+
+export const ticketSchema = z.object({
+  sede: z.string().trim().min(1, "Selecciona la sede").max(100),
+  area: z.string().trim().min(1, "Selecciona el área que solicita el soporte").max(100),
+  categoria: z.string().trim().min(1, "Selecciona la categoría").max(100),
+  prioridad: z.enum(TICKET_PRIORIDADES, { errorMap: () => ({ message: "Selecciona la prioridad" }) }),
+  celular: z
+    .string()
+    .trim()
+    .min(7, "Escribe un celular de contacto")
+    .max(20, "Máximo 20 caracteres")
+    .regex(/^[0-9+()\-\s]+$/, "El celular solo puede llevar números"),
+  asunto: z.string().trim().min(1, "El asunto es obligatorio").max(150, "Máximo 150 caracteres"),
+  descripcion: z.string().trim().min(1, "La descripción es obligatoria").max(5000, "Máximo 5000 caracteres"),
+});
+export type TicketFormData = z.input<typeof ticketSchema>;
+
+export const reabrirTicketSchema = z.object({
+  id: z.number().int().positive(),
+  nota: z.string().trim().min(1, "Tienes que explicar por qué reabres el ticket").max(1000, "Máximo 1000 caracteres"),
+});
