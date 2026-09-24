@@ -116,3 +116,32 @@ export async function enviarPlantilla(
     return { ok: false, wamid: null, error: e instanceof Error ? e.message : "Error de red" };
   }
 }
+
+/**
+ * Sube un archivo a Meta (multipart a /{phone}/media) y devuelve su `media_id`, que se usa en el encabezado de la
+ * plantilla. Sin credenciales simula un id `DEV_*` (mismo criterio que enviarPlantilla). El id caduca a los ~30 días.
+ */
+export async function subirMediaMeta(
+  bytes: Uint8Array,
+  mime: string,
+  nombre: string
+): Promise<{ ok: true; mediaId: string } | { ok: false; error: string }> {
+  if (!whatsappConfigurado()) return { ok: true, mediaId: `DEV_${Math.random().toString(16).slice(2, 18)}` };
+
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", mime);
+  form.append("file", new Blob([bytes as BlobPart], { type: mime }), nombre);
+  try {
+    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` },
+      body: form,
+    });
+    const json = await res.json();
+    if (json?.id) return { ok: true, mediaId: String(json.id) };
+    return { ok: false, error: `[${json?.error?.code ?? ""}] ${json?.error?.message ?? "Respuesta inesperada de la API"}`.trim() };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red" };
+  }
+}

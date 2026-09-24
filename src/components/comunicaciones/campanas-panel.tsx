@@ -17,7 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDateShort } from "@/lib/utils";
-import { crearCampana, procesarLoteCampana } from "@/app/api/actions/campanas";
+import { cancelarCampana, crearCampana, crearCampanaDesdeBase, pausarCampana, procesarLoteCampana, reanudarCampana } from "@/app/api/actions/campanas";
+import { ESTADOS_SIN_ENVIO, ESTADO_BADGE, accionesDisponibles } from "@/lib/campanas-estado";
+import { CampanaAdjuntoExportar, ExportarHistorialCampanas } from "@/components/comunicaciones/campana-adjunto-exportar";
+import { DestinatariosOrigen, type OrigenDestinatarios } from "@/components/comunicaciones/destinatarios-origen";
 
 export interface CampanaRow {
   id: number;
@@ -28,15 +31,11 @@ export interface CampanaRow {
   total_destinatarios: number;
   total_enviados: number;
   total_fallidos: number;
+  total_entregados: number;
+  total_leidos: number;
   created_at: string;
+  media_nombre?: string | null;
 }
-
-const ESTADO_BADGE: Record<string, "default" | "secondary" | "destructive" | "outline" | "success"> = {
-  BORRADOR: "outline",
-  EN_PROCESO: "default",
-  COMPLETADA: "success",
-  CANCELADA: "destructive",
-};
 
 interface CampanasPanelProps {
   campanas: CampanaRow[];
@@ -49,7 +48,8 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
   const [nombre, setNombre] = useState("");
   const [plantilla, setPlantilla] = useState("");
   const [idioma, setIdioma] = useState("es_CO");
-  const [destinatariosTexto, setDestinatariosTexto] = useState("");
+  const [origen, setOrigen] = useState<OrigenDestinatarios>({ tipo: "texto", texto: "" });
+  const [aviso, setAviso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [procesandoId, setProcesandoId] = useState<number | null>(null);
@@ -58,36 +58,48 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
   const crear = async () => {
     setError(null);
 
-    // Formato: una línea por destinatario → telefono;nombre;param1|param2|param3
-    const destinatarios = destinatariosTexto
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((linea) => {
-        const [telefono, nombreDest, params] = linea.split(";").map((p) => p?.trim() ?? "");
-        return {
-          telefono,
-          nombre: nombreDest || undefined,
-          parametros: params ? params.split("|").map((p) => p.trim()) : [],
-        };
-      });
-
-    if (destinatarios.length === 0) {
-      setError("Agrega al menos un destinatario (una línea por teléfono)");
-      return;
-    }
-
+    let res: { error?: string; resumen?: string | null };
     setGuardando(true);
-    const res = await crearCampana({ nombre, plantilla, idioma, destinatarios });
+    if (origen.tipo === "base") {
+      res = await crearCampanaDesdeBase({ nombre, plantilla, idioma, fuente: origen.fuente, ciudad: origen.ciudad, mapeo: origen.mapeo });
+    } else if (origen.tipo === "excel") {
+      if (origen.destinatarios.length === 0) {
+        setGuardando(false);
+        setError("Sube un Excel válido con al menos un destinatario");
+        return;
+      }
+      res = await crearCampana({ nombre, plantilla, idioma, destinatarios: origen.destinatarios }, { omitirInvalidos: true });
+    } else {
+      // Formato: una línea por destinatario → telefono;nombre;param1|param2|param3
+      const destinatarios = origen.texto
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((linea) => {
+          const [telefono, nombreDest, params] = linea.split(";").map((p) => p?.trim() ?? "");
+          return {
+            telefono,
+            nombre: nombreDest || undefined,
+            parametros: params ? params.split("|").map((p) => p.trim()) : [],
+          };
+        });
+      if (destinatarios.length === 0) {
+        setGuardando(false);
+        setError("Agrega al menos un destinatario (una línea por teléfono)");
+        return;
+      }
+      res = await crearCampana({ nombre, plantilla, idioma, destinatarios });
+    }
     setGuardando(false);
     if (res.error) {
       setError(res.error);
       return;
     }
+    setAviso(res.resumen ?? null);
     setDialogOpen(false);
     setNombre("");
     setPlantilla("");
-    setDestinatariosTexto("");
+    setOrigen({ tipo: "texto", texto: "" });
     router.refresh();
   };
 
@@ -103,6 +115,8 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
       }
       const restantes = "restantes" in res ? (res.restantes ?? 0) : 0;
       setProgreso(`Enviados ${"procesados" in res ? res.procesados : 0} — quedan ${restantes}`);
+      // Se pausó o canceló (desde aquí o desde otra pestaña): el lote ya cortó y el ciclo debe parar.
+      if ("estado" in res && (ESTADOS_SIN_ENVIO as readonly string[]).includes(res.estado)) break;
       if (restantes === 0) break;
     }
     setProcesandoId(null);
@@ -110,13 +124,34 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
     router.refresh();
   };
 
+  /** Pausar, reanudar o cancelar. Al reanudar se vuelven a llamar los lotes. */
+  const cambiarEstado = async (c: CampanaRow, accion: "pausar" | "reanudar" | "cancelar") => {
+    if (accion === "cancelar" && !confirm(`¿Cancelar la campaña "${c.nombre}"? Los mensajes que no se alcanzaron a enviar ya no se enviarán. No se puede deshacer.`)) return;
+    const res = await { pausar: pausarCampana, reanudar: reanudarCampana, cancelar: cancelarCampana }[accion](c.id);
+    if ("error" in res && res.error) {
+      alert(res.error);
+      router.refresh();
+      return;
+    }
+    router.refresh();
+    if (accion === "reanudar") await procesar(c.id);
+  };
+
   return (
     <div className="space-y-4">
+      {aviso && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800" role="status">
+          Campaña creada. {aviso}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ExportarHistorialCampanas />
       {puedeEditar && (
         <div className="flex justify-end">
           <Button onClick={() => setDialogOpen(true)}>Nueva campaña</Button>
         </div>
       )}
+      </div>
 
       <div className="overflow-x-auto">
         <Table>
@@ -127,6 +162,7 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
               <TableHead>Plantilla</TableHead>
               <TableHead>Destinatarios</TableHead>
               <TableHead>Enviados / Fallidos</TableHead>
+              <TableHead>Entregados / Leídos</TableHead>
               <TableHead>Estado</TableHead>
               {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
@@ -134,7 +170,7 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
           <TableBody>
             {campanas.length === 0 && (
               <TableRow>
-                <TableCell colSpan={puedeEditar ? 7 : 6} className="text-center text-muted-foreground">
+                <TableCell colSpan={puedeEditar ? 8 : 7} className="text-center text-muted-foreground">
                   Sin campañas creadas
                 </TableCell>
               </TableRow>
@@ -152,11 +188,22 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
                   {" / "}
                   <span className="text-red-600">{c.total_fallidos}</span>
                 </TableCell>
+                <TableCell title="Según los avisos de WhatsApp (webhook)">
+                  {c.total_entregados}
+                  {" / "}
+                  {c.total_leidos}
+                </TableCell>
                 <TableCell>
                   <Badge variant={ESTADO_BADGE[c.estado] ?? "outline"}>{c.estado.replace("_", " ")}</Badge>
                 </TableCell>
                 {puedeEditar && (
-                  <TableCell className="text-right">
+                  <TableCell className="space-x-2 whitespace-nowrap text-right">
+                    <CampanaAdjuntoExportar id={c.id} estado={c.estado} mediaNombre={c.media_nombre} puedeEditar={puedeEditar} />
+                    {accionesDisponibles(c.estado).map((a) => (
+                      <Button key={a} size="sm" variant="outline" disabled={procesandoId === c.id && a !== "pausar" && a !== "cancelar"} onClick={() => cambiarEstado(c, a)}>
+                        {{ pausar: "Pausar", reanudar: "Reanudar", cancelar: "Cancelar" }[a]}
+                      </Button>
+                    ))}
                     {(c.estado === "BORRADOR" || c.estado === "EN_PROCESO") && (
                       <Button
                         size="sm"
@@ -179,9 +226,7 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
           <DialogHeader>
             <DialogTitle>Nueva campaña WhatsApp</DialogTitle>
             <DialogDescription>
-              La plantilla debe existir y estar aprobada en el WhatsApp Business Manager. Un
-              destinatario por línea con el formato:{" "}
-              <code className="text-xs">telefono;nombre;param1|param2</code>
+              La plantilla debe existir y estar aprobada en el WhatsApp Business Manager. Elige de dónde salen los destinatarios.
             </DialogDescription>
           </DialogHeader>
 
@@ -204,18 +249,7 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
                 placeholder="ej: recordatorio_servicio"
               />
             </div>
-            <div className="space-y-1">
-              <Label>Destinatarios *</Label>
-              <Textarea
-                rows={8}
-                value={destinatariosTexto}
-                onChange={(e) => setDestinatariosTexto(e.target.value)}
-                placeholder={"3001234567;Juan Pérez;Juan|mañana 8am\n3109876543;Ana Gómez;Ana|tarde 2pm"}
-              />
-              <p className="text-xs text-muted-foreground">
-                Celulares colombianos de 10 dígitos: el indicativo 57 se agrega automáticamente.
-              </p>
-            </div>
+            <DestinatariosOrigen onChange={setOrigen} />
 
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
