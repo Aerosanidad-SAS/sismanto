@@ -1,0 +1,108 @@
+# Despliega `main` a PRODUCCIÓN de Vercel (proyecto `sismanto`, team `tecnicoaerosanidad`). Es MANUAL
+# (workflow_dispatch) y solo desde `main`: hoy «lo despliega Daniel a mano» (ENTORNOS.md); esto lo vuelve
+# un botón con revisor obligatorio, con el mismo mecanismo que deploy.yml (CLI de Vercel, sin .git).
+#
+# Requisitos: el entorno `Production` de GitHub con «Required reviewers»; los secretos VERCEL_TOKEN,
+# VERCEL_ORG_ID y VERCEL_PROJECT_ID (ya existen a nivel de repo). Opcional, y muy recomendable cuando exista
+# una base de producción propia: secreto DATABASE_URL_PROD + variable PRODUCTION_SUPABASE_REF. Con ellos el
+# despliegue se niega a continuar si quedan migraciones pendientes (código nuevo sobre esquema viejo).
+#
+# Las variables de entorno de Production (URL/keys de Supabase, etc.) las trae `vercel pull` del proyecto:
+# no viven en este repo. Qué base usa Production lo decide Vercel, no este archivo.
+name: Deploy PROD (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmacion:
+        description: "Escribe exactamente: DESPLEGAR-PRODUCCION"
+        type: string
+        required: true
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Production
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+      PRODUCTION_SUPABASE_REF: ${{ vars.PRODUCTION_SUPABASE_REF }}
+    steps:
+      - name: Solo desde main y con confirmación
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Solo se despliega a producción desde main (ahora: $GITHUB_REF)."
+            exit 1
+          fi
+          if [ "${{ inputs.confirmacion }}" != "DESPLEGAR-PRODUCCION" ]; then
+            echo "::error::Escribe exactamente DESPLEGAR-PRODUCCION en «confirmacion»."
+            exit 1
+          fi
+          for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Falta el secreto $v."
+              exit 1
+            fi
+          done
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      # Con base de producción propia: no desplegar código que necesita migraciones sin aplicar.
+      - name: Comprobar que la base está al día
+        run: |
+          if [ -n "$DATABASE_URL" ]; then
+            REQUIRE_ZERO=1 node scripts/prod-preflight.mjs
+          else
+            echo "::warning::No hay secreto DATABASE_URL_PROD: NO se comprobó el esquema de la base. Según ENTORNOS.md, Production apunta hoy a la misma base que staging (ya migrada). Si Production ya usa una base propia, agrega DATABASE_URL_PROD y PRODUCTION_SUPABASE_REF."
+            echo "- ⚠️ No se comprobó el esquema de la base (sin DATABASE_URL_PROD)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - run: npm install --global vercel@latest
+
+      - run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Desplegar a producción y esperar el resultado
+        run: |
+          # Igual que deploy.yml: desde la raíz y sin .git (el despliegue no lleva autor de commit).
+          rm -rf .git
+          url=$(vercel deploy --prebuilt --prod --archive=tgz --no-wait --token="$VERCEL_TOKEN")
+          host="${url#https://}"
+          echo "Despliegue: $url"
+          echo "- producción → $url" >> "$GITHUB_STEP_SUMMARY"
+
+          state=""
+          for i in $(seq 1 40); do
+            resp=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v13/deployments/$host?teamId=$VERCEL_ORG_ID")
+            state=$(echo "$resp" | jq -r '.readyState // "UNKNOWN"')
+            case "$state" in
+              READY) break ;;
+              BLOCKED|ERROR|CANCELED)
+                reason=$(echo "$resp" | jq -r '.readyStateReason // .error.message // "sin motivo"')
+                echo "::error::Despliegue $state: $reason"
+                echo "- ❌ $state: $reason" >> "$GITHUB_STEP_SUMMARY"
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+          if [ "$state" != "READY" ]; then
+            echo "::error::El despliegue sigue en $state tras 10 minutos."
+            exit 1
+          fi
+          echo "- ✅ READY" >> "$GITHUB_STEP_SUMMARY"
