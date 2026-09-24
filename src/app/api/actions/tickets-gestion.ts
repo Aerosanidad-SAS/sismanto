@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireAuth } from "@/app/api/actions/auth";
 import { puedeGestionarTickets } from "@/lib/auth-utils";
+import { auditar } from "@/lib/auditoria";
 import { TICKET_ESTADOS, TICKET_PRIORIDADES } from "@/lib/validations";
 import type { TicketHistorialRow } from "@/app/api/actions/tickets";
 
@@ -115,12 +116,13 @@ export async function getTicketGestion(id: number) {
 
 type Cliente = ReturnType<typeof createClient>;
 
-async function accion(id: number, ejecutar: (supabase: Cliente, id: number) => PromiseLike<{ error: { message: string } | null }>) {
+async function accion(id: number, detalle: string, ejecutar: (supabase: Cliente, id: number) => PromiseLike<{ error: { message: string } | null }>) {
   const parsed = idTicket.safeParse(id);
   if (!parsed.success) return { error: "Ticket inválido" };
   if (!(await gestor())) return { error: "Sin permisos para gestionar tickets" };
   const { error } = await ejecutar(createClient(), parsed.data);
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "tickets", parsed.data, detalle);
   revalidatePath("/soporte");
   revalidatePath("/soporte/gestion");
   revalidatePath(`/soporte/gestion/${parsed.data}`);
@@ -128,13 +130,13 @@ async function accion(id: number, ejecutar: (supabase: Cliente, id: number) => P
 }
 
 export async function tomarTicket(id: number) {
-  return accion(id, (s, t) => s.rpc("tomar_ticket", { p_ticket_id: t }) as never);
+  return accion(id, "Ticket tomado", (s, t) => s.rpc("tomar_ticket", { p_ticket_id: t }) as never);
 }
 
 export async function registrarContactoTicket(id: number, nota?: string) {
   const n = z.string().trim().max(1000).safeParse(nota ?? "");
   if (!n.success) return { error: "La nota no puede pasar de 1000 caracteres" };
-  return accion(id, (s, t) => s.rpc("registrar_contacto_ticket", { p_ticket_id: t, p_nota: n.data || null }) as never);
+  return accion(id, "Contacto con el solicitante registrado", (s, t) => s.rpc("registrar_contacto_ticket", { p_ticket_id: t, p_nota: n.data || null }) as never);
 }
 
 const cambioEstadoSchema = z.object({
@@ -149,6 +151,7 @@ export async function cambiarEstadoTicket(id: number, estado: string, solucion?:
   if (parsed.data.estado === "RESUELTO" && !parsed.data.solucion) return { error: "Describe la solución aplicada" };
   return accion(
     id,
+    `Estado → ${parsed.data.estado}`,
     (s, t) =>
       s.rpc("cambiar_estado_ticket", {
         p_ticket_id: t,
@@ -162,7 +165,7 @@ export async function cambiarEstadoTicket(id: number, estado: string, solucion?:
 export async function cambiarPrioridadTicket(id: number, prioridad: string) {
   const p = z.enum(TICKET_PRIORIDADES).safeParse(prioridad);
   if (!p.success) return { error: "Prioridad inválida" };
-  return accion(id, (s, t) => s.rpc("cambiar_prioridad_ticket", { p_ticket_id: t, p_prioridad: p.data }) as never);
+  return accion(id, `Prioridad → ${p.data}`, (s, t) => s.rpc("cambiar_prioridad_ticket", { p_ticket_id: t, p_prioridad: p.data }) as never);
 }
 
 /** Solo ADMIN (política tickets_delete). El historial cae en cascada; la imagen se borra aquí. */
@@ -188,6 +191,7 @@ export async function eliminarTicket(id: number) {
     }
   }
 
+  await auditar("ELIMINAR", "tickets", parsed.data, "Ticket eliminado");
   revalidatePath("/soporte/gestion");
   return { success: true as const, aviso };
 }
