@@ -10,7 +10,7 @@ interface Props {
 
 export default async function GestionTicketsPage({ searchParams }: Props) {
   // Solo gestores (misma lista que es_gestor_tickets() en la base).
-  const profile = await requireRole(["ADMIN", "ANALISTA", "COORDINACION"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "COORDINACION", "TECNICO"]);
 
   const [tickets, catalogos] = await Promise.all([
     getTicketsGestion({

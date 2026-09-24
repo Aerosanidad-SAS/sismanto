@@ -92,6 +92,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "065_tickets_soporte.sql",                     file: "scripts/migrations/065_tickets_soporte.sql" },
   { name: "066_tickets_gestion.sql",                     file: "scripts/migrations/066_tickets_gestion.sql" },
   { name: "067_tickets_config_indicadores.sql",          file: "scripts/migrations/067_tickets_config_indicadores.sql" },
+  { name: "076_roles_tecnico_aeropuerto.sql",              file: "scripts/migrations/076_roles_tecnico_aeropuerto.sql" },
   { name: "080_captacion_aeroportuaria.sql",             file: "scripts/migrations/080_captacion_aeroportuaria.sql" },
   { name: "081_sispro_catalogos.sql",                    file: "scripts/migrations/081_sispro_catalogos.sql" },
 ];
