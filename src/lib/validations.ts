@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
@@ -491,6 +492,14 @@ export const operationalCenterUpdateNombreSchema = z.object({
 
 const optStr = z.string().trim().max(255).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
 const optText = z.string().trim().max(5000).optional().or(z.literal("")).transform((v) => (v ? v : undefined));
+/** Select cerrado opcional: vacío o uno de los valores permitidos (con mensaje claro si no lo es). */
+const optEnum = (valores: readonly string[], mensaje: string) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => v === "" || valores.includes(v), mensaje)
+    .optional()
+    .transform((v) => (v ? v : undefined));
 
 // Catálogo real — verificado contra el <select> de sisres/registroPacientes.php
 // (Ronda de QA, 2026-07-21). No son valores inventados.
@@ -710,10 +719,12 @@ export const assessmentSchema = z.object({
   concepto_medico: optText,
   tiempo_estimado: optStr,
   recomendaciones: optText,
-  valoracion: optStr,
-  medico: optStr,
-  pasajero: optStr,
-  estado: optStr,
+  // Selects cerrados como en registroValoracion.php de SISRES (antes eran texto libre:
+  // "apto", "NO  APTO"… y el conteo de aptos no era confiable).
+  valoracion: optEnum(VALORACION_OPCIONES, "Valoración: elige APTO o NO APTO"),
+  estado: optEnum(ESTADO_VALORACION_OPCIONES, "Estado: elige ACTIVO o INACTIVO"),
+  // `medico` y `pasajero` ya no vienen del formulario: los pone el servidor (médico = usuario que
+  // registra; pasajero = nombre del paciente), como los campos ocultos de SISRES.
 });
 export type AssessmentFormData = z.input<typeof assessmentSchema>;
 
