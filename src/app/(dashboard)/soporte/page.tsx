@@ -2,13 +2,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requireAuth } from "@/app/api/actions/auth";
 import { puedeGestionarTickets } from "@/lib/auth-utils";
 import { getCatalogosTickets, getMisTickets } from "@/app/api/actions/tickets";
+import { getConfigTickets } from "@/app/api/actions/tickets-config";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { MisTickets } from "@/components/soporte/mis-tickets";
 
 export default async function SoportePage() {
   // Cualquier usuario con perfil activo puede pedir soporte y ver SUS tickets.
   // Lo que ve cada rol lo decide la base (RLS, migración 065), no esta página.
   const { profile } = await requireAuth();
-  const [tickets, catalogos] = await Promise.all([getMisTickets(), getCatalogosTickets()]);
+  const [tickets, catalogos, config] = await Promise.all([getMisTickets(), getCatalogosTickets(), getConfigTickets()]);
 
   return (
     <div className="space-y-8">
@@ -18,6 +20,12 @@ export default async function SoportePage() {
           Registra un ticket cuando algo de tecnología no funcione y sigue su estado hasta que se resuelva.
         </p>
       </div>
+
+      {config.mensaje && (
+        <Alert>
+          <AlertDescription>{config.mensaje}</AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>

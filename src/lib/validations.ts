@@ -847,3 +847,32 @@ export const reabrirTicketSchema = z.object({
   id: z.number().int().positive(),
   nota: z.string().trim().min(1, "Tienes que explicar por qué reabres el ticket").max(1000, "Máximo 1000 caracteres"),
 });
+
+// ─── Soporte técnico: configuración — ver migración 067 ─────────────────────
+const horaHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Hora inválida (HH:MM)");
+
+export const ticketSlaSchema = z.object({
+  baja: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
+  media: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
+  alta: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
+  urgente: z.number().int().min(1, "Entre 1 y 720 horas").max(720, "Entre 1 y 720 horas"),
+});
+
+export const ticketHorarioSchema = z
+  .object({
+    dias: z.array(z.number().int().min(1).max(7)).min(1, "Elige al menos un día"),
+    inicio: horaHHMM,
+    fin: horaHHMM,
+  })
+  .refine((h) => h.fin > h.inicio, { message: "La hora de cierre debe ser posterior a la de apertura", path: ["fin"] });
+
+export const ticketDisponibilidadSchema = z.object({
+  anio: z.number().int().min(2020, "Año entre 2020 y 2100").max(2100, "Año entre 2020 y 2100"),
+  mes: z.number().int().min(1, "Mes entre 1 y 12").max(12, "Mes entre 1 y 12"),
+  porcentaje: z.number().min(0, "Entre 0 y 100").max(100, "Entre 0 y 100"),
+  notas: z.string().trim().max(500, "Máximo 500 caracteres").optional(),
+});
+
+export const ticketCorreoSchema = z.string().trim().toLowerCase().email("Correo inválido").max(254);
+export const ticketMensajeSchema = z.string().trim().max(500, "Máximo 500 caracteres");
+export const ticketCatalogoTipoSchema = z.enum(["sedes", "areas", "categorias"]);
