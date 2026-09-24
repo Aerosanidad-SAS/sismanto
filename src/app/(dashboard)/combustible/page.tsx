@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getMetricasConsumo, getRendimientoCombustibleSerieMensual } from "@/app/api/actions/consumo";
 import { ConsumoCliente } from "@/components/consumo/consumo-cliente";
+import { requireRole } from "@/app/api/actions/auth";
 
 async function getInitialData() {
   try {
@@ -20,6 +21,7 @@ export default async function CombustiblePage({
 }: {
   searchParams: { inicio?: string; fin?: string; vehiculo?: string; centro?: string };
 }) {
+  await requireRole(["ADMIN", "GERENCIAL", "ANALISTA"]);
   const hoy = new Date();
   const hace3Meses = new Date();
   hace3Meses.setMonth(hoy.getMonth() - 3);
