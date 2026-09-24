@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
@@ -94,6 +95,7 @@ export async function crearBaja(entrada: BajaEntrada, firmas: FirmasBaja) {
     const { error: e2 } = await supabase.from("ti_baja_equipo").update({ ...r.cambios, firmas_png: r.png }).eq("id", fila.id);
     if (e2) avisos.push(`La baja se creó pero no se pudo enlazar la firma: ${e2.message}`);
   }
+  await auditar("INSERTAR", "formatos_ti", fila.id, `Baja de equipo ${fila.numero_orden} creada`);
   revalidatePath("/formatos-ti/baja");
   return { success: true, id: fila.id, numero_orden: fila.numero_orden, avisos };
 }
@@ -122,6 +124,7 @@ export async function actualizarBaja(id: number, entrada: BajaEntrada, firmas: F
   if (error) return { error: error.message };
 
   await borrarFirmas(supabase, r.viejas);
+  await auditar("MODIFICAR", "formatos_ti", idParsed.data, `Baja de equipo actualizada`);
   revalidatePath("/formatos-ti/baja");
   return { success: true, avisos: r.avisos };
 }
@@ -141,6 +144,7 @@ export async function eliminarBaja(id: number) {
   const { error } = await supabase.from("ti_baja_equipo").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
   await borrarFirmas(supabase, [fila.firma_responsable_ruta]);
+  await auditar("ELIMINAR", "formatos_ti", idParsed.data, `Baja de equipo eliminada`);
   revalidatePath("/formatos-ti/baja");
   return { success: true };
 }
