@@ -34,6 +34,7 @@ import {
   Handshake,
   Building2,
   FileSignature,
+  ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -193,6 +194,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: FileSignature,
         roles: ["ADMIN", "ANALISTA"],
         hint: "Acta de entrega de equipos y celulares con firma digital (G-TECN-F 028 / 031, origen SISRES).",
+      },
+      {
+        name: "Diagnóstico de equipos",
+        href: "/formatos-ti/diagnostico",
+        icon: ClipboardCheck,
+        roles: ["ADMIN", "ANALISTA"],
+        hint: "Diagnóstico y mantenimiento de equipos informáticos con listado de chequeo y firma (G-TECN-F 047, origen SISRES).",
       },
     ],
   },

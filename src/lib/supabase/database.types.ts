@@ -25,6 +25,18 @@ type TiActaEntregaRow = {
   created_by: string | null; created_at: string; updated_at: string
 }
 
+type TiDiagnosticoRow = {
+  id: number; numero_orden: string; fecha_diagnostico: string; equipo: string; marca: string; modelo: string;
+  usuario_equipo: string; serial: string; ubicacion: string; responsable_equipo: string; fecha_orden: string | null;
+  sede: string; placa: string; codigo_institucional: string; tipo_mtto: string;
+  diagnostico: Json; descripcion_falla: string; checklist: Json;
+  equipo_apto_uso: boolean; equipo_averiado: boolean; requirio_reparacion: boolean; partes_buen_estado: boolean;
+  observaciones: string; realizo_nombre: string; realizo_cargo: string; firma_realizo_ruta: string; firma_realizo_hash: string;
+  reviso_nombre: string; reviso_cargo: string; firma_reviso_ruta: string; firma_reviso_hash: string;
+  firmas_png: Json; sisres_id: number | null; created_by: string | null; created_at: string; updated_at: string
+}
+type TiDiagnosticoRepuestoRow = { id: number; diagnostico_id: number; repuesto: string; referencia_serial: string; cantidad: number }
+
 export type Database = {
   public: {
     Tables: {
@@ -1222,6 +1234,18 @@ export type Database = {
         Row: TiActaEntregaRow
         Insert: Partial<Omit<TiActaEntregaRow, "numero_orden">>
         Update: Partial<Omit<TiActaEntregaRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_diagnostico: {
+        Row: TiDiagnosticoRow
+        Insert: Partial<Omit<TiDiagnosticoRow, "numero_orden">>
+        Update: Partial<Omit<TiDiagnosticoRow, "numero_orden">>
+        Relationships: []
+      }
+      ti_diagnostico_repuestos: {
+        Row: TiDiagnosticoRepuestoRow
+        Insert: Partial<TiDiagnosticoRepuestoRow>
+        Update: Partial<TiDiagnosticoRepuestoRow>
         Relationships: []
       }
       wa_campaigns: {
