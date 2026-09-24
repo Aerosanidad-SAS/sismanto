@@ -81,6 +81,7 @@ export function GestionTickets({ tickets, categorias, esAdmin, filtros }: Props)
       setError(r.error);
       return;
     }
+    if ("aviso" in r && r.aviso) setError(r.aviso);
     router.refresh();
   }
 

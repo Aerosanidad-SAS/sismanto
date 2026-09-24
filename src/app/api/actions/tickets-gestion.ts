@@ -179,10 +179,17 @@ export async function eliminarTicket(id: number) {
   if (!borrados || borrados.length === 0) return { error: "No se pudo eliminar el ticket" };
 
   const ruta = (ticket as { adjunto_path: string | null } | null)?.adjunto_path;
-  if (ruta) await supabase.storage.from("tickets-adjuntos").remove([ruta]);
+  let aviso: string | undefined;
+  if (ruta) {
+    const { error: errorImagen } = await supabase.storage.from("tickets-adjuntos").remove([ruta]);
+    if (errorImagen) {
+      console.error("No se pudo borrar la imagen del ticket eliminado:", errorImagen.message);
+      aviso = "El ticket se eliminó, pero no se pudo borrar su imagen adjunta.";
+    }
+  }
 
   revalidatePath("/soporte/gestion");
-  return { success: true as const };
+  return { success: true as const, aviso };
 }
 
 export interface UsuarioBuscado {

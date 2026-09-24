@@ -37,6 +37,8 @@ AS $$
 $$;
 REVOKE ALL ON FUNCTION public.ticket_nombre_usuario(UUID) FROM PUBLIC;
 -- Solo la usan las funciones de abajo (definer) y el servidor; no se expone a la API.
+-- Las funciones definer la llaman con los permisos de su dueño, por eso no necesita
+-- GRANT para authenticated: no "corregirlo", rompería el flujo.
 GRANT EXECUTE ON FUNCTION public.ticket_nombre_usuario(UUID) TO service_role;
 
 -- ─── Tomar ───────────────────────────────────────────────────────────────────
@@ -230,8 +232,14 @@ BEGIN
 END $$;
 
 -- ─── Borrar (solo ADMIN) ─────────────────────────────────────────────────────
--- El historial cae en cascada. La imagen adjunta la borra la aplicación.
+-- El historial cae en cascada. La imagen adjunta la borra la aplicación, con la
+-- sesión del ADMIN: por eso también necesita su política de borrado en Storage.
 DROP POLICY IF EXISTS tickets_delete ON tickets;
 CREATE POLICY tickets_delete ON tickets
   FOR DELETE TO authenticated
   USING (get_user_role() = 'ADMIN');
+
+DROP POLICY IF EXISTS tickets_adjuntos_delete ON storage.objects;
+CREATE POLICY tickets_adjuntos_delete ON storage.objects
+  FOR DELETE TO authenticated
+  USING (bucket_id = 'tickets-adjuntos' AND get_user_role() = 'ADMIN');
