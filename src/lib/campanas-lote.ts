@@ -15,6 +15,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import type { WaMediaHeader } from "@/lib/notifications/whatsapp";
 import {
   ESTADOS_SIN_ENVIO,
   MINUTOS_RECLAMO_VENCIDO,
@@ -32,13 +33,30 @@ export interface ResultadoEnvio {
 }
 
 export interface DepsLote {
-  enviar: (telefono: string, plantilla: string, idioma: string, parametros: string[]) => Promise<ResultadoEnvio>;
+  enviar: (telefono: string, plantilla: string, idioma: string, parametros: string[], media?: WaMediaHeader) => Promise<ResultadoEnvio>;
+  /**
+   * Encabezado de imagen/PDF/video de la campaña. Se resuelve UNA vez por lote (re-sube el archivo a Meta si el id
+   * caducó). Si devuelve `{error}` el lote no envía nada: un mensaje sin su adjunto saldría incompleto.
+   */
+  media?: (campana: CampanaLote) => Promise<WaMediaHeader | null | { error: string }>;
   esperar: (ms: number) => Promise<unknown>;
   ahora: () => Date;
   /** false = simulación (sin credenciales): no hay pausa entre envíos. */
   envioReal: boolean;
   pausaEntreEnviosMs: number;
   tamanoLote: number;
+}
+
+export interface CampanaLote {
+  id: number;
+  estado: string;
+  plantilla: string;
+  idioma: string;
+  media_tipo?: string | null;
+  media_id?: string | null;
+  media_nombre?: string | null;
+  media_ruta?: string | null;
+  media_subido_at?: string | null;
 }
 
 export type ResultadoLote =
@@ -72,10 +90,18 @@ async function estadoActual(db: Cliente, campaignId: number): Promise<string | n
 
 export async function procesarLote(db: Cliente, campaignId: number, deps: DepsLote): Promise<ResultadoLote> {
   const { data } = await db.from("wa_campaigns").select("*").eq("id", campaignId).maybeSingle();
-  const campana = data as unknown as { id: number; estado: string; plantilla: string; idioma: string } | null;
+  const campana = data as unknown as CampanaLote | null;
   if (!campana) return { error: "Campaña no encontrada" };
   if (campana.estado === "PAUSADA") return { error: "La campaña está pausada. Reanúdala para seguir enviando." };
   if (campana.estado === "COMPLETADA" || campana.estado === "CANCELADA") return { error: `La campaña ya está ${campana.estado}` };
+
+  // Antes de reclamar a nadie: si la campaña lleva adjunto y no se puede preparar, no se envía ningún mensaje.
+  let media: WaMediaHeader | undefined;
+  if (deps.media && campana.media_ruta) {
+    const m = await deps.media(campana);
+    if (m && "error" in m) return { error: m.error };
+    if (m) media = m;
+  }
 
   await liberarReclamosVencidos(db, campana.id, deps.ahora());
 
@@ -122,7 +148,7 @@ export async function procesarLote(db: Cliente, campaignId: number, deps: DepsLo
     if (!reclamado || reclamado.length === 0) continue; // otro lote ya lo tomó
 
     const params = Array.isArray(dest.parametros) ? (dest.parametros as unknown[]).map(String) : [];
-    const res = await deps.enviar(dest.telefono, campana.plantilla, campana.idioma, params);
+    const res = await deps.enviar(dest.telefono, campana.plantilla, campana.idioma, params, media);
     await db
       .from("wa_campaign_recipients")
       .update({

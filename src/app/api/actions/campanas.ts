@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { getProfile } from "@/app/api/actions/auth";
 import type { WaCampaignFormData } from "@/lib/validations";
 import { waCampaignSchema } from "@/lib/validations";
-import { sanitizarTelefono, enviarPlantilla, whatsappConfigurado } from "@/lib/notifications/whatsapp";
+import { sanitizarTelefono, enviarPlantilla, whatsappConfigurado, subirMediaMeta } from "@/lib/notifications/whatsapp";
 import { z } from "zod";
 import { procesarLote, cambiarEstadoCampana } from "@/lib/campanas-lote";
 import type { AccionCampana } from "@/lib/campanas-estado";
+import { adjuntarMedia, quitarMedia, resolverMediaEnvio, type AlmacenMedia } from "@/lib/campanas-media-servicio";
+import { filasDetalle, filasHistorial } from "@/lib/campanas-exportar";
 
 const ROLES_CAMPANAS = ["ADMIN", "COORDINACION"];
 
@@ -103,8 +105,10 @@ export async function procesarLoteCampana(campaignId: number) {
   const idParsed = z.number().int().positive().safeParse(campaignId);
   if (!idParsed.success) return { error: "ID inválido" };
 
-  const res = await procesarLote(createClient(), idParsed.data, {
+  const supabase = createClient();
+  const res = await procesarLote(supabase, idParsed.data, {
     enviar: enviarPlantilla,
+    media: (campana) => resolverMediaEnvio(supabase, almacenMedia(supabase), campana, subirMediaMeta),
     esperar,
     ahora: () => new Date(),
     envioReal: whatsappConfigurado(),
@@ -139,4 +143,75 @@ export async function reanudarCampana(campaignId: number) {
 /** Cancela definitivamente: los destinatarios que no se alcanzaron a enviar quedan PENDIENTE y ya no se envían. */
 export async function cancelarCampana(campaignId: number) {
   return cambiarEstado(campaignId, "cancelar");
+}
+
+function almacenMedia(supabase: ReturnType<typeof createClient>): AlmacenMedia {
+  return {
+    descargar: async (ruta) => {
+      const { data, error } = await supabase.storage.from("campanas-media").download(ruta);
+      return error || !data ? null : new Uint8Array(await data.arrayBuffer());
+    },
+    borrar: async (ruta) => {
+      await supabase.storage.from("campanas-media").remove([ruta]);
+    },
+  };
+}
+
+/**
+ * El navegador ya subió el archivo a Storage (`<user_id>/<archivo>`); aquí se valida su contenido, se sube a Meta y
+ * se guarda en la campaña. Solo en BORRADOR.
+ */
+export async function adjuntarMediaCampana(campaignId: number, ruta: string) {
+  const profile = await getProfile();
+  if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
+  const idParsed = z.number().int().positive().safeParse(campaignId);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const supabase = createClient();
+  const res = await adjuntarMedia(supabase, almacenMedia(supabase), {
+    campaignId: idParsed.data,
+    ruta,
+    userId: profile.user_id,
+    subir: subirMediaMeta,
+  });
+  if ("success" in res) revalidatePath("/comunicaciones");
+  return res;
+}
+
+export async function quitarMediaCampana(campaignId: number) {
+  const profile = await getProfile();
+  if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
+  const idParsed = z.number().int().positive().safeParse(campaignId);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const supabase = createClient();
+  const res = await quitarMedia(supabase, almacenMedia(supabase), idParsed.data);
+  if ("success" in res) revalidatePath("/comunicaciones");
+  return res;
+}
+
+/** Filas para el Excel de una campaña (el archivo se arma en el navegador). Mismo permiso que el resto del módulo. */
+export async function exportarDetalleCampana(campaignId: number) {
+  const profile = await getProfile();
+  if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
+  const idParsed = z.number().int().positive().safeParse(campaignId);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const supabase = createClient();
+  const { data: camp } = await supabase.from("wa_campaigns").select("nombre").eq("id", idParsed.data).maybeSingle();
+  if (!camp) return { error: "Campaña no encontrada" };
+  const { data } = await supabase.from("wa_campaign_recipients").select("*").eq("campaign_id", idParsed.data).order("id").limit(20000);
+  return {
+    success: true as const,
+    nombre: (camp as unknown as { nombre: string }).nombre,
+    filas: filasDetalle((data ?? []) as unknown as Record<string, unknown>[]),
+  };
+}
+
+export async function exportarHistorialCampanas() {
+  const profile = await getProfile();
+  if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
+  const supabase = createClient();
+  const { data } = await supabase.from("wa_campaigns").select("*").order("created_at", { ascending: false }).limit(5000);
+  return { success: true as const, filas: filasHistorial((data ?? []) as unknown as Record<string, unknown>[]) };
 }

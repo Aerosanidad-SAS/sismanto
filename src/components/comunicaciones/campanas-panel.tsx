@@ -19,6 +19,7 @@ import {
 import { formatDateShort } from "@/lib/utils";
 import { cancelarCampana, crearCampana, pausarCampana, procesarLoteCampana, reanudarCampana } from "@/app/api/actions/campanas";
 import { ESTADOS_SIN_ENVIO, ESTADO_BADGE, accionesDisponibles } from "@/lib/campanas-estado";
+import { CampanaAdjuntoExportar, ExportarHistorialCampanas } from "@/components/comunicaciones/campana-adjunto-exportar";
 
 export interface CampanaRow {
   id: number;
@@ -30,6 +31,7 @@ export interface CampanaRow {
   total_enviados: number;
   total_fallidos: number;
   created_at: string;
+  media_nombre?: string | null;
 }
 
 interface CampanasPanelProps {
@@ -121,11 +123,14 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ExportarHistorialCampanas />
       {puedeEditar && (
         <div className="flex justify-end">
           <Button onClick={() => setDialogOpen(true)}>Nueva campaña</Button>
         </div>
       )}
+      </div>
 
       <div className="overflow-x-auto">
         <Table>
@@ -166,6 +171,7 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
                 </TableCell>
                 {puedeEditar && (
                   <TableCell className="space-x-2 whitespace-nowrap text-right">
+                    <CampanaAdjuntoExportar id={c.id} estado={c.estado} mediaNombre={c.media_nombre} puedeEditar={puedeEditar} />
                     {accionesDisponibles(c.estado).map((a) => (
                       <Button key={a} size="sm" variant="outline" disabled={procesandoId === c.id && a !== "pausar" && a !== "cancelar"} onClick={() => cambiarEstado(c, a)}>
                         {{ pausar: "Pausar", reanudar: "Reanudar", cancelar: "Cancelar" }[a]}
