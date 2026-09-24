@@ -83,6 +83,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "067_tickets_config_indicadores.sql",          file: "scripts/migrations/067_tickets_config_indicadores.sql" },
   { name: "078_campanas_pausa_cancelar.sql",               file: "scripts/migrations/078_campanas_pausa_cancelar.sql" },
   { name: "080_campanas_media.sql",                        file: "scripts/migrations/080_campanas_media.sql" },
+  { name: "079_whatsapp_entrega_lectura.sql",              file: "scripts/migrations/079_whatsapp_entrega_lectura.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

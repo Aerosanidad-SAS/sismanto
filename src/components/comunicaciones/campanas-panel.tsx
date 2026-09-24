@@ -30,6 +30,8 @@ export interface CampanaRow {
   total_destinatarios: number;
   total_enviados: number;
   total_fallidos: number;
+  total_entregados: number;
+  total_leidos: number;
   created_at: string;
   media_nombre?: string | null;
 }
@@ -141,6 +143,7 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
               <TableHead>Plantilla</TableHead>
               <TableHead>Destinatarios</TableHead>
               <TableHead>Enviados / Fallidos</TableHead>
+              <TableHead>Entregados / Leídos</TableHead>
               <TableHead>Estado</TableHead>
               {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
@@ -148,7 +151,7 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
           <TableBody>
             {campanas.length === 0 && (
               <TableRow>
-                <TableCell colSpan={puedeEditar ? 7 : 6} className="text-center text-muted-foreground">
+                <TableCell colSpan={puedeEditar ? 8 : 7} className="text-center text-muted-foreground">
                   Sin campañas creadas
                 </TableCell>
               </TableRow>
@@ -165,6 +168,11 @@ export function CampanasPanel({ campanas, puedeEditar }: CampanasPanelProps) {
                   <span className="text-green-600">{c.total_enviados}</span>
                   {" / "}
                   <span className="text-red-600">{c.total_fallidos}</span>
+                </TableCell>
+                <TableCell title="Según los avisos de WhatsApp (webhook)">
+                  {c.total_entregados}
+                  {" / "}
+                  {c.total_leidos}
                 </TableCell>
                 <TableCell>
                   <Badge variant={ESTADO_BADGE[c.estado] ?? "outline"}>{c.estado.replace("_", " ")}</Badge>
