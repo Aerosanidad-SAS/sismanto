@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { requireRole } from "./auth";
 import { revalidatePath } from "next/cache";
 import {
@@ -407,6 +408,7 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
     return { error: `La novedad #${incident.id} quedó creada, pero el detalle del siniestro no se guardó: ${error.message}` };
   }
 
+  await auditar("INSERTAR", "novedades", incident.id as number, "Siniestro vial reportado");
   revalidatePath("/ovem");
   revalidatePath("/novedades");
   revalidatePath("/regulacion");

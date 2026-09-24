@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
 import { centroVisible } from "@/lib/auth-utils";
 import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
@@ -47,6 +48,7 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
     fecha_cambio: new Date().toISOString(),
   });
 
+  await auditar("MODIFICAR", "vehiculos", parsed.data.vehicleId, `Estado del vehículo: ${estadoAnterior ?? "?"} → ${parsed.data.nuevoEstado}`);
   revalidatePath("/regulacion");
   revalidatePath("/vehiculos");
   revalidatePath(`/vehiculos/${parsed.data.vehicleId}`);
@@ -135,6 +137,7 @@ export async function asignarTripulacion(
 
   if (error) return { error: error.message };
   await reasignarServiciosNoIniciados(supabase, parsed.data.vehicleId, parsed.data.rol, parsed.data.userId);
+  await auditar("MODIFICAR", "regulacion", parsed.data.vehicleId, `Tripulación asignada (rol ${parsed.data.rol})`);
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
   return { success: true };
@@ -159,6 +162,7 @@ export async function unassignVehicle(assignmentId: number) {
   if (asignacion && rol && rol in CAMPO_TRIPULACION) {
     await reasignarServiciosNoIniciados(supabase, asignacion.vehicle_id, rol, null);
   }
+  await auditar("MODIFICAR", "regulacion", idParsed.data, "Asignación de tripulación finalizada");
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
   return { success: true };
