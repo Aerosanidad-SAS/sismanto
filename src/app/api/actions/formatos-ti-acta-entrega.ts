@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
@@ -143,6 +144,8 @@ export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: Firm
     .single();
   if (error || !creada) return { error: error?.message ?? "No se pudo crear el acta" };
   const fila = { ...(creada as unknown as ActaEntregaFila), created_at: creadoEn };
+  // Primero el alta y después (si aplica) el envío del enlace: así la bitácora queda en el orden en que ocurrió.
+  await auditar("INSERTAR", "formatos_ti", fila.id, `Acta de entrega ${fila.numero_orden} creada`);
 
   const { cambios, png, avisos } = await motor.resolverFirmas(supabase, "acta-entrega", fila.id, fila, firmasAqui, LADOS_ACTA_ENTREGA, clavesActa(fila), (l) => l.clave === "devolucion" && d.tipo_equipo !== "CELULAR");
   if (Object.keys(cambios).length > 0) {
@@ -159,6 +162,7 @@ export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: Firm
       placa: d.equipo_placa,
     });
     if (!envio.ok) avisos.push(`El acta se guardó, pero ${envio.error} Puedes reenviarlo desde el listado.`);
+    else await auditar("NOTIFICAR", "formatos_ti", fila.id, `Enlace de firma enviado por correo (acta ${fila.numero_orden})`);
   }
   revalidatePath("/formatos-ti/acta-entrega");
   return { success: true, id: fila.id, numero_orden: fila.numero_orden, avisos };
@@ -215,6 +219,7 @@ export async function actualizarActaEntrega(id: number, entrada: ActaEntregaEntr
   await borrarFirmas(supabase, viejas); // limpieza de las firmas reemplazadas
   // Se dibujó la firma de "recibe" en esta edición: un enlace de correo pendiente no debe poder pisarla después.
   if (cambios.firma_recibe_ruta) await invalidarTokensPendientes(createAdminClient(), "ti_acta_entrega", previa.id, "recibe");
+  await auditar("MODIFICAR", "formatos_ti", previa.id, `Acta de entrega ${previa.numero_orden} actualizada`);
   revalidatePath("/formatos-ti/acta-entrega");
   return { success: true, avisos };
 }
@@ -244,6 +249,7 @@ export async function reenviarEnlaceFirmaActa(id: number) {
     placa: acta.equipo_placa,
   });
   if (!envio.ok) return { error: envio.error };
+  await auditar("NOTIFICAR", "formatos_ti", acta.id, `Enlace de firma reenviado por correo (acta ${acta.numero_orden})`);
   revalidatePath("/formatos-ti/acta-entrega");
   return { success: true };
 }
@@ -263,6 +269,7 @@ export async function eliminarActaEntrega(id: number) {
   const { error } = await supabase.from("ti_acta_entrega").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
   await borrarFirmas(supabase, LADOS_ACTA_ENTREGA.map((l) => fila[l.ruta]));
+  await auditar("ELIMINAR", "formatos_ti", fila.id, `Acta de entrega ${fila.numero_orden} eliminada`);
   revalidatePath("/formatos-ti/acta-entrega");
   return { success: true };
 }
@@ -293,6 +300,8 @@ export async function exportarActasEntrega(filtros: Omit<FiltrosActaEntrega, "pa
   const { data, error } = await aplicarFiltros(consulta, { ...filtros, pagina: 1 });
   if (error) return { error: error.message };
   const filas = (data ?? []) as unknown as ActaEntregaFila[];
+  // Nombres y cédulas de funcionarios salen del sistema: queda quién lo hizo y cuántas filas (no el contenido).
+  await auditar("EXPORTAR", "formatos_ti", "", `Exportación de actas de entrega (${Math.min(filas.length, EXPORT_MAX)} filas${filas.length > EXPORT_MAX ? ", truncada" : ""})`);
   return { filas: filas.slice(0, EXPORT_MAX), truncado: filas.length > EXPORT_MAX };
 }
 

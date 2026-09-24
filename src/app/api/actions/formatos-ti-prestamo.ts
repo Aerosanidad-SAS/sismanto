@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
@@ -109,6 +110,7 @@ export async function crearPrestamo(entrada: PrestamoEntrada, firmas: FirmasPres
     const { error: e2 } = await supabase.from("ti_prestamo_equipo").update({ ...r.cambios, firmas_png: r.png }).eq("id", fila.id);
     if (e2) avisos.push(`El préstamo se creó pero no se pudieron enlazar las firmas: ${e2.message}`);
   }
+  await auditar("INSERTAR", "formatos_ti", fila.id, `Préstamo ${fila.numero_orden} creada`);
   revalidatePath("/formatos-ti/prestamo");
   return { success: true, id: fila.id, numero_orden: fila.numero_orden, avisos };
 }
@@ -143,6 +145,7 @@ export async function actualizarPrestamo(id: number, entrada: PrestamoEntrada, f
   if (error) return { error: error.message };
 
   await borrarFirmas(supabase, r.viejas);
+  await auditar("MODIFICAR", "formatos_ti", idParsed.data, `Préstamo actualizada`);
   revalidatePath("/formatos-ti/prestamo");
   return { success: true, avisos: r.avisos };
 }
@@ -162,6 +165,7 @@ export async function eliminarPrestamo(id: number) {
   const { error } = await supabase.from("ti_prestamo_equipo").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
   await borrarFirmas(supabase, LADOS_PRESTAMO.map((l) => fila[l.ruta]));
+  await auditar("ELIMINAR", "formatos_ti", idParsed.data, `Préstamo eliminada`);
   revalidatePath("/formatos-ti/prestamo");
   return { success: true };
 }
@@ -190,6 +194,8 @@ export async function exportarPrestamos(filtros: Omit<FiltrosPrestamo, "pagina">
   const { data, error } = await aplicarFiltros(consulta, { ...filtros, pagina: 1 });
   if (error) return { error: error.message };
   const filas = (data ?? []) as unknown as PrestamoFila[];
+  // Nombres y cédulas de funcionarios salen del sistema: queda quién lo hizo y cuántas filas (no el contenido).
+  await auditar("EXPORTAR", "formatos_ti", "", `Exportación de préstamos (${Math.min(filas.length, EXPORT_MAX)} filas${filas.length > EXPORT_MAX ? ", truncada" : ""})`);
   return { filas: filas.slice(0, EXPORT_MAX), truncado: filas.length > EXPORT_MAX };
 }
 

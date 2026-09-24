@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { auditar } from "@/lib/auditoria";
 import { contextoFirma, procesarFirmaRemota, type ContextoFirma } from "@/lib/formatos-ti/firma-remota-servicio";
 
 /**
@@ -16,6 +17,11 @@ export async function contextoFirmaRemota(token: string): Promise<ContextoFirma>
 export async function firmarRemoto(token: string, dataUri: string): Promise<{ success: true } | { error: string }> {
   const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const res = await procesarFirmaRemota(createAdminClient(), token, dataUri, ip);
-  if ("success" in res) revalidatePath("/formatos-ti/acta-entrega");
-  return res;
+  if ("success" in res) {
+    // Quien firma no tiene cuenta: el actor es el propio enlace del correo. userId nulo a propósito.
+    await auditar("MODIFICAR", "formatos_ti", res.registroId, "Firma remota registrada por el funcionario (enlace por correo)", { userId: null, label: "firma remota (enlace por correo)", role: "" });
+    revalidatePath("/formatos-ti/acta-entrega");
+  }
+  // Al firmante (público) solo se le confirma el resultado: el id del registro es interno.
+  return "success" in res ? { success: true } : res;
 }

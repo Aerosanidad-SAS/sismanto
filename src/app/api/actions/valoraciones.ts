@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import type { AssessmentFormData } from "@/lib/validations";
 import { assessmentSchema } from "@/lib/validations";
 import { getProfile } from "@/app/api/actions/auth";
+import { auditar } from "@/lib/auditoria";
 import {
   ROLES_ELIMINAR_VALORACION,
   COLUMNAS_BUSQUEDA_VALORACIONES,
@@ -96,6 +97,8 @@ export async function crearValoracion(formData: AssessmentFormData) {
     .select()
     .single();
   if (error) return { error: error.message };
+  // Solo el número: el detalle de la bitácora no lleva datos clínicos ni personales del pasajero.
+  await auditar("INSERTAR", "valoraciones", (data as { id: number }).id, "Valoración creada");
   revalidatePath("/valoraciones");
   return { success: true, data };
 }
@@ -122,6 +125,7 @@ export async function actualizarValoracion(id: number, formData: AssessmentFormD
     })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "valoraciones", idParsed.data, "Valoración actualizada");
   revalidatePath("/valoraciones");
   return { success: true };
 }
@@ -146,6 +150,7 @@ export async function eliminarValoracion(id: number) {
     .update({ activo: false, updated_at: new Date().toISOString() })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "valoraciones", idParsed.data, "Valoración desactivada");
   revalidatePath("/valoraciones");
   return { success: true };
 }
@@ -224,6 +229,8 @@ export async function enviarCertificadoValoracion(id: number) {
     .from("medical_assessments")
     .update({ certificado_enviado_at: new Date().toISOString(), certificado_enviado_a: destino })
     .eq("id", v.id);
+  // Sin la dirección de correo (dato personal): queda registrada en la propia valoración (certificado_enviado_a).
+  await auditar("NOTIFICAR", "valoraciones", v.id, "Certificado enviado por correo al pasajero");
   revalidatePath("/valoraciones");
   return { success: true, destino };
 }

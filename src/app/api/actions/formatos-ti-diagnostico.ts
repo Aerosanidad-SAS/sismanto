@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
@@ -134,6 +135,7 @@ export async function crearDiagnostico(entrada: DiagnosticoEntrada, firmas: Firm
     const { error: e2 } = await supabase.from("ti_diagnostico").update({ ...r.cambios, firmas_png: r.png }).eq("id", fila.id);
     if (e2) avisos.push(`El diagnóstico se creó pero no se pudieron enlazar las firmas: ${e2.message}`);
   }
+  await auditar("INSERTAR", "formatos_ti", fila.id, `Diagnóstico ${fila.numero_orden} creada`);
   revalidatePath("/formatos-ti/diagnostico");
   return { success: true, id: fila.id, numero_orden: fila.numero_orden, avisos };
 }
@@ -165,6 +167,7 @@ export async function actualizarDiagnostico(id: number, entrada: DiagnosticoEntr
   const errRep = await guardarRepuestos(supabase, previa.id, repuestos);
   if (errRep) avisos.push(`Se guardó el diagnóstico pero no los repuestos: ${errRep}`);
   await borrarFirmas(supabase, r.viejas);
+  await auditar("MODIFICAR", "formatos_ti", idParsed.data, `Diagnóstico actualizada`);
   revalidatePath("/formatos-ti/diagnostico");
   return { success: true, avisos };
 }
@@ -184,6 +187,7 @@ export async function eliminarDiagnostico(id: number) {
   const { error } = await supabase.from("ti_diagnostico").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
   await borrarFirmas(supabase, [fila.firma_realizo_ruta, fila.firma_reviso_ruta]);
+  await auditar("ELIMINAR", "formatos_ti", idParsed.data, `Diagnóstico eliminada`);
   revalidatePath("/formatos-ti/diagnostico");
   return { success: true };
 }
@@ -212,6 +216,8 @@ export async function exportarDiagnosticos(filtros: Omit<FiltrosDiagnostico, "pa
   const { data, error } = await aplicarFiltros(consulta, { ...filtros, pagina: 1 });
   if (error) return { error: error.message };
   const filas = (data ?? []) as unknown as DiagnosticoFila[];
+  // Nombres y cédulas de funcionarios salen del sistema: queda quién lo hizo y cuántas filas (no el contenido).
+  await auditar("EXPORTAR", "formatos_ti", "", `Exportación de diagnósticos (${Math.min(filas.length, EXPORT_MAX)} filas${filas.length > EXPORT_MAX ? ", truncada" : ""})`);
   return { filas: filas.slice(0, EXPORT_MAX), truncado: filas.length > EXPORT_MAX };
 }
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { PatientFormData } from "@/lib/validations";
 import { patientSchema } from "@/lib/validations";
@@ -14,7 +15,6 @@ import {
   condicionOrPalabra,
   palabrasBusquedaPacientes,
 } from "@/lib/pacientes-lista";
-import { auditar } from "@/lib/auditoria";
 
 /**
  * Una página de pacientes activos (100) con búsqueda en el servidor. Antes se
@@ -198,5 +198,7 @@ export async function exportarPacientes() {
     filas.push(...((data ?? []) as PacienteExport[]));
     if (!data || data.length < LOTE) break;
   }
+  // Datos personales de pacientes fuera del sistema: queda quién lo hizo y cuántas filas (no el contenido).
+  await auditar("EXPORTAR", "pacientes", "", `Exportación de pacientes (${filas.length} filas${filas.length >= EXPORT_PACIENTES_MAX_FILAS ? ", truncada" : ""})`);
   return { filas, truncado: filas.length >= EXPORT_PACIENTES_MAX_FILAS };
 }

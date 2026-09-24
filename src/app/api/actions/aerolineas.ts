@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getProfile } from "@/app/api/actions/auth";
@@ -39,6 +40,7 @@ export async function crearAerolinea(nombre: string) {
   const supabase = createClient();
   const { error } = await supabase.from("airlines").insert({ nombre: parsed.data });
   if (error) return { error: error.code === "23505" ? "Ya existe una aerolínea con ese nombre" : error.message };
+  await auditar("INSERTAR", "valoraciones", "", `Catálogo de aerolíneas: creada «${parsed.data}»`);
   revalidatePath("/aerolineas");
   return { success: true };
 }
@@ -57,6 +59,7 @@ export async function actualizarAerolinea(id: number, datos: { nombre: string; a
     .update({ nombre: parsed.data, activo: !!datos.activo, updated_at: new Date().toISOString() })
     .eq("id", idParsed.data);
   if (error) return { error: error.code === "23505" ? "Ya existe una aerolínea con ese nombre" : error.message };
+  await auditar("MODIFICAR", "valoraciones", idParsed.data, `Catálogo de aerolíneas: «${parsed.data}» ${datos.activo ? "activa" : "inactiva"}`);
   revalidatePath("/aerolineas");
   return { success: true };
 }
@@ -74,6 +77,7 @@ export async function eliminarAerolinea(id: number) {
     .update({ activo: false, updated_at: new Date().toISOString() })
     .eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "valoraciones", idParsed.data, "Catálogo de aerolíneas: aerolínea desactivada");
   revalidatePath("/aerolineas");
   return { success: true };
 }
