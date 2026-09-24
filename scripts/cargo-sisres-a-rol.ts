@@ -26,7 +26,7 @@ export const CARGO_SISRES_A_ROL: Readonly<Record<number, string>> = {
  * un permiso que nadie decidió.
  */
 export function rolParaCargoSisres(cargo: number | string | null | undefined): string | null {
-  const n = typeof cargo === "string" ? Number(cargo.trim()) : cargo;
+  const n = typeof cargo === "string" ? (/^[0-9]+$/.test(cargo.trim()) ? Number(cargo.trim()) : null) : cargo;
   if (n === null || n === undefined || !Number.isInteger(n)) return null;
   return CARGO_SISRES_A_ROL[n] ?? null;
 }
