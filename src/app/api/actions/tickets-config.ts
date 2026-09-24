@@ -109,7 +109,7 @@ export async function guardarCatalogoTickets(tipo: string, nombres: string[]) {
   if (!t.success || !n.success) return { error: n.success ? "Catálogo desconocido" : (n.error.issues[0]?.message ?? "Datos inválidos") };
   if (!(await admin())) return { error: "Solo un Administrador puede configurar los catálogos" };
 
-  const { error } = await createClient().rpc("guardar_catalogo_ticket", { p_tipo: t.data, p_nombres: n.data });
+  const { error } = await createClient().rpc("guardar_catalogo_ticket", { p_tipo: t.data, p_nombres: n.data } as never);
   if (error) return { error: error.message };
   revalidatePath("/soporte/configuracion");
   revalidatePath("/soporte");
