@@ -76,3 +76,17 @@ export function getDefaultRoute(role: UserRole): string {
     default:               return "/login";
   }
 }
+
+/**
+ * Gestores de soporte técnico (tickets): los cargos de SISRES con act_gestionar_ticket.
+ * Debe coincidir con la función es_gestor_tickets() de la migración 065 — la base es
+ * la que manda (RLS); esto solo decide qué se muestra y qué páginas se abren.
+ */
+export function puedeGestionarTickets(role: UserRole | string | undefined | null): boolean {
+  return role === "ADMIN" || role === "ANALISTA" || role === "COORDINACION";
+}
+
+/** Catálogos, SLA, horario y disponibilidad del soporte: solo Administrador (act_configurar_catalogos_ticket). */
+export function puedeConfigurarTickets(role: UserRole | string | undefined | null): boolean {
+  return role === "ADMIN";
+}
