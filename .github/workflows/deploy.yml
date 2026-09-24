@@ -2,7 +2,10 @@
 # Vercel con GitHub NO funciona mientras el team sea Hobby: rechaza los repos
 # privados de una organización ("Cannot deploy from a private GitHub
 # organization repository on the Hobby plan"). Con la CLI despliega el token
-# del proyecto, así que León y David no necesitan cuenta de Vercel.
+# del proyecto, pero la CLI adjunta el autor del commit y Hobby bloquea el
+# despliegue (BLOCKED) si ese autor no es el dueño de la cuenta: solo pasan los
+# commits del dueño. El job lo detecta y falla rápido con el motivo de Vercel.
+# La salida limpia es Vercel Pro (o su prueba de 14 días).
 #
 # Proyecto: `sismanto` del team `tecnicoaerosanidad`. Requiere los secretos
 # VERCEL_TOKEN (token de ese team), VERCEL_ORG_ID y VERCEL_PROJECT_ID.
@@ -52,11 +55,38 @@ jobs:
 
       - run: vercel build --token="$VERCEL_TOKEN"
 
-      - name: Desplegar y apuntar el dominio de la rama
+      # --no-wait returns as soon as the deployment exists. Without it the CLI
+      # sits in "Building…" for minutes when Vercel blocks the deployment
+      # (Hobby plan: commit author is not the account owner), so poll the API
+      # ourselves and fail fast with the reason Vercel gives.
+      - name: Deploy and wait for the result
         run: |
-          url=$(vercel deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN")
-          echo "Despliegue: $url"
+          url=$(vercel deploy --prebuilt --archive=tgz --no-wait --token="$VERCEL_TOKEN")
+          host="${url#https://}"
+          echo "Deployment: $url"
           echo "- \`${{ github.ref_name }}\` → $url" >> "$GITHUB_STEP_SUMMARY"
+
+          state=""
+          for i in $(seq 1 40); do
+            resp=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v13/deployments/$host?teamId=$VERCEL_ORG_ID")
+            state=$(echo "$resp" | jq -r '.readyState // "UNKNOWN"')
+            case "$state" in
+              READY) break ;;
+              BLOCKED|ERROR|CANCELED)
+                reason=$(echo "$resp" | jq -r '.readyStateReason // .error.message // "no reason given"')
+                echo "::error::Deployment $state: $reason"
+                echo "- ❌ $state: $reason" >> "$GITHUB_STEP_SUMMARY"
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+
+          if [ "$state" != "READY" ]; then
+            echo "::error::Deployment still $state after 10 minutes."
+            exit 1
+          fi
+
           # The alias can fail while the domain still belongs to the old
           # project; the deployment itself is fine, so don't fail the job.
           if vercel alias set "$url" "$ALIAS" --token="$VERCEL_TOKEN"; then
