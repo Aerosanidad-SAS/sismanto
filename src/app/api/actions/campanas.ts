@@ -11,6 +11,8 @@ import { procesarLote, cambiarEstadoCampana } from "@/lib/campanas-lote";
 import type { AccionCampana } from "@/lib/campanas-estado";
 import { adjuntarMedia, quitarMedia, resolverMediaEnvio, type AlmacenMedia } from "@/lib/campanas-media-servicio";
 import { filasDetalle, filasHistorial } from "@/lib/campanas-exportar";
+import { leerDestinatariosDeBase } from "@/lib/campanas-base";
+import { mascararTelefono, normalizarDestinatarios, resumenOmitidos } from "@/lib/campanas-destinatarios";
 
 const ROLES_CAMPANAS = ["ADMIN", "COORDINACION"];
 
@@ -43,32 +45,22 @@ export async function getDestinatariosCampana(campaignId: number) {
   return data || [];
 }
 
-export async function crearCampana(formData: WaCampaignFormData) {
-  const profile = await getProfile();
-  if (!profile || !ROLES_CAMPANAS.includes(profile.role_codigo)) return { error: "Sin permisos" };
+type DestinatarioListo = { telefonoNormalizado: string; nombre?: string; parametros: string[] };
 
-  const parsed = waCampaignSchema.safeParse(formData);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-
-  // Validar teléfonos ANTES de crear nada (mismo criterio que waSanitizarTelefono)
-  const destinatarios = parsed.data.destinatarios.map((d) => ({
-    ...d,
-    telefonoNormalizado: sanitizarTelefono(d.telefono),
-  }));
-  const invalidos = destinatarios.filter((d) => !d.telefonoNormalizado);
-  if (invalidos.length > 0) {
-    return { error: `${invalidos.length} teléfono(s) inválido(s), ej: "${invalidos[0].telefono}"` };
-  }
-
+/** Inserta la campaña y sus destinatarios (ya validados y normalizados). Compartido por las tres formas de crearla. */
+async function insertarCampana(
+  datos: { nombre: string; plantilla: string; idioma: string },
+  destinatarios: DestinatarioListo[]
+) {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
 
   const { data: campana, error } = await supabase
     .from("wa_campaigns")
     .insert({
-      nombre: parsed.data.nombre,
-      plantilla: parsed.data.plantilla,
-      idioma: parsed.data.idioma,
+      nombre: datos.nombre,
+      plantilla: datos.plantilla,
+      idioma: datos.idioma,
       estado: "BORRADOR",
       total_destinatarios: destinatarios.length,
       created_by: userData.user?.id ?? null,
@@ -80,7 +72,7 @@ export async function crearCampana(formData: WaCampaignFormData) {
   const { error: errDest } = await supabase.from("wa_campaign_recipients").insert(
     destinatarios.map((d) => ({
       campaign_id: campana.id,
-      telefono: d.telefonoNormalizado as string,
+      telefono: d.telefonoNormalizado,
       nombre: d.nombre ?? null,
       parametros: d.parametros,
       estado: "PENDIENTE",
@@ -89,7 +81,81 @@ export async function crearCampana(formData: WaCampaignFormData) {
   if (errDest) return { error: errDest.message };
 
   revalidatePath("/comunicaciones");
-  return { success: true, data: campana };
+  return { success: true as const, data: campana };
+}
+
+async function exigirRolCampanas(): Promise<string | null> {
+  const profile = await getProfile();
+  return profile && ROLES_CAMPANAS.includes(profile.role_codigo) ? null : "Sin permisos";
+}
+
+/**
+ * Campaña con destinatarios escritos a mano o leídos de un Excel. Con `omitirInvalidos` (Excel) los teléfonos inválidos
+ * y repetidos se omiten y se cuentan en `resumen`; sin él (texto pegado) un teléfono inválido es un error, como siempre.
+ */
+export async function crearCampana(formData: WaCampaignFormData, opciones: { omitirInvalidos?: boolean } = {}) {
+  const sinPermiso = await exigirRolCampanas();
+  if (sinPermiso) return { error: sinPermiso };
+
+  const parsed = waCampaignSchema.safeParse(formData);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  if (opciones.omitirInvalidos) {
+    const { destinatarios, omitidos } = normalizarDestinatarios(parsed.data.destinatarios.map((d) => ({ ...d, parametros: d.parametros ?? [] })));
+    if (destinatarios.length === 0) return { error: "Ningún destinatario tiene un teléfono válido." };
+    const res = await insertarCampana(parsed.data, destinatarios);
+    return "error" in res ? res : { ...res, resumen: resumenOmitidos(omitidos) };
+  }
+
+  // Validar teléfonos ANTES de crear nada (mismo criterio que waSanitizarTelefono)
+  const destinatarios = parsed.data.destinatarios.map((d) => ({
+    ...d,
+    telefonoNormalizado: sanitizarTelefono(d.telefono),
+  }));
+  const invalidos = destinatarios.filter((d) => !d.telefonoNormalizado);
+  if (invalidos.length > 0) {
+    return { error: `${invalidos.length} teléfono(s) inválido(s), ej: "${invalidos[0].telefono}"` };
+  }
+  return insertarCampana(parsed.data, destinatarios as DestinatarioListo[]);
+}
+
+const entradaBaseSchema = z.object({
+  fuente: z.enum(["pacientes", "clientes"]),
+  ciudad: z.string().trim().max(100).default(""),
+  mapeo: z.array(z.string().max(40)).max(10).default([]),
+});
+
+/** Vista previa de una campaña desde la base: cuántos destinatarios saldrían y cuántos se omiten, sin crear nada ni devolver teléfonos completos. */
+export async function previsualizarDestinatariosBase(entrada: z.input<typeof entradaBaseSchema>) {
+  const sinPermiso = await exigirRolCampanas();
+  if (sinPermiso) return { error: sinPermiso };
+  const parsed = entradaBaseSchema.safeParse(entrada);
+  if (!parsed.success) return { error: "Origen de destinatarios inválido" };
+
+  const res = await leerDestinatariosDeBase(createClient(), parsed.data);
+  if ("error" in res) return res;
+  return {
+    total: res.destinatarios.length,
+    registros: res.registros,
+    resumen: resumenOmitidos(res.omitidos),
+    // Solo una muestra, con el teléfono enmascarado: la vista previa no es una exportación de datos personales.
+    muestra: res.destinatarios.slice(0, 5).map((d) => ({ telefono: mascararTelefono(d.telefonoNormalizado), nombre: d.nombre ?? "", parametros: d.parametros })),
+  };
+}
+
+/** Crea la campaña con los pacientes o clientes activos (y de la ciudad indicada, si se pidió) que tengan un celular válido. */
+export async function crearCampanaDesdeBase(datos: { nombre: string; plantilla: string; idioma: string } & z.input<typeof entradaBaseSchema>) {
+  const sinPermiso = await exigirRolCampanas();
+  if (sinPermiso) return { error: sinPermiso };
+  const base = entradaBaseSchema.safeParse(datos);
+  if (!base.success) return { error: "Origen de destinatarios inválido" };
+  const cab = waCampaignSchema.pick({ nombre: true, plantilla: true, idioma: true }).safeParse(datos);
+  if (!cab.success) return { error: cab.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const res = await leerDestinatariosDeBase(createClient(), base.data);
+  if ("error" in res) return res;
+  const creada = await insertarCampana(cab.data, res.destinatarios);
+  return "error" in creada ? creada : { ...creada, resumen: resumenOmitidos(res.omitidos) };
 }
 
 /**
