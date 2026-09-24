@@ -34,7 +34,6 @@ import {
   Handshake,
   Building2,
   FileSignature,
-  ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultRoute } from "@/lib/auth-utils";
