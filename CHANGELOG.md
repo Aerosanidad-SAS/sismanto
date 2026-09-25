@@ -2,6 +2,23 @@
 
 Lo genera `npm run release` a partir de los archivos de `changelog/unreleased/`. No se edita a mano (ver `changelog/README.md`).
 
+## v0.3.0 — 2026-09-25
+
+### Funcionalidades
+
+- **infra** — Los administradores pueden ver el sistema como cualquier otro rol («Ver como…») para probar permisos, solo en dev y staging. _Roles: ADMIN._
+- **menu** — El menú lateral tiene secciones desplegables que recuerdan lo que abriste. _Roles: todos._
+
+### Correcciones
+
+- **auditoria** — En la bitácora ahora se puede filtrar por todos los módulos que registran (vehículos, regulación, mantenimientos, novedades, clientes, proveedores, capacitaciones y cargas masivas). _Roles: ADMIN._
+- **flota** — Las fechas y los costos fijos (SOAT, póliza y técnico-mecánica) ahora se calculan igual en cualquier computador y en producción: el dashboard y los KPIs muestran la misma cifra, las fechas ya no aparecen un día antes, y el resumen del día y las estadísticas de servicios cuentan el día completo de Colombia. _Roles: todos._
+- **infraestructura** — Al crear un ambiente nuevo desde cero (por ejemplo un staging vacío) ya no falla la instalación de la base de datos en la migración de captación. _Roles: ninguno._
+
+### Mantenimiento
+
+- **infra** — Los PR piden la revisión automáticamente al abrirse. _Roles: ninguno._
+
 ## v0.2.0 — 2026-09-25
 
 Migraciones incluidas: 065, 066, 067, 068, 069, 070, 071, 072, 073, 074, 075, 076, 077, 078, 079, 080, 081, 082, 083, 084, 085, 086.
