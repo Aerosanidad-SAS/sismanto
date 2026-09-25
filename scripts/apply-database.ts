@@ -105,6 +105,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "084_coordinacion_lectura_flota.sql",          file: "scripts/migrations/084_coordinacion_lectura_flota.sql" },
   { name: "085_airlines_semilla.sql",                    file: "scripts/migrations/085_airlines_semilla.sql" },
   { name: "086_captacion_campos_obligatorios.sql",       file: "scripts/migrations/086_captacion_campos_obligatorios.sql" },
+  { name: "087_rls_una_evaluacion_por_consulta.sql",     file: "scripts/migrations/087_rls_una_evaluacion_por_consulta.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
