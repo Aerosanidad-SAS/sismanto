@@ -1,3 +1,26 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression[callee.property.name=/^(getFullYear|getMonth|getDate|getDay|getHours|setFullYear|setMonth|setDate|setHours)$/]",
+        "message": "Estos métodos de Date responden en la zona horaria del equipo que ejecuta (Vercel corre en UTC, tu computador en Bogotá) y dan resultados distintos. Usa las funciones de src/lib/fechas.ts (anioDe, mesDe, sumarDias, sumarMeses, diasEntre…). Ver la política en fechas.ts."
+      },
+      {
+        "selector": "CallExpression[callee.property.name=/^(slice|split|substring)$/][callee.object.callee.property.name='toISOString'][callee.object.callee.object.type='NewExpression'][callee.object.callee.object.arguments.length=0]",
+        "message": "`new Date().toISOString().slice(0, 10)` es el día en UTC y cambia a las 7 p. m. de Colombia. Usa hoyBogota() de src/lib/fechas.ts."
+      },
+      {
+        "selector": "NewExpression[callee.name='Date'][arguments.0.type='Literal'][arguments.0.value=/^\\d{4}-\\d{2}-\\d{2}$/]",
+        "message": "`new Date(\"AAAA-MM-DD\")` es la medianoche UTC (el día anterior en Colombia). Un día de negocio es texto: usa las funciones de src/lib/fechas.ts."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/lib/fechas.ts", "src/**/*.test.ts"],
+      "rules": { "no-restricted-syntax": "off" }
+    }
+  ]
 }

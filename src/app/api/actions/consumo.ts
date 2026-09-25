@@ -1,5 +1,6 @@
 "use server";
 
+import { mesesDelRango } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { fuelLogSchema, metricasConsumoParamsSchema } from "@/lib/validations";
 import { isReferenceSparkCombustionPlaca, normalizePlaca } from "@/lib/fleet-reference-plates";
@@ -238,17 +239,7 @@ export async function getRendimientoCombustibleSerieMensual(
 
     const logs = fuelLogs || [];
 
-    const monthKeys: string[] = [];
-    const start = new Date(fi + "T12:00:00");
-    const end = new Date(ff + "T12:00:00");
-    const cur = new Date(start.getFullYear(), start.getMonth(), 1);
-    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
-    while (cur <= endMonth) {
-      monthKeys.push(
-        `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`
-      );
-      cur.setMonth(cur.getMonth() + 1);
-    }
+    const monthKeys = mesesDelRango(fi, ff);
 
     const rendimientoMesVehiculo = (vehicleIdRow: string, yyyymm: string): number | null => {
       const inMonth = logs

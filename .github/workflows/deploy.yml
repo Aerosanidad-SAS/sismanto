@@ -55,7 +55,12 @@ jobs:
       # de staging) las trae `vercel pull`: no viven en este repo.
       - run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
-      - run: vercel build --token="$VERCEL_TOKEN"
+      - name: Build
+        env:
+          # Se muestran al pie del menú (versión · commit). Sin .git en el despliegue no hay otra forma de saberlo.
+          NEXT_PUBLIC_COMMIT_SHA: ${{ github.sha }}
+          NEXT_PUBLIC_APP_ENV: ${{ github.ref_name == 'staging' && 'staging' || 'dev' }}
+        run: vercel build --token="$VERCEL_TOKEN"
 
       # --no-wait returns as soon as the deployment exists. Without it the CLI
       # sits in "Building…" for minutes when Vercel blocks the deployment

@@ -4,22 +4,8 @@ import { KPIDashboard } from "@/components/charts/kpi-dashboard";
 import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 import { getMetricasConsumo } from "@/app/api/actions/consumo";
 import { requireRole } from "@/app/api/actions/auth";
-
-function calcularRtmPeriodoKpi(
-  fi: string,
-  ff: string,
-  rtmByYear: Record<number, number>
-): number {
-  const anioInicio = new Date(fi).getFullYear();
-  const anioFin = new Date(ff).getFullYear();
-  const aniosConocidos = Object.keys(rtmByYear).map(Number);
-  const ultimoAnio = aniosConocidos.length ? Math.max(...aniosConocidos) : anioFin;
-  let total = 0;
-  for (let anio = anioInicio; anio <= anioFin; anio++) {
-    total += rtmByYear[anio] ?? rtmByYear[ultimoAnio] ?? 0;
-  }
-  return total;
-}
+import { costoFijoDelPeriodo, type TarifasRtm } from "@/lib/costos-fijos";
+import { diasDelRango, esDia, hoyBogota, limitesInstante } from "@/lib/fechas";
 
 type TcoTipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
 type FuelResumenKPI = {
@@ -48,16 +34,16 @@ async function getKPIData(
       .from("vehicles")
       .select("id, placa, centro_operativo, centro_operativo_id");
 
-    const horasTotales =
-    (new Date(fechaFin).getTime() - new Date(fechaInicio).getTime()) /
-    (1000 * 60 * 60);
+    const horasTotales = diasDelRango(fechaInicio, fechaFin) * 24;
+    // Las columnas de novedades son timestamptz: el último día del rango tiene que entrar completo (hora de Colombia).
+    const lim = limitesInstante(fechaInicio, fechaFin);
 
     const { data: incidents } = await supabase
     .from("incidents")
     .select("vehicle_id, fecha_reporte, fecha_cierre, afecta_operatividad")
     .eq("afecta_operatividad", true)
-    .gte("fecha_reporte", fechaInicio)
-    .lte("fecha_reporte", fechaFin);
+    .gte("fecha_reporte", lim.desde)
+    .lt("fecha_reporte", lim.hastaExclusivo);
 
     let vehiclesFiltrados = (vehicles || []).filter(
       (v: any) => !isReferenceSparkCombustionPlaca(v.placa)
@@ -102,7 +88,7 @@ async function getKPIData(
     const { data: rtmRowsKpi } = await supabase
       .from("rtm_historico")
       .select("anio, valor");
-    const rtmByYearKpi: Record<number, number> = {};
+    const rtmByYearKpi: TarifasRtm = {};
     for (const r of rtmRowsKpi || []) {
       rtmByYearKpi[r.anio] = Number(r.valor);
     }
@@ -147,21 +133,14 @@ async function getKPIData(
           .lte("fecha", fechaFin)
       : { data: [] as any[] };
 
-    const diasPeriodo = Math.max(
-      1,
-      Math.round(
-        (new Date(fechaFin).getTime() - new Date(fechaInicio).getTime()) / (1000 * 60 * 60 * 24)
-      ) + 1
-    );
-    const factorPeriodo = diasPeriodo / 365;
-    const rtmPeriodoKpi = calcularRtmPeriodoKpi(fechaInicio, fechaFin, rtmByYearKpi);
-
     const tcoData: Record<string, any> = {};
     for (const v of vehiclesCost) {
-      const costoFijoAnual =
-        (Number(v.costo_soat_anual || 0) + Number(v.costo_poliza_anual || 0)) *
-          factorPeriodo +
-        rtmPeriodoKpi;
+      const costoFijoAnual = costoFijoDelPeriodo(
+        { soatAnual: v.costo_soat_anual, polizaAnual: v.costo_poliza_anual },
+        fechaInicio,
+        fechaFin,
+        rtmByYearKpi
+      );
       tcoData[v.id] = {
         placa: v.placa,
         centroOperativo: v.centro_operativo,
@@ -216,8 +195,8 @@ async function getKPIData(
     const { data: incidentsResolucion } = await supabase
     .from("incidents")
     .select("severidad, fecha_reporte, fecha_cierre, estado")
-    .gte("fecha_reporte", fechaInicio)
-    .lte("fecha_reporte", fechaFin);
+    .gte("fecha_reporte", lim.desde)
+    .lt("fecha_reporte", lim.hastaExclusivo);
 
     const resolucionPorSeveridad: Record<string, any> = {};
     incidentsResolucion?.forEach((inc) => {
@@ -300,9 +279,9 @@ export default async function KPIsPage({
   };
 }) {
   await requireRole(["ADMIN", "GERENCIAL", "ANALISTA"]);
-  const hoy = new Date();
-  const fechaInicio = searchParams.inicio || "2024-01-01";
-  const fechaFin = searchParams.fin || hoy.toISOString().split("T")[0];
+  const hoy = hoyBogota();
+  const fechaInicio = esDia(searchParams.inicio) ? searchParams.inicio : "2024-01-01";
+  const fechaFin = esDia(searchParams.fin) && searchParams.fin >= fechaInicio ? searchParams.fin : hoy;
 
   const kCentroParsed = searchParams.kCentro ? parseInt(searchParams.kCentro, 10) : NaN;
   const tcoCentroId =

@@ -1,6 +1,6 @@
 {
   "name": "aeromanto",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "engines": {
     "node": ">=20.0.0"
@@ -11,10 +11,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node scripts/run-tests.mjs",
     "db:apply": "tsx scripts/apply-database.ts",
+    "db:seed-role-users": "tsx scripts/seed-role-test-users.ts",
     "db:check": "tsx scripts/check-migrations-registered.ts",
     "fuel:load": "tsx scripts/load-fuel-logs.ts",
-    "etl:sisres": "tsx scripts/etl-sisres.ts"
+    "etl:sisres": "tsx scripts/etl-sisres.ts",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

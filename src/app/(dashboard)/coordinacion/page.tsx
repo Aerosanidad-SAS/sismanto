@@ -1,3 +1,4 @@
+import { hoyBogota } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import Link from "next/link";
 async function getCoordinacionData() {
   try {
     const supabase = createClient();
-    const hoy = new Date().toISOString().split("T")[0];
+    const hoy = hoyBogota();
 
     const [{ data: vehicles }, { data: roles }] = await Promise.all([
       supabase.from("vehicles").select("id, placa, estado_actual, centro_operativo"),

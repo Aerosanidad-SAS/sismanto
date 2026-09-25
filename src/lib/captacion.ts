@@ -1,3 +1,4 @@
+import { diaEnBogota } from "@/lib/fechas";
 // Captación de pacientes aeroportuarios + reporte SISPRO (migración 080/081).
 // Listas fijas portadas de registroCaptacion.php de SISRES y códigos del libro "SISPRO 2026".
 // Todo lo de aquí es puro (sin base de datos) para poder probarlo con datos inventados.
@@ -158,7 +159,7 @@ const siNo = (v: boolean | null | undefined) => (v === null || v === undefined ?
 
 /** Fecha (yyyy-MM-dd) del instante dado, en hora de Colombia (UTC-5, sin horario de verano). */
 export function diaColombia(iso: string): string {
-  return new Date(new Date(iso).getTime() - 5 * 3_600_000).toISOString().slice(0, 10);
+  return diaEnBogota(iso);
 }
 
 /** dd/MM/aaaa — formato de "Fecha de atención" en el libro. */
@@ -250,4 +251,47 @@ export function puedeUsarCaptacion(role: string | undefined | null): boolean {
 /** Editar y eliminar registros (cargo 1 de SISRES). */
 export function puedeAdministrarCaptacion(role: string | undefined | null): boolean {
   return role === "ADMIN";
+}
+
+// ─── Campos obligatorios configurables (migración 086) ──────────────────────
+// Solo los OPCIONALES del formulario: los que exige SISPRO (identificación, nombres, país, tipo de usuario, momento,
+// motivo, egreso, CIE-10, médico…) siempre son obligatorios y no se configuran.
+export const CAMPOS_CONFIGURABLES = [
+  { campo: "tipo_atencion", etiqueta: "Tipo de atención" },
+  { campo: "lugar_atencion", etiqueta: "Lugar de atención" },
+  { campo: "lado_atencion", etiqueta: "Lado" },
+  { campo: "ubicacion_atencion", etiqueta: "Ubicación" },
+  { campo: "detalle_ubicacion", etiqueta: "Detalle de la ubicación" },
+  { campo: "tiempo_activacion", etiqueta: "Hora de activación" },
+  { campo: "tiempo_llegada", etiqueta: "Hora de llegada" },
+  { campo: "fecha_nacimiento", etiqueta: "Fecha de nacimiento" },
+  { campo: "telefono", etiqueta: "Teléfono" },
+  { campo: "condicion", etiqueta: "Condición" },
+  { campo: "patologia_sistema", etiqueta: "Patología por sistema" },
+  { campo: "otra_patologia", etiqueta: "Otra patología" },
+  { campo: "post_operatorio", etiqueta: "Post operatorio" },
+  { campo: "accidente_especial", etiqueta: "Accidente especial" },
+  { campo: "notificacion_obligatoria", etiqueta: "Notificación obligatoria" },
+  { campo: "tipo_vuelo", etiqueta: "Tipo de vuelo" },
+  { campo: "aerolinea", etiqueta: "Aerolínea o entidad" },
+  { campo: "origen", etiqueta: "Origen" },
+  { campo: "destino", etiqueta: "Destino" },
+  { campo: "emergencia_tipo", etiqueta: "Tipo de emergencia" },
+] as const;
+
+export type CampoConfigurable = (typeof CAMPOS_CONFIGURABLES)[number]["campo"];
+const NOMBRES_CONFIGURABLES: readonly string[] = CAMPOS_CONFIGURABLES.map((c) => c.campo);
+
+/** ¿Es un campo que se puede marcar como obligatorio? (el servidor no acepta nombres que no estén en la lista). */
+export function esCampoConfigurable(campo: string): campo is CampoConfigurable {
+  return NOMBRES_CONFIGURABLES.includes(campo);
+}
+
+/**
+ * Etiquetas de los campos obligatorios que vienen vacíos. Vacío = undefined, null o solo espacios. Un campo marcado
+ * obligatorio que el servidor no conoce se ignora (una fila vieja no debe bloquear todo el formulario).
+ */
+export function camposObligatoriosFaltantes(datos: Record<string, unknown>, obligatorios: readonly string[]): string[] {
+  const vacio = (v: unknown) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+  return CAMPOS_CONFIGURABLES.filter((c) => obligatorios.includes(c.campo) && vacio(datos[c.campo])).map((c) => c.etiqueta);
 }

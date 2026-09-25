@@ -1,3 +1,4 @@
+import { hoyBogota } from "@/lib/fechas";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadFile, moveAndRenameFile, getReviewFolderId } from "@/lib/graph/client";
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         .from("maintenance_records")
         .insert({
           vehicle_id:             vehicle?.id ?? null,
-          fecha:                  extracted.invoice_date ?? new Date().toISOString().slice(0, 10),
+          fecha:                  extracted.invoice_date ?? hoyBogota(),
           kilometraje_actual:     0,
           tipo:                   (extracted.tipo ?? "CORRECTIVO") as "PREVENTIVO" | "CORRECTIVO",
           descripcion_trabajo:    extracted.work_description ?? null,
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       // ── 5. Rename + move file ─────────────────────────────────────────────
       const newName = buildFileName(
         plate,
-        extracted.invoice_date ?? new Date().toISOString().slice(0, 10),
+        extracted.invoice_date ?? hoyBogota(),
         extracted.work_description ?? extracted.supplier_name ?? "Mantenimiento",
         ext
       );

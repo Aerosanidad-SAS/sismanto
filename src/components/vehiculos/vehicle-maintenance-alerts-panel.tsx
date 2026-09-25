@@ -1,5 +1,6 @@
 "use client";
 
+import { formatoDia, hoyBogota, normalizarDia, sumarDias } from "@/lib/fechas";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { registrarCumplimiento } from "@/app/api/actions/plan-mantenimiento";
@@ -50,7 +51,7 @@ function AlertRow({
   const [open, setOpen]           = useState(false);
   const [isPending, startTransition] = useTransition();
   const [km, setKm]               = useState("");
-  const [fecha, setFecha]         = useState(new Date().toISOString().split("T")[0]);
+  const [fecha, setFecha]         = useState(hoyBogota());
   const [notas, setNotas]         = useState("");
   const [err, setErr]             = useState<string | null>(null);
 
@@ -79,10 +80,7 @@ function AlertRow({
   const proximo = alert.intervalo_km > 0
     ? `Próximo a ${alert.km_ultimo != null ? (alert.km_ultimo + alert.intervalo_km).toLocaleString() : "—"} km`
     : `Próximo el ${alert.ultimo_mantenimiento
-        ? new Date(
-            new Date(alert.ultimo_mantenimiento).getTime() +
-            alert.intervalo_dias * 86400000
-          ).toLocaleDateString("es-CO")
+        ? formatoDia(sumarDias(normalizarDia(alert.ultimo_mantenimiento), alert.intervalo_dias))
         : "—"}`;
 
   const restante = alert.intervalo_km > 0

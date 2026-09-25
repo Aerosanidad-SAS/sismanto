@@ -1,12 +1,25 @@
+import { readFileSync } from "node:fs";
+
+const paquete = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Versión que se muestra al pie del menú (la sube solo el PR de release; ver changelog/README.md). El commit
+  // (NEXT_PUBLIC_COMMIT_SHA) y el entorno (NEXT_PUBLIC_APP_ENV) los inyectan los workflows de despliegue.
+  env: {
+    NEXT_PUBLIC_APP_VERSION: paquete.version,
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
   experimental: {
     serverActions: {
       bodySizeLimit: "8mb",
+    },
+    // El historial de versiones se lee de estos archivos en tiempo de ejecución: hay que llevarlos al despliegue.
+    outputFileTracingIncludes: {
+      "/**/*": ["./CHANGELOG.md", "./changelog/unreleased/**/*"],
     },
   },
 };

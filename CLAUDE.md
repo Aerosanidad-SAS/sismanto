@@ -38,6 +38,7 @@ Three people push to this repo in parallel, each with their own Claude Code. The
 - **One PR = one concern.** No drive-by refactors or reformatting — it creates conflicts for the other two.
 - **Before opening a PR:** `npm run lint`, `npm run build`, and `npx tsc --noEmit` filtered to the files you touched (no *new* errors). Fill in `.github/pull_request_template.md` — roles affected, migrations, how it was verified (screenshot for UI).
 - **Shared database:** `dev` and `staging` use ONE Supabase project. Never run `npm run db:apply` by hand against it — `db-migrate.yml` applies migrations automatically after the PR is merged into `dev` (or `staging`). A `[DB-DESTRUCTIVE]` migration therefore runs the moment the PR merges: review it as if it were already running.
+- **Testing roles:** don't log out/in per role. With `ROLE_SWITCHER_ENABLED=true` in `.env.local`, an ADMIN gets a "Ver como" selector in the sidebar footer (real session switch to `test.<rol>@sismanto.test`, so RLS applies). Seed the users once with `npm run db:seed-role-users`. Never enable it in Production (see `ENTORNOS.md`).
 - **Migration numbers:** right before opening the PR, check the highest number on `origin/dev`. If someone merged the same number, renumber the file and its entry in `scripts/apply-database.ts`. Any DROP or type change → PR title starts with `[DB-DESTRUCTIVE]`.
 - **Conflict-prone files — touch minimally:** `src/lib/validations.ts`, `src/lib/supabase/database.types.ts`, `src/app/(dashboard)/layout.tsx`, `scripts/apply-database.ts`.
 - **Merge into `dev`** requires: CI green + Claude review with no BLOCK + one approval from someone other than the author. Squash merge. `staging → main` is approved only by Daniel.
@@ -133,6 +134,9 @@ npm run build 2>&1 | grep -E "Error:|error TS|Module not found|Failed" | head -3
 
 ## Conventions
 
+- **Dates: a business date is a DAY (`"YYYY-MM-DD"`), not an instant.** Use `src/lib/fechas.ts` (`hoyBogota()`, `sumarDias`, `diasEntre`, `formatoDia`, `limitesInstante`…). Never `new Date("2024-01-01")`, `getFullYear()/getMonth()/getDate()/setMonth()` or `new Date().toISOString().slice(0, 10)`: they answer in the machine's time zone (Vercel = UTC, your PC = Bogotá) so local and production disagree. ESLint enforces it and `npm test` runs the tests under three time zones. Fixed costs come from `src/lib/costos-fijos.ts` only.
+
+- **Versioning:** every PR into `dev` adds `changelog/unreleased/<topic>.md` (type/area/roles/migration + one user-facing line in Spanish); nobody edits `package.json`'s version or `CHANGELOG.md` in a PR — only the release PR (`npm run release`). Full rules: `changelog/README.md`.
 - **File naming:** `kebab-case` / `PascalCase` for components
 - **Git commits:** Conventional Commits (`feat:`, `fix:`, `chore:`)
 - **No unreviewed deps** — check before `npm install`

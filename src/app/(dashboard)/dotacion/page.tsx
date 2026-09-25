@@ -1,3 +1,4 @@
+import { hoyBogota } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/app/api/actions/auth";
 import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
@@ -11,7 +12,7 @@ import { DotacionPanel } from "@/components/dotacion/dotacion-panel";
 export default async function DotacionPage() {
   const profile = await requireRole(["AUXILIAR_ENFERMERIA", "ADMIN", "ANALISTA"]);
   const supabase = createClient();
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyBogota();
 
   let vehiclesQuery = supabase.from("vehicles").select("id, placa, marca").order("placa");
   const centro = centroVisible(profile);

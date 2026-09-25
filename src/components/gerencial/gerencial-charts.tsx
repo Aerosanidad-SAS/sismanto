@@ -1,5 +1,6 @@
 "use client";
 
+import { hoyBogota, sumarMeses } from "@/lib/fechas";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateField } from "@/components/forms/date-field";
@@ -10,13 +11,11 @@ import { getEstadisticasServiciosPorCiudad, type EstadisticasPorCiudad } from "@
 const COLORES = { Bogotá: "#2563eb", Medellín: "#16a34a" };
 
 function hoyIso() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyBogota();
 }
 
 function seisMesesAtrasIso() {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 6);
-  return d.toISOString().slice(0, 10);
+  return sumarMeses(hoyBogota(), -6);
 }
 
 export function ServiciosPorCiudadChart({ inicial }: { inicial: EstadisticasPorCiudad[] }) {

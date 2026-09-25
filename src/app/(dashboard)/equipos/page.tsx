@@ -1,3 +1,4 @@
+import { hoyBogota, sumarDias } from "@/lib/fechas";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getEquiposBiomedicos, getMantenimientosBiomedicos } from "@/app/api/actions/inventario-biomedico";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
@@ -14,8 +15,8 @@ export default async function EquiposPage() {
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
 
-  const hoy = new Date().toISOString().slice(0, 10);
-  const en30dias = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const hoy = hoyBogota();
+  const en30dias = sumarDias(hoyBogota(), 30);
   const mantenimientoVencido = equipos.filter(
     (e) => e.proximo_mantenimiento && e.proximo_mantenimiento < hoy
   ).length;

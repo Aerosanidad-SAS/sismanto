@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { NextResponse } from "next/server";
 import { getFilasSisproMes } from "@/app/api/actions/captacion";
+import { auditar } from "@/lib/auditoria";
 import { COLUMNAS_SISPRO } from "@/lib/captacion";
 
 // Descarga del reporte SISPRO de un mes (?mes=aaaa-mm) en el mismo formato de las hojas
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
   }
 
   const [anio, num] = mes.split("-").map(Number);
+  await auditar("EXPORTAR", "captacion", "", `Reporte SISPRO ${mes} (${resultado.total} filas)`);
   const hoja = XLSX.utils.aoa_to_sheet([[...COLUMNAS_SISPRO], ...resultado.filas]);
   hoja["!cols"] = COLUMNAS_SISPRO.map((c) => ({ wch: Math.min(Math.max(c.length, 12), 40) }));
   const libro = XLSX.utils.book_new();
