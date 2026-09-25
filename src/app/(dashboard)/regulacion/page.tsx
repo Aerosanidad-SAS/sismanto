@@ -70,7 +70,7 @@ export default async function RegulacionPage({
 
       <ServiciosDelDia
         servicios={(tablero.servicios as ServicioDelDia[]).filter(
-          (s) => !prefijoDeCiudad || (s.ciudad_origen ?? "").toLowerCase().startsWith(prefijoDeCiudad)
+          (s) => !prefijoDeCiudad || (s.ciudad_registro ?? "").toLowerCase().startsWith(prefijoDeCiudad)
         )}
       />
 

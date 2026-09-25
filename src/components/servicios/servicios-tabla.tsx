@@ -191,6 +191,8 @@ interface ServiciosTablaProps {
   >;
   /** Ciudad del usuario logueado — default de "ciudad origen" en un servicio nuevo. */
   ciudadDefault?: string | null;
+  /** Ciudad de registro por defecto (la del CRA de quien registra): BOGOTA D.C. o MEDELLÍN. */
+  ciudadRegistroDefault?: string;
   /** Rol de quien ve la tabla — determina si los campos de logística quedan bloqueados al editar. */
   viewerRole?: string | null;
   /** Conteo y paginación: van a la izquierda de la barra, en la misma fila que «+ Registrar». */
@@ -227,6 +229,7 @@ export function ServiciosTabla({
   reguladoresDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
+  ciudadRegistroDefault,
   viewerRole,
   viewerNombreCompleto,
   barra,
@@ -367,6 +370,7 @@ export function ServiciosTabla({
       tipo_servicio: "",
       departamento_origen: ubicacionDefault?.departamento ?? "",
       ciudad_origen: ubicacionDefault?.ciudad ?? "",
+      ciudad_registro: ciudadRegistroDefault ?? "",
       // SISRES precarga "Recibe" con la sesión y preselecciona "Despacha"
       // al mismo usuario cuando es Regulador (registroServicios.php,
       // $esRegulador) — y fuerza método de pago a N/A porque el Regulador

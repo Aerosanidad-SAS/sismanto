@@ -202,7 +202,7 @@ function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centroId
   if (filtros.tipo) q = q.eq("tipo_servicio", filtros.tipo);
   if (filtros.cliente) q = q.eq("cliente", filtros.cliente);
   const prefijo = prefijoCiudad(filtros.ciudad);
-  if (prefijo) q = q.ilike("ciudad_origen", `${prefijo}%`);
+  if (prefijo) q = q.ilike("ciudad_registro", `${prefijo}%`);
   if (filtros.origen) q = q.eq("ciudad_origen", filtros.origen);
   if (filtros.destino) q = q.eq("ciudad_destino", filtros.destino);
   if (filtros.cedula) q = q.ilike("cedula_paciente", `%${filtros.cedula.replace(/[%_\\]/g, "")}%`);

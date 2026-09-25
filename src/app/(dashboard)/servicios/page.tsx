@@ -14,7 +14,7 @@ import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 import { MisServicios } from "@/components/servicios/mis-servicios";
 import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { centroVisible } from "@/lib/auth-utils";
-import { leerFiltros } from "@/lib/servicios-lista";
+import { ciudadRegistroDePerfil, leerFiltros } from "@/lib/servicios-lista";
 import { ServiciosFiltros } from "@/components/servicios/servicios-filtros";
 import { ServiciosPaginacion } from "@/components/servicios/servicios-paginacion";
 import { ExportarServicios } from "@/components/servicios/exportar-servicios";
@@ -138,6 +138,7 @@ export default async function ServiciosPage({
             reguladoresDisponibles={reguladoresDisponibles}
             tripulacionPorVehiculo={tripulacionPorVehiculo}
             ciudadDefault={profile?.ciudad}
+            ciudadRegistroDefault={ciudadRegistroDePerfil(profile)}
           />
           {total > 0 && <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
         </CardContent>

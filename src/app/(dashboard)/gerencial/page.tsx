@@ -106,7 +106,7 @@ export default async function GerencialPage({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h2 className="text-xl">Servicios — Bogotá y Medellín</h2>
-            <HelpTrigger text="Segmentado por texto libre (ciudad de origen del servicio) — no hay un catálogo cerrado de ciudad todavía, así que es una cifra aproximada, no exacta." />
+            <HelpTrigger text="Segmentado por ciudad de registro: la del CRA al que está asignado el usuario de Regulación que recibió la solicitud (un servicio de Medellín a Chocó recibido por el CRA Medellín cuenta como Medellín). Es texto libre, sin catálogo cerrado." />
           </div>
           <FiltroCiudadUrl />
         </div>
