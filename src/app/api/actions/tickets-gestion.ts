@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireAuth } from "@/app/api/actions/auth";
 import { puedeGestionarTickets } from "@/lib/auth-utils";
+import { notificarTicket } from "@/lib/tickets-correo";
 import { auditar } from "@/lib/auditoria";
 import { TICKET_ESTADOS, TICKET_PRIORIDADES } from "@/lib/validations";
 import type { TicketHistorialRow } from "@/app/api/actions/tickets";
@@ -130,7 +131,9 @@ async function accion(id: number, detalle: string, ejecutar: (supabase: Cliente,
 }
 
 export async function tomarTicket(id: number) {
-  return accion(id, "Ticket tomado", (s, t) => s.rpc("tomar_ticket", { p_ticket_id: t }) as never);
+  const r = await accion(id, "Ticket tomado", (s, t) => s.rpc("tomar_ticket", { p_ticket_id: t }) as never);
+  if ("success" in r && r.success) await notificarTicket("TOMADO", id);
+  return r;
 }
 
 export async function registrarContactoTicket(id: number, nota?: string) {
@@ -149,7 +152,7 @@ export async function cambiarEstadoTicket(id: number, estado: string, solucion?:
   const parsed = cambioEstadoSchema.safeParse({ estado, solucion, nota });
   if (!parsed.success) return { error: "Datos inválidos" };
   if (parsed.data.estado === "RESUELTO" && !parsed.data.solucion) return { error: "Describe la solución aplicada" };
-  return accion(
+  const r = await accion(
     id,
     `Estado → ${parsed.data.estado}`,
     (s, t) =>
@@ -160,6 +163,9 @@ export async function cambiarEstadoTicket(id: number, estado: string, solucion?:
         p_nota: parsed.data.nota || null,
       }) as never,
   );
+  // Al resolver, se avisa al solicitante con la solución (y cómo reabrir). Nunca rompe el cambio de estado.
+  if ("success" in r && r.success && parsed.data.estado === "RESUELTO") await notificarTicket("RESUELTO", id);
+  return r;
 }
 
 export async function cambiarPrioridadTicket(id: number, prioridad: string) {
