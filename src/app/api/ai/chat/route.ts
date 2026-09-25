@@ -3,13 +3,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
 import {
-  checkBudget,
-  logUsage,
   toolGetNovedades,
   toolGetVehiculos,
   toolGetMantenimientos,
   toolGetCombustible,
 } from "@/app/api/actions/ai-data";
+import { checkBudget, logUsage } from "@/lib/ai-presupuesto";
 import { crearMantenimiento } from "@/app/api/actions/mantenimientos";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
