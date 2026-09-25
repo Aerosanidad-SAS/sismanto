@@ -1,5 +1,6 @@
 "use server";
 
+import { diaEnBogota, hoyBogota, limitesInstante, sumarDias, sumarMeses } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
 import { centroVisible } from "@/lib/auth-utils";
@@ -21,8 +22,8 @@ export interface EstadisticasServicios {
  */
 export async function getEstadisticasServicios(): Promise<EstadisticasServicios> {
   const supabase = createClient();
-  const desde = new Date();
-  desde.setMonth(desde.getMonth() - 12);
+  const hoy = hoyBogota();
+  const desdeIso = limitesInstante(sumarMeses(hoy, -12), hoy).desde;
 
   // Por páginas: un solo .limit(20000) devuelve 1000 filas y las estadísticas salían incompletas.
   const filas = await leerTodo((d, h) =>
@@ -31,7 +32,7 @@ export async function getEstadisticasServicios(): Promise<EstadisticasServicios>
       .select(
         "etapa, tipo_servicio, fecha_hora_registro, ciudad_origen, oportunidad_atencion, tiempo_total_origen, tiempo_espera_destino, tiempo_total"
       )
-      .gte("fecha_hora_registro", desde.toISOString())
+      .gte("fecha_hora_registro", desdeIso)
       .order("id")
       .range(d, h),
   );
@@ -46,7 +47,8 @@ export async function getEstadisticasServicios(): Promise<EstadisticasServicios>
     porEtapaMap.set(s.etapa, (porEtapaMap.get(s.etapa) ?? 0) + 1);
     porTipoMap.set(s.tipo_servicio, (porTipoMap.get(s.tipo_servicio) ?? 0) + 1);
 
-    const mes = s.fecha_hora_registro?.slice(0, 7) ?? "s/f";
+    const registro = (s as { fecha_hora_registro: string | null }).fecha_hora_registro;
+      const mes = registro ? diaEnBogota(registro).slice(0, 7) : "s/f";
     const m = porMesMap.get(mes) ?? { cantidad: 0, finalizados: 0 };
     m.cantidad++;
     if (s.etapa === "FINALIZADO") m.finalizados++;
@@ -108,19 +110,13 @@ export async function getEstadisticasServiciosPorCiudad(params?: {
 
   let desdeIso: string;
   let hastaExclusivoIso: string;
+  const hoy = hoyBogota();
   if (params) {
-    desdeIso = `${params.desde}T00:00:00.000Z`;
-    const diaSiguiente = new Date(`${params.hasta}T00:00:00.000Z`);
-    diaSiguiente.setDate(diaSiguiente.getDate() + 1);
-    hastaExclusivoIso = diaSiguiente.toISOString();
+    ({ desde: desdeIso, hastaExclusivo: hastaExclusivoIso } = limitesInstante(params.desde, params.hasta));
   } else {
-    const desde = new Date();
-    desde.setMonth(desde.getMonth() - 6);
-    desdeIso = desde.toISOString();
-    hastaExclusivoIso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    ({ desde: desdeIso, hastaExclusivo: hastaExclusivoIso } = limitesInstante(sumarMeses(hoy, -6), hoy));
   }
-  const hace30dias = new Date();
-  hace30dias.setDate(hace30dias.getDate() - 30);
+  const hace30dias = Date.parse(limitesInstante(sumarDias(hoy, -30), hoy).desde);
 
   const filas = await leerTodo((d, h) =>
     supabase
@@ -135,12 +131,13 @@ export async function getEstadisticasServiciosPorCiudad(params?: {
 
   return CIUDADES_JUNTA.map(({ ciudad, prefijo }) => {
     const deLaCiudad = filas.filter((s) => sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo));
-    const ultimos30 = deLaCiudad.filter((s) => new Date(s.fecha_hora_registro) >= hace30dias);
+    const ultimos30 = deLaCiudad.filter((s) => Date.parse((s as { fecha_hora_registro: string }).fecha_hora_registro) >= hace30dias);
     const finalizados = ultimos30.filter((s) => s.etapa === "FINALIZADO").length;
 
     const porMesMap = new Map<string, number>();
     for (const s of deLaCiudad) {
-      const mes = s.fecha_hora_registro?.slice(0, 7) ?? "s/f";
+      const registro = (s as { fecha_hora_registro: string | null }).fecha_hora_registro;
+      const mes = registro ? diaEnBogota(registro).slice(0, 7) : "s/f";
       porMesMap.set(mes, (porMesMap.get(mes) ?? 0) + 1);
     }
 
@@ -277,9 +274,7 @@ export async function getResumenOperativoDiario(params: {
   hasta: string;
 }): Promise<ResumenOperativoConsolidado> {
   const supabase = createClient();
-  const desdeIso = `${params.desde}T00:00:00.000Z`;
-  const diaSiguiente = new Date(`${params.hasta}T00:00:00.000Z`);
-  diaSiguiente.setDate(diaSiguiente.getDate() + 1);
+  const { desde: desdeIso, hastaExclusivo: hastaExclusivoIso } = limitesInstante(params.desde, params.hasta);
 
   // Mismo alcance que la lista de servicios: Regulación cuenta lo de su centro,
   // si no, el resumen muestra cifras de servicios que ni puede abrir.
@@ -289,7 +284,7 @@ export async function getResumenOperativoDiario(params: {
       .from("medical_services")
       .select("etapa, tipo_servicio, ciudad_origen")
       .gte("fecha_hora_registro", desdeIso)
-      .lt("fecha_hora_registro", diaSiguiente.toISOString());
+      .lt("fecha_hora_registro", hastaExclusivoIso);
     if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
     return query.order("id").range(d, h);
   });

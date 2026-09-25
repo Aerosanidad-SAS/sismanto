@@ -1,3 +1,4 @@
+import { hoyBogota } from "@/lib/fechas";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getEstadisticasServicios, getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
 import { EstadisticasCharts } from "@/components/servicios/estadisticas-charts";
@@ -6,7 +7,7 @@ import { requireRole } from "@/app/api/actions/auth";
 
 export default async function EstadisticasPage() {
   await requireRole(["ADMIN", "GERENCIAL", "ANALISTA", "COORDINACION"]);
-  const hoyIso = new Date().toISOString().slice(0, 10);
+  const hoyIso = hoyBogota();
   const [stats, resumenHoy] = await Promise.all([
     getEstadisticasServicios(),
     getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),

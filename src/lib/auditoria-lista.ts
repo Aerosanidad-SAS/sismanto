@@ -19,6 +19,14 @@ export const ENTIDADES_AUDITORIA = [
   "tickets",
   "captacion",
   "configuracion",
+  "vehiculos",
+  "regulacion",
+  "mantenimientos",
+  "novedades",
+  "clientes",
+  "proveedores",
+  "capacitaciones",
+  "carga_masiva",
 ] as const;
 
 export const AUDITORIA_POR_PAGINA = 50;

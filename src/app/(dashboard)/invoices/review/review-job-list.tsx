@@ -118,7 +118,7 @@ function JobCard({
           <div>
             <p className="font-medium">{job.source_file_name ?? "Sin nombre"}</p>
             <p className="text-xs text-muted-foreground">
-              {new Date(job.created_at).toLocaleString("es-CO")}
+              {new Date(job.created_at).toLocaleString("es-CO", { timeZone: "America/Bogota" })}
               {job.vehicle_plate && (
                 <span className="ml-2 font-mono bg-muted px-1 rounded">
                   {job.vehicle_plate}

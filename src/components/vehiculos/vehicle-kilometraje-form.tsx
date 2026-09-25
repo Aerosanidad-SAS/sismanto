@@ -1,5 +1,6 @@
 "use client";
 
+import { hoyBogota } from "@/lib/fechas";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ export function VehicleKilometrajeForm({ vehicleId, placa }: VehicleKilometrajeF
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [km, setKm] = useState("");
-  const [fecha, setFecha] = useState(() => new Date().toISOString().split("T")[0]);
+  const [fecha, setFecha] = useState(() => hoyBogota());
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 

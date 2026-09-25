@@ -4,24 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { dateRangeSchema, tipoFiltroMantenimientoSchema } from "@/lib/validations";
 import type { CostoPorVehiculoKPI, DisponibilidadVehiculo } from "@/types";
 import { isReferenceSparkCombustionPlaca, normalizePlaca } from "@/lib/fleet-reference-plates";
+import { costoFijoDelPeriodo, type TarifasRtm } from "@/lib/costos-fijos";
+import { limitesInstante } from "@/lib/fechas";
 
 type TipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
-
-function calcularRtmPeriodo(
-  fi: string,
-  ff: string,
-  rtmByYear: Record<number, number>
-): number {
-  const anioInicio = new Date(fi).getFullYear();
-  const anioFin = new Date(ff).getFullYear();
-  const aniosConocidos = Object.keys(rtmByYear).map(Number);
-  const ultimoAnio = aniosConocidos.length ? Math.max(...aniosConocidos) : anioFin;
-  let total = 0;
-  for (let anio = anioInicio; anio <= anioFin; anio++) {
-    total += rtmByYear[anio] ?? rtmByYear[ultimoAnio] ?? 0;
-  }
-  return total;
-}
 
 export type CostosPorVehiculoOpciones = {
   centroOperativoId?: number;
@@ -94,7 +80,7 @@ export async function getCostosPorVehiculo(
     const { data: rtmRows } = await supabase
       .from("rtm_historico")
       .select("anio, valor");
-    const rtmByYear: Record<number, number> = {};
+    const rtmByYear: TarifasRtm = {};
     for (const r of rtmRows || []) {
       rtmByYear[r.anio] = Number(r.valor);
     }
@@ -148,19 +134,14 @@ export async function getCostosPorVehiculo(
       .gte("fecha", fi)
       .lte("fecha", ff);
 
-    const diasPeriodo = Math.max(
-      1,
-      Math.round((new Date(ff).getTime() - new Date(fi).getTime()) / (1000 * 60 * 60 * 24)) + 1
-    );
-    const factorPeriodo = diasPeriodo / 365;
-    const rtmPeriodo = calcularRtmPeriodo(fi, ff, rtmByYear);
-
     const map: Record<string, CostoPorVehiculoKPI> = {};
     for (const v of vehicles) {
-      const costoFijoAnual =
-        (Number(v.costo_soat_anual || 0) + Number(v.costo_poliza_anual || 0)) *
-          factorPeriodo +
-        rtmPeriodo;
+      const costoFijoAnual = costoFijoDelPeriodo(
+        { soatAnual: v.costo_soat_anual, polizaAnual: v.costo_poliza_anual },
+        fi,
+        ff,
+        rtmByYear
+      );
       map[v.id] = {
         vehicleId: v.id,
         placa: v.placa || "",
@@ -228,8 +209,10 @@ export async function getDisponibilidadPorVehiculo(
     if (vehiclesOperativos.length === 0) return [];
 
     // Período en ms — incluye el último día completo (hasta las 23:59:59)
-    const periodStartMs = new Date(fi).getTime();
-    const periodEndMs = new Date(ff).getTime() + 24 * 60 * 60 * 1000 - 1;
+    // Límites del periodo en hora de Colombia (las fechas de cambio son timestamptz), no en UTC.
+    const lim = limitesInstante(fi, ff);
+    const periodStartMs = Date.parse(lim.desde);
+    const periodEndMs = Date.parse(lim.hastaExclusivo) - 1;
     const horasTotales = (periodEndMs - periodStartMs + 1) / (1000 * 60 * 60);
 
     // Historial de cambios de estado: fuente de verdad para TFDS
@@ -320,8 +303,8 @@ export async function getResolucionNovedades(
         `id, fecha_reporte, descripcion, severidad, reportado_por, estado, fecha_cierre, tiempo_resolucion_horas, afecta_operatividad,
          vehicles!inner(placa, marca)`
       )
-      .gte("fecha_reporte", fi)
-      .lte("fecha_reporte", ff)
+      .gte("fecha_reporte", limitesInstante(fi, ff).desde)
+      .lt("fecha_reporte", limitesInstante(fi, ff).hastaExclusivo)
       .order("fecha_reporte", { ascending: false });
 
     if (!data) return { novedades: [], resumen: null };

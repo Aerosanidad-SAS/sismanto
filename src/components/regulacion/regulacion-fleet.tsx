@@ -1,5 +1,6 @@
 "use client";
 
+import { hoyBogota } from "@/lib/fechas";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -167,7 +168,7 @@ export function RegulacionFleet({
   };
   const [error, setError] = useState<string | null>(null);
   const [unassignAssignmentId, setUnassignAssignmentId] = useState<number | null>(null);
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyBogota();
 
   const openUnassignDialog = (assignmentId: number) => {
     setUnassignAssignmentId(assignmentId);

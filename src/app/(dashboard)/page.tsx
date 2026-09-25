@@ -1,3 +1,4 @@
+import { diasEntre, esDia, hoyBogota, primerDiaDelMes, sumarDias } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,23 +36,6 @@ const DEFAULT_DATA = {
   novedadesAbiertasPorVehicleId: {} as Record<string, NovedadAbiertaResumen[]>,
 };
 
-const BOGOTA_TIME_ZONE = "America/Bogota";
-const DAY_MS = 1000 * 60 * 60 * 24;
-
-const getDateIsoInTimeZone = (date: Date, timeZone: string): string => {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const year = parts.find((p) => p.type === "year")?.value;
-  const month = parts.find((p) => p.type === "month")?.value;
-  const day = parts.find((p) => p.type === "day")?.value;
-  if (!year || !month || !day) return "";
-  return `${year}-${month}-${day}`;
-};
-
 // "2026-01-15" → "15 ene 2026"
 const MESES_CORTOS = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"] as const;
 const formatFechaCortaPeriodo = (iso: string): string => {
@@ -61,12 +45,7 @@ const formatFechaCortaPeriodo = (iso: string): string => {
 };
 
 const getDiffDays = (targetIso: string, fromIso: string): number =>
-  Math.max(
-    0,
-    Math.ceil(
-      (Date.parse(`${targetIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / DAY_MS
-    )
-  );
+  esDia(targetIso) && esDia(fromIso) ? Math.max(0, diasEntre(fromIso, targetIso)) : 0;
 
 async function getDashboardData() {
   try {
@@ -79,17 +58,13 @@ async function getDashboardData() {
     const totalOperativos = vehicles.filter((v: any) => v.estado_actual === "OPERATIVO").length;
     const totalFueraServicio = vehicles.filter((v: any) => v.estado_actual === "FUERA_DE_SERVICIO").length;
 
-    const now = new Date();
-    const hoyBogota = getDateIsoInTimeZone(now, BOGOTA_TIME_ZONE);
-    const en30Dias = new Date(now);
-    en30Dias.setDate(en30Dias.getDate() + 30);
-    const limiteBogota = getDateIsoInTimeZone(en30Dias, BOGOTA_TIME_ZONE);
-    const [year = "", month = ""] = hoyBogota.split("-");
-    const inicioMesBogota = year && month ? `${year}-${month}-01` : hoyBogota;
+    const hoyDia = hoyBogota();
+    const limiteBogota = sumarDias(hoyDia, 30);
+    const inicioMesBogota = primerDiaDelMes(hoyDia);
 
     const isInNext30Days = (dateIso: string | null | undefined): dateIso is string => {
       if (!dateIso) return false;
-      return dateIso >= hoyBogota && dateIso <= limiteBogota;
+      return dateIso >= hoyDia && dateIso <= limiteBogota;
     };
 
     const mantenimientosMes = vehicleIdList.length
@@ -114,7 +89,7 @@ async function getDashboardData() {
               {
                 placa: String(v.placa || ""),
                 fecha: v.vencimiento_soat,
-                diasRestantes: getDiffDays(v.vencimiento_soat, hoyBogota),
+                diasRestantes: getDiffDays(v.vencimiento_soat, hoyDia),
               },
             ]
           : []
@@ -129,7 +104,7 @@ async function getDashboardData() {
           {
             placa: String(v.placa || ""),
             fecha,
-            diasRestantes: getDiffDays(fecha, hoyBogota),
+            diasRestantes: getDiffDays(fecha, hoyDia),
           },
         ];
       })
@@ -231,23 +206,17 @@ export default async function DashboardPage({
     gCentro?: string;
   };
 }) {
-  const hoy = new Date();
   const defaultInicio = "2024-01-01"; // inicio del historial real de combustible y mantenimientos
-  const defaultFin = hoy.toISOString().split("T")[0];
+  const defaultFin = hoyBogota();
 
   const parseDashDate = (s?: string): string | null => {
     const t = s?.trim();
-    if (!t || Number.isNaN(Date.parse(t))) return null;
-    return t;
+    return esDia(t) ? t : null;
   };
 
   const gInicioOk = parseDashDate(searchParams.gInicio);
   const gFinOk = parseDashDate(searchParams.gFin);
-  const globalPeriodoValido = Boolean(
-    gInicioOk &&
-      gFinOk &&
-      new Date(gInicioOk).getTime() <= new Date(gFinOk).getTime()
-  );
+  const globalPeriodoValido = Boolean(gInicioOk && gFinOk && gInicioOk <= gFinOk);
 
   let globalCentroId: number | undefined;
   if (globalPeriodoValido && searchParams.gCentro?.trim()) {
@@ -322,7 +291,7 @@ export default async function DashboardPage({
 
   if (canAssignOvem) {
     const supabaseDash = createClient();
-    const hoyIso = new Date().toISOString().split("T")[0];
+    const hoyIso = hoyBogota();
     const [ousers, assignments] = await Promise.all([
       getUsuariosPorRol("OVEM"),
       supabaseDash

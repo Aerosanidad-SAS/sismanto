@@ -1,3 +1,4 @@
+import { hoyBogota, sumarDias, sumarMeses } from "@/lib/fechas";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
@@ -12,16 +13,6 @@ import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 
 const ROLES_PERMITIDOS = ["ADMIN", "GERENCIAL"];
-const BOGOTA_TIME_ZONE = "America/Bogota";
-
-const getDateIsoInTimeZone = (date: Date, timeZone: string): string => {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
-  const year = parts.find((p) => p.type === "year")?.value;
-  const month = parts.find((p) => p.type === "month")?.value;
-  const day = parts.find((p) => p.type === "day")?.value;
-  return year && month && day ? `${year}-${month}-${day}` : "";
-};
-
 interface VencimientoFila {
   placa: string;
   fecha: string;
@@ -30,7 +21,7 @@ interface VencimientoFila {
 async function getDatosGerenciales() {
   const supabase = createClient();
 
-  const hoyIso = new Date().toISOString().slice(0, 10);
+  const hoyIso = hoyBogota();
 
   const [{ data: vehiclesRaw }, estadisticasCiudad, resumenHoy, biomedicos, { data: revenueRaw }] = await Promise.all([
     supabase.from("vehicles").select("placa, estado_actual, centro_operativo, vencimiento_soat, vencimiento_rtm, vencimiento_tecnicomecanica, fecha_pase_aeroportuario"),
@@ -40,15 +31,13 @@ async function getDatosGerenciales() {
     supabase
       .from("vehicle_service_revenue")
       .select("periodo, monto")
-      .gte("periodo", new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().slice(0, 10)),
+      .gte("periodo", sumarMeses(hoyIso, -3)),
   ]);
 
   const vehicles = (vehiclesRaw ?? []).filter((v) => !isReferenceSparkCombustionPlaca(v.placa));
 
-  const hoy = getDateIsoInTimeZone(new Date(), BOGOTA_TIME_ZONE);
-  const en30Dias = new Date();
-  en30Dias.setDate(en30Dias.getDate() + 30);
-  const limite = getDateIsoInTimeZone(en30Dias, BOGOTA_TIME_ZONE);
+  const hoy = hoyIso;
+  const limite = sumarDias(hoy, 30);
   const enVentana = (fecha: string | null): fecha is string => !!fecha && fecha >= hoy && fecha <= limite;
 
   const vencimientosSoat: VencimientoFila[] = vehicles

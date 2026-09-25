@@ -40,6 +40,15 @@ La base de datos se migra aparte, en GitHub Actions: `.github/workflows/db-migra
 4. **Variables pendientes en Vercel**: `AZURE_*`, `ONEDRIVE_*`, `ANTHROPIC_API_KEY` (facturas y chat de IA), `NOTIFICATIONS_MAIL_FROM` (correos de vencimientos) y `CRON_SECRET`. Sin ellas esas funciones no operan; el resto de la app sí.
 5. **Supabase Free**: pausa los proyectos tras 7 días sin actividad; `.github/workflows/supabase-keepalive.yml` los mantiene activos (variable del repo `SUPABASE_KEEPALIVE_TARGETS`: una línea `<url> <anon key>` por proyecto).
 
+## Selector de roles ("Ver como…")
+
+Solo para probar: un ADMIN elige un rol en el pie del menú lateral y el sistema se ve exactamente como lo ve ese rol (menú, redirecciones y datos, porque el RLS lee el rol del usuario real de la sesión). Por debajo cambia la sesión a un usuario de prueba `test.<rol>@sismanto.test` (sin contraseña ni buzón) y un banner amarillo permite volver a ADMIN. Cada cambio queda en la bitácora con el administrador real.
+
+- **Se activa** con `ROLE_SWITCHER_ENABLED=true`: en `.env.local` (local) y en el entorno **Preview** de Vercel (dev y staging). Sin la variable, o con `VERCEL_ENV=production`, no existe ni responde. **Nunca definirla en Production.**
+- **Usuarios de prueba:** `npm run db:seed-role-users` (idempotente; solo corre contra el proyecto de staging). Dev y staging comparten base, así que basta con correrlo una vez.
+- **Límite:** OVEM, MEDICO y AUXILIAR_ENFERMERIA ven "Mis servicios" vacío hasta que se les asigne un vehículo o servicio.
+- Los usuarios `[TEST]` aparecen en Administración → Usuarios.
+
 ## Checklist de go-live
 
 Antes de recibir usuarios reales:

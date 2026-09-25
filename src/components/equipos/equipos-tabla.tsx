@@ -1,5 +1,6 @@
 "use client";
 
+import { hoyBogota, sumarDias } from "@/lib/fechas";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -164,7 +165,7 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
     setError(null);
     formMant.reset({
       equipment_id: e.id,
-      fecha_mantenimiento: new Date().toISOString().slice(0, 10),
+      fecha_mantenimiento: hoyBogota(),
       obs_apto: true,
       obs_averiado: false,
       obs_reparacion: false,
@@ -223,9 +224,9 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
 
   const estadoMantenimiento = (e: EquipoRow) => {
     if (!e.proximo_mantenimiento) return <Badge variant="outline">Sin programar</Badge>;
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = hoyBogota();
     if (e.proximo_mantenimiento < hoy) return <Badge variant="destructive">Vencido</Badge>;
-    const en30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const en30 = sumarDias(hoyBogota(), 30);
     if (e.proximo_mantenimiento <= en30) return <Badge variant="default">Próximo</Badge>;
     return <Badge variant="success">Al día</Badge>;
   };
