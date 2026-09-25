@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/api/actions/auth";
-import { getCaptacion, getCatalogosCaptacion } from "@/app/api/actions/captacion";
+import { getCamposObligatorios, getCaptacion, getCatalogosCaptacion } from "@/app/api/actions/captacion";
 import { FormularioCaptacion } from "@/components/captacion/formulario-captacion";
 import { ROLES_CAPTACION_LISTA, puedeAdministrarCaptacion } from "@/lib/captacion";
 
@@ -12,7 +12,7 @@ export default async function CaptacionDetallePage({ params }: { params: { id: s
 
   const id = Number(params.id);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  const [captacion, catalogos] = await Promise.all([getCaptacion(id), getCatalogosCaptacion()]);
+  const [captacion, catalogos, obligatorios] = await Promise.all([getCaptacion(id), getCatalogosCaptacion(), getCamposObligatorios()]);
   if (!captacion) notFound();
 
   return (
@@ -28,7 +28,7 @@ export default async function CaptacionDetallePage({ params }: { params: { id: s
         </p>
       </div>
       {puedeEditar ? (
-        <FormularioCaptacion catalogos={catalogos} inicial={captacion} />
+        <FormularioCaptacion catalogos={catalogos} inicial={captacion} obligatorios={obligatorios} />
       ) : (
         <pre className="overflow-x-auto rounded-md border bg-muted p-4 text-xs">
           {JSON.stringify(

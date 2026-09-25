@@ -94,9 +94,16 @@ export function ListaCaptaciones({ captaciones, aeropuertos, filtros, esAdmin }:
           </a>
         </Button>
         <p className="text-xs text-muted-foreground">Mismas 38 columnas del libro SISPRO 2026; los códigos de país, ciudad e IPS ya van resueltos.</p>
-        <Button className="ml-auto" asChild>
-          <Link href="/captacion/nueva">Nueva captación</Link>
-        </Button>
+        <div className="ml-auto flex gap-2">
+          {esAdmin && (
+            <Button variant="outline" asChild>
+              <Link href="/captacion/configuracion">Configurar campos</Link>
+            </Button>
+          )}
+          <Button asChild>
+            <Link href="/captacion/nueva">Nueva captación</Link>
+          </Button>
+        </div>
       </div>
 
       <form

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { captacionSchema, type CaptacionFormData } from "@/lib/validations";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
+import { camposObligatoriosFaltantes } from "@/lib/captacion";
 import {
   ACCIDENTES_ESPECIALES,
   CONDICIONES,
@@ -44,6 +45,8 @@ interface Props {
   /** Si viene, el formulario edita ese registro (solo ADMIN). */
   inicial?: CaptacionRow;
   medicoPorDefecto?: string;
+  /** Campos opcionales que un ADMIN marcó como obligatorios (Configurar captación). */
+  obligatorios?: string[];
 }
 
 interface Estado {
@@ -207,7 +210,7 @@ function SiNo({ valor, onChange }: { valor: string; onChange: (v: string) => voi
   );
 }
 
-export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" }: Props) {
+export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "", obligatorios = [] }: Props) {
   const router = useRouter();
   const [f, setF] = useState<Estado>(() => estadoInicial(catalogos, medicoPorDefecto, inicial));
   const [guardando, setGuardando] = useState(false);
@@ -218,6 +221,8 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
 
   const set = <K extends keyof Estado>(k: K, v: Estado[K]) => setF((prev) => ({ ...prev, [k]: v }));
   const edicion = !!inicial;
+  // Etiqueta con * si el campo es obligatorio por configuración.
+  const et = (campo: string, texto: string) => (obligatorios.includes(campo) ? `${texto} *` : texto);
 
   async function buscarPaciente() {
     setAviso(null);
@@ -269,6 +274,11 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
       setError(validacion.error.issues[0]?.message ?? "Datos inválidos");
       return;
     }
+    const faltantes = camposObligatoriosFaltantes(datos as unknown as Record<string, unknown>, obligatorios);
+    if (faltantes.length > 0) {
+      setError(`Campo(s) obligatorio(s) sin llenar: ${faltantes.join(", ")}`);
+      return;
+    }
     setGuardando(true);
     const r = inicial ? await actualizarCaptacion(inicial.id, datos) : await crearCaptacion(datos);
     setGuardando(false);
@@ -302,7 +312,7 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
           <Campo etiqueta="Aeropuerto de atención *" ancho="lg:col-span-2">
             <Lista valores={catalogos.aeropuertosAtencion} valor={f.aeropuerto_atencion} onChange={(v) => set("aeropuerto_atencion", v)} />
           </Campo>
-          <Campo etiqueta="Tipo de atención">
+          <Campo etiqueta={et("tipo_atencion", "Tipo de atención")}>
             <Lista valores={TIPOS_ATENCION} valor={f.tipo_atencion} onChange={(v) => set("tipo_atencion", v)} />
           </Campo>
           {f.tipo_atencion === "AUTORIZACION DE VUELO" && (
@@ -310,26 +320,26 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
               <Lista valores={["APTO", "NO APTO"]} valor={f.resultado_autorizacion} onChange={(v) => set("resultado_autorizacion", v)} />
             </Campo>
           )}
-          <Campo etiqueta="Lugar de atención">
+          <Campo etiqueta={et("lugar_atencion", "Lugar de atención")}>
             <Lista valores={LUGARES_ATENCION} valor={f.lugar_atencion} onChange={(v) => set("lugar_atencion", v)} />
           </Campo>
-          <Campo etiqueta="Lado">
+          <Campo etiqueta={et("lado_atencion", "Lado")}>
             <Lista
               valores={LADOS_ATENCION}
               valor={f.lado_atencion}
               onChange={(v) => setF((p) => ({ ...p, lado_atencion: v, ubicacion_atencion: "" }))}
             />
           </Campo>
-          <Campo etiqueta="Ubicación">
+          <Campo etiqueta={et("ubicacion_atencion", "Ubicación")}>
             <Lista valores={ubicaciones} vacio={f.lado_atencion ? "Selecciona…" : "Elige primero el lado"} valor={f.ubicacion_atencion} onChange={(v) => set("ubicacion_atencion", v)} />
           </Campo>
-          <Campo etiqueta="Detalle de la ubicación" ancho="sm:col-span-2 lg:col-span-3">
+          <Campo etiqueta={et("detalle_ubicacion", "Detalle de la ubicación")} ancho="sm:col-span-2 lg:col-span-3">
             <Textarea rows={2} maxLength={2000} value={f.detalle_ubicacion} onChange={(e) => set("detalle_ubicacion", e.target.value)} />
           </Campo>
-          <Campo etiqueta="Hora de activación (HH:MM:SS)">
+          <Campo etiqueta={et("tiempo_activacion", "Hora de activación (HH:MM:SS)")}>
             <Input type="time" step={1} value={f.tiempo_activacion} onChange={(e) => set("tiempo_activacion", e.target.value)} />
           </Campo>
-          <Campo etiqueta="Hora de llegada (HH:MM:SS)">
+          <Campo etiqueta={et("tiempo_llegada", "Hora de llegada (HH:MM:SS)")}>
             <Input type="time" step={1} value={f.tiempo_llegada} onChange={(e) => set("tiempo_llegada", e.target.value)} />
           </Campo>
         </CardContent>
@@ -373,10 +383,10 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
           <Campo etiqueta="Segundo apellido (vacío = NONE)">
             <Input maxLength={30} value={f.segundo_apellido} onChange={(e) => set("segundo_apellido", e.target.value)} />
           </Campo>
-          <Campo etiqueta="Fecha de nacimiento">
+          <Campo etiqueta={et("fecha_nacimiento", "Fecha de nacimiento")}>
             <Input type="date" value={f.fecha_nacimiento} onChange={(e) => set("fecha_nacimiento", e.target.value)} />
           </Campo>
-          <Campo etiqueta="Teléfono">
+          <Campo etiqueta={et("telefono", "Teléfono")}>
             <Input inputMode="tel" maxLength={20} value={f.telefono} onChange={(e) => set("telefono", e.target.value)} />
           </Campo>
           <Campo etiqueta="Nacionalidad *">
@@ -468,28 +478,28 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
           <CardTitle>Clasificación clínica</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Campo etiqueta="Condición">
+          <Campo etiqueta={et("condicion", "Condición")}>
             <Lista valores={CONDICIONES} valor={f.condicion} onChange={(v) => set("condicion", v)} />
           </Campo>
-          <Campo etiqueta="Patología por sistema">
+          <Campo etiqueta={et("patologia_sistema", "Patología por sistema")}>
             <Lista valores={PATOLOGIAS_SISTEMA} valor={f.patologia_sistema} onChange={(v) => set("patologia_sistema", v)} />
           </Campo>
-          <Campo etiqueta="Otra patología">
+          <Campo etiqueta={et("otra_patologia", "Otra patología")}>
             <Lista valores={OTRAS_PATOLOGIAS} valor={f.otra_patologia} onChange={(v) => set("otra_patologia", v)} />
           </Campo>
-          <Campo etiqueta="Post operatorio">
+          <Campo etiqueta={et("post_operatorio", "Post operatorio")}>
             <Lista valores={POST_OPERATORIOS} valor={f.post_operatorio} onChange={(v) => set("post_operatorio", v)} />
           </Campo>
-          <Campo etiqueta="Accidente especial">
+          <Campo etiqueta={et("accidente_especial", "Accidente especial")}>
             <Lista valores={ACCIDENTES_ESPECIALES} valor={f.accidente_especial} onChange={(v) => set("accidente_especial", v)} />
           </Campo>
-          <Campo etiqueta="Notificación obligatoria">
+          <Campo etiqueta={et("notificacion_obligatoria", "Notificación obligatoria")}>
             <Lista valores={NOTIFICACIONES_OBLIGATORIAS} valor={f.notificacion_obligatoria} onChange={(v) => set("notificacion_obligatoria", v)} />
           </Campo>
-          <Campo etiqueta="Tipo de vuelo">
+          <Campo etiqueta={et("tipo_vuelo", "Tipo de vuelo")}>
             <Lista valores={TIPOS_VUELO} valor={f.tipo_vuelo} onChange={(v) => set("tipo_vuelo", v)} />
           </Campo>
-          <Campo etiqueta="Aerolínea o entidad">
+          <Campo etiqueta={et("aerolinea", "Aerolínea o entidad")}>
             {catalogos.aerolineas.length > 0 ? (
               // Del catálogo de aerolíneas; si el registro trae una que ya no está (inactiva o vieja), se conserva.
               <Lista
@@ -509,10 +519,10 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
           <CardTitle>Traslado, medicamentos y dispositivos</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Campo etiqueta="Origen">
+          <Campo etiqueta={et("origen", "Origen")}>
             <Input maxLength={100} placeholder="Vacío = NO APLICA" value={f.origen} onChange={(e) => set("origen", e.target.value)} />
           </Campo>
-          <Campo etiqueta="Destino">
+          <Campo etiqueta={et("destino", "Destino")}>
             <Input maxLength={100} placeholder="Vacío = NO APLICA" value={f.destino} onChange={(e) => set("destino", e.target.value)} />
           </Campo>
 
@@ -581,7 +591,7 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
             ))}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Campo etiqueta="Tipo de emergencia">
+            <Campo etiqueta={et("emergencia_tipo", "Tipo de emergencia")}>
               <Lista valores={EMERGENCIAS_TIPO} valor={f.emergencia_tipo} onChange={(v) => set("emergencia_tipo", v)} />
             </Campo>
             <Campo etiqueta="Notas de la emergencia" ancho="sm:col-span-2">
