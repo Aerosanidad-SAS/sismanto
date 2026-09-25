@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
 import { centroVisible } from "@/lib/auth-utils";
 import { leerTodo } from "@/lib/leer-todo";
+import { prefijoCiudad } from "@/lib/servicios-lista";
 
 export interface EstadisticasServicios {
   total: number;
@@ -20,22 +21,22 @@ export interface EstadisticasServicios {
  * embebido de SISRES (includes/estadisticasServicios.php) a agregación
  * sobre medical_services.
  */
-export async function getEstadisticasServicios(): Promise<EstadisticasServicios> {
+export async function getEstadisticasServicios(ciudad?: string): Promise<EstadisticasServicios> {
+  const prefijo = prefijoCiudad(ciudad);
   const supabase = createClient();
   const hoy = hoyBogota();
   const desdeIso = limitesInstante(sumarMeses(hoy, -12), hoy).desde;
 
   // Por páginas: un solo .limit(20000) devuelve 1000 filas y las estadísticas salían incompletas.
-  const filas = await leerTodo((d, h) =>
-    supabase
+  const filas = await leerTodo((d, h) => {
+    const base = supabase
       .from("medical_services")
       .select(
         "etapa, tipo_servicio, fecha_hora_registro, ciudad_origen, oportunidad_atencion, tiempo_total_origen, tiempo_espera_destino, tiempo_total"
       )
-      .gte("fecha_hora_registro", desdeIso)
-      .order("id")
-      .range(d, h),
-  );
+      .gte("fecha_hora_registro", desdeIso);
+    return (prefijo ? base.ilike("ciudad_origen", `${prefijo}%`) : base).order("id").range(d, h);
+  });
 
   const porEtapaMap = new Map<string, number>();
   const porTipoMap = new Map<string, number>();

@@ -21,6 +21,7 @@ import {
   CircleSlash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CIUDADES_SERVICIO } from "@/lib/servicios-lista";
 
 // Asignados es el total: Asignados = Programados + En curso + Atendidos +
 // Fallidos + Cancelados, exacto — cada estado real tiene su propia tarjeta
@@ -107,15 +108,20 @@ type ModoFecha = "hoy" | "rango";
 export function ResumenOperativo({
   inicial,
   modoInicial = "hoy",
+  ciudad = "",
 }: {
   inicial: ResumenOperativoConsolidado;
   modoInicial?: ModoFecha;
+  /** "bogota" | "medellin": muestra solo esa ciudad. Vacío = las dos, con el consolidado. */
+  ciudad?: string;
 }) {
   const [modo, setModo] = useState<ModoFecha>(modoInicial);
   const [desde, setDesde] = useState(hoyIso());
   const [hasta, setHasta] = useState(hoyIso());
   const [datos, setDatos] = useState(inicial);
   const [cargando, setCargando] = useState(false);
+  const nombreCiudad = CIUDADES_SERVICIO.find((c) => c.clave === ciudad)?.nombre;
+  const deLaCiudad = nombreCiudad ? datos.porCiudad.find((c) => c.ciudad === nombreCiudad) : undefined;
 
   const cargar = async (d: string, h: string) => {
     setCargando(true);
@@ -183,17 +189,23 @@ export function ResumenOperativo({
           </div>
         </div>
         <CardDescription>
-          {modo === "hoy" ? "Servicios de hoy" : `Servicios entre ${desde} y ${hasta}`} — Bogotá y
-          Medellín por separado, con el consolidado de ambas arriba.
+          {modo === "hoy" ? "Servicios de hoy" : `Servicios entre ${desde} y ${hasta}`} —{" "}
+          {deLaCiudad ? deLaCiudad.ciudad : "Bogotá y Medellín por separado, con el consolidado de ambas arriba."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <BloqueConsolidado titulo="Consolidado — Bogotá + Medellín" bucket={datos.consolidado} />
-        <div className="grid gap-3 md:grid-cols-2">
-          {datos.porCiudad.map((c) => (
-            <BloqueCiudad key={c.ciudad} ciudad={c.ciudad} bucket={c} />
-          ))}
-        </div>
+        {deLaCiudad ? (
+          <BloqueConsolidado titulo={deLaCiudad.ciudad} bucket={deLaCiudad} />
+        ) : (
+          <>
+            <BloqueConsolidado titulo="Consolidado — Bogotá + Medellín" bucket={datos.consolidado} />
+            <div className="grid gap-3 md:grid-cols-2">
+              {datos.porCiudad.map((c) => (
+                <BloqueCiudad key={c.ciudad} ciudad={c.ciudad} bucket={c} />
+              ))}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

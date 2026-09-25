@@ -11,10 +11,18 @@ import { MantenimientoCard, VencimientosCard } from "@/components/regulacion/ale
 import { BarraTablero } from "@/components/regulacion/barra-tablero";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { veSoloSuCentro } from "@/lib/auth-utils";
+import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
+import { prefijoCiudad } from "@/lib/servicios-lista";
 
 const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];
 
-export default async function RegulacionPage() {
+export default async function RegulacionPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const pedida = Array.isArray(searchParams.ciudad) ? searchParams.ciudad[0] : searchParams.ciudad;
+  const prefijoDeCiudad = prefijoCiudad(pedida);
   const profile = await getProfile();
   if (!profile || !ROLES_PERMITIDOS.includes(profile.role_codigo)) {
     redirect("/");
@@ -44,10 +52,13 @@ export default async function RegulacionPage() {
             {profile.centro_nombre ? `Centro ${profile.centro_nombre}` : "Todos los centros"}
           </p>
         </div>
-        <BarraTablero
-          vehiculos={vehiculosOperativos}
-          reportadoPor={profile.nombre_completo ?? profile.email ?? ""}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <FiltroCiudadUrl />
+          <BarraTablero
+            vehiculos={vehiculosOperativos}
+            reportadoPor={profile.nombre_completo ?? profile.email ?? ""}
+          />
+        </div>
       </div>
 
       {veSoloSuCentro(profile.role_codigo) && !profile.operational_center_id && (
@@ -57,7 +68,11 @@ export default async function RegulacionPage() {
         </div>
       )}
 
-      <ServiciosDelDia servicios={tablero.servicios as ServicioDelDia[]} />
+      <ServiciosDelDia
+        servicios={(tablero.servicios as ServicioDelDia[]).filter(
+          (s) => !prefijoDeCiudad || (s.ciudad_origen ?? "").toLowerCase().startsWith(prefijoDeCiudad)
+        )}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <VencimientosCard vencimientos={tablero.vencimientos} />

@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateField } from "@/components/forms/date-field";
 import { ETAPAS_SERVICIO } from "@/lib/validations";
-import { CIUDADES_SERVICIO, filtrosAQuery, type FiltrosServicios } from "@/lib/servicios-lista";
+import { filtrosAQuery, type FiltrosServicios } from "@/lib/servicios-lista";
+import { FiltroCiudad } from "./filtro-ciudad";
 import { cn } from "@/lib/utils";
 import { TIPOS_SERVICIO } from "./servicios-tabla";
 
@@ -54,8 +55,6 @@ export function ServiciosFiltros({
     </Select>
   );
 
-  const opcionesCiudad = [{ clave: "", nombre: "Ambas" }, ...CIUDADES_SERVICIO];
-
   return (
     <form
       className="space-y-2"
@@ -65,35 +64,14 @@ export function ServiciosFiltros({
       }}
     >
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-        <div className="space-y-1">
-          <span className={cn(ETIQUETA, "block")} id="f-ciudad-etiqueta">
-            Ciudad
-          </span>
-          <div role="radiogroup" aria-labelledby="f-ciudad-etiqueta" className="inline-flex h-8 overflow-hidden rounded-md border border-input">
-            {opcionesCiudad.map((c) => {
-              const activa = (f.ciudad ?? "") === c.clave;
-              return (
-                <button
-                  key={c.clave || "ambas"}
-                  type="button"
-                  role="radio"
-                  aria-checked={activa}
-                  onClick={() => {
-                    const siguiente = { ...f, ciudad: c.clave };
-                    setF(siguiente);
-                    aplicar(siguiente);
-                  }}
-                  className={cn(
-                    "px-3 text-sm transition-colors",
-                    activa ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
-                  )}
-                >
-                  {c.nombre}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <FiltroCiudad
+          valor={f.ciudad ?? ""}
+          onChange={(clave) => {
+            const siguiente = { ...f, ciudad: clave };
+            setF(siguiente);
+            aplicar(siguiente);
+          }}
+        />
         <div className="space-y-1">
           <label htmlFor="f-desde" className={cn(ETIQUETA, "block")}>
             Programado desde

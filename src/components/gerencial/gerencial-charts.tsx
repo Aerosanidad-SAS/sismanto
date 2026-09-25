@@ -7,6 +7,7 @@ import { DateField } from "@/components/forms/date-field";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { getEstadisticasServiciosPorCiudad, type EstadisticasPorCiudad } from "@/app/api/actions/estadisticas-servicios";
+import { CIUDADES_SERVICIO } from "@/lib/servicios-lista";
 
 const COLORES = { Bogotá: "#2563eb", Medellín: "#16a34a" };
 
@@ -18,7 +19,7 @@ function seisMesesAtrasIso() {
   return sumarMeses(hoyBogota(), -6);
 }
 
-export function ServiciosPorCiudadChart({ inicial }: { inicial: EstadisticasPorCiudad[] }) {
+export function ServiciosPorCiudadChart({ inicial, ciudad = "" }: { inicial: EstadisticasPorCiudad[]; ciudad?: string }) {
   const [desde, setDesde] = useState(seisMesesAtrasIso());
   const [hasta, setHasta] = useState(hoyIso());
   const [datos, setDatos] = useState(inicial);
@@ -31,10 +32,12 @@ export function ServiciosPorCiudadChart({ inicial }: { inicial: EstadisticasPorC
     setCargando(false);
   };
 
-  const meses = Array.from(new Set(datos.flatMap((d) => d.serieMensual.map((s) => s.mes)))).sort();
+  const nombreCiudad = CIUDADES_SERVICIO.find((c) => c.clave === ciudad)?.nombre;
+  const visibles = nombreCiudad ? datos.filter((d) => d.ciudad === nombreCiudad) : datos;
+  const meses = Array.from(new Set(visibles.flatMap((d) => d.serieMensual.map((s) => s.mes)))).sort();
   const filas = meses.map((mes) => {
     const fila: Record<string, string | number> = { mes };
-    for (const d of datos) {
+    for (const d of visibles) {
       fila[d.ciudad] = d.serieMensual.find((s) => s.mes === mes)?.cantidad ?? 0;
     }
     return fila;
@@ -45,7 +48,7 @@ export function ServiciosPorCiudadChart({ inicial }: { inicial: EstadisticasPorC
       <CardHeader className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle>Servicios por mes — Bogotá vs. Medellín</CardTitle>
+            <CardTitle>{nombreCiudad ? `Servicios por mes — ${nombreCiudad}` : "Servicios por mes — Bogotá vs. Medellín"}</CardTitle>
             <CardDescription>Por ciudad de origen del servicio.</CardDescription>
           </div>
           <div className="flex flex-wrap items-end gap-2">
@@ -71,7 +74,7 @@ export function ServiciosPorCiudadChart({ inicial }: { inicial: EstadisticasPorC
             <YAxis fontSize={12} allowDecimals={false} />
             <Tooltip />
             <Legend />
-            {datos.map((d) => (
+            {visibles.map((d) => (
               <Line
                 key={d.ciudad}
                 type="monotone"

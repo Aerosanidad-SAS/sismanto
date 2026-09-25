@@ -143,7 +143,7 @@ export default async function ServiciosPage({
         </CardContent>
       </Card>
 
-      <ResumenOperativo inicial={resumenHoy} />
+      <ResumenOperativo inicial={resumenHoy} ciudad={filtros.ciudad ?? ""} />
     </div>
   );
 }
