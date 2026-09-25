@@ -7,6 +7,13 @@ Escrito el 2026-09-24 por David (con Claude Code). Complementa `ENTORNOS.md` y n
 
 ## 0. Lo primero: ¿qué base usa hoy «Production»?
 
+> **Confirmado el 25/09/2026 por David (admin del Vercel principal): Production usa la base de STAGING** (`SISMANTO_Staging`, ref `oanbqlfvdmdpckrcwfqi`). Es el **caso A**. Lo afirma David desde su acceso; Claude no pudo verificarlo por su cuenta. Daniel: si ves otro ref en `NEXT_PUBLIC_SUPABASE_URL` de Production, avisa y se sigue el caso B.
+>
+> Consecuencias del caso A:
+> - **No hay migraciones que aplicar a producción**: la base ya tiene todo lo de `dev` y `staging`. Basta con correr **«Deploy PROD (manual)»** (sección 3).
+> - Los usuarios de prueba del selector de roles (`test.<rol>@sismanto.test`, sin contraseña ni buzón) **viven también en la base de producción**. Por eso `ROLE_SWITCHER_ENABLED` **nunca** se define en el entorno Production de Vercel: sin ella (o con `VERCEL_ENV=production`) el selector no existe.
+> - Producción y staging son la misma base: ver la advertencia de abajo.
+
 Hay una contradicción entre los documentos y hay que resolverla **antes de tocar nada**:
 
 - `CLAUDE.md` y `ENTORNOS.md` (tabla de ramas) dicen que `main` usa «la Supabase de producción».
