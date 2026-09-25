@@ -4,11 +4,13 @@ import { renewWebhookSubscription } from "@/lib/graph/client";
 
 export async function POST(request: NextRequest): Promise<Response> {
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  // Fail-closed: sin secreto configurado se rechaza todo (antes quedaba abierto a cualquiera).
+  if (!cronSecret) {
+    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
+  }
+  const auth = request.headers.get("authorization");
+  if (auth !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = createAdminClient();
