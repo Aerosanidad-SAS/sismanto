@@ -47,6 +47,7 @@ import {
   Trash2,
   Headset,
   LifeBuoy,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { esRolRestringido, getDefaultRoute, rutaPermitidaARolRestringido } from "@/lib/auth-utils";
@@ -402,6 +403,12 @@ const ROLE_BADGE_STYLES: Record<UserRole, string> = {
 };
 
 const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
+/** Secciones del menú desplegadas por el usuario ({ [label]: boolean }); se recuerdan entre visitas. */
+const NAV_OPEN_GROUPS_KEY = "sismanto-nav-open-groups";
+
+function isActiveHref(pathname: string | null, href: string): boolean {
+  return pathname === href || (href !== "/" && Boolean(pathname?.startsWith(href)));
+}
 
 export default function DashboardLayout({
   children,
@@ -416,15 +423,30 @@ export default function DashboardLayout({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   /** Solo lg+: barra lateral estrecha (iconos). En móvil el drawer siempre muestra texto completo. */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     try {
       if (typeof window !== "undefined" && localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === "1") {
         setSidebarCollapsed(true);
       }
+      const saved = localStorage.getItem(NAV_OPEN_GROUPS_KEY);
+      if (saved) setOpenGroups(JSON.parse(saved) as Record<string, boolean>);
     } catch {
       /* ignore */
     }
+  }, []);
+
+  const toggleGroup = useCallback((label: string) => {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      try {
+        localStorage.setItem(NAV_OPEN_GROUPS_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -525,6 +547,17 @@ export default function DashboardLayout({
             : 0
         )
     : [];
+
+  // La sección de la página actual siempre se abre al navegar (las demás conservan lo que el usuario dejó).
+  useEffect(() => {
+    const activa = navGroups.find((g) => g.label && g.items.some((n) => isActiveHref(pathname, n.href)));
+    if (activa?.label) {
+      const label = activa.label;
+      setOpenGroups((prev) => (prev[label] ? prev : { ...prev, [label]: true }));
+    }
+    // navGroups se recalcula en cada render; basta con reaccionar a la ruta y al perfil.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, profile]);
 
   if (loading) {
     return (
@@ -717,23 +750,46 @@ export default function DashboardLayout({
             showCollapsedChrome && "lg:px-2"
           )}
         >
-          {navGroups.map((group, gi) => (
-            <div key={group.label ?? `grupo-${gi}`} className={cn(gi > 0 && "pt-3")}>
-              {group.label && (
-                <p
+          {navGroups.map((group, gi) => {
+            const label = group.label;
+            const open = label === null || openGroups[label] === true;
+            const groupHasActive = group.items.some((n) => isActiveHref(pathname, n.href));
+            const panelId = `nav-group-${gi}`;
+            return (
+            <div key={label ?? `grupo-${gi}`} className={cn(gi > 0 && "pt-1")}>
+              {label && (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(label)}
+                  aria-expanded={open}
+                  aria-controls={panelId}
                   className={cn(
-                    "px-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
-                    showCollapsedChrome && "lg:sr-only"
+                    "flex w-full items-center justify-between rounded-lg px-4 py-2 min-h-[40px] touch-manipulation",
+                    "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground",
+                    "hover:bg-[#F4EFE6] transition-colors",
+                    showCollapsedChrome && "lg:hidden"
                   )}
                 >
-                  {group.label}
-                </p>
+                  <span className={cn(groupHasActive && !open && "text-[#2BB6C7]")}>{label}</span>
+                  <ChevronDown
+                    className={cn("h-4 w-4 shrink-0 transition-transform", open && "rotate-180")}
+                    aria-hidden
+                  />
+                </button>
               )}
-              <div className="space-y-1">
+              <div
+                id={panelId}
+                className={cn(
+                  "space-y-1",
+                  label && "ml-4 border-l border-border pl-2",
+                  label && showCollapsedChrome && "lg:ml-0 lg:border-l-0 lg:pl-0",
+                  // Colapsado: oculto, salvo en la barra estrecha de iconos (lg), donde todo se ve como iconos.
+                  !open && cn("hidden", showCollapsedChrome && "lg:block")
+                )}
+              >
                 {group.items.map((item) => {
                   const Icon = item.icon;
-                  const isActive =
-                    pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+                  const isActive = isActiveHref(pathname, item.href);
                   return (
                     <Link
                       key={item.name}
@@ -757,7 +813,8 @@ export default function DashboardLayout({
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div
