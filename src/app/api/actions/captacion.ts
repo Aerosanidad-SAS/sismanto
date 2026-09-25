@@ -13,7 +13,10 @@ import { CaptacionPdf, type CaptacionPdfDatos } from "@/lib/pdf/captacion";
 import { aTimestamptzColombia } from "@/lib/hora-colombia";
 import { captacionSchema } from "@/lib/validations";
 import {
+  CAMPOS_CONFIGURABLES,
+  camposObligatoriosFaltantes,
   diaColombia,
+  esCampoConfigurable,
   filaSispro,
   puedeAdministrarCaptacion,
   puedeUsarCaptacion,
@@ -76,6 +79,38 @@ async function leerTodo<T>(pagina: (desde: number, hasta: number) => PromiseLike
 async function usuario() {
   const profile = await getProfile();
   return profile && puedeUsarCaptacion(profile.role_codigo) ? profile : null;
+}
+
+/** Campos opcionales que un ADMIN marcó como obligatorios (migración 086). Cualquier rol de captación puede leerlos. */
+export async function getCamposObligatorios(): Promise<string[]> {
+  if (!(await usuario())) return [];
+  const { data } = await createClient().from("captacion_campos_obligatorios").select("campo").eq("obligatorio", true);
+  return ((data ?? []) as unknown as { campo: string }[]).map((r) => r.campo).filter(esCampoConfigurable);
+}
+
+/** Guarda cuáles campos opcionales son obligatorios. Solo ADMIN. `campos` es la lista COMPLETA de los obligatorios. */
+export async function guardarCamposObligatorios(campos: string[]) {
+  const profile = await getProfile();
+  if (!profile || !puedeAdministrarCaptacion(profile.role_codigo)) return { error: "Solo un Administrador puede configurar la captación" };
+  const lista = z.array(z.string().max(40)).max(100).safeParse(campos);
+  if (!lista.success) return { error: "Datos inválidos" };
+  const desconocidos = lista.data.filter((c) => !esCampoConfigurable(c));
+  if (desconocidos.length > 0) return { error: `Campo no configurable: ${desconocidos[0]}` };
+
+  // Una fila por campo configurable (los no marcados quedan en false), en un solo upsert.
+  const filas = CAMPOS_CONFIGURABLES.map((c) => ({
+    campo: c.campo,
+    obligatorio: lista.data.includes(c.campo),
+    updated_at: new Date().toISOString(),
+    updated_by: profile.user_id,
+  }));
+  const { error } = await createClient().from("captacion_campos_obligatorios").upsert(filas as never, { onConflict: "campo" });
+  if (error) return { error: error.message };
+  await auditar("MODIFICAR", "configuracion", "captacion", `Campos obligatorios de captación: ${lista.data.length} marcados`);
+  revalidatePath("/captacion");
+  revalidatePath("/captacion/nueva");
+  revalidatePath("/captacion/configuracion");
+  return { success: true as const };
 }
 
 export async function getCatalogosCaptacion(): Promise<CatalogosCaptacion> {
@@ -248,6 +283,8 @@ export async function crearCaptacion(datos: z.input<typeof captacionSchema>) {
   if (!profile) return { error: "Sin permisos para registrar captaciones" };
   const parsed = captacionSchema.safeParse(datos);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const faltantes = camposObligatoriosFaltantes(parsed.data as Record<string, unknown>, await getCamposObligatorios());
+  if (faltantes.length > 0) return { error: `Campo(s) obligatorio(s) sin llenar: ${faltantes.join(", ")}` };
   const errorCatalogo = await validarContraCatalogos(parsed.data);
   if (errorCatalogo) return { error: errorCatalogo };
 
@@ -292,6 +329,8 @@ export async function actualizarCaptacion(id: number, datos: z.input<typeof capt
   if (!profile || !puedeAdministrarCaptacion(profile.role_codigo)) return { error: "Solo un Administrador puede editar captaciones" };
   const parsed = captacionSchema.safeParse(datos);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const faltantes = camposObligatoriosFaltantes(parsed.data as Record<string, unknown>, await getCamposObligatorios());
+  if (faltantes.length > 0) return { error: `Campo(s) obligatorio(s) sin llenar: ${faltantes.join(", ")}` };
   const errorCatalogo = await validarContraCatalogos(parsed.data);
   if (errorCatalogo) return { error: errorCatalogo };
 
