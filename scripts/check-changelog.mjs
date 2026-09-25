@@ -11,7 +11,8 @@ import { DIR_PENDIENTES, leerFragmento } from "./lib/changelog.mjs";
 const base = process.env.BASE_REF || "origin/dev";
 const titulo = process.env.PR_TITLE || "";
 const etiquetas = (process.env.PR_LABELS || "").split(",").map((e) => e.trim()).filter(Boolean);
-const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+// stderr de git se descarta: algunas comprobaciones (p. ej. «¿existe el archivo en la base?») fallan a propósito.
+const git = (...args) => execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 const fallar = (m) => {
   console.error(`\n❌ ${m}\n   Reglas de versionamiento: changelog/README.md\n`);
   process.exit(1);
