@@ -7,6 +7,7 @@ import {
   useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { VersionMenu } from "@/components/version/version-dialog";
 import { usePathname,
   useRouter } from "next/navigation";
 import {
@@ -778,6 +779,7 @@ export default function DashboardLayout({
               <span className={cn(showCollapsedChrome && "lg:sr-only")}>Cerrar sesión</span>
             </button>
           </form>
+          <VersionMenu colapsado={showCollapsedChrome} />
         </div>
       </aside>
 

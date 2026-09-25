@@ -27,3 +27,6 @@
 
 - [ ] Rama `feat/<nombre>-<tema>` o `fix/<nombre>-<tema>` creada desde `dev` y rebaseada hoy
 - [ ] Sin datos reales de pacientes ni de personal (CSV del ETL, cédulas, correos)
+
+## Changelog
+- [ ] Agregué `changelog/unreleased/<tema>.md` (o el PR es solo de documentación y tiene la etiqueta `no-changelog`). No toqué la versión ni `CHANGELOG.md`.

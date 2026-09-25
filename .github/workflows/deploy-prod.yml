@@ -75,7 +75,11 @@ jobs:
 
       - run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
-      - run: vercel build --prod --token="$VERCEL_TOKEN"
+      - name: Build
+        env:
+          NEXT_PUBLIC_COMMIT_SHA: ${{ github.sha }}
+          NEXT_PUBLIC_APP_ENV: production
+        run: vercel build --prod --token="$VERCEL_TOKEN"
 
       - name: Desplegar a producción y esperar el resultado
         run: |

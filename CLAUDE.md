@@ -133,6 +133,7 @@ npm run build 2>&1 | grep -E "Error:|error TS|Module not found|Failed" | head -3
 
 ## Conventions
 
+- **Versioning:** every PR into `dev` adds `changelog/unreleased/<topic>.md` (type/area/roles/migration + one user-facing line in Spanish); nobody edits `package.json`'s version or `CHANGELOG.md` in a PR — only the release PR (`npm run release`). Full rules: `changelog/README.md`.
 - **File naming:** `kebab-case` / `PascalCase` for components
 - **Git commits:** Conventional Commits (`feat:`, `fix:`, `chore:`)
 - **No unreviewed deps** — check before `npm install`
