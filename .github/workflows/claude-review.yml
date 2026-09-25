@@ -3,6 +3,11 @@
 # es BLOCKED o si la revisión no llegó a publicarse. Aprobar el PR sigue
 # siendo de una persona — este check solo decide si se puede mergear.
 #
+# Para gastar poco, corre una vez por PR y no en cada push: al abrirlo o al
+# marcarlo "Ready for review" (los drafts no gastan nada). Para volver a
+# revisar tras nuevos commits, pon la etiqueta `re-review`; el workflow la
+# quita al terminar. Los PR que solo tocan *.md, docs/ o changelog/ no se revisan.
+#
 # Requiere el secreto CLAUDE_CODE_OAUTH_TOKEN (GitHub → Settings → Secrets and
 # variables → Actions), generado con `claude setup-token`. Lo carga un admin
 # del repo `Aerosanidad-SAS/sismanto`.
@@ -10,7 +15,11 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, labeled]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "changelog/**"
 
 permissions:
   contents: read
@@ -26,9 +35,11 @@ concurrency:
 
 jobs:
   review:
-    if: github.event.pull_request.draft == false
+    if: >-
+      github.event.pull_request.draft == false &&
+      (github.event.action != 'labeled' || github.event.label.name == 're-review')
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder
@@ -86,6 +97,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           claude_args: |
+            --model claude-sonnet-5
+            --max-turns 15
             --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"
           prompt: |
             Eres Aegis, el revisor de código de Aeromanto. Antes de revisar, lee
@@ -141,3 +154,10 @@ jobs:
             *)
               echo "Veredicto de Claude: $verdict" ;;
           esac
+
+      # Deja la etiqueta lista para pedir otra revisión tras el próximo push.
+      - name: Quitar etiqueta re-review
+        if: always() && github.event.action == 'labeled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label re-review || true
