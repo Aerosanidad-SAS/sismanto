@@ -2,17 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DateField } from "@/components/forms/date-field";
 import { ETAPAS_SERVICIO } from "@/lib/validations";
-import { filtrosAQuery, type FiltrosServicios } from "@/lib/servicios-lista";
+import { CIUDADES_SERVICIO, filtrosAQuery, type FiltrosServicios } from "@/lib/servicios-lista";
+import { cn } from "@/lib/utils";
 import { TIPOS_SERVICIO } from "./servicios-tabla";
 
 const TODOS = "__todos__";
+const AVANZADOS = ["cliente", "origen", "destino", "cedula"] as const;
 
-/** Los filtros de mostrarServicios.php; se aplican con el botón, como en SISRES. */
+const ETIQUETA = "text-[11px] font-medium leading-none text-muted-foreground";
+
+/** Los filtros de mostrarServicios.php en una sola franja: lo de siempre a la vista y el resto bajo «Más filtros». */
 export function ServiciosFiltros({
   inicial,
   clientes,
@@ -26,12 +31,16 @@ export function ServiciosFiltros({
 }) {
   const router = useRouter();
   const [f, setF] = useState<FiltrosServicios>(inicial);
+  const activosAvanzados = AVANZADOS.filter((k) => inicial[k]).length;
+  const [masAbierto, setMasAbierto] = useState(activosAvanzados > 0);
   const set = (k: keyof FiltrosServicios, v: string) => setF((prev) => ({ ...prev, [k]: v === TODOS ? "" : v }));
   const hayFiltros = Object.values(inicial).some(Boolean);
 
-  const selector = (k: keyof FiltrosServicios, placeholder: string, opciones: readonly string[]) => (
+  const aplicar = (filtros: FiltrosServicios) => router.push(`/servicios${filtrosAQuery(filtros)}`);
+
+  const selector = (k: keyof FiltrosServicios, placeholder: string, opciones: readonly string[], ancho: string) => (
     <Select value={f[k] || TODOS} onValueChange={(v) => set(k, v)}>
-      <SelectTrigger aria-label={placeholder}>
+      <SelectTrigger aria-label={placeholder} className={cn("h-8 text-sm", ancho)}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -45,68 +54,118 @@ export function ServiciosFiltros({
     </Select>
   );
 
+  const opcionesCiudad = [{ clave: "", nombre: "Ambas" }, ...CIUDADES_SERVICIO];
+
   return (
     <form
-      className="space-y-3"
+      className="space-y-2"
       onSubmit={(e) => {
         e.preventDefault();
-        router.push(`/servicios${filtrosAQuery(f)}`);
+        aplicar(f);
       }}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
         <div className="space-y-1">
-          <Label htmlFor="f-desde" className="text-xs">
+          <span className={cn(ETIQUETA, "block")} id="f-ciudad-etiqueta">
+            Ciudad
+          </span>
+          <div role="radiogroup" aria-labelledby="f-ciudad-etiqueta" className="inline-flex h-8 overflow-hidden rounded-md border border-input">
+            {opcionesCiudad.map((c) => {
+              const activa = (f.ciudad ?? "") === c.clave;
+              return (
+                <button
+                  key={c.clave || "ambas"}
+                  type="button"
+                  role="radio"
+                  aria-checked={activa}
+                  onClick={() => {
+                    const siguiente = { ...f, ciudad: c.clave };
+                    setF(siguiente);
+                    aplicar(siguiente);
+                  }}
+                  className={cn(
+                    "px-3 text-sm transition-colors",
+                    activa ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                  )}
+                >
+                  {c.nombre}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="f-desde" className={cn(ETIQUETA, "block")}>
             Programado desde
-          </Label>
-          <Input id="f-desde" type="date" value={f.desde ?? ""} onChange={(e) => set("desde", e.target.value)} />
+          </label>
+          <DateField id="f-desde" compact className="w-[9.5rem]" value={f.desde ?? ""} onChange={(v) => set("desde", v)} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="f-hasta" className="text-xs">
+          <label htmlFor="f-hasta" className={cn(ETIQUETA, "block")}>
             Programado hasta
-          </Label>
-          <Input id="f-hasta" type="date" value={f.hasta ?? ""} onChange={(e) => set("hasta", e.target.value)} />
+          </label>
+          <DateField id="f-hasta" compact className="w-[9.5rem]" value={f.hasta ?? ""} onChange={(v) => set("hasta", v)} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Tipo de servicio</Label>
-          {selector("tipo", "Tipo", TIPOS_SERVICIO)}
+          <span className={cn(ETIQUETA, "block")}>Tipo de servicio</span>
+          {selector("tipo", "Tipo", TIPOS_SERVICIO, "w-44")}
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Etapa</Label>
-          {selector("etapa", "Etapa", ETAPAS_SERVICIO)}
+          <span className={cn(ETIQUETA, "block")}>Etapa</span>
+          {selector("etapa", "Etapa", ETAPAS_SERVICIO, "w-36")}
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Cliente</Label>
-          {selector("cliente", "Cliente", clientes)}
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Ciudad de origen</Label>
-          {selector("origen", "Origen", origenes)}
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Ciudad de destino</Label>
-          {selector("destino", "Destino", destinos)}
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="f-cedula" className="text-xs">
-            Cédula
-          </Label>
-          <Input
-            id="f-cedula"
-            inputMode="numeric"
-            placeholder="Buscar cédula"
-            value={f.cedula ?? ""}
-            onChange={(e) => set("cedula", e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="flex flex-wrap justify-end gap-2">
-        {hayFiltros && (
-          <Button type="button" variant="outline" onClick={() => router.push("/servicios")}>
-            Limpiar
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 gap-1.5 px-3 text-sm"
+          aria-expanded={masAbierto}
+          onClick={() => setMasAbierto((v) => !v)}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Más filtros{activosAvanzados > 0 ? ` (${activosAvanzados})` : ""}
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", masAbierto && "rotate-180")} />
+        </Button>
+        <div className="ml-auto flex gap-2">
+          {hayFiltros && (
+            <Button type="button" variant="outline" className="h-8 px-3 text-sm" onClick={() => router.push("/servicios")}>
+              Limpiar
+            </Button>
+          )}
+          <Button type="submit" className="h-8 px-3 text-sm">
+            Aplicar filtros
           </Button>
-        )}
-        <Button type="submit">Aplicar filtros</Button>
+        </div>
       </div>
+
+      {masAbierto && (
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-t pt-2">
+          <div className="space-y-1">
+            <span className={cn(ETIQUETA, "block")}>Cliente</span>
+            {selector("cliente", "Cliente", clientes, "w-52")}
+          </div>
+          <div className="space-y-1">
+            <span className={cn(ETIQUETA, "block")}>Ciudad de origen</span>
+            {selector("origen", "Origen", origenes, "w-44")}
+          </div>
+          <div className="space-y-1">
+            <span className={cn(ETIQUETA, "block")}>Ciudad de destino</span>
+            {selector("destino", "Destino", destinos, "w-44")}
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="f-cedula" className={cn(ETIQUETA, "block")}>
+              Cédula
+            </label>
+            <Input
+              id="f-cedula"
+              inputMode="numeric"
+              placeholder="Buscar cédula"
+              className="h-8 w-40 text-sm"
+              value={f.cedula ?? ""}
+              onChange={(e) => set("cedula", e.target.value)}
+            />
+          </div>
+        </div>
+      )}
     </form>
   );
 }

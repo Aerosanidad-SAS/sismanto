@@ -8,7 +8,24 @@ export const SERVICIOS_POR_PAGINA = 100;
 /** Tope de exportación, igual que EXPORT_MAX_FILAS en export/exportExcel.php. */
 export const EXPORT_MAX_FILAS = 50000;
 
+/**
+ * Ciudades de la Junta (Bogotá y Medellín). No hay un catálogo cerrado de ciudad en medical_services: se agrupa por el
+ * texto de `ciudad_origen` que empiece con el prefijo (sin acentos, sin importar mayúsculas), igual que las estadísticas.
+ */
+export const CIUDADES_SERVICIO = [
+  { clave: "bogota", nombre: "Bogotá", prefijo: "bogot" },
+  { clave: "medellin", nombre: "Medellín", prefijo: "medell" },
+] as const;
+export type CiudadServicio = (typeof CIUDADES_SERVICIO)[number]["clave"];
+
+/** Prefijo de `ciudad_origen` para la clave elegida; null si es "ambas" o un valor desconocido. */
+export function prefijoCiudad(clave: string | undefined | null): string | null {
+  return CIUDADES_SERVICIO.find((c) => c.clave === clave)?.prefijo ?? null;
+}
+
 export interface FiltrosServicios {
+  /** "bogota" | "medellin": ciudad de origen del servicio. Vacío = ambas. */
+  ciudad?: string;
   /** Rango sobre fecha_hora_programacion (YYYY-MM-DD); SISRES exige ambos extremos. */
   desde?: string;
   hasta?: string;
@@ -20,7 +37,7 @@ export interface FiltrosServicios {
   cedula?: string;
 }
 
-const CLAVES: (keyof FiltrosServicios)[] = ["desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula"];
+const CLAVES: (keyof FiltrosServicios)[] = ["ciudad", "desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula"];
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Lee filtros y página de los searchParams de la URL, descartando valores inválidos. */
@@ -34,6 +51,7 @@ export function leerFiltros(params: Record<string, string | string[] | undefined
     const s = (Array.isArray(v) ? v[0] : v)?.trim();
     if (!s) continue;
     if ((k === "desde" || k === "hasta") && !FECHA.test(s)) continue;
+    if (k === "ciudad" && !prefijoCiudad(s)) continue;
     filtros[k] = s.slice(0, 120);
   }
   const p = Number(Array.isArray(params.pagina) ? params.pagina[0] : params.pagina);

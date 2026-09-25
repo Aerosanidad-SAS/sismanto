@@ -92,11 +92,12 @@ export default async function ServiciosPage({
   }
 
   return (
-    <div className="space-y-8">
+    // -mx-4 recorta el relleno de 32 px del layout a 16 px: esta lista necesita todo el ancho posible.
+    <div className="-mx-4 space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl">Servicios registrados</h1>
-          <p className="mt-2 text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             Despacho y seguimiento de traslados y servicios asistenciales.
           </p>
         </div>
@@ -111,7 +112,7 @@ export default async function ServiciosPage({
       )}
 
       <Card>
-        <CardContent className="space-y-4 pt-6">
+        <CardContent className="space-y-3 p-4">
           <ServiciosFiltros
             key={JSON.stringify(filtros)}
             inicial={filtros}
@@ -119,16 +120,14 @@ export default async function ServiciosPage({
             origenes={opciones.origenes}
             destinos={opciones.destinos}
           />
-          <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <ExportarServicios filtros={filtros} />
-          </div>
           {errorLista && (
             <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
               No se pudo cargar la lista de servicios: {errorLista}
             </p>
           )}
-          <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />
           <ServiciosTabla
+            barra={<ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
+            acciones={<ExportarServicios filtros={filtros} />}
             servicios={servicios as any}
             vehiculos={vehiculos}
             clientes={clientes.map((c) => c.nombre)}
