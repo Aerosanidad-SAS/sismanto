@@ -17,6 +17,7 @@ export const ENTIDADES_AUDITORIA = [
   "valoraciones",
   "formatos_ti",
   "tickets",
+  "captacion",
   "configuracion",
 ] as const;
 

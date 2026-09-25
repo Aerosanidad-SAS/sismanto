@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { eliminarCaptacion, type CaptacionRow } from "@/app/api/actions/captacion";
+import { eliminarCaptacion, generarCaptacionPdf, type CaptacionRow } from "@/app/api/actions/captacion";
 import { MOTIVOS_CONSULTA } from "@/lib/captacion";
 
 interface Props {
@@ -37,6 +37,7 @@ export function ListaCaptaciones({ captaciones, aeropuertos, filtros, esAdmin }:
   const [mes, setMes] = useState(`${hoy.getUTCFullYear()}-${String(hoy.getUTCMonth() + 1).padStart(2, "0")}`);
   const [error, setError] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState<number | null>(null);
+  const [generando, setGenerando] = useState<number | null>(null);
 
   function aplicar() {
     const p = new URLSearchParams();
@@ -45,6 +46,24 @@ export function ListaCaptaciones({ captaciones, aeropuertos, filtros, esAdmin }:
     if (hasta) p.set("hasta", hasta);
     if (aeropuerto) p.set("aeropuerto", aeropuerto);
     router.push(p.toString() ? `/captacion?${p}` : "/captacion");
+  }
+
+  async function descargarPdf(c: CaptacionRow) {
+    setGenerando(c.id);
+    setError(null);
+    const r = await generarCaptacionPdf(c.id);
+    setGenerando(null);
+    if (!("success" in r) || !r.success) {
+      setError("error" in r && r.error ? r.error : "No se pudo generar el PDF");
+      return;
+    }
+    const bytes = Uint8Array.from(atob(r.data), (ch) => ch.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = r.filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function borrar(c: CaptacionRow) {
@@ -174,6 +193,9 @@ export function ListaCaptaciones({ captaciones, aeropuertos, filtros, esAdmin }:
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" asChild>
                         <Link href={`/captacion/${c.id}`}>{esAdmin ? "Editar" : "Ver"}</Link>
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={generando === c.id} onClick={() => void descargarPdf(c)}>
+                        {generando === c.id ? "Generando…" : "PDF"}
                       </Button>
                       {esAdmin && (
                         <Button size="sm" variant="outline" disabled={eliminando === c.id} onClick={() => void borrar(c)}>

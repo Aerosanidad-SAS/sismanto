@@ -490,7 +490,16 @@ export function FormularioCaptacion({ catalogos, inicial, medicoPorDefecto = "" 
             <Lista valores={TIPOS_VUELO} valor={f.tipo_vuelo} onChange={(v) => set("tipo_vuelo", v)} />
           </Campo>
           <Campo etiqueta="Aerolínea o entidad">
-            <Input maxLength={150} value={f.aerolinea} onChange={(e) => set("aerolinea", e.target.value)} />
+            {catalogos.aerolineas.length > 0 ? (
+              // Del catálogo de aerolíneas; si el registro trae una que ya no está (inactiva o vieja), se conserva.
+              <Lista
+                valores={f.aerolinea && !catalogos.aerolineas.includes(f.aerolinea) ? [f.aerolinea, ...catalogos.aerolineas] : catalogos.aerolineas}
+                valor={f.aerolinea}
+                onChange={(v) => set("aerolinea", v)}
+              />
+            ) : (
+              <Input maxLength={150} value={f.aerolinea} onChange={(e) => set("aerolinea", e.target.value)} />
+            )}
           </Campo>
         </CardContent>
       </Card>
