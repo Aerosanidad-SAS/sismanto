@@ -1,0 +1,35 @@
+# Crea el tag vX.Y.Z cuando una promoción llega a `staging` (ver changelog/README.md).
+# La versión sale de package.json, que solo cambia en el PR `chore(release)`. Si el tag ya existe no hace nada.
+# `main` no crea tags: solo promueve el mismo commit que ya lleva su tag desde staging.
+name: Tag release
+
+on:
+  push:
+    branches: [staging]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Crear el tag de la versión
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v${version}"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "El tag ${tag} ya existe: no se crea otro."
+            echo "- El tag \`${tag}\` ya existía." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "SISMANTO ${tag}"
+          git push origin "${tag}"
+          echo "- Tag \`${tag}\` creado en \`${GITHUB_SHA::7}\`." >> "$GITHUB_STEP_SUMMARY"
