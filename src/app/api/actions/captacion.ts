@@ -1,9 +1,15 @@
 "use server";
 
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { createElement, type ReactElement } from "react";
+import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
+import { auditar } from "@/lib/auditoria";
+import { CaptacionPdf, type CaptacionPdfDatos } from "@/lib/pdf/captacion";
 import { aTimestamptzColombia } from "@/lib/hora-colombia";
 import { captacionSchema } from "@/lib/validations";
 import {
@@ -49,6 +55,8 @@ export interface CatalogosCaptacion {
   aeropuertosProcedencia: string[];
   paises: string[];
   ips: string[];
+  /** Aerolíneas activas del catálogo (tabla airlines). Vacío si el catálogo aún no está cargado. */
+  aerolineas: string[];
 }
 
 // PostgREST devuelve como máximo 1000 filas por consulta (max-rows) aunque se pida un .limit() mayor, y
@@ -71,7 +79,7 @@ async function usuario() {
 }
 
 export async function getCatalogosCaptacion(): Promise<CatalogosCaptacion> {
-  if (!(await usuario())) return { aeropuertosAtencion: [], aeropuertosProcedencia: [], paises: [], ips: [] };
+  if (!(await usuario())) return { aeropuertosAtencion: [], aeropuertosProcedencia: [], paises: [], ips: [], aerolineas: [] };
   const s = createClient();
   const nombres = async (tabla: "sispro_aeropuertos_atencion" | "sispro_aeropuertos" | "sispro_paises" | "sispro_ips") => {
     const filas = await leerTodo<{ nombre: string }>((d, h) => s.from(tabla).select("nombre").order("nombre").range(d, h));
@@ -83,7 +91,8 @@ export async function getCatalogosCaptacion(): Promise<CatalogosCaptacion> {
     nombres("sispro_paises"),
     nombres("sispro_ips"),
   ]);
-  return { aeropuertosAtencion, aeropuertosProcedencia, paises, ips };
+  const aerolineas = (await leerTodo<{ nombre: string }>((d, h) => s.from("airlines").select("nombre").eq("activo", true).order("nombre").range(d, h))).map((r) => r.nombre);
+  return { aeropuertosAtencion, aeropuertosProcedencia, paises, ips, aerolineas };
 }
 
 export async function buscarCie10Captacion(busqueda: string): Promise<{ codigo: string; descripcion: string }[]> {
@@ -270,8 +279,10 @@ export async function crearCaptacion(datos: z.input<typeof captacionSchema>) {
     .single();
   if (error || !data) return { error: error?.message ?? "No se pudo registrar la captación" };
 
+  const nuevoId = (data as { id: number }).id;
+  await auditar("INSERTAR", "captacion", nuevoId, "Captación aeroportuaria registrada");
   revalidatePath("/captacion");
-  return { success: true as const, id: (data as { id: number }).id };
+  return { success: true as const, id: nuevoId };
 }
 
 export async function actualizarCaptacion(id: number, datos: z.input<typeof captacionSchema>) {
@@ -292,6 +303,7 @@ export async function actualizarCaptacion(id: number, datos: z.input<typeof capt
   if (error) return { error: error.message };
   if (!data || data.length === 0) return { error: "No se pudo guardar (el registro no existe)" };
 
+  await auditar("MODIFICAR", "captacion", idOk.data, "Captación aeroportuaria actualizada");
   revalidatePath("/captacion");
   revalidatePath(`/captacion/${idOk.data}`);
   return { success: true as const };
@@ -311,6 +323,7 @@ export async function eliminarCaptacion(id: number) {
     .select("id");
   if (error) return { error: error.message };
   if (!data || data.length === 0) return { error: "No se pudo eliminar (el registro no existe)" };
+  await auditar("ELIMINAR", "captacion", idOk.data, "Captación aeroportuaria desactivada");
   revalidatePath("/captacion");
   return { success: true as const };
 }
@@ -365,4 +378,30 @@ export async function getFilasSisproMes(mes: string): Promise<{ filas: (string |
   // Garantía extra por si el rango de la consulta se desplazara: solo días del mes pedido (hora de Bogotá).
   const delMes = lista.filter((c) => diaColombia(c.fecha_atencion).startsWith(m.data));
   return { filas: delMes.map((c, i) => filaSispro(c, i + 1, cat)), total: delMes.length };
+}
+
+// ─── PDF individual ─────────────────────────────────────────────────────────
+
+/** Formato individual en PDF (base64, mismo patrón que el certificado de valoraciones: sin Route Handler). */
+export async function generarCaptacionPdf(id: number) {
+  const captacion = await getCaptacion(id);
+  if (!captacion) return { error: "Captación no encontrada o sin permiso" };
+
+  // El logo es opcional: si el archivo no está en el despliegue, el PDF sale igual, sin logo.
+  let logo: Buffer | undefined;
+  try {
+    logo = await readFile(path.join(process.cwd(), "public", "brand", "alianza.png"));
+  } catch {
+    logo = undefined;
+  }
+
+  try {
+    // El componente devuelve un <Document>; el tipo de createElement no lo sabe (mismo cast que el certificado de valoraciones).
+    const documento = createElement(CaptacionPdf, { captacion: captacion as unknown as CaptacionPdfDatos, logo }) as unknown as ReactElement<DocumentProps>;
+    const buffer = await renderToBuffer(documento);
+    await auditar("EXPORTAR", "captacion", captacion.id, "PDF individual de captación");
+    return { success: true as const, data: buffer.toString("base64"), filename: `captacion-${captacion.id}.pdf` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo generar el PDF" };
+  }
 }
