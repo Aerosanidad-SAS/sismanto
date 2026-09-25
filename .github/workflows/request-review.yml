@@ -1,0 +1,44 @@
+# Pide la revisión del PR en cuanto se abre, para que el revisor reciba la
+# notificación "review requested" de GitHub (correo y campana) sin que el
+# autor tenga que acordarse de asignarlo. NO aprueba nada: aprobar sigue siendo
+# de una persona.
+#
+# Repo variables (Settings → Secrets and variables → Actions → Variables):
+#   REVIEWER_DEFAULT   login de GitHub que revisa los PR (por defecto TecnicoAerosanidad)
+#   REVIEWER_FALLBACK  quien revisa cuando el autor ES el revisor por defecto (p. ej. el
+#                      login de León); si no se define, esos PR quedan sin revisor pedido
+# (No se necesita CODEOWNERS: en repos privados exige un plan de pago.)
+name: Request review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  request:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      AUTHOR: ${{ github.event.pull_request.user.login }}
+      REVIEWER_DEFAULT: ${{ vars.REVIEWER_DEFAULT }}
+      REVIEWER_FALLBACK: ${{ vars.REVIEWER_FALLBACK }}
+    steps:
+      - name: Request the reviewer
+        run: |
+          reviewer="${REVIEWER_DEFAULT:-TecnicoAerosanidad}"
+          if [ "$AUTHOR" = "$reviewer" ]; then
+            reviewer="$REVIEWER_FALLBACK"
+          fi
+          if [ -z "$reviewer" ]; then
+            echo "::notice::No reviewer configured for a PR authored by $AUTHOR."
+            exit 0
+          fi
+          gh pr edit "$PR" --repo "$REPO" --add-reviewer "$reviewer"
+          echo "Review requested from $reviewer"
