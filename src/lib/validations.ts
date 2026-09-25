@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { esDia } from '@/lib/fechas';
 import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 
 // Schema de validación para mantenimiento
@@ -150,10 +151,12 @@ export const mileageLogSchema = z.object({
 
 export type MileageLogFormData = z.infer<typeof mileageLogSchema>;
 
+// Un DÍA de calendario AAAA-MM-DD (ver fechas.ts). `Date.parse` aceptaba cualquier texto y lo interpretaba en la zona del
+// servidor, que es de donde salían resultados distintos en local y en producción.
 const parseableDateString = z
   .string()
   .min(1, "Fecha requerida")
-  .refine((s) => !Number.isNaN(Date.parse(s)), "Fecha inválida");
+  .refine((s) => esDia(s), "Fecha inválida (usa AAAA-MM-DD)");
 
 export const dateRangeSchema = z
   .object({
@@ -161,7 +164,7 @@ export const dateRangeSchema = z
     fechaFin: parseableDateString,
   })
   .refine(
-    (d) => new Date(d.fechaInicio).getTime() <= new Date(d.fechaFin).getTime(),
+    (d) => d.fechaInicio <= d.fechaFin,
     { message: "La fecha fin debe ser posterior o igual a la fecha inicio", path: ["fechaFin"] }
   );
 

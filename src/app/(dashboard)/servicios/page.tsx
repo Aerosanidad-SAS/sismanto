@@ -1,3 +1,4 @@
+import { hoyBogota } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -44,7 +45,7 @@ export default async function ServiciosPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const hoyIso = new Date().toISOString().slice(0, 10);
+  const hoyIso = hoyBogota();
   const { filtros, pagina } = leerFiltros(searchParams);
   const profile = await getProfile();
   const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");

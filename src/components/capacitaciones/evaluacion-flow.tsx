@@ -1,5 +1,6 @@
 "use client";
 
+import { formatoDia, hoyBogota } from "@/lib/fechas";
 import { useState, useEffect, useTransition, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -73,11 +74,7 @@ export function EvaluacionFlow({
 
   const resolveText = useCallback(
     (text: string) => {
-      const today = new Date().toLocaleDateString("es-CO", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
+      const today = formatoDia(hoyBogota(), "largo");
       return text
         .replace(/\{nombre\}/g, ovemName)
         .replace(/\{fecha_hoy\}/g, today)

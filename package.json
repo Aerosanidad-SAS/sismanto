@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node scripts/run-tests.mjs",
     "db:apply": "tsx scripts/apply-database.ts",
     "db:check": "tsx scripts/check-migrations-registered.ts",
     "fuel:load": "tsx scripts/load-fuel-logs.ts",

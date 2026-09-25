@@ -1,5 +1,6 @@
 "use client";
 
+import { anioDe, esDia, hoyBogota, primerDiaDelMes, sumarMeses, ultimoDiaDelMesDe } from "@/lib/fechas";
 import { useState, useTransition, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
@@ -119,21 +120,10 @@ export function DisponibilidadCard({
   };
 
   const periodoMes = (dir: number | "now") => {
-    const base =
-      dir === "now"
-        ? new Date()
-        : (() => {
-            const b = fi ? new Date(fi + "T12:00:00") : new Date();
-            b.setMonth(b.getMonth() + dir);
-            return b;
-          })();
-    const y = base.getFullYear();
-    const m = base.getMonth();
-    const f0 = `${y}-${String(m + 1).padStart(2, "0")}-01`;
-    const ult = new Date(y, m + 1, 0).getDate();
-    const f1 = `${y}-${String(m + 1).padStart(2, "0")}-${String(ult).padStart(2, "0")}`;
-    setFi(f0);
-    setFf(f1);
+    const hoy = hoyBogota();
+    const base = dir === "now" ? hoy : sumarMeses(primerDiaDelMes(esDia(fi) ? fi : hoy), dir);
+    setFi(primerDiaDelMes(base));
+    setFf(ultimoDiaDelMesDe(base));
   };
 
   const periodoAnio = (year: number) => {
@@ -141,7 +131,7 @@ export function DisponibilidadCard({
     setFf(`${year}-12-31`);
   };
 
-  const yearNow = new Date().getFullYear();
+  const yearNow = anioDe(hoyBogota());
 
   const alternarEstado = (vehicleId: string, actualmenteDisponible: boolean) => {
     if (!puedeToggleEstado) return;

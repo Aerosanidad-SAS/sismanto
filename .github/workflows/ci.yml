@@ -26,4 +26,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      # Corre las pruebas con TZ=UTC, America/Bogota y Asia/Tokyo: si un cálculo depende de la zona horaria, falla.
+      - run: npm test
       - run: npm run build

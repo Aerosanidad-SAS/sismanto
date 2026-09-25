@@ -1,5 +1,6 @@
 "use client";
 
+import { hoyBogota } from "@/lib/fechas";
 import { useState, useCallback, useRef } from "react";
 import { FileUp, Loader2, CheckCircle2, XCircle, Trash2, RotateCcw, FileText, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -118,7 +119,7 @@ function InvoicePreviewForm({
   );
 
   const [vehicleId, setVehicleId] = useState(matchedVehicle?.id || "");
-  const [fecha, setFecha] = useState(ext.fecha || new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha] = useState(ext.fecha || hoyBogota());
   const [tipo, setTipo] = useState<"PREVENTIVO" | "CORRECTIVO">(ext.tipo || "CORRECTIVO");
   const [descripcion, setDescripcion] = useState(ext.descripcion_trabajo || "");
   const [proveedor, setProveedor] = useState(ext.proveedor || "");

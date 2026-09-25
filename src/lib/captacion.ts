@@ -1,3 +1,4 @@
+import { diaEnBogota } from "@/lib/fechas";
 // Captación de pacientes aeroportuarios + reporte SISPRO (migración 080/081).
 // Listas fijas portadas de registroCaptacion.php de SISRES y códigos del libro "SISPRO 2026".
 // Todo lo de aquí es puro (sin base de datos) para poder probarlo con datos inventados.
@@ -158,7 +159,7 @@ const siNo = (v: boolean | null | undefined) => (v === null || v === undefined ?
 
 /** Fecha (yyyy-MM-dd) del instante dado, en hora de Colombia (UTC-5, sin horario de verano). */
 export function diaColombia(iso: string): string {
-  return new Date(new Date(iso).getTime() - 5 * 3_600_000).toISOString().slice(0, 10);
+  return diaEnBogota(iso);
 }
 
 /** dd/MM/aaaa — formato de "Fecha de atención" en el libro. */

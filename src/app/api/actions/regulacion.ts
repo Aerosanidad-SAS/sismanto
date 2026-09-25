@@ -1,5 +1,6 @@
 "use server";
 
+import { hoyBogota } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
@@ -25,7 +26,7 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
     .single();
 
   const estadoAnterior = vehicleActual?.estado_actual ?? null;
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyBogota();
 
   const { error } = await supabase
     .from("vehicles")
@@ -170,7 +171,7 @@ export async function unassignVehicle(assignmentId: number) {
 
 export async function getFleetWithAssignments() {
   const supabase = createClient();
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyBogota();
   const centro = centroVisible(await getProfile());
 
   let vehiclesQuery = supabase

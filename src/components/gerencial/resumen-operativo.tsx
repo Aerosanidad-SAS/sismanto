@@ -1,5 +1,6 @@
 "use client";
 
+import { hoyBogota } from "@/lib/fechas";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateField } from "@/components/forms/date-field";
@@ -35,7 +36,7 @@ const TARJETAS = [
 ] as const;
 
 function hoyIso() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyBogota();
 }
 
 /** Fila compacta de tipo de servicio — mismo dato en los 3 niveles (consolidado y cada ciudad). */

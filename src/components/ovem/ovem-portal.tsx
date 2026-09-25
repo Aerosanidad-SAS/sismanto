@@ -105,7 +105,7 @@ export function OvemPortal({
     null
   );
 
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyBogota; // día de hoy en Colombia, calculado en el servidor
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
 
   useEffect(() => {

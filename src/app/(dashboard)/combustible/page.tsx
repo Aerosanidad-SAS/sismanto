@@ -1,3 +1,4 @@
+import { esDia, hoyBogota, sumarMeses } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { getMetricasConsumo, getRendimientoCombustibleSerieMensual } from "@/app/api/actions/consumo";
 import { ConsumoCliente } from "@/components/consumo/consumo-cliente";
@@ -22,12 +23,9 @@ export default async function CombustiblePage({
   searchParams: { inicio?: string; fin?: string; vehiculo?: string; centro?: string };
 }) {
   await requireRole(["ADMIN", "GERENCIAL", "ANALISTA"]);
-  const hoy = new Date();
-  const hace3Meses = new Date();
-  hace3Meses.setMonth(hoy.getMonth() - 3);
-
-  const fechaInicio = searchParams.inicio || hace3Meses.toISOString().split("T")[0];
-  const fechaFin = searchParams.fin || hoy.toISOString().split("T")[0];
+  const hoy = hoyBogota();
+  const fechaInicio = esDia(searchParams.inicio) ? searchParams.inicio : sumarMeses(hoy, -3);
+  const fechaFin = esDia(searchParams.fin) ? searchParams.fin : hoy;
   const vehicleId = searchParams.vehiculo || undefined;
   const centroId = searchParams.centro ? parseInt(searchParams.centro, 10) : undefined;
 
