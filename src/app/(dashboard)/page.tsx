@@ -1,6 +1,7 @@
 import { diasEntre, esDia, hoyBogota, primerDiaDelMes, sumarDias } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KpiCard, KpiCaption, KpiValue } from "@/components/ui/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { getProfile } from "@/app/api/actions/auth";
@@ -338,7 +339,7 @@ export default async function DashboardPage({
 
       {/* KPIs resumen: vehículos ~mitad anchura; resto en cuadrícula compacta */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
-        <Card className="min-w-0 xl:w-1/2 xl:max-w-[50%]">
+        <Card className="min-w-0 xl:w-[40%] xl:max-w-[40%]">
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <div className="flex min-w-0 items-center gap-2">
               <CardTitle className="text-sm font-medium">Vehículos</CardTitle>
@@ -375,41 +376,29 @@ export default async function DashboardPage({
         </Card>
 
         <div
-          className={`grid min-w-0 flex-1 gap-3 sm:grid-cols-2 ${hideFinanceKpis ? "xl:grid-cols-2" : "xl:grid-cols-3"}`}
+          className="grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3"
         >
           {!hideFinanceKpis && (
-            <Card>
-              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-sm font-medium">Costo</CardTitle>
-                  <HelpTrigger text="Costo total de operación (mantenimiento + combustible + costos fijos prorrateados) para el período del filtro global." />
-                </div>
-                <DollarSign className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(costos.reduce((sum, c) => sum + c.costoTotal, 0))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {formatFechaCortaPeriodo(fechaInicio)} – {formatFechaCortaPeriodo(fechaFin)}
-                </p>
-              </CardContent>
-            </Card>
+            <KpiCard
+              title="Costo"
+              icon={DollarSign}
+              help={<HelpTrigger text="Costo total de operación (mantenimiento + combustible + costos fijos prorrateados) para el período del filtro global." />}
+            >
+              <KpiValue>{formatCurrency(costos.reduce((sum, c) => sum + c.costoTotal, 0))}</KpiValue>
+              <KpiCaption>
+                {formatFechaCortaPeriodo(fechaInicio)} – {formatFechaCortaPeriodo(fechaFin)}
+              </KpiCaption>
+            </KpiCard>
           )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium">Novedades abiertas</CardTitle>
-                <HelpTrigger text="Incidencias en estado ABIERTO que aún no se cierran en el sistema." />
-              </div>
-              <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{data.novedadesAbiertas}</div>
-              <p className="text-xs text-muted-foreground">Requieren atención</p>
-            </CardContent>
-          </Card>
+          <KpiCard
+            title="Novedades abiertas"
+            icon={AlertTriangle}
+            help={<HelpTrigger text="Incidencias en estado ABIERTO que aún no se cierran en el sistema." />}
+          >
+            <KpiValue>{data.novedadesAbiertas}</KpiValue>
+            <KpiCaption>Requieren atención</KpiCaption>
+          </KpiCard>
 
           <ProximosVencimientosModal
             total={data.proximosVencimientos}
