@@ -67,8 +67,6 @@ export default function LoginPage() {
           <div>
             <CardTitle className="text-2xl">SISMANTO</CardTitle>
             <CardDescription>Inicie sesión con su cédula y contraseña</CardDescription>
-            {/* Temporary marker to verify the PR → approval → deploy flow; remove after the test. */}
-            <p className="mt-1 text-xs text-muted-foreground">Prueba de despliegue · 25 sep 2026</p>
           </div>
         </CardHeader>
         <CardContent>
