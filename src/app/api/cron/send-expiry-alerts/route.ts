@@ -128,3 +128,6 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   return NextResponse.json({ enviados: resultados.length, nuevas: nuevas.length, resultados });
 }
+
+// Vercel Cron invoca con GET; POST queda para lanzarlo a mano con el mismo secreto.
+export const GET = POST;
