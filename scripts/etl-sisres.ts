@@ -33,7 +33,7 @@ import * as path from "path";
 import pg from "pg";
 import { sanitizarTelefono } from "../src/lib/notifications/whatsapp";
 import { resolverCiudad } from "../src/lib/colombia-geo";
-import { asignarPlacasUnicas, elegirPacientesUnicos } from "./etl-integridad";
+import { asignarPlacasUnicas, decimalConPunto, elegirPacientesUnicos } from "./etl-integridad";
 
 // ─── Env (mismo mecanismo que apply-database.ts) ─────────────────────────────
 function loadEnvFile(filePath: string) {
@@ -220,6 +220,15 @@ function fechaValida(iso: string): boolean {
   const [a, m, d] = iso.slice(0, 10).split("-").map(Number);
   const dt = new Date(Date.UTC(a, m - 1, d));
   return a >= 1900 && a <= 2100 && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/** Decimal con punto de una columna DOUBLE (coordenadas): NO pasa por `numero()`, que leería "-9.428" como -9428. */
+function decimal(ctx: Ctx, nombre: string): number | null {
+  const raw = v(ctx.fila, nombre);
+  if (raw === null) return null;
+  const n = decimalConPunto(raw);
+  if (n === null) registrar(avisos, ctx.tabla, ctx.fila, `${nombre}: decimal no reconocido "${raw}" — se cargó vacío`);
+  return n;
 }
 
 function fecha(ctx: Ctx, ...nombres: string[]): string | null {
@@ -411,7 +420,7 @@ async function cargarAeropuertos(client: pg.Client, dir: string) {
     return [
       entero(v(f, "id")), v(f, "ident"), v(f, "type"), nombre, v(f, "municipality"), v(f, "iso_country"),
       v(f, "iso_region"), v(f, "iata_code"), v(f, "icao_code"), (v(f, "scheduled_service") ?? "").toLowerCase() === "yes",
-      numero(ctx, "latitude_deg"), numero(ctx, "longitude_deg"), entero(v(f, "elevation_ft")),
+      decimal(ctx, "latitude_deg"), decimal(ctx, "longitude_deg"), entero(v(f, "elevation_ft")),
     ];
   });
   await enTransaccion(client, "airports", async () => {
