@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/app/api/actions/auth";
 import { puedeGestionarTickets } from "@/lib/auth-utils";
+import { notificarTicket } from "@/lib/tickets-correo";
 import { auditar } from "@/lib/auditoria";
 import { reabrirTicketSchema, ticketSchema, TICKET_ESTADOS } from "@/lib/validations";
 
@@ -202,6 +203,8 @@ export async function crearTicket(formData: FormData) {
 
   // Solo categoría/prioridad/sede: el asunto y la descripción pueden traer datos personales y no van a la bitácora.
   await auditar("INSERTAR", "tickets", (data as { id: number }).id, `Ticket creado (${datos.categoria}/${datos.prioridad}, sede ${datos.sede})${solicitanteId === user.id ? "" : " a nombre de otra persona"}`);
+  // Avisa a los gestores y confirma al solicitante. Nunca rompe la creación (ver tickets-correo.ts).
+  await notificarTicket("NUEVO", (data as { id: number }).id);
   revalidatePath("/soporte");
   return { success: true as const, id: (data as { id: number }).id };
 }
@@ -217,6 +220,7 @@ export async function reabrirTicket(ticketId: number, nota: string) {
   if (error) return { error: error.message };
 
   await auditar("MODIFICAR", "tickets", parsed.data.id, "Ticket reabierto");
+  await notificarTicket("REABIERTO", parsed.data.id, { nota: parsed.data.nota });
   revalidatePath("/soporte");
   return { success: true as const };
 }
