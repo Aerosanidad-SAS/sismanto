@@ -1,5 +1,6 @@
 "use server";
 
+import { hoyBogota } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { requireRole } from "./auth";
@@ -15,7 +16,7 @@ import type { RoadAccidentFormData } from "@/lib/validations";
 
 /** Misma convención que daily_checks: fecha UTC, que es la que usa CURRENT_DATE en las políticas RLS. */
 function hoyUtc() {
-  return new Date().toISOString().split("T")[0];
+  return hoyBogota();
 }
 
 export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACION" = "PREOPERACIONAL") {
@@ -41,7 +42,7 @@ export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACI
 
 export async function getAssignedVehicles(userId: string) {
   const supabase = createClient();
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyBogota();
 
   const { data } = await supabase
     .from("vehicle_assignments")
@@ -204,7 +205,7 @@ export async function updateKilometrajeOdometer(
 
 export async function getDailyCheckForToday(userId: string, vehicleId: string) {
   const supabase = createClient();
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyBogota();
   const { data } = await supabase
     .from("daily_checks")
     .select("*")
@@ -217,7 +218,7 @@ export async function getDailyCheckForToday(userId: string, vehicleId: string) {
 
 export async function getDailyCheckItemsForToday(userId: string, vehicleId: string) {
   const supabase = createClient();
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyBogota();
 
   const { data: check } = await supabase
     .from("daily_checks")

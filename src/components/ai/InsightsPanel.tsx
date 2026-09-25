@@ -87,7 +87,7 @@ export function InsightsPanel() {
           </p>
           {result && (
             <p className="text-xs text-muted-foreground mt-0.5">
-              Período: {result.periodo} · Generado: {new Date(result.generado_en).toLocaleString("es-CO")}
+              Período: {result.periodo} · Generado: {new Date(result.generado_en).toLocaleString("es-CO", { timeZone: "America/Bogota" })}
             </p>
           )}
         </div>

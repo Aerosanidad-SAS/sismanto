@@ -1,5 +1,6 @@
 "use client";
 
+import { edadEn, esDia, hoyBogota, normalizarDia } from "@/lib/fechas";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -52,13 +53,9 @@ import { crearPaciente, actualizarPaciente, eliminarPaciente } from "@/app/api/a
 /** null = no se pudo determinar (sin fecha de nacimiento o fecha inválida) */
 function calcularEdadNumero(fechaNacimiento: string | undefined): number | null {
   if (!fechaNacimiento) return null;
-  const nacimiento = new Date(fechaNacimiento);
-  if (Number.isNaN(nacimiento.getTime())) return null;
-  const hoy = new Date();
-  let edad = hoy.getFullYear() - nacimiento.getFullYear();
-  const m = hoy.getMonth() - nacimiento.getMonth();
-  if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) edad--;
-  return edad;
+  const nacimiento = normalizarDia(fechaNacimiento.slice(0, 10));
+  if (!esDia(nacimiento)) return null;
+  return edadEn(nacimiento, hoyBogota());
 }
 
 export interface PacienteRow {
@@ -89,13 +86,9 @@ function nombreCompleto(p: PacienteRow) {
 
 function calcularEdad(fechaNacimiento: string | null): string {
   if (!fechaNacimiento) return "—";
-  const nacimiento = new Date(fechaNacimiento);
-  if (Number.isNaN(nacimiento.getTime())) return "—";
-  const hoy = new Date();
-  let edad = hoy.getFullYear() - nacimiento.getFullYear();
-  const m = hoy.getMonth() - nacimiento.getMonth();
-  if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) edad--;
-  return `${edad}`;
+  const nacimiento = fechaNacimiento.slice(0, 10);
+  if (!esDia(nacimiento)) return "—";
+  return `${edadEn(nacimiento, hoyBogota())}`;
 }
 
 // Campos de texto simples del formulario (los que tienen catálogo real —

@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node scripts/run-tests.mjs",
     "db:apply": "tsx scripts/apply-database.ts",
     "db:seed-role-users": "tsx scripts/seed-role-test-users.ts",
     "db:check": "tsx scripts/check-migrations-registered.ts",

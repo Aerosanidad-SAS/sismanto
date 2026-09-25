@@ -56,7 +56,7 @@ export function BarraTablero({ vehiculos, reportadoPor }: BarraTableroProps) {
     <div className="flex flex-wrap items-center gap-2">
       <p className="text-xs text-muted-foreground">
         {ultima
-          ? `Actualizado ${ultima.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+          ? `Actualizado ${ultima.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "America/Bogota" })}`
           : "Se actualiza cada 30 segundos"}
       </p>
       <Button variant="outline" size="sm" onClick={refrescarAhora}>

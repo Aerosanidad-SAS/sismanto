@@ -1,5 +1,6 @@
 "use client";
 
+import { hoyBogota } from "@/lib/fechas";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,7 @@ export function AssignOvemButton({ vehicleId, vehiclePlaca, ovemUsers, currentAs
   const handleAssign = () => {
     if (!selectedUserId) return;
     setError(null);
-    const today = new Date().toISOString().split("T")[0];
+    const today = hoyBogota();
     startTransition(async () => {
       const result = await asignarTripulacion(vehicleId, selectedUserId, "OVEM", today);
       if (result?.error) { setError(result.error); return; }

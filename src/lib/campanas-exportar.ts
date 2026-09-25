@@ -1,3 +1,4 @@
+import { diaEnBogota } from "@/lib/fechas";
 /**
  * Filas para exportar campañas a Excel (SISRES: exportCampanaHistorial.php). Puras y tolerantes: las columnas de estado
  * de Meta (`estado_meta`, `entregado_at`, `leido_at`) las agrega el webhook de WhatsApp; si esa migración aún no está
@@ -52,5 +53,5 @@ export function nombreArchivoExport(base: string, fecha: Date = new Date()): str
     .replace(/[^a-zA-Z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 50);
-  return `${limpio || "campana"}_${fecha.toISOString().slice(0, 10)}.xlsx`;
+  return `${limpio || "campana"}_${diaEnBogota(fecha)}.xlsx`;
 }

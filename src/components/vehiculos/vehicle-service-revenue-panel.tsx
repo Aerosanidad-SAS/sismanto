@@ -1,5 +1,6 @@
 "use client";
 
+import { hoyBogota, primerDiaDelMes } from "@/lib/fechas";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -62,10 +63,7 @@ export function VehicleServiceRevenuePanel({
 }) {
   const router = useRouter();
   const [serviceTypeId, setServiceTypeId] = useState(String(serviceTypes[0]?.id ?? ""));
-  const [periodo, setPeriodo] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-  });
+  const [periodo, setPeriodo] = useState(() => primerDiaDelMes(hoyBogota()));
   const [monto, setMonto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -134,6 +134,8 @@ npm run build 2>&1 | grep -E "Error:|error TS|Module not found|Failed" | head -3
 
 ## Conventions
 
+- **Dates: a business date is a DAY (`"YYYY-MM-DD"`), not an instant.** Use `src/lib/fechas.ts` (`hoyBogota()`, `sumarDias`, `diasEntre`, `formatoDia`, `limitesInstante`…). Never `new Date("2024-01-01")`, `getFullYear()/getMonth()/getDate()/setMonth()` or `new Date().toISOString().slice(0, 10)`: they answer in the machine's time zone (Vercel = UTC, your PC = Bogotá) so local and production disagree. ESLint enforces it and `npm test` runs the tests under three time zones. Fixed costs come from `src/lib/costos-fijos.ts` only.
+
 - **Versioning:** every PR into `dev` adds `changelog/unreleased/<topic>.md` (type/area/roles/migration + one user-facing line in Spanish); nobody edits `package.json`'s version or `CHANGELOG.md` in a PR — only the release PR (`npm run release`). Full rules: `changelog/README.md`.
 - **File naming:** `kebab-case` / `PascalCase` for components
 - **Git commits:** Conventional Commits (`feat:`, `fix:`, `chore:`)

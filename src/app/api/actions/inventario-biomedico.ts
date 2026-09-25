@@ -1,5 +1,6 @@
 "use server";
 
+import { diasEntre, hoyBogota, normalizarDia } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -54,12 +55,8 @@ export async function getAlertasBiomedicos() {
     // El inventario de Sistemas (area = 'SISTEMAS') comparte la tabla; no son alertas biomédicas.
     .or("area.is.null,area.neq.SISTEMAS");
 
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  const diasHasta = (fecha: string) => {
-    const d = new Date(fecha);
-    return Math.round((d.getTime() - hoy.getTime()) / 86400000);
-  };
+  const hoy = hoyBogota();
+  const diasHasta = (fecha: string) => diasEntre(hoy, normalizarDia(fecha));
   const nivelDe = (dias: number): "ROJA" | "NARANJA" | null => {
     if (dias <= 15) return "ROJA";
     if (dias <= 30) return "NARANJA";

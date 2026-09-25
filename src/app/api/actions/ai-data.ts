@@ -1,5 +1,6 @@
 "use server";
 
+import { hoyBogota } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -8,7 +9,7 @@ const MONTHLY_BUDGET_USD = parseFloat(process.env.AI_MONTHLY_BUDGET_USD ?? "30.0
 
 export async function checkBudget(): Promise<{ ok: boolean; reason?: string }> {
   const admin = createAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyBogota();
   const monthStart = today.slice(0, 7) + "-01";
 
   const { data: daily } = await admin
@@ -245,8 +246,8 @@ export async function getInsightsData() {
     .map(([conductor, total]) => ({ conductor, total }));
 
   return {
-    fechaAnalisis: new Date().toISOString().slice(0, 10),
-    periodoAnalisis: `${hace90} al ${new Date().toISOString().slice(0, 10)}`,
+    fechaAnalisis: hoyBogota(),
+    periodoAnalisis: `${hace90} al ${hoyBogota()}`,
     resumenFlota: {
       totalVehiculos: vehiculos.data?.length ?? 0,
       operativos: (vehiculos.data ?? []).filter((v) => v.estado_actual === "OPERATIVO").length,

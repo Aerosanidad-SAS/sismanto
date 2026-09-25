@@ -1,3 +1,4 @@
+import { diaEnBogota, esDia, formatoDia, hoyBogota } from "@/lib/fechas";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
 const styles = StyleSheet.create({
@@ -54,9 +55,10 @@ export interface HojaVidaMantenimiento {
 
 function fmtFecha(f: string | null): string {
   if (!f) return "—";
+  if (esDia(f)) return formatoDia(f);
   const d = new Date(f);
   if (Number.isNaN(d.getTime())) return f;
-  return d.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return formatoDia(diaEnBogota(d));
 }
 
 function Campo({ label, valor }: { label: string; valor: string | null }) {
@@ -135,7 +137,7 @@ export function HojaVidaBiomedicaPdf({
         </View>
 
         <Text style={styles.footer}>
-          Generado por {generadoPor} el {new Date().toLocaleDateString("es-CO")} — Aeromanto / Aerosanidad S.A.S.
+          Generado por {generadoPor} el {formatoDia(hoyBogota())} — Aeromanto / Aerosanidad S.A.S.
         </Text>
       </Page>
     </Document>
