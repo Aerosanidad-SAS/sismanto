@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/app/api/actions/auth";
 import {
   checkBudget,
   logUsage,
@@ -128,11 +129,9 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("role_codigo")
-    .eq("user_id", user.id)
-    .single();
+  // El rol vive en `roles.codigo` (user_profiles solo tiene `role_id`): se lee con getProfile(), que además exige
+  // perfil activo. Antes se pedía la columna inexistente user_profiles.role_codigo y toda petición daba 403.
+  const profile = await getProfile();
 
   if (!profile || !["ADMIN", "GERENCIAL"].includes(profile.role_codigo)) {
     return NextResponse.json({ error: "Sin permisos para el chat IA" }, { status: 403 });
