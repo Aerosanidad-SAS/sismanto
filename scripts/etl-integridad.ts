@@ -95,3 +95,17 @@ export function elegirPacientesUnicos<T>(
   }
   return { conservar: filas.filter((f) => !descartadasSet.has(f)), descartadas };
 }
+
+/**
+ * Decimal con PUNTO, tal como sale de una columna DOUBLE de MySQL (coordenadas, etc.).
+ * NO es lo mismo que `numero()` del ETL: ese lee texto libre con formato colombiano, donde "150.000" son ciento
+ * cincuenta mil. Aplicado a una coordenada, "-9.428" (3 decimales) se leía como -9428 en silencio.
+ * Solo acepta `-?dígitos(.dígitos)?`; cualquier otra cosa devuelve null (el llamador lo registra como aviso).
+ */
+export function decimalConPunto(raw: string | null): number | null {
+  if (raw === null) return null;
+  const t = raw.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
