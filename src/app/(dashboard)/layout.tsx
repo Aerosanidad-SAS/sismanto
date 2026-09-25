@@ -54,6 +54,7 @@ import { esRolRestringido, getDefaultRoute, rutaPermitidaARolRestringido } from 
 import { getProfile, signOut, type UserRole } from "@/app/api/actions/auth";
 import { getCompanyBranding } from "@/app/api/actions/company-settings";
 import { Button } from "@/components/ui/button";
+import { RoleSwitcher, RoleSwitchBanner } from "@/components/dev/role-switcher";
 
 type NavItem = {
   name: string;
@@ -823,6 +824,7 @@ export default function DashboardLayout({
             showCollapsedChrome && "lg:p-2"
           )}
         >
+          <RoleSwitcher collapsed={showCollapsedChrome} />
           <form action={signOut}>
             <button
               type="submit"
@@ -848,6 +850,7 @@ export default function DashboardLayout({
           showCollapsedChrome && "lg:!pl-[4.75rem]"
         )}
       >
+        <RoleSwitchBanner />
         <main
           className={cn(
             "mx-auto w-full max-w-[100vw]",
