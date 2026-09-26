@@ -33,6 +33,8 @@ export interface DateFieldProps {
   className?: string;
   /** Clase del input de texto en sí (ej. para achicarlo en una barra compacta). */
   inputClassName?: string;
+  /** Alto de 32 px (input y botón del calendario) para franjas de filtros densas. */
+  compact?: boolean;
 }
 
 /**
@@ -42,7 +44,7 @@ export interface DateFieldProps {
  * escribir la fecha como elegirla en el calendario. El valor que entra/sale
  * sigue siendo ISO "yyyy-MM-dd" — no cambia nada del lado de Zod/BD.
  */
-export function DateField({ value, onChange, id, disabled, placeholder = "dd/mm/aaaa", max, min, className, inputClassName }: DateFieldProps) {
+export function DateField({ value, onChange, id, disabled, placeholder = "dd/mm/aaaa", max, min, className, inputClassName, compact }: DateFieldProps) {
   const fechaSeleccionada = aFecha(value);
   const [texto, setTexto] = React.useState(fechaSeleccionada ? format(fechaSeleccionada, FORMATO_VISIBLE) : "");
   const [open, setOpen] = React.useState(false);
@@ -76,12 +78,12 @@ export function DateField({ value, onChange, id, disabled, placeholder = "dd/mm/
         disabled={disabled}
         onChange={(e) => setTexto(e.target.value)}
         onBlur={(e) => confirmarTexto(e.target.value)}
-        className={cn("flex-1", inputClassName)}
+        className={cn("flex-1", compact && "h-8 min-w-0 px-2 text-sm", inputClassName)}
         inputMode="numeric"
       />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" size="icon" disabled={disabled} className="shrink-0" aria-label="Elegir fecha en calendario">
+          <Button type="button" variant="outline" size="icon" disabled={disabled} className={cn("shrink-0", compact && "h-8 w-8")} aria-label="Elegir fecha en calendario">
             <CalendarIcon className="h-4 w-4" />
           </Button>
         </PopoverTrigger>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { ArrowRightLeft, Lock, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -190,8 +191,14 @@ interface ServiciosTablaProps {
   >;
   /** Ciudad del usuario logueado — default de "ciudad origen" en un servicio nuevo. */
   ciudadDefault?: string | null;
+  /** Ciudad de registro por defecto (la del CRA de quien registra): BOGOTA D.C. o MEDELLÍN. */
+  ciudadRegistroDefault?: string;
   /** Rol de quien ve la tabla — determina si los campos de logística quedan bloqueados al editar. */
   viewerRole?: string | null;
+  /** Conteo y paginación: van a la izquierda de la barra, en la misma fila que «+ Registrar». */
+  barra?: ReactNode;
+  /** Acciones (p. ej. Exportar) que van junto a «+ Registrar». */
+  acciones?: ReactNode;
 }
 
 const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p?.email || null;
@@ -222,8 +229,11 @@ export function ServiciosTabla({
   reguladoresDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
+  ciudadRegistroDefault,
   viewerRole,
   viewerNombreCompleto,
+  barra,
+  acciones,
 }: ServiciosTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -360,6 +370,7 @@ export function ServiciosTabla({
       tipo_servicio: "",
       departamento_origen: ubicacionDefault?.departamento ?? "",
       ciudad_origen: ubicacionDefault?.ciudad ?? "",
+      ciudad_registro: ciudadRegistroDefault ?? "",
       // SISRES precarga "Recibe" con la sesión y preselecciona "Despacha"
       // al mismo usuario cuando es Regulador (registroServicios.php,
       // $esRegulador) — y fuerza método de pago a N/A porque el Regulador
@@ -513,26 +524,29 @@ export function ServiciosTabla({
   };
 
   return (
-    <div className="space-y-4">
-      {puedeEditar && (
-        <div className="flex justify-end">
-          <Button onClick={abrirNuevo}>+ Registrar</Button>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">{barra}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {acciones}
+          {puedeEditar && (
+            <Button className="h-8 px-3 text-sm" onClick={abrirNuevo}>
+              + Registrar
+            </Button>
+          )}
         </div>
-      )}
+      </div>
 
       <div className="overflow-x-auto">
-        <Table>
+        <Table className="[&_td]:px-3 [&_td]:py-1.5 [&_th]:h-9 [&_th]:px-3">
           <TableHeader>
             <TableRow>
               <TableHead>ID</TableHead>
               <TableHead>Etapa</TableHead>
               <TableHead>Paciente</TableHead>
-              <TableHead>Registro</TableHead>
-              <TableHead>Programado</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Móvil</TableHead>
+              <TableHead title="Fecha programada; debajo, la de registro">Programado</TableHead>
+              <TableHead>Tipo / móvil</TableHead>
               <TableHead>Origen → Destino</TableHead>
-              {puedeCambiarEtapaLibre && <TableHead>Cambiar etapa</TableHead>}
               {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
@@ -540,7 +554,7 @@ export function ServiciosTabla({
             {filtrados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={8 + (puedeCambiarEtapaLibre ? 1 : 0) + (puedeEditar ? 1 : 0)}
+                  colSpan={6 + (puedeEditar ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin servicios registrados
@@ -554,14 +568,16 @@ export function ServiciosTabla({
               });
               return (
               <TableRow key={s.id}>
-                <TableCell className="tabular-nums text-muted-foreground">{s.id}</TableCell>
+                <TableCell className="w-12 !px-2 text-xs tabular-nums text-muted-foreground">{s.id}</TableCell>
                 <TableCell>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa}</Badge>
+                  <div className="flex flex-nowrap items-center gap-1">
+                    <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"} className="shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px] leading-5">
+                      {s.etapa}
+                    </Badge>
                     {estancado !== null && (
                       <Badge
                         variant="outline"
-                        className="border-transparent bg-foreground text-background"
+                        className="shrink-0 whitespace-nowrap border-transparent bg-foreground px-1 py-0 text-[10px] leading-5 text-background"
                         title={`Lleva ${estancado} h en ${s.etapa} sin avanzar`}
                       >
                         ⏰ {estancado}h
@@ -569,63 +585,77 @@ export function ServiciosTabla({
                     )}
                   </div>
                 </TableCell>
-                <TableCell>
-                  <div className="font-medium">{s.nombre_completo}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {s.patients?.cedula ?? (s.cedula_paciente as string | null) ?? "sin enlace"}
+                <TableCell className="min-w-[10.5rem]">
+                  <div className="text-sm leading-tight">
+                    <span className="font-medium">{s.nombre_completo}</span>{" "}
+                    <span className="text-xs text-muted-foreground">
+                      {s.patients?.cedula ?? (s.cedula_paciente as string | null) ?? "sin enlace"}
+                    </span>
                   </div>
                 </TableCell>
-                <TableCell className="whitespace-nowrap tabular-nums">{fechaHora24(s.fecha_hora_registro)}</TableCell>
                 <TableCell className="whitespace-nowrap tabular-nums">
-                  {fechaHora24(s.fecha_hora_programacion as string | null) || "—"}
+                  <div className="text-sm leading-tight">{fechaHora24(s.fecha_hora_programacion as string | null) || "—"}</div>
+                  <div className="text-xs leading-tight text-muted-foreground" title="Fecha de registro">
+                    {fechaHora24(s.fecha_hora_registro)}
+                  </div>
                 </TableCell>
-                <TableCell className="max-w-40">
-                  <p className="truncate text-sm">{s.tipo_servicio}</p>
+                <TableCell className="max-w-32">
+                  <p className="truncate text-sm leading-tight" title={s.tipo_servicio}>
+                    {s.tipo_servicio}
+                  </p>
+                  <p className="text-xs leading-tight text-muted-foreground">Móvil {s.vehicles?.placa ?? s.movil_placa ?? "—"}</p>
                 </TableCell>
-                <TableCell>{s.vehicles?.placa ?? s.movil_placa ?? "—"}</TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="text-sm leading-tight">
                   {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
                 </TableCell>
-                {puedeCambiarEtapaLibre && (
-                  <TableCell className="min-w-[10rem]">
-                    <Select
-                      disabled={busyId === s.id}
-                      onValueChange={(v) => handleEtapa(s, v)}
-                      value=""
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={busyId === s.id ? "Guardando…" : "Mover a…"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ETAPAS_DESTINO(s.etapa).map((etapa) => (
-                          <SelectItem key={etapa} value={etapa}>
-                            {etapa}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                )}
                 {puedeEditar && (
-                  <TableCell className="text-right space-x-2">
-                    {puedeEditarServicio(s) ? (
-                      <Button variant="outline" size="sm" onClick={() => abrirEdicion(s)}>
-                        Editar
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Finalizado — bloqueado</span>
-                    )}
-                    {puedeEliminar && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        disabled={busyId === s.id}
-                        onClick={() => handleEliminar(s)}
-                      >
-                        Eliminar
-                      </Button>
-                    )}
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-0.5">
+                      {puedeCambiarEtapaLibre && (
+                        <Select
+                          disabled={busyId === s.id}
+                          onValueChange={(v) => handleEtapa(s, v)}
+                          value=""
+                        >
+                          <SelectTrigger
+                            className="h-7 w-7 justify-center p-0 [&>svg:last-child]:hidden"
+                            title="Cambiar etapa"
+                            aria-label="Cambiar etapa"
+                          >
+                            <ArrowRightLeft className="h-3.5 w-3.5" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ETAPAS_DESTINO(s.etapa).map((etapa) => (
+                              <SelectItem key={etapa} value={etapa}>
+                                {etapa}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {puedeEditarServicio(s) ? (
+                        <Button variant="outline" size="icon" className="h-7 w-7" title="Editar" aria-label="Editar servicio" onClick={() => abrirEdicion(s)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <span className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground" title="Finalizado — bloqueado">
+                          <Lock className="h-3.5 w-3.5" aria-label="Finalizado — bloqueado" />
+                        </span>
+                      )}
+                      {puedeEliminar && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          title="Eliminar"
+                          aria-label="Eliminar servicio"
+                          disabled={busyId === s.id}
+                          onClick={() => handleEliminar(s)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 )}
               </TableRow>

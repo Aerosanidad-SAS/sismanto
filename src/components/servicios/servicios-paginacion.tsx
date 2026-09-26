@@ -25,7 +25,7 @@ export function ServiciosPaginacion({
     deshabilitado ? (
       <span
         aria-hidden
-        className="flex h-9 min-w-9 items-center justify-center rounded-md border px-2 text-sm text-muted-foreground opacity-50"
+        className="flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-sm text-muted-foreground opacity-50"
       >
         {contenido}
       </span>
@@ -35,7 +35,7 @@ export function ServiciosPaginacion({
         aria-label={etiqueta}
         aria-current={activo ? "page" : undefined}
         className={cn(
-          "flex h-9 min-w-9 items-center justify-center rounded-md border px-2 text-sm",
+          "flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-sm",
           activo ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
         )}
       >
@@ -44,7 +44,7 @@ export function ServiciosPaginacion({
     );
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <p className="text-sm text-muted-foreground">
         Mostrando{" "}
         <strong className="text-foreground">

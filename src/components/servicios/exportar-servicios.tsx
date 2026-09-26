@@ -53,7 +53,7 @@ export function ExportarServicios({ filtros }: { filtros: FiltrosServicios }) {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button type="button" variant="outline" onClick={exportar} disabled={cargando} className="gap-2">
+      <Button type="button" variant="outline" onClick={exportar} disabled={cargando} className="h-8 gap-2 px-3 text-sm">
         <FileSpreadsheet className="h-4 w-4" />
         {cargando ? "Exportando…" : "Exportar Excel"}
       </Button>

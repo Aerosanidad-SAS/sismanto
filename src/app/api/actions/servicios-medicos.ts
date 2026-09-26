@@ -14,6 +14,7 @@ import { auditar } from "@/lib/auditoria";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
+  prefijoCiudad,
   type FiltrosServicios,
 } from "@/lib/servicios-lista";
 
@@ -200,6 +201,8 @@ function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centroId
   if (filtros.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtros.etapa)) q = q.eq("etapa", filtros.etapa);
   if (filtros.tipo) q = q.eq("tipo_servicio", filtros.tipo);
   if (filtros.cliente) q = q.eq("cliente", filtros.cliente);
+  const prefijo = prefijoCiudad(filtros.ciudad);
+  if (prefijo) q = q.ilike("ciudad_registro", `${prefijo}%`);
   if (filtros.origen) q = q.eq("ciudad_origen", filtros.origen);
   if (filtros.destino) q = q.eq("ciudad_destino", filtros.destino);
   if (filtros.cedula) q = q.ilike("cedula_paciente", `%${filtros.cedula.replace(/[%_\\]/g, "")}%`);
