@@ -16,6 +16,9 @@ import { VehicleMaintenanceAlertsPanel } from "@/components/vehiculos/vehicle-ma
 import { getAlertsForVehicle } from "@/app/api/actions/plan-mantenimiento";
 import { VehicleSpecsEditor } from "@/components/vehiculos/vehicle-specs-editor";
 import { VehicleGeneralEditor } from "@/components/vehiculos/vehicle-general-editor";
+import { VehicleCostosAnuales } from "@/components/vehiculos/vehicle-costos-anuales";
+import { listarCostosAnuales } from "@/app/api/actions/costos-anuales";
+import { ROLES_EDITAN_COSTOS_ANUALES } from "@/lib/costos-anuales";
 
 async function getVehicle(id: string) {
   try {
@@ -135,6 +138,9 @@ export default async function VehicleDetailPage({
 
   const canLogMaintenance =
     profile?.role_codigo === "ADMIN" || profile?.role_codigo === "MANTENIMIENTO";
+
+  const costosAnuales = await listarCostosAnuales(params.id);
+  const puedeEditarCostosAnuales = (ROLES_EDITAN_COSTOS_ANUALES as readonly string[]).includes(profile?.role_codigo ?? "");
 
   const esElectricoFlota = ELECTRIC_VEHICLE_PLACAS.has(String(vehicle.placa || "").toUpperCase());
 
@@ -298,6 +304,23 @@ export default async function VehicleDetailPage({
       </div>
 
       {esElectricoFlota && <ElectricVehicleInsight />}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Costos anuales: SOAT, póliza y RTM</CardTitle>
+          <CardDescription>
+            Cada pago con su vigencia. El costo se reparte por día y alimenta los costos del dashboard y los KPIs.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <VehicleCostosAnuales
+            vehicleId={params.id}
+            filas={costosAnuales}
+            puedeEditar={puedeEditarCostosAnuales}
+            puedeEliminar={profile?.role_codigo === "ADMIN"}
+          />
+        </CardContent>
+      </Card>
 
       {showRevenue && (
         <Card>

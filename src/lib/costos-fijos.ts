@@ -1,60 +1,34 @@
-import { aniosDelRango, diasDelAnio, diasDelRango, solapeDias, type Dia } from "./fechas";
+import { diasDelRango, esDia, solapeDias, type Dia } from "./fechas";
 
 /**
- * Costos fijos de un vehículo en un periodo (SOAT, póliza y técnico-mecánica). Es la ÚNICA implementación: el dashboard
- * y los KPIs la usan, así que ya no pueden divergir. Es pura y no depende de la zona horaria (solo aritmética de días,
- * ver `fechas.ts`), de modo que da lo mismo en local, en Vercel y en las pruebas.
+ * Referencia en TypeScript del criterio de costos anuales (SOAT, póliza y RTM). El cálculo que usa la aplicación vive en
+ * la base (`costo_devengado` y `costos_por_vehiculo`, migración 089); esta es su gemela pura, sin zona horaria, y sirve
+ * para probar el criterio y para comprobar que la función SQL da lo mismo (`scripts/verify-costos-sql.ts`).
  *
- * Criterio (devengo): un costo anual se reparte en partes iguales por día de su año. El costo del periodo es la parte que
- * cae dentro de él.
- *  - SOAT y póliza: `valor anual × días del periodo / 365`.
- *  - RTM (tarifa regulada por año, `rtm_historico`): por cada año calendario que toca el periodo,
- *    `tarifa del año × días del periodo dentro de ese año / días de ese año`. Antes se sumaba el año COMPLETO aunque el
- *    periodo fuera de un día.
+ * Criterio (devengo): el valor de un costo anual se reparte en partes iguales por cada día de su vigencia; el costo de un
+ * periodo es la parte que cae dentro de él. Renovar es agregar otra vigencia: el pasado no cambia.
  */
 
-/** Tarifa de RTM por año calendario (`rtm_historico`). */
-export type TarifasRtm = Record<number, number>;
-
-/**
- * Tarifa que aplica a un año. Si el año no tiene dato: uno posterior al último conocido usa la última tarifa (aún no se
- * publica la del año en curso); uno intermedio usa la del año conocido anterior; uno anterior al primer dato cuesta 0
- * (no hay información, y no se inventa una tarifa de otro año).
- */
-export function tarifaRtmDelAnio(anio: number, tarifas: TarifasRtm): number {
-  const propia = tarifas[anio];
-  if (propia !== undefined) return propia;
-  const previos = Object.keys(tarifas)
-    .map(Number)
-    .filter((a) => a < anio)
-    .sort((a, b) => a - b);
-  return previos.length ? tarifas[previos[previos.length - 1]] : 0;
+export interface CostoAnual {
+  valor: number | null | undefined;
+  vigenciaDesde: Dia;
+  vigenciaHasta: Dia;
 }
 
-/** RTM que corresponde a un periodo, repartida por días dentro de cada año. */
-export function rtmDelPeriodo(desde: Dia, hasta: Dia, tarifas: TarifasRtm): number {
-  let total = 0;
-  for (const anio of aniosDelRango(desde, hasta)) {
-    const diasEnElAnio = solapeDias(desde, hasta, `${anio}-01-01`, `${anio}-12-31`);
-    total += (tarifaRtmDelAnio(anio, tarifas) * diasEnElAnio) / diasDelAnio(anio);
-  }
-  return total;
-}
-
-export interface CostosAnualesVehiculo {
-  soatAnual: number | null | undefined;
-  polizaAnual: number | null | undefined;
-}
-
-/** Costo fijo de un vehículo en `desde..hasta` (ambos incluidos). */
-export function costoFijoDelPeriodo(
-  v: CostosAnualesVehiculo,
+/** Parte de `valor` que cae en el periodo `desde..hasta` (ambos incluidos). Gemela de `costo_devengado` en SQL. */
+export function costoDevengado(
+  valor: number | null | undefined,
+  vigenciaDesde: Dia,
+  vigenciaHasta: Dia,
   desde: Dia,
-  hasta: Dia,
-  tarifasRtm: TarifasRtm
+  hasta: Dia
 ): number {
-  const factorSoatPoliza = diasDelRango(desde, hasta) / 365;
-  return (
-    (Number(v.soatAnual || 0) + Number(v.polizaAnual || 0)) * factorSoatPoliza + rtmDelPeriodo(desde, hasta, tarifasRtm)
-  );
+  if (valor == null || !esDia(vigenciaDesde) || !esDia(vigenciaHasta) || vigenciaHasta < vigenciaDesde) return 0;
+  const diasEnElPeriodo = solapeDias(desde, hasta, vigenciaDesde, vigenciaHasta);
+  return (Number(valor) * diasEnElPeriodo) / diasDelRango(vigenciaDesde, vigenciaHasta);
+}
+
+/** Suma de lo devengado por varias vigencias en el periodo. */
+export function costoAnualDelPeriodo(filas: CostoAnual[], desde: Dia, hasta: Dia): number {
+  return filas.reduce((s, f) => s + costoDevengado(f.valor, f.vigenciaDesde, f.vigenciaHasta, desde, hasta), 0);
 }
