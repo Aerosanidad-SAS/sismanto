@@ -14,7 +14,7 @@ npm run lint         # ESLint
 npm run db:apply     # Apply database migrations
 ```
 
-No test runner. CI on every PR into `dev`/`staging`/`main`: `.github/workflows/ci.yml` (lint + build) and `.github/workflows/claude-review.yml` (Claude review as Aegis + new type errors; fails on BLOCK).
+No test runner. CI on every PR into `dev`/`staging`/`main`: `.github/workflows/ci.yml` (lint + build) and `.github/workflows/claude-review.yml` (Claude review as Aegis + new type errors; fails on BLOCK; runs once per PR on open/ready, re-run with the `re-review` label; skips docs-only PRs).
 
 ## Branches & deploy — read `ENTORNOS.md` for full detail
 

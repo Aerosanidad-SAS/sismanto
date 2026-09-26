@@ -14,8 +14,8 @@ import {
 } from "@/lib/validations";
 import type { RoadAccidentFormData } from "@/lib/validations";
 
-/** Misma convención que daily_checks: fecha UTC, que es la que usa CURRENT_DATE en las políticas RLS. */
-function hoyUtc() {
+/** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
+function hoyOvem() {
   return hoyBogota();
 }
 
@@ -251,7 +251,7 @@ export async function getSupplyCheckForToday(vehicleId: string) {
     .select("id, observaciones")
     .eq("user_id", profile.user_id)
     .eq("vehicle_id", vehicleId)
-    .eq("fecha", hoyUtc())
+    .eq("fecha", hoyOvem())
     .maybeSingle();
   if (!check) return null;
 
@@ -286,7 +286,7 @@ export async function submitSupplyCheck(data: {
       {
         user_id: profile.user_id,
         vehicle_id: row.vehicleId,
-        fecha: hoyUtc(),
+        fecha: hoyOvem(),
         completo: faltantes === 0,
         observaciones: row.observaciones?.trim() || null,
         updated_at: new Date().toISOString(),
@@ -326,7 +326,7 @@ export async function submitOvemFuelLog(data: {
   const parsed = ovemFuelLogSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const row = parsed.data;
-  if (row.fecha > hoyUtc()) return { error: "La fecha del tanqueo no puede ser futura" };
+  if (row.fecha > hoyOvem()) return { error: "La fecha del tanqueo no puede ser futura" };
 
   const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
   const supabase = createClient();

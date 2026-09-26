@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { ServiciosPorCiudadChart } from "@/components/gerencial/gerencial-charts";
 import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { HelpTrigger } from "@/components/ui/help-trigger";
+import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
+import { prefijoCiudad } from "@/lib/servicios-lista";
 
 const ROLES_PERMITIDOS = ["ADMIN", "GERENCIAL"];
 interface VencimientoFila {
@@ -75,7 +77,13 @@ async function getDatosGerenciales() {
   };
 }
 
-export default async function GerencialPage() {
+export default async function GerencialPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const pedida = Array.isArray(searchParams.ciudad) ? searchParams.ciudad[0] : searchParams.ciudad;
+  const ciudad = prefijoCiudad(pedida) ? (pedida as string) : "";
   const profile = await getProfile();
   if (!profile || !ROLES_PERMITIDOS.includes(profile.role_codigo)) {
     redirect("/");
@@ -95,12 +103,15 @@ export default async function GerencialPage() {
 
       {/* Servicios por ciudad */}
       <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl">Servicios — Bogotá y Medellín</h2>
-          <HelpTrigger text="Segmentado por texto libre (ciudad de origen del servicio) — no hay un catálogo cerrado de ciudad todavía, así que es una cifra aproximada, no exacta." />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl">Servicios — Bogotá y Medellín</h2>
+            <HelpTrigger text="Segmentado por ciudad de registro: la del CRA al que está asignado el usuario de Regulación que recibió la solicitud (un servicio de Medellín a Chocó recibido por el CRA Medellín cuenta como Medellín). Es texto libre, sin catálogo cerrado." />
+          </div>
+          <FiltroCiudadUrl />
         </div>
-        <ResumenOperativo inicial={datos.resumenHoy} />
-        <ServiciosPorCiudadChart inicial={datos.estadisticasCiudad} />
+        <ResumenOperativo inicial={datos.resumenHoy} ciudad={ciudad} />
+        <ServiciosPorCiudadChart inicial={datos.estadisticasCiudad} ciudad={ciudad} />
       </section>
 
       {/* Estado de flota */}

@@ -29,6 +29,7 @@ export interface ServicioDelDia extends ServicioParaEstado {
   nombre_completo: string | null;
   fecha_hora_registro: string | null;
   ciudad_origen: string | null;
+  ciudad_registro?: string | null;
   direccion_origen: string | null;
   ciudad_intermedia: string | null;
   direccion_intermedia: string | null;

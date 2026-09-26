@@ -89,7 +89,8 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
       {
         name: "Coordinación",
         href: "/coordinacion",
-        roles: ["ADMIN", "COORDINACION"],
+        // El ADMIN la ve con el selector "Ver como… COORDINACION"; no ocupa lugar en su menú.
+        roles: ["COORDINACION"],
         icon: Users,
         hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
       },
@@ -151,20 +152,6 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Stethoscope,
         roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
         hint: "Conceptos de aptitud médica para vuelo (origen SISRES).",
-      },
-      {
-        name: "Aerolíneas",
-        href: "/aerolineas",
-        icon: PlaneTakeoff,
-        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
-        hint: "Catálogo de aerolíneas para las valoraciones (origen SISRES).",
-      },
-      {
-        name: "Aeropuertos",
-        href: "/aeropuertos",
-        icon: Plane,
-        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
-        hint: "Catálogo de aeropuertos para origen y destino de vuelo (origen SISRES).",
       },
     ],
   },
@@ -316,7 +303,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     ],
   },
   {
-    label: "Administración",
+    label: "Administración del sistema",
     items: [
       {
         name: "Configuración",
@@ -338,6 +325,20 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: History,
         roles: ["ADMIN"],
         hint: "Quién hizo qué y cuándo (registro inmutable de auditoría).",
+      },
+      {
+        name: "Aerolíneas",
+        href: "/aerolineas",
+        icon: PlaneTakeoff,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aerolíneas para las valoraciones (origen SISRES).",
+      },
+      {
+        name: "Aeropuertos",
+        href: "/aeropuertos",
+        icon: Plane,
+        roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
+        hint: "Catálogo de aeropuertos para origen y destino de vuelo (origen SISRES).",
       },
     ],
   },

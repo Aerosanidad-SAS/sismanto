@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
 import { centroVisible } from "@/lib/auth-utils";
 import { leerTodo } from "@/lib/leer-todo";
+import { prefijoCiudad } from "@/lib/servicios-lista";
 
 export interface EstadisticasServicios {
   total: number;
@@ -20,22 +21,22 @@ export interface EstadisticasServicios {
  * embebido de SISRES (includes/estadisticasServicios.php) a agregación
  * sobre medical_services.
  */
-export async function getEstadisticasServicios(): Promise<EstadisticasServicios> {
+export async function getEstadisticasServicios(ciudad?: string): Promise<EstadisticasServicios> {
+  const prefijo = prefijoCiudad(ciudad);
   const supabase = createClient();
   const hoy = hoyBogota();
   const desdeIso = limitesInstante(sumarMeses(hoy, -12), hoy).desde;
 
   // Por páginas: un solo .limit(20000) devuelve 1000 filas y las estadísticas salían incompletas.
-  const filas = await leerTodo((d, h) =>
-    supabase
+  const filas = await leerTodo((d, h) => {
+    const base = supabase
       .from("medical_services")
       .select(
         "etapa, tipo_servicio, fecha_hora_registro, ciudad_origen, oportunidad_atencion, tiempo_total_origen, tiempo_espera_destino, tiempo_total"
       )
-      .gte("fecha_hora_registro", desdeIso)
-      .order("id")
-      .range(d, h),
-  );
+      .gte("fecha_hora_registro", desdeIso);
+    return (prefijo ? base.ilike("ciudad_registro", `${prefijo}%`) : base).order("id").range(d, h);
+  });
 
   const porEtapaMap = new Map<string, number>();
   const porTipoMap = new Map<string, number>();
@@ -89,10 +90,9 @@ export interface EstadisticasPorCiudad {
   serieMensual: { mes: string; cantidad: number }[];
 }
 
-// Bogotá/Medellín por texto libre — no hay catálogo de ciudad cerrado en
-// medical_services (ni un centro_operativo 1:1 con ciudad: AIRPLAN mezcla
-// Medellín con otras 5 ciudades). Es una cifra aproximada, no exacta —
-// avisar antes de presentarla como dato cerrado.
+// Bogotá/Medellín por CIUDAD DE REGISTRO (`ciudad_registro`): la del CRA al que está
+// asignado el usuario de Regulación que recibió la solicitud, no la de origen ni destino.
+// Es texto libre (BOGOTA D.C. / MEDELLÍN), sin catálogo cerrado: se agrupa por prefijo.
 const CIUDADES_JUNTA = [
   { ciudad: "Bogotá", prefijo: "bogot" },
   { ciudad: "Medellín", prefijo: "medell" },
@@ -121,16 +121,16 @@ export async function getEstadisticasServiciosPorCiudad(params?: {
   const filas = await leerTodo((d, h) =>
     supabase
       .from("medical_services")
-      .select("etapa, fecha_hora_registro, ciudad_origen, tiempo_total")
+      .select("etapa, fecha_hora_registro, ciudad_registro, tiempo_total")
       .gte("fecha_hora_registro", desdeIso)
       .lt("fecha_hora_registro", hastaExclusivoIso)
-      .not("ciudad_origen", "is", null)
+      .not("ciudad_registro", "is", null)
       .order("id")
       .range(d, h),
   );
 
   return CIUDADES_JUNTA.map(({ ciudad, prefijo }) => {
-    const deLaCiudad = filas.filter((s) => sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo));
+    const deLaCiudad = filas.filter((s) => sinAcentos(s.ciudad_registro ?? "").startsWith(prefijo));
     const ultimos30 = deLaCiudad.filter((s) => Date.parse((s as { fecha_hora_registro: string }).fecha_hora_registro) >= hace30dias);
     const finalizados = ultimos30.filter((s) => s.etapa === "FINALIZADO").length;
 
@@ -282,7 +282,7 @@ export async function getResumenOperativoDiario(params: {
   const filas = await leerTodo((d, h) => {
     let query = supabase
       .from("medical_services")
-      .select("etapa, tipo_servicio, ciudad_origen")
+      .select("etapa, tipo_servicio, ciudad_registro")
       .gte("fecha_hora_registro", desdeIso)
       .lt("fecha_hora_registro", hastaExclusivoIso);
     if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
@@ -291,7 +291,7 @@ export async function getResumenOperativoDiario(params: {
 
   const porCiudad: ResumenOperativoCiudad[] = [...CIUDADES_JUNTA].reverse().map(({ ciudad, prefijo }) => ({
     ciudad,
-    ...calcularBucket(filas.filter((s) => sinAcentos(s.ciudad_origen ?? "").startsWith(prefijo))),
+    ...calcularBucket(filas.filter((s) => sinAcentos(s.ciudad_registro ?? "").startsWith(prefijo))),
   }));
 
   return { consolidado: sumarBuckets(porCiudad), porCiudad };
