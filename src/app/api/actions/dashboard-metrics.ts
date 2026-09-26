@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { dateRangeSchema, tipoFiltroMantenimientoSchema } from "@/lib/validations";
 import type { CostoPorVehiculoKPI, DisponibilidadVehiculo } from "@/types";
 import { isReferenceSparkCombustionPlaca, normalizePlaca } from "@/lib/fleet-reference-plates";
-import { costoFijoDelPeriodo, type TarifasRtm } from "@/lib/costos-fijos";
+import { costosPorVehiculo } from "@/lib/costos-vehiculo";
 import { limitesInstante } from "@/lib/fechas";
 
 type TipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
@@ -26,29 +26,6 @@ function normalizarPlacas(csv: string | undefined): Set<string> | null {
   return parts.length ? new Set(parts) : null;
 }
 
-function coincideTextoTrabajo(
-  r: {
-    descripcion_trabajo?: string | null;
-    maintenance_categories?: { nombre?: string | null } | null;
-    id_manto?: number;
-  },
-  itemsByManto: Record<number, string[]>,
-  q: string
-): boolean {
-  const n = q.trim().toLowerCase();
-  if (!n) return true;
-  const hay = (s?: string | null) => (s || "").toLowerCase().includes(n);
-  if (hay(r.descripcion_trabajo)) return true;
-  if (hay(r.maintenance_categories?.nombre)) return true;
-  const mid = r.id_manto;
-  if (mid != null) {
-    for (const d of itemsByManto[mid] || []) {
-      if (hay(d)) return true;
-    }
-  }
-  return false;
-}
-
 export async function getCostosPorVehiculo(
   fechaInicio: string,
   fechaFin: string,
@@ -61,123 +38,17 @@ export async function getCostosPorVehiculo(
     const tipoOk = tipoFiltroMantenimientoSchema.safeParse(tipo);
     if (!tipoOk.success) return [];
 
-    const { fechaInicio: fi, fechaFin: ff } = dr.data;
-    const tipoF = tipoOk.data;
     const centroId = opciones.centroOperativoId;
     const placasSet = normalizarPlacas(opciones.placasCsv);
-    const textoQ = opciones.textoTrabajo?.trim() || "";
 
-    const supabase = createClient();
-
-    const { data: vehiclesRaw } = await supabase
-      .from("vehicles")
-      .select(
-        "id, placa, marca, centro_operativo_id, costo_soat_anual, costo_poliza_anual"
-      )
-      .order("placa");
-    if (!vehiclesRaw) return [];
-
-    const { data: rtmRows } = await supabase
-      .from("rtm_historico")
-      .select("anio, valor");
-    const rtmByYear: TarifasRtm = {};
-    for (const r of rtmRows || []) {
-      rtmByYear[r.anio] = Number(r.valor);
-    }
-
-    let vehicles = (vehiclesRaw as any[]).filter(
-      (v) => !isReferenceSparkCombustionPlaca(v.placa)
-    );
-    if (centroId != null && Number.isFinite(centroId)) {
-      vehicles = vehicles.filter((v) => v.centro_operativo_id === centroId);
-    }
-    if (placasSet && placasSet.size > 0) {
-      vehicles = vehicles.filter((v) => placasSet.has(normalizePlaca(v.placa)));
-    }
-    if (vehicles.length === 0) return [];
-
-    const vehicleIds = vehicles.map((v) => v.id as string);
-
-    let mantQuery = supabase
-      .from("maintenance_records")
-      .select(
-        `id_manto, vehicle_id, tipo, valor, descripcion_trabajo, maintenance_categories(nombre)`
-      )
-      .in("vehicle_id", vehicleIds)
-      .gte("fecha", fi)
-      .lte("fecha", ff);
-
-    if (tipoF !== "AMBOS") {
-      mantQuery = mantQuery.eq("tipo", tipoF);
-    }
-
-    let registros = ((await mantQuery).data || []) as any[];
-    let itemsByManto: Record<number, string[]> = {};
-    if (textoQ && registros.length > 0) {
-      const ids = [...new Set(registros.map((r) => r.id_manto as number))];
-      const { data: itemRows } = await supabase
-        .from("maintenance_items")
-        .select("maintenance_record_id, descripcion")
-        .in("maintenance_record_id", ids);
-      for (const row of itemRows || []) {
-        const rid = row.maintenance_record_id as number;
-        if (!itemsByManto[rid]) itemsByManto[rid] = [];
-        itemsByManto[rid].push(String(row.descripcion || ""));
-      }
-      registros = registros.filter((r) => coincideTextoTrabajo(r, itemsByManto, textoQ));
-    }
-
-    const { data: fuelRows } = await supabase
-      .from("fuel_logs")
-      .select("vehicle_id, costo")
-      .in("vehicle_id", vehicleIds)
-      .gte("fecha", fi)
-      .lte("fecha", ff);
-
-    const map: Record<string, CostoPorVehiculoKPI> = {};
-    for (const v of vehicles) {
-      const costoFijoAnual = costoFijoDelPeriodo(
-        { soatAnual: v.costo_soat_anual, polizaAnual: v.costo_poliza_anual },
-        fi,
-        ff,
-        rtmByYear
-      );
-      map[v.id] = {
-        vehicleId: v.id,
-        placa: v.placa || "",
-        marca: v.marca || null,
-        costoPreventivo: 0,
-        costoCorrectivo: 0,
-        costoCombustible: 0,
-        costoFijoAnual,
-        costoMantenimientoTotal: 0,
-        costoTotal: costoFijoAnual,
-        cantidadMantenimientos: 0,
-      };
-    }
-
-    for (const r of registros) {
-      const reg = map[r.vehicle_id];
-      if (!reg) continue;
-      const valor = Number(r.valor || 0);
-      reg.costoMantenimientoTotal += valor;
-      reg.cantidadMantenimientos += 1;
-      if (r.tipo === "PREVENTIVO") reg.costoPreventivo += valor;
-      else reg.costoCorrectivo += valor;
-    }
-
-    for (const f of fuelRows || []) {
-      const reg = map[f.vehicle_id];
-      if (!reg) continue;
-      reg.costoCombustible += Number(f.costo || 0);
-    }
-
-    const out = Object.values(map).map((r) => ({
-      ...r,
-      costoTotal: r.costoMantenimientoTotal + r.costoCombustible + r.costoFijoAnual,
-    }));
-
-    return out.sort((a, b) => b.costoTotal - a.costoTotal);
+    return await costosPorVehiculo(createClient(), {
+      desde: dr.data.fechaInicio,
+      hasta: dr.data.fechaFin,
+      tipo: tipoOk.data,
+      centroOperativoId: centroId != null && Number.isFinite(centroId) ? centroId : undefined,
+      placas: placasSet ? [...placasSet] : undefined,
+      texto: opciones.textoTrabajo,
+    });
   } catch {
     return [];
   }
