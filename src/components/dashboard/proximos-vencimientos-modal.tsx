@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Calendar } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KpiCard, KpiCaption, KpiValue } from "@/components/ui/kpi-card";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { Button } from "@/components/ui/button";
 import {
@@ -79,29 +79,24 @@ export function ProximosVencimientosModal({
 
   return (
     <>
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-sm font-medium">Próximos vencimientos</CardTitle>
-            <HelpTrigger text="Cantidad de vehículos con SOAT o técnico-mecánica que vencen en los próximos 30 días. Haz clic para ver el detalle." />
+      <KpiCard
+        title="Próximos vencimientos"
+        icon={Calendar}
+        help={<HelpTrigger text="Cantidad de vehículos con SOAT o técnico-mecánica que vencen en los próximos 30 días. Haz clic para ver el detalle." />}
+      >
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto w-full min-w-0 justify-start whitespace-normal p-0 text-left hover:bg-transparent"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+        >
+          <div className="min-w-0">
+            <KpiValue>{total}</KpiValue>
+            <KpiCaption>SOAT / técnico-mec. en 30 días</KpiCaption>
           </div>
-          <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        </CardHeader>
-        <CardContent>
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-auto p-0 text-left hover:bg-transparent"
-            onClick={() => setOpen(true)}
-            aria-haspopup="dialog"
-          >
-            <div>
-              <div className="text-2xl font-bold">{total}</div>
-              <p className="text-xs text-muted-foreground">SOAT / técnico-mec. en 30 días</p>
-            </div>
-          </Button>
-        </CardContent>
-      </Card>
+        </Button>
+      </KpiCard>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
