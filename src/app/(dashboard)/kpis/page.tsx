@@ -15,6 +15,26 @@ type FuelResumenKPI = {
   vehiculosConDatos: number;
   vehiculosAnalizados: number;
 };
+type RatioPC = {
+  costoPreventivo: number;
+  costoCorrectivo: number;
+  ratio: number;
+  cantidadPreventivo: number;
+  cantidadCorrectivo: number;
+};
+
+function mapearTco(costos: Awaited<ReturnType<typeof costosPorVehiculo>>) {
+  return costos.map((c) => ({
+    placa: c.placa,
+    centroOperativo: c.centroOperativo,
+    costoPreventivo: c.costoPreventivo,
+    costoCorrectivo: c.costoCorrectivo,
+    costoCombustible: c.costoCombustible,
+    costoFijoAnual: c.costoFijoAnual,
+    costoTotal: c.costoTotal,
+    cantidadMantenimientos: c.cantidadMantenimientos,
+  }));
+}
 
 async function getKPIData(
   fechaInicio: string,
@@ -79,39 +99,32 @@ async function getKPIData(
       };
     });
 
-    // KPI 2: CTO (Costo Total de Operación). Misma función SQL que el dashboard: una sola fuente de costos.
-    const centroCosto = tcoFiltros?.centroId;
-    const costos = await costosPorVehiculo(supabase, {
-      desde: fechaInicio,
-      hasta: fechaFin,
-      tipo: tcoFiltros?.tipo,
-      centroOperativoId: centroCosto != null && !Number.isNaN(centroCosto) ? centroCosto : undefined,
-      placaFragmento: tcoFiltros?.placaFragment,
-    });
-    const tcoData = costos.map((c) => ({
-      placa: c.placa,
-      centroOperativo: c.centroOperativo,
-      costoPreventivo: c.costoPreventivo,
-      costoCorrectivo: c.costoCorrectivo,
-      costoCombustible: c.costoCombustible,
-      costoFijoAnual: c.costoFijoAnual,
-      costoTotal: c.costoTotal,
-      cantidadMantenimientos: c.cantidadMantenimientos,
-    }));
-
-    // KPI 3: Ratio Preventivo/Correctivo (del mismo subconjunto filtrado)
-    const totalPreventivo = costos.reduce((s, c) => s + c.costoPreventivo, 0);
-    const totalCorrectivo = costos.reduce((s, c) => s + c.costoCorrectivo, 0);
-    const cantidadPreventivo = costos.reduce((s, c) => s + c.cantidadPreventivo, 0);
-    const cantidadCorrectivo = costos.reduce((s, c) => s + c.cantidadCorrectivo, 0);
-
-    const ratioPC = {
-      costoPreventivo: totalPreventivo,
-      costoCorrectivo: totalCorrectivo,
-      ratio: totalCorrectivo > 0 ? totalPreventivo / totalCorrectivo : 0,
-      cantidadPreventivo,
-      cantidadCorrectivo,
-    };
+    // KPI 2 y 3: CTO y Ratio Preventivo/Correctivo. Misma función SQL que el dashboard: una sola fuente de costos.
+    // Try/catch propio (Aegis, #116): costosPorVehiculo lanza si la RPC falla (p. ej. la migración 089 aún no
+    // aplicada al desplegar) y no debe arrastrar a KPI 1 (disponibilidad) ni KPI 4 (resolución), que no dependen de ella.
+    let tcoData: ReturnType<typeof mapearTco> = [];
+    let ratioPC: RatioPC = { costoPreventivo: 0, costoCorrectivo: 0, ratio: 0, cantidadPreventivo: 0, cantidadCorrectivo: 0 };
+    try {
+      const centroCosto = tcoFiltros?.centroId;
+      const costos = await costosPorVehiculo(supabase, {
+        desde: fechaInicio,
+        hasta: fechaFin,
+        tipo: tcoFiltros?.tipo,
+        centroOperativoId: centroCosto != null && !Number.isNaN(centroCosto) ? centroCosto : undefined,
+        placaFragmento: tcoFiltros?.placaFragment,
+      });
+      tcoData = mapearTco(costos);
+      ratioPC = {
+        costoPreventivo: costos.reduce((s, c) => s + c.costoPreventivo, 0),
+        costoCorrectivo: costos.reduce((s, c) => s + c.costoCorrectivo, 0),
+        ratio: 0,
+        cantidadPreventivo: costos.reduce((s, c) => s + c.cantidadPreventivo, 0),
+        cantidadCorrectivo: costos.reduce((s, c) => s + c.cantidadCorrectivo, 0),
+      };
+      ratioPC.ratio = ratioPC.costoCorrectivo > 0 ? ratioPC.costoPreventivo / ratioPC.costoCorrectivo : 0;
+    } catch (e) {
+      console.error("KPI costos (costosPorVehiculo) falló, el resto del tablero sigue:", e instanceof Error ? e.message : e);
+    }
 
     // KPI 4: Tiempo Medio de Resolución
     const { data: incidentsResolucion } = await supabase
