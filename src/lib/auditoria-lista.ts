@@ -20,6 +20,7 @@ export const ENTIDADES_AUDITORIA = [
   "captacion",
   "configuracion",
   "vehiculos",
+  "costos_anuales",
   "regulacion",
   "mantenimientos",
   "novedades",
