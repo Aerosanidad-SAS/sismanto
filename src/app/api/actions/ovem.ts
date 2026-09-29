@@ -13,6 +13,7 @@ import {
   updateKilometrajeOdometerSchema,
 } from "@/lib/validations";
 import type { RoadAccidentFormData } from "@/lib/validations";
+import { validarPreoperacional } from "@/lib/preoperacional";
 
 /** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
 function hoyOvem() {
@@ -76,7 +77,6 @@ export async function submitDailyCheck(data: {
   kilometrajeInicial: number;
   kilometrajeFinal?: number;
   observaciones?: string;
-  isAssignment?: boolean;
   items?: Array<{
     checklistItemId: number;
     estado: "OK" | "FALLA" | "NO_APLICA";
@@ -88,10 +88,16 @@ export async function submitDailyCheck(data: {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const row = parsed.data;
 
-  const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
-  if (profile.role_codigo === "OVEM" && profile.user_id !== row.userId) {
-    return { error: "No autorizado" };
-  }
+  // Solo el OVEM registra su propio preoperacional (la política insert_daily_checks tampoco deja a otro rol).
+  const profile = await requireRole(["OVEM"]);
+  if (profile.user_id !== row.userId) return { error: "No autorizado" };
+
+  // El día lo pone el servidor: un preoperacional es de hoy, no de la fecha que mande el navegador (migración 090).
+  const fecha = hoyOvem();
+
+  const catalogo = await getChecklistItemsActivos("PREOPERACIONAL");
+  const errorChecklist = validarPreoperacional(catalogo, row.items ?? []);
+  if (errorChecklist) return { error: errorChecklist };
 
   const supabase = createClient();
 
@@ -99,14 +105,13 @@ export async function submitDailyCheck(data: {
     .from("daily_checks")
     .upsert(
       {
-        user_id: row.userId,
+        user_id: profile.user_id,
         vehicle_id: row.vehicleId,
-        fecha: row.fecha,
+        fecha,
         kilometraje_inicial: row.kilometrajeInicial,
         kilometraje_final: row.kilometrajeFinal ?? null,
         checklist_ok: false,
         observaciones: row.observaciones ?? null,
-        is_assignment: row.isAssignment,
       },
       { onConflict: "user_id,vehicle_id,fecha" }
     )
@@ -115,40 +120,18 @@ export async function submitDailyCheck(data: {
 
   if (checkError) return { error: checkError.message };
 
-  const dailyCheckId = checkRow?.id;
-  if (dailyCheckId && row.items && row.items.length > 0) {
-    // Upsert por item. Si cantidadOk < cantidad esperada, UI ya manda estado=FALLA.
-    const payload = row.items.map((it) => ({
-      daily_check_id: dailyCheckId,
-      checklist_item_id: it.checklistItemId,
-      estado: it.estado,
-      cantidad_ok: it.cantidadOk ?? null,
-      observacion: it.observacion?.trim() || null,
-    }));
-
-    const { error: itemsErr } = await supabase
-      .from("daily_check_items")
-      .upsert(payload, { onConflict: "daily_check_id,checklist_item_id" });
-    if (itemsErr) return { error: itemsErr.message };
-  }
-
-  // Si el OVEM marcó asignación, crear vehicle_assignment para hoy
-  if (row.isAssignment) {
-    const { error: assignError } = await supabase
-      .from("vehicle_assignments")
-      .upsert(
-        {
-          user_id: row.userId,
-          vehicle_id: row.vehicleId,
-          fecha_inicio: row.fecha,
-          fecha_fin: row.fecha,
-          activo: true,
-          asignado_por: row.userId,
-        },
-        { onConflict: "user_id,vehicle_id,fecha_inicio" }
-      );
-    if (assignError) return { error: assignError.message };
-  }
+  // checklist_ok lo recalcula el trigger trg_actualizar_checklist_ok (migración 005) al escribir los ítems.
+  const payload = (row.items ?? []).map((it) => ({
+    daily_check_id: checkRow.id,
+    checklist_item_id: it.checklistItemId,
+    estado: it.estado,
+    cantidad_ok: it.cantidadOk ?? null,
+    observacion: it.observacion?.trim() || null,
+  }));
+  const { error: itemsErr } = await supabase
+    .from("daily_check_items")
+    .upsert(payload, { onConflict: "daily_check_id,checklist_item_id" });
+  if (itemsErr) return { error: itemsErr.message };
 
   revalidatePath("/ovem");
   return { success: true };
