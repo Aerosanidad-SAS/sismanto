@@ -217,7 +217,6 @@ export const dailyCheckSchema = z.object({
   /** Mantiene compatibilidad, pero se recalcula por daily_check_items (trigger DB). */
   checklistOk: z.boolean().optional(),
   observaciones: z.string().optional(),
-  isAssignment: z.boolean().default(false),
   items: z
     .array(
       z.object({

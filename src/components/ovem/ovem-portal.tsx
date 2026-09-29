@@ -35,7 +35,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VehiculoConDocumentos } from "@/lib/vencimientos";
-import { ChecklistItemRow, agruparPorCategoria, type ChecklistItem } from "./checklist-item-row";
+import { ChecklistItemRow, agruparPorCategoria, checklistPayload, type ChecklistItem } from "./checklist-item-row";
+import { validarPreoperacional } from "@/lib/preoperacional";
 import { CombustibleForm } from "./combustible-form";
 import { SiniestroForm } from "./siniestro-form";
 import { DocumentosVehiculo } from "./documentos-vehiculo";
@@ -171,14 +172,9 @@ export function OvemPortal({
       return;
     }
     const idsVisibles = new Set(checklistFiltrado.map((it) => it.id));
-    const desdeEstado = Object.entries(checkItemsState)
-      .filter(([id]) => idsVisibles.has(parseInt(id, 10)))
-      .map(([id, v]) => ({
-        checklistItemId: parseInt(id, 10),
-        estado: v.estado,
-        cantidadOk: v.cantidadOk,
-        observacion: v.observacion,
-      }));
+    // Todos los ítems visibles, no solo los tocados: la pantalla muestra "OK" en lo que no se cambió, y eso es lo
+    // que se guarda. Antes se enviaban solo los tocados y el registro quedaba incompleto.
+    const visibles = checklistPayload(checklistFiltrado, checkItemsState);
     const noAplicaOcultos = checklistItems
       .filter((it) => !idsVisibles.has(it.id))
       .map((it) => ({
@@ -186,6 +182,13 @@ export function OvemPortal({
         estado: "NO_APLICA" as const,
         observacion: undefined as string | undefined,
       }));
+    const items = [...visibles, ...noAplicaOcultos];
+    const errorChecklist = validarPreoperacional(checklistItems, items);
+    if (errorChecklist) {
+      setError(errorChecklist);
+      setLoading(false);
+      return;
+    }
 
     const result = await submitDailyCheck({
       userId,
@@ -194,7 +197,7 @@ export function OvemPortal({
       kilometrajeInicial: kmNum,
       kilometrajeFinal: kmNum,
       observaciones: observaciones || undefined,
-      items: [...desdeEstado, ...noAplicaOcultos],
+      items,
     });
     if (result?.error) setError(result.error);
     else {
@@ -463,9 +466,15 @@ export function OvemPortal({
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               {success && <p className="text-sm text-green-600">{success}</p>}
-              <Button onClick={handleSubmitChecklist} disabled={loading}>
-                {loading ? "Guardando..." : dailyCheckDone ? "Actualizar checklist" : "Enviar checklist"}
-              </Button>
+              {viewerRole === "OVEM" ? (
+                <Button onClick={handleSubmitChecklist} disabled={loading}>
+                  {loading ? "Guardando..." : dailyCheckDone ? "Actualizar checklist" : "Enviar checklist"}
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Solo el OVEM del vehículo envía el preoperacional; desde este rol la vista es de consulta.
+                </p>
+              )}
             </CardContent>
           </Card>
 
