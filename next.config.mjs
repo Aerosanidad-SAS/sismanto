@@ -45,6 +45,10 @@ const nextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: cabecerasSeguridad }];
   },
+  // /coordinacion se fusionó en Dashboard (pestaña «Vehículos y Operación»): los marcadores viejos no dan 404.
+  async redirects() {
+    return [{ source: "/coordinacion", destination: "/", permanent: true }];
+  },
   // Versión que se muestra al pie del menú (la sube solo el PR de release; ver changelog/README.md). El commit
   // (NEXT_PUBLIC_COMMIT_SHA) y el entorno (NEXT_PUBLIC_APP_ENV) los inyectan los workflows de despliegue.
   env: {

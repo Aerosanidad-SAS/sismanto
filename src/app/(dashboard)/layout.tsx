@@ -76,23 +76,17 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         href: "/",
         icon: LayoutDashboard,
         // Regulación entra a Servicios, como en SISRES; el resumen ejecutivo no es su trabajo diario.
-        roles: ["ADMIN", "GERENCIAL", "MANTENIMIENTO", "ANALISTA"],
-        hint: "Resumen ejecutivo: KPIs, costos del período, disponibilidad, novedades y estado de flota.",
+        // COORDINACION entra aquí desde que se retiró /coordinacion: solo ve la pestaña "Vehículos y
+        // Operación" (sin barra de tabs, filtrado en page.tsx vía DASHBOARD_TAB_ROLES).
+        roles: ["ADMIN", "GERENCIAL", "MANTENIMIENTO", "ANALISTA", "COORDINACION"],
+        hint: "Resumen ejecutivo por pestañas: vehículos y operación, servicios, equipos biomédicos y financiero.",
       },
       {
         name: "Tablero ejecutivo",
         href: "/gerencial",
         icon: TrendingUp,
         roles: ["ADMIN", "GERENCIAL"],
-        hint: "Vista de alto nivel para Gerencia y Junta Directiva: servicios por ciudad, flota, vencimientos, equipos biomédicos e ingresos.",
-      },
-      {
-        name: "Coordinación",
-        href: "/coordinacion",
-        // El ADMIN la ve con el selector "Ver como… COORDINACION"; no ocupa lugar en su menú.
-        roles: ["COORDINACION"],
-        icon: Users,
-        hint: "Visión operativa CRA: estado flota, OVEM activos, novedades y próximos mantenimientos.",
+        hint: "Vista de alto nivel para Gerencia y Junta Directiva, por pestañas: vehículos y operación, servicios, equipos biomédicos y financiero.",
       },
     ],
   },
@@ -103,7 +97,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Servicios",
         href: "/servicios",
         icon: Ambulance,
-        roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"],
+        roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA", "COORDINACION"],
         hint: "Servicios registrados: filtros, registro, etapas, exportación y avisos sonoros.",
       },
       {
@@ -195,7 +189,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Inventario y hoja de vida",
         href: "/equipos",
         icon: Activity,
-        roles: ["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"],
+        roles: ["ADMIN", "MANTENIMIENTO", "ANALISTA", "VISTA"],
         hint: "Inventario, mantenimientos y hoja de vida de equipos médicos (origen SISRES).",
       },
     ],
@@ -240,7 +234,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Campañas WhatsApp",
         href: "/comunicaciones",
         icon: MessageCircle,
-        roles: ["ADMIN", "COORDINACION", "ANALISTA"],
+        roles: ["ADMIN", "ANALISTA"],
         hint: "Campañas masivas con plantillas aprobadas de Meta (origen SISRES).",
       },
     ],
@@ -349,7 +343,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         name: "Captación aeroportuaria",
         href: "/captacion",
         icon: Plane,
-        roles: ["ADMIN", "ANALISTA", "COORDINACION", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA"],
+        roles: ["ADMIN", "ANALISTA", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA"],
         hint: "Registra las atenciones en aeropuertos y genera el reporte SISPRO del mes.",
       },
     ],
@@ -499,11 +493,11 @@ export default function DashboardLayout({
         }
         if (
           p.role_codigo === "COORDINACION" &&
-          !["/coordinacion", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte", "/captacion"].some(
+          !["/", "/servicios", "/capacitaciones", "/pacientes", "/equipos", "/comunicaciones", "/estadisticas", "/ai-insights", "/soporte", "/captacion"].some(
             (b) => pathname === b || pathname.startsWith(`${b}/`)
           )
         ) {
-          router.replace("/coordinacion");
+          router.replace("/");
         }
         // Roles clínicos de la integración SISRES y Regulación: llevarlos a su pantalla de trabajo.
         // ANALISTA queda fuera — tiene paridad con ADMIN (ver migración 046) y
@@ -767,12 +761,12 @@ export default function DashboardLayout({
                   aria-controls={panelId}
                   className={cn(
                     "flex w-full items-center justify-between rounded-lg px-4 py-2 min-h-[40px] touch-manipulation",
-                    "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground",
-                    "hover:bg-[#F4EFE6] transition-colors",
+                    "text-[11px] font-semibold uppercase tracking-wider text-foreground",
+                    "hover:bg-muted transition-colors",
                     showCollapsedChrome && "lg:hidden"
                   )}
                 >
-                  <span className={cn(groupHasActive && !open && "text-[#2BB6C7]")}>{label}</span>
+                  <span className={cn(groupHasActive && !open && "text-accent")}>{label}</span>
                   <ChevronDown
                     className={cn("h-4 w-4 shrink-0 transition-transform", open && "rotate-180")}
                     aria-hidden
@@ -802,7 +796,7 @@ export default function DashboardLayout({
                         showCollapsedChrome
                           ? "lg:justify-center lg:px-2 lg:py-3"
                           : "px-4 py-3.5 lg:py-3",
-                        isActive ? "bg-[#2BB6C7] text-white" : "text-[#666564] active:bg-muted hover:bg-[#F4EFE6] lg:hover:bg-[#F4EFE6]"
+                        isActive ? "bg-accent text-accent-foreground" : "text-foreground active:bg-muted hover:bg-muted lg:hover:bg-muted"
                       )}
                       onClick={() => setMobileNavOpen(false)}
                     >

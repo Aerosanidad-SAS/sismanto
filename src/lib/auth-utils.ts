@@ -45,10 +45,11 @@ export type CentroOperativo = Database["public"]["Enums"]["operational_center"];
 
 /**
  * Roles que ven solo la operación de su centro operativo (decisión de
- * Daniel, 2026-09-21: un centro por usuario). Admin, Analista, Gerencial,
- * Coordinación, Mantenimiento y Vista ven todos los centros.
+ * Daniel, 2026-09-21: un centro por usuario). Coordinación se sumó el 2026-09-30: la de
+ * Bogotá ve solo Bogotá y la de Medellín solo Medellín. Admin, Analista, Gerencial,
+ * Mantenimiento y Vista ven todos los centros.
  */
-export const ROLES_POR_CENTRO: readonly UserRole[] = ["REGULACION", "OVEM", "MEDICO", "AUXILIAR_ENFERMERIA"];
+export const ROLES_POR_CENTRO: readonly UserRole[] = ["REGULACION", "OVEM", "MEDICO", "AUXILIAR_ENFERMERIA", "COORDINACION"];
 
 export function veSoloSuCentro(role: UserRole | string | undefined | null): boolean {
   return ROLES_POR_CENTRO.includes(role as UserRole);
@@ -91,7 +92,7 @@ export function getDefaultRoute(role: UserRole): string {
     case "REGULACION":     return "/servicios";
     case "GERENCIAL":      return "/";
     case "MANTENIMIENTO":  return "/vehiculos";
-    case "COORDINACION":   return "/coordinacion";
+    case "COORDINACION":   return "/";
     case "ANALISTA":       return "/";
     case "MEDICO":         return "/pacientes";
     case "AUXILIAR_ENFERMERIA": return "/pacientes";
