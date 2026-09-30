@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell, BellOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getServiciosParaAvisos } from "@/app/api/actions/servicios-medicos";
+import { getUmbralesEstancado } from "@/app/api/actions/servicios-estancados";
 import { horasEstancado, UMBRALES_PROXIMOS_MIN } from "@/lib/servicios-lista";
 import { cn } from "@/lib/utils";
 
@@ -115,7 +116,8 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
   }, []);
 
   const revisar = useCallback(async () => {
-    const servicios = await getServiciosParaAvisos();
+    // Umbral de estancados configurado por el ADMIN (migración 098): se lee en cada revisión para no quedar viejo.
+    const [servicios, umbrales] = await Promise.all([getServiciosParaAvisos(), getUmbralesEstancado()]);
     const ahora = Date.now();
     const nuevos: Aviso[] = [];
     let peorSonido: TipoSonido | null = null;
@@ -141,7 +143,7 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
     }
 
     const estancados = servicios
-      .map((s) => ({ s, horas: horasEstancado(s, ahora) }))
+      .map((s) => ({ s, horas: horasEstancado(s, ahora, umbrales) }))
       .filter((x): x is { s: (typeof servicios)[number]; horas: number } => x.horas !== null)
       .filter(({ s, horas }) => {
         const clave = `estancado_${s.id}_${horas}`;
