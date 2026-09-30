@@ -27,6 +27,21 @@ export const MODULOS_CAMPOS = {
       { campo: "correo", etiqueta: "Correo" },
     ],
   },
+  clientes: {
+    etiqueta: "Clientes",
+    siempre: "Tipo y número de documento, nombre o razón social",
+    campos: [
+      { campo: "digito_verificacion", etiqueta: "Dígito de verificación" },
+      { campo: "sector", etiqueta: "Sector" },
+      { campo: "direccion", etiqueta: "Dirección" },
+      { campo: "departamento", etiqueta: "Departamento" },
+      { campo: "ciudad", etiqueta: "Ciudad" },
+      { campo: "telefono1", etiqueta: "Teléfono 1" },
+      { campo: "telefono2", etiqueta: "Teléfono 2" },
+      { campo: "telefono3", etiqueta: "Teléfono 3" },
+      { campo: "correo", etiqueta: "Correo" },
+    ],
+  },
 } as const;
 
 export type ModuloCampos = keyof typeof MODULOS_CAMPOS;
