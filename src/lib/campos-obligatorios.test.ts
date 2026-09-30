@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { camposFaltantes, conAsterisco, esModuloCampos, filtrarConocidos, mensajeFaltantes } from "./campos-obligatorios";
-import { patientSchema } from "./validations";
+import { clientSchema, patientSchema } from "./validations";
+import { MODULOS_CAMPOS } from "./campos-obligatorios";
 
 describe("camposFaltantes", () => {
   it("lista las etiquetas de los obligatorios vacíos (undefined, null o espacios)", () => {
@@ -36,6 +37,16 @@ describe("catálogo de pacientes", () => {
     const forma = patientSchema.shape as Record<string, { isOptional: () => boolean }>;
     for (const campo of ["nombre2", "apellido2", "fecha_nacimiento", "sexo", "rh", "estatura", "departamento", "ciudad", "direccion", "barrio", "localidad", "eps", "celular", "correo"]) {
       assert.ok(forma[campo], `${campo} no está en patientSchema`);
+      assert.equal(forma[campo].isOptional(), true, `${campo} ya es obligatorio en el esquema`);
+    }
+  });
+});
+
+describe("catálogo de clientes", () => {
+  it("solo trae campos que existen en clientSchema y que el esquema NO exige ya", () => {
+    const forma = clientSchema.shape as Record<string, { isOptional: () => boolean }>;
+    for (const { campo } of MODULOS_CAMPOS.clientes.campos) {
+      assert.ok(forma[campo], `${campo} no está en clientSchema`);
       assert.equal(forma[campo].isOptional(), true, `${campo} ya es obligatorio en el esquema`);
     }
   });
