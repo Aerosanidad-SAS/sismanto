@@ -12,6 +12,15 @@ import { getProfile } from "@/app/api/actions/auth";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
 import { completarFechasProximas, fechasTrasMantenimiento, type FechasEquipo } from "@/lib/biomedico-fechas";
+import {
+  CHECKLIST_GENERAL,
+  MAX_ITEMS_CHECKLIST,
+  MAX_LARGO_ITEM,
+  armarChecklist,
+  limpiarItems,
+  normalizarEquipo,
+  type CatalogoChecklists,
+} from "@/lib/biomedico-checklist";
 
 function fechasNulas(d: Record<string, unknown>, campos: string[]) {
   const out: Record<string, unknown> = { ...d };
@@ -198,9 +207,26 @@ export async function getMantenimientosBiomedicos(equipmentId?: number) {
   return data || [];
 }
 
-export async function crearMantenimientoBiomedico(formData: BiomedicalMaintenanceFormData) {
+const checklistEnviadoSchema = z
+  .object({
+    todos: z.array(z.string().max(MAX_LARGO_ITEM)).max(MAX_ITEMS_CHECKLIST),
+    marcados: z.array(z.string().max(MAX_LARGO_ITEM)).max(MAX_ITEMS_CHECKLIST),
+  })
+  .optional();
+
+/**
+ * `checklist`: todos los ítems que se mostraron y los que se marcaron como «cumple» (migración 092). Si no viene
+ * o está vacío, el mantenimiento se guarda sin checklist, como antes.
+ */
+export async function crearMantenimientoBiomedico(
+  formData: BiomedicalMaintenanceFormData,
+  checklist?: { todos: string[]; marcados: string[] }
+) {
   const parsed = biomedicalMaintenanceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const chkParsed = checklistEnviadoSchema.safeParse(checklist);
+  if (!chkParsed.success) return { error: "Lista de chequeo inválida" };
+  const chk = chkParsed.data ? armarChecklist(chkParsed.data.todos, chkParsed.data.marcados) : null;
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -209,8 +235,11 @@ export async function crearMantenimientoBiomedico(formData: BiomedicalMaintenanc
     .insert({
       ...parsed.data,
       cantidad: parsed.data.cantidad ?? null,
+      chk_items: chk?.chk_items ?? null,
+      chk_total: chk?.chk_total ?? null,
+      chk_marcados: chk?.chk_marcados ?? null,
       created_by: userData.user?.id ?? null,
-    })
+    } as never)
     .select()
     .single();
   if (error) return { error: error.message };
@@ -237,6 +266,63 @@ export async function crearMantenimientoBiomedico(formData: BiomedicalMaintenanc
   await auditar("INSERTAR", "inventario", parsed.data.equipment_id, "Mantenimiento biomédico registrado");
   revalidatePath("/equipos");
   return { success: true, data };
+}
+
+// ── Listas de chequeo (migración 092) ────────────────────────
+
+const ROLES_LEER_CHECKLIST = ["ADMIN", "MANTENIMIENTO", "COORDINACION", "GERENCIAL", "ANALISTA", "VISTA"];
+const ROLES_EDITAR_CHECKLIST = ["ADMIN", "MANTENIMIENTO"];
+
+/** Todas las listas, por clave de equipo. Vacío si el rol no puede leerlas o la tabla aún no existe. */
+export async function getChecklistsBiomedicos(): Promise<CatalogoChecklists> {
+  const profile = await getProfile();
+  if (!profile || !ROLES_LEER_CHECKLIST.includes(profile.role_codigo)) return {};
+  const { data, error } = await createClient().from("biomedical_checklists").select("equipo, items").order("equipo");
+  if (error) return {};
+  const catalogo: CatalogoChecklists = {};
+  for (const f of (data ?? []) as unknown as { equipo: string; items: unknown }[]) {
+    if (Array.isArray(f.items)) catalogo[f.equipo] = limpiarItems(f.items);
+  }
+  return catalogo;
+}
+
+/** Crea o reemplaza la lista de un tipo de equipo (el nombre se normaliza a la clave). Solo ADMIN y MANTENIMIENTO. */
+export async function guardarChecklistBiomedico(equipo: string, items: string[]) {
+  const profile = await getProfile();
+  if (!profile || !ROLES_EDITAR_CHECKLIST.includes(profile.role_codigo)) return { error: "Sin permisos para editar listas de chequeo" };
+  const clave = normalizarEquipo(z.string().max(150).catch("").parse(equipo));
+  if (!clave) return { error: "Escribe el tipo de equipo" };
+  const lista = z.array(z.string().max(MAX_LARGO_ITEM, `Cada ítem puede tener hasta ${MAX_LARGO_ITEM} caracteres`)).max(MAX_ITEMS_CHECKLIST).safeParse(items);
+  if (!lista.success) return { error: lista.error.issues[0]?.message ?? "Ítems inválidos" };
+  const limpios = limpiarItems(lista.data);
+  if (limpios.length === 0) return { error: "Agrega al menos un ítem" };
+
+  const { error } = await createClient()
+    .from("biomedical_checklists")
+    .upsert({ equipo: clave, items: limpios, updated_at: new Date().toISOString(), updated_by: profile.user_id } as never, {
+      onConflict: "equipo",
+    });
+  if (error) return { error: error.message };
+  await auditar("MODIFICAR", "inventario", clave, `Lista de chequeo ${clave}: ${limpios.length} ítems`);
+  revalidatePath("/equipos");
+  revalidatePath("/equipos/checklists");
+  return { success: true as const, equipo: clave, items: limpios };
+}
+
+/** Elimina la lista de un tipo de equipo (sus equipos pasan a usar la GENERAL). La GENERAL no se elimina. */
+export async function eliminarChecklistBiomedico(equipo: string) {
+  const profile = await getProfile();
+  if (!profile || !ROLES_EDITAR_CHECKLIST.includes(profile.role_codigo)) return { error: "Sin permisos para editar listas de chequeo" };
+  const clave = normalizarEquipo(z.string().max(150).catch("").parse(equipo));
+  if (!clave) return { error: "Lista inválida" };
+  if (clave === CHECKLIST_GENERAL) return { error: "La lista GENERAL no se elimina: es la que usan los equipos sin lista propia" };
+  const { data, error } = await createClient().from("biomedical_checklists").delete().eq("equipo", clave).select("equipo");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "La lista no existe" };
+  await auditar("ELIMINAR", "inventario", clave, `Lista de chequeo ${clave} eliminada`);
+  revalidatePath("/equipos");
+  revalidatePath("/equipos/checklists");
+  return { success: true as const };
 }
 
 /** Hoja de vida: ficha del equipo + historial completo de mantenimientos. */

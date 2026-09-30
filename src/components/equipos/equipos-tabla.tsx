@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { SIN_FILTROS, filtrarEquipos, hayFiltros, valoresDistintos, type FiltrosEquipos } from "@/lib/equipos-filtros";
+import { checklistParaEquipo, type CatalogoChecklists } from "@/lib/biomedico-checklist";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -113,9 +114,11 @@ interface EquiposTablaProps {
   equipos: EquipoRow[];
   mantenimientos: MantenimientoBioRow[];
   puedeEditar: boolean;
+  /** Listas de chequeo por tipo de equipo (migración 092); vacío = el mantenimiento se registra sin checklist. */
+  checklists?: CatalogoChecklists;
 }
 
-export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTablaProps) {
+export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists = {} }: EquiposTablaProps) {
   const router = useRouter();
   const [filtros, setFiltros] = useState<FiltrosEquipos>(SIN_FILTROS);
   const [dialogEquipo, setDialogEquipo] = useState(false);
@@ -125,6 +128,9 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
+  // Checklist del mantenimiento que se está registrando: la lista del tipo de equipo y los ítems que «cumplen».
+  const [checklistMant, setChecklistMant] = useState<ReturnType<typeof checklistParaEquipo>>(null);
+  const [chkCumple, setChkCumple] = useState<Set<string>>(new Set());
 
   const formEquipo = useForm<BiomedicalEquipmentFormData>({
     resolver: zodResolver(biomedicalEquipmentSchema),
@@ -172,6 +178,10 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
       obs_baja: false,
       obs_partes: true,
     } as BiomedicalMaintenanceFormData);
+    // Como SISRES: todos los ítems arrancan en «Cumple»; se desmarca lo que no cumple.
+    const lista = checklistParaEquipo(e.equipo, checklists);
+    setChecklistMant(lista);
+    setChkCumple(new Set(lista?.items ?? []));
     setDialogMantenimiento(true);
   };
 
@@ -193,7 +203,10 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
   const onSubmitMantenimiento = async (values: BiomedicalMaintenanceFormData) => {
     setGuardando(true);
     setError(null);
-    const res = await crearMantenimientoBiomedico(values);
+    const res = await crearMantenimientoBiomedico(
+      values,
+      checklistMant ? { todos: checklistMant.items, marcados: Array.from(chkCumple) } : undefined
+    );
     setGuardando(false);
     if (res.error) {
       setError(res.error);
@@ -551,6 +564,35 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
                 <Input id="referencia_serial" {...formMant.register("referencia_serial")} />
               </div>
             </div>
+
+            {checklistMant && (
+              <fieldset className="space-y-2 rounded-md border border-border p-3">
+                <legend className="px-1 text-sm font-medium">
+                  Lista de chequeo{checklistMant.esGeneral ? " (general)" : ""} — {chkCumple.size} de{" "}
+                  {checklistMant.items.length} cumplen
+                </legend>
+                <p className="text-xs text-muted-foreground">Desmarca los ítems que no cumplen.</p>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {checklistMant.items.map((item) => (
+                    <label key={item} className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={chkCumple.has(item)}
+                        onCheckedChange={(v) =>
+                          setChkCumple((prev) => {
+                            const next = new Set(prev);
+                            if (v === true) next.add(item);
+                            else next.delete(item);
+                            return next;
+                          })
+                        }
+                      />
+                      {item}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
             <div className="grid gap-2 sm:grid-cols-3">
               {(
