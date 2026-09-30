@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { hoyBogota, sumarDias } from "@/lib/fechas";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getEquiposBiomedicos, getMantenimientosBiomedicos } from "@/app/api/actions/inventario-biomedico";
@@ -72,6 +73,14 @@ export default async function EquiposPage() {
           <EquiposTabla equipos={equipos} mantenimientos={mantenimientos} puedeEditar={puedeEditar} />
         </CardContent>
       </Card>
+
+      {profile?.role_codigo === "ADMIN" && (
+        <p className="text-sm text-muted-foreground">
+          <Link href="/equipos/notificaciones" className="underline">
+            Avisos de vencimiento por correo (Biomédica / Sistemas)
+          </Link>
+        </p>
+      )}
     </div>
   );
 }
