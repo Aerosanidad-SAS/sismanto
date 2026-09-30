@@ -1,6 +1,71 @@
 # Estado de la integración SISRES → Aeromanto
 
-**Fecha:** 2026-07-21 · **Rama:** `integration/sisres` · Ejecutado según `PLAN_INTEGRACION_SISRES.md`.
+> **Lo más reciente está en la primera sección** («Cierre de brechas funcionales», 2026-09-30). Las secciones de
+> más abajo son la historia de julio y se dejan como registro.
+
+## 🔄 Cierre de brechas funcionales SISRES → SISMANTO (2026-09-30)
+
+**Qué es:** una revisión del código actual de SISRES (`C:\xampp\htdocs\sisres`, que sigue recibiendo commits casi a
+diario) contra SISMANTO, para portar lo que falta. `FEATURE_MATRIX.md` (julio) quedó desactualizada: hoy SISMANTO
+ya tiene casi todos los **módulos** de SISRES (servicios, pacientes, captación, aerolíneas, aeropuertos, formatos
+TI, soporte, equipos, campañas). Las brechas que quedan son **funciones dentro de esos módulos**. Se porta una por
+PR contra `dev`.
+
+### PRs de esta tanda
+
+| PR | Brecha (origen en SISRES) | Migración | Estado al 2026-09-30 |
+|---|---|---|---|
+| #121 | Informes ACM, Aerocivil, PME y PAE de captación (`informe*.php`, `includes/informe*Calculo.php`) → `/captacion/informes` | — | ✅ mergeado |
+| #122 | Filtro «servicios sin gestionar» en la lista de servicios (commit SISRES `f5fd5ff`) | — | abierto |
+| #123 | Opciones administrables de 7 selects del formulario de servicios (`configurarCamposServicio.php`, `2726772`) → `/servicios/configuracion` | 091 | abierto |
+| #124 | Listas de chequeo del mantenimiento biomédico, 47 sembradas desde SISRES (`mantenimiento_checklist`) → `/equipos/checklists` | 092 | abierto |
+| #125 | Plantillas de texto del mantenimiento biomédico (`9df77b1`) → `/equipos/plantillas` | 093 | abierto |
+| #126 | Documentos del equipo: INVIMA, manuales, guías (`inventario_documento`, `1c93eb9`); bucket privado `equipos-documentos` | 094 | abierto |
+| #127 | Destinatarios de avisos de vencimiento por área Biomédica/Sistemas (`configurarNotificacionesInventario.php`); el cron también avisa de Sistemas y pagina >1000 equipos | 095 | abierto |
+
+**Orden de merge:** cualquiera. Cada PR tiene su propio número de migración (091–095). Si se mergean en otro orden,
+solo choca la línea de registro en `scripts/apply-database.ts`: se deja la lista en orden numérico. #124, #125 y
+#126 tocan zonas distintas de `src/components/equipos/equipos-tabla.tsx` y deberían combinarse sin conflicto.
+
+**Cómo se verificó (sirve de guía para las próximas):**
+- La lógica se escribe como funciones puras en `src/lib/*.ts`, con pruebas `*.test.ts` (`npm test` las corre en
+  UTC, Bogotá y Tokio). Cuando existe un PHP equivalente, se comparan las salidas del PHP de SISRES y del TS nuevo
+  con los mismos datos (reales si hay; si no, aleatorios).
+- Cada migración se ensayó **contra staging dentro de una transacción con `ROLLBACK`**: se corre dos veces
+  (idempotencia) y se prueba la RLS por rol simulando el JWT con `SET LOCAL ROLE authenticated` +
+  `set_config('request.jwt.claims', '{"sub":"<user_id>","role":"authenticated"}', true)`. No queda nada aplicado:
+  las migraciones las aplica `db-migrate.yml` al mergear, nunca a mano en la base compartida.
+- Pantallas: `npm run dev` y Playwright con un usuario `test.<rol>@sismanto.test`. **No hay usuario `test.admin`**,
+  así que las pantallas solo-ADMIN no se probaron de punta a punta.
+- Conocido: en `next dev`, un rol que no es ADMIN al abrir una página solo-ADMIN ve «Application error» (`Rendered
+  more hooks` en el Router interno de Next). En `next build && next start` redirige bien: es solo de desarrollo.
+
+**Pendiente de probar en `dev` después de cada merge** (dependen de tablas nuevas, que no existen en staging antes
+del merge):
+- #123: agregar o quitar una opción en `/servicios/configuracion` como ADMIN y verla en «Nuevo servicio».
+- #124: registrar un mantenimiento y ver la lista de chequeo del tipo de equipo; editar una lista.
+- #125: «Usar plantilla…» en los 3 campos (campo vacío, reemplazar y agregar al final).
+- #126: subir un PDF y una imagen, verlos (enlace firmado) y eliminarlos. Probar que un archivo que no es
+  PDF/JPG/PNG pero se renombró a `.pdf` se rechaza.
+- #127: configurar un correo de prueba en el área Sistemas y lanzar el cron a mano
+  (`POST /api/cron/send-biomedical-alerts` con `Authorization: Bearer $CRON_SECRET`). **Ojo:** escribe en
+  `biomedical_alerts_log` y envía correos reales.
+
+### Brechas que quedan (no empezadas)
+
+| Brecha | En SISRES | Qué hace falta |
+|---|---|---|
+| **Campos obligatorios configurables** | `configurarCampos*.php` + `includes/camposObligatoriosGenerico.php`, en **12 módulos** (servicios 50 campos, acta de entrega 37, diagnóstico 33, baja 28, móviles 22, pacientes 19, usuarios 17, valoraciones 17, proveedores 15, clientes 14, préstamo 4, aerolíneas 2) | En SISMANTO solo existe para captación (migración 086, `captacion_campos_obligatorios`). Propuesta: una tabla genérica `(modulo, campo, obligatorio)` y un módulo por PR, empezando por pacientes y servicios. **Esperando que Daniel decida por cuál módulo empezar.** |
+| **«GPS» / calculadora de rutas** | `segumientoAmbulanciasMaps.php`: **no rastrea ambulancias**; es una calculadora de rutas con Google Maps (origen, intermedio, destino, tráfico, ubicación del navegador). Hay un helper de «token de seguimiento» (`includes/seguimientoHelper.php`) sin pantalla pública que lo use. | Necesita una llave de Google Maps API con facturación. **Esperando la llave.** |
+| **Permisos y roles editables en pantalla** | `adminPermisos.php`, `adminRoles.php` (tabla `permisos` por cargo, con historial y revertir) | Decisión de arquitectura: SISMANTO usa RLS fija en migraciones. **Esperando decisión de Daniel.** |
+| Catálogo de sedes del inventario | `configurarInventario.php` (sedes para el selector «Aeropuerto / Sede» del equipo) | Menor: en SISMANTO ese campo es texto libre. |
+
+**Antes de portar cualquier brecha**, revisar `git -C C:/xampp/htdocs/sisres log --since=<última fecha>`, porque SISRES
+cambia seguido. Por ejemplo, el 30/09 agregó checklist, plantillas y documentos en el mismo día.
+
+---
+
+**Fecha de lo que sigue:** 2026-07-21 · **Rama:** `integration/sisres` · Ejecutado según `PLAN_INTEGRACION_SISRES.md`.
 
 ## ✅ Construido y compilando (build + lint en verde)
 
