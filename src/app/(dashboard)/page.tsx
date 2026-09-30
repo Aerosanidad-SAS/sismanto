@@ -33,6 +33,7 @@ import { EstadoFlotaTablaPaginada } from "@/components/dashboard/estado-flota-ta
 import { puedeVerPestanaDashboard } from "@/lib/dashboard-tabs";
 import { CoordinacionInicio } from "@/components/dashboard/coordinacion-inicio";
 import { ciudadDelCentro, getFlotaDelDia } from "@/app/api/actions/coordinacion";
+import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
 import Link from "next/link";
 
 const DEFAULT_DATA = {
@@ -295,10 +296,11 @@ export default async function DashboardPage({
   // costos, disponibilidad ni biomédicos del tablero ejecutivo.
   if ((await getProfile())?.role_codigo === "COORDINACION") {
     const hoy = hoyBogota();
-    const [resumen, flota, ciudadCentro] = await Promise.all([
+    const [resumen, flota, ciudadCentro, preoperacional] = await Promise.all([
       getResumenOperativoDiario({ desde: hoy, hasta: hoy }),
       getFlotaDelDia(),
       ciudadDelCentro(),
+      getPreoperacionalHoy(),
     ]);
     return (
       <div className="space-y-6">
@@ -306,7 +308,7 @@ export default async function DashboardPage({
           <h1 className="text-3xl">Coordinación</h1>
           <p className="mt-2 text-muted-foreground">Operación del día de tu CRA</p>
         </div>
-        <CoordinacionInicio resumen={resumen} ciudad={ciudadCentro} flota={flota} />
+        <CoordinacionInicio resumen={resumen} ciudad={ciudadCentro} flota={flota} preoperacional={preoperacional} />
       </div>
     );
   }
