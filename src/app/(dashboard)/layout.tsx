@@ -40,6 +40,7 @@ import {
   Handshake,
   Building2,
   History,
+  Route,
   Plug,
   Plane,
   PlaneTakeoff,
@@ -107,6 +108,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Radio,
         roles: ["ADMIN", "REGULACION", "ANALISTA"],
         hint: "Servicios del día, flota disponible, tripulación y vencimientos del centro.",
+      },
+      {
+        name: "Cotizador de rutas",
+        href: "/cotizaciones",
+        icon: Route,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Cotiza un traslado con la ruta de Google Maps, en PDF o por correo.",
       },
       {
         name: "Clientes",

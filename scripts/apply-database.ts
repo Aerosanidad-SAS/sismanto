@@ -112,6 +112,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "091_servicio_opciones_campo.sql",                 file: "scripts/migrations/091_servicio_opciones_campo.sql" },
   { name: "099_integraciones_config.sql",                   file: "scripts/migrations/099_integraciones_config.sql" },
   { name: "100_seguimiento_gps_servicio.sql",               file: "scripts/migrations/100_seguimiento_gps_servicio.sql" },
+  { name: "101_cotizaciones_ruta.sql",                      file: "scripts/migrations/101_cotizaciones_ruta.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
