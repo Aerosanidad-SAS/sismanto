@@ -24,8 +24,11 @@ PR contra `dev`.
 | #127 | Destinatarios de avisos de vencimiento por área Biomédica/Sistemas (`configurarNotificacionesInventario.php`); el cron también avisa de Sistemas y pagina >1000 equipos | 095 | abierto |
 | #130 | Campos obligatorios configurables: **motor genérico** (tabla `campos_obligatorios`, registro de módulos en `src/lib/campos-obligatorios.ts`, pantalla `/admin/campos-obligatorios`) + primer módulo **pacientes** | 096 | abierto |
 | #131 | Campos obligatorios de **clientes**. PR apilado: su base es la rama del #130, así que se mergea después de él | — | abierto |
+| #132 | 🐞 **Bug:** registrar un mantenimiento biomédico ahora recalcula el próximo mantenimiento o la próxima calibración (con la frecuencia del equipo) | — | abierto |
+| #133 | Prestadores médicos: **crear y editar** en `/proveedores` (ADMIN/ANALISTA); el directorio ahora muestra los **1.332** (antes 3: filtraba `activo` y 1.329 vienen en estado 0 de SISRES) | — | abierto |
+| #134 | **Recuperar contraseña** con código por correo (`/recuperar`, público). Necesita las variables de Microsoft Graph en el entorno | 097 | abierto |
 
-**Orden de merge:** cualquiera. Cada PR tiene su propio número de migración (091–096). Si se mergean en otro orden,
+**Orden de merge:** cualquiera, salvo #131 (va después de #130). Cada PR tiene su propio número de migración (091–097). Si se mergean en otro orden,
 solo choca la línea de registro en `scripts/apply-database.ts`: se deja la lista en orden numérico. #124, #125 y
 #126 tocan zonas distintas de `src/components/equipos/equipos-tabla.tsx` y deberían combinarse sin conflicto.
 
@@ -50,6 +53,9 @@ del merge):
 - #126: subir un PDF y una imagen, verlos (enlace firmado) y eliminarlos. Probar que un archivo que no es
   PDF/JPG/PNG pero se renombró a `.pdf` se rechaza.
 - #130: como ADMIN, marcar «Celular» en `/admin/campos-obligatorios?modulo=pacientes` y comprobar que el formulario lo marca con * y no deja guardar sin él.
+- #132: registrar un mantenimiento a un equipo «Vencido» y ver que pasa a «Al día».
+- #133: crear un prestador y editar uno existente como ANALISTA.
+- #134: con un usuario de correo real, pedir el código, cambiar la clave y entrar con la nueva.
 - #127: configurar un correo de prueba en el área Sistemas y lanzar el cron a mano
   (`POST /api/cron/send-biomedical-alerts` con `Authorization: Bearer $CRON_SECRET`). **Ojo:** escribe en
   `biomedical_alerts_log` y envía correos reales.
@@ -62,9 +68,9 @@ del merge):
 | **Rastreo GPS de la ambulancia del servicio** | Desde la lista de servicios, «ver seguimiento» abre `PHPMailer/seguimiento.php?id=` con la **ubicación en vivo** del vehículo asignado (API **ProTrack365**, `PHPMailer/apiProtrack.php`, por el IMEI del GPS del móvil). «Notificar» (`PHPMailer/enviarNotificacion.php`) le manda al paciente, por WhatsApp (plantilla `ubicacion_vehiculo`) y por correo, un enlace **público con token** (`servicios.token_seguimiento`, `includes/seguimientoHelper.php`) para ver el vehículo en camino. | SISMANTO ya tiene `vehicles.imei_gps` (036). Faltan las **credenciales de ProTrack365** (cuenta y clave de la API), la plantilla de WhatsApp aprobada y una página pública con token. **Esperando credenciales.** |
 | Calculadora de rutas | `segumientoAmbulanciasMaps.php`: Google Maps (origen, intermedio, destino, tráfico, ubicación del navegador). No rastrea nada. | Necesita una llave de Google Maps API con facturación. Prioridad baja. |
 | **Permisos y roles editables en pantalla** | `adminPermisos.php`, `adminRoles.php` (tabla `permisos` por cargo, con historial y revertir) | Decisión de arquitectura: SISMANTO usa RLS fija en migraciones. **Esperando decisión de Daniel.** |
-| 🐞 **Próximo mantenimiento no se recalcula** | En SISRES, próximo = último + 6 meses y próxima calibración = última + 12 meses (`insertarInventario.php`/`modificar_inventario.php`). | **Bug en SISMANTO:** `crearMantenimientoBiomedico` actualiza `ultimo_mantenimiento` pero no `proximo_mantenimiento`, así que el equipo recién mantenido sigue «Vencido» y el cron avisa todos los días. **Prioridad alta.** |
-| **Prestadores médicos: crear y editar** | `registroProveedores.php`/`editarProveedor.php` (tabla `proveedores` → `medical_providers`, 1.332 filas) | En SISMANTO `/proveedores` es un directorio **de solo lectura**: no hay forma de crear ni editar un prestador. |
-| **Recuperar contraseña** | `recuperarPassword.php`: código de 6 dígitos al correo, válido 15 min, 5 intentos; enlace «¿Olvidaste tu contraseña?» en el login | SISMANTO no tiene recuperación: el login es con cédula y hoy solo un ADMIN puede cambiar la clave. |
+| ✅ (#132) 🐞 **Próximo mantenimiento no se recalcula** | En SISRES, próximo = último + 6 meses y próxima calibración = última + 12 meses (`insertarInventario.php`/`modificar_inventario.php`). | **Bug en SISMANTO:** `crearMantenimientoBiomedico` actualiza `ultimo_mantenimiento` pero no `proximo_mantenimiento`, así que el equipo recién mantenido sigue «Vencido» y el cron avisa todos los días. **Prioridad alta.** |
+| ✅ (#133) **Prestadores médicos: crear y editar** | `registroProveedores.php`/`editarProveedor.php` (tabla `proveedores` → `medical_providers`, 1.332 filas) | En SISMANTO `/proveedores` es un directorio **de solo lectura**: no hay forma de crear ni editar un prestador. |
+| ✅ (#134) **Recuperar contraseña** | `recuperarPassword.php`: código de 6 dígitos al correo, válido 15 min, 5 intentos; enlace «¿Olvidaste tu contraseña?» en el login | SISMANTO no tiene recuperación: el login es con cédula y hoy solo un ADMIN puede cambiar la clave. |
 | **Tipos de servicio visibles por rol** | Permisos `tipo_ver_*` (registrar y editar): Regulador solo ve MD, TAB y TAM; los demás, todos | SISMANTO muestra los 10 tipos a todos los roles. Se puede hacer como configuración por rol sin el sistema de permisos dinámicos. |
 | Umbral de servicios estancados configurable | `configuracionSistema.php` → activo/inactivo + horas para PROGRAMADO y CURSO | En SISMANTO está fijo en el código (`UMBRAL_ESTANCADO_HORAS`, 4 h) «hasta que Regulación confirme». |
 | **Mantenimiento biomédico incompleto** | Editar mantenimiento (`editarMantenimientoBiomedica.php`), tipo PREVENTIVO/CORRECTIVO/CALIBRACION como lista, evidencia PDF del proveedor externo, **orden de mantenimiento en PDF** (`OrdenMantenimientoRender.php`) e impresión por rango | SISMANTO solo registra (sin editar), el tipo es texto libre, y no hay evidencia ni orden PDF. |
