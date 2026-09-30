@@ -1,19 +1,27 @@
 import { diasEntre, esDia, hoyBogota, primerDiaDelMes, sumarDias } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard, KpiCaption, KpiValue } from "@/components/ui/kpi-card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/utils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatCurrency, formatDateShort } from "@/lib/utils";
 import { getProfile } from "@/app/api/actions/auth";
 import { CostoPorVehiculoCard } from "@/components/dashboard/costo-por-vehiculo-card";
 import { DisponibilidadCard } from "@/components/dashboard/disponibilidad-card";
 import { ResolucionNovedadesCard } from "@/components/dashboard/resolucion-novedades-card";
+import { DashboardTabs, type DashboardTabDef } from "@/components/dashboard/dashboard-tabs";
 import {
   getCostosPorVehiculo,
   getDisponibilidadPorVehiculo,
   getResolucionNovedades,
 } from "@/app/api/actions/dashboard-metrics";
-import { AlertTriangle, DollarSign, Truck } from "lucide-react";
+import { getEstadisticasServiciosPorCiudad, getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
+import { getAlertasBiomedicos } from "@/app/api/actions/inventario-biomedico";
+import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
+import { ServiciosPorCiudadChart } from "@/components/gerencial/gerencial-charts";
+import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
+import { prefijoCiudad } from "@/lib/servicios-lista";
+import { Activity, Ambulance, AlertTriangle, DollarSign, Truck } from "lucide-react";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { type NovedadAbiertaResumen } from "@/components/dashboard/estado-flota-detalle";
@@ -22,6 +30,10 @@ import { getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 import { ProximosVencimientosModal } from "@/components/dashboard/proximos-vencimientos-modal";
 import { EstadoFlotaTablaPaginada } from "@/components/dashboard/estado-flota-tabla-paginada";
+import { puedeVerPestanaDashboard } from "@/lib/dashboard-tabs";
+import { CoordinacionInicio } from "@/components/dashboard/coordinacion-inicio";
+import { ciudadDelCentro, getFlotaDelDia } from "@/app/api/actions/coordinacion";
+import Link from "next/link";
 
 const DEFAULT_DATA = {
   totalOperativos: 0,
@@ -189,6 +201,77 @@ async function getDashboardData() {
   }
 }
 
+// Fusionado desde la antigua página de Coordinación (ver PR de retabulación): estado operativo, conductores
+// OVEM activos, novedades y alertas de mantenimiento — lo que antes solo veía el rol COORDINACION en /coordinacion
+// vive ahora dentro de la pestaña "Vehículos y Operación" de Dashboard, visible a todos los roles que la ven.
+async function getCoordinacionSectionData() {
+  try {
+    const supabase = createClient();
+    const hoy = hoyBogota();
+
+    const [{ data: vehicles }, { data: roles }] = await Promise.all([
+      supabase.from("vehicles").select("id, placa, estado_actual, centro_operativo"),
+      supabase.from("roles").select("id, codigo"),
+    ]);
+
+    const ovemRoleIds = (roles || []).filter((r) => r.codigo === "OVEM").map((r) => r.id);
+
+    const [{ data: users }, { data: assignments }, { data: incidentes }, { data: alerts }] = await Promise.all([
+      supabase
+        .from("user_profiles")
+        .select("user_id, nombre_completo, email, role_id, activo")
+        .eq("activo", true),
+      supabase
+        .from("vehicle_assignments")
+        .select("id, user_id, vehicle_id, fecha_inicio, fecha_fin, activo, vehicles(placa, estado_actual)")
+        .eq("activo", true)
+        .or(`fecha_fin.is.null,fecha_fin.gte.${hoy}`)
+        .order("fecha_inicio", { ascending: false }),
+      supabase
+        .from("incidents")
+        .select("id, fecha_reporte, descripcion, estado, vehicle_id, vehicles(placa)")
+        .in("estado", ["ABIERTO", "EN_PROCESO"])
+        .order("fecha_reporte", { ascending: false })
+        .limit(20),
+      supabase
+        .from("vehicle_maintenance_alerts")
+        .select("placa, descripcion, categoria, km_restantes, dias_restantes, nivel_alerta")
+        .in("nivel_alerta", ["ROJA", "NARANJA"])
+        .limit(20),
+    ]);
+
+    const ovemUsers = (users || []).filter((u) => ovemRoleIds.includes(u.role_id));
+    const usersById = new Map(ovemUsers.map((u) => [u.user_id, u]));
+
+    const rowsAsignacion = (assignments || []).map((a: any) => ({
+      id: a.id,
+      user: usersById.get(a.user_id),
+      placa: a.vehicles?.placa || "N/A",
+      estadoVehiculo: a.vehicles?.estado_actual || "N/A",
+      inicio: a.fecha_inicio,
+      fin: a.fecha_fin,
+    }));
+
+    return {
+      ovemActivos: ovemUsers.length,
+      asignacionesActivas: rowsAsignacion.length,
+      incidentesAbiertos: incidentes || [],
+      asignaciones: rowsAsignacion,
+      alerts: alerts || [],
+      centros: Array.from(new Set((vehicles || []).map((v) => v.centro_operativo))).sort(),
+    };
+  } catch {
+    return {
+      ovemActivos: 0,
+      asignacionesActivas: 0,
+      incidentesAbiertos: [] as any[],
+      asignaciones: [] as any[],
+      alerts: [] as any[],
+      centros: [] as string[],
+    };
+  }
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -205,8 +288,29 @@ export default async function DashboardPage({
     gInicio?: string;
     gFin?: string;
     gCentro?: string;
+    ciudad?: string;
   };
 }) {
+  // COORDINACION tiene su propio inicio (resumen de servicios de su CRA, flota del día, informes): no carga
+  // costos, disponibilidad ni biomédicos del tablero ejecutivo.
+  if ((await getProfile())?.role_codigo === "COORDINACION") {
+    const hoy = hoyBogota();
+    const [resumen, flota, ciudadCentro] = await Promise.all([
+      getResumenOperativoDiario({ desde: hoy, hasta: hoy }),
+      getFlotaDelDia(),
+      ciudadDelCentro(),
+    ]);
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl">Coordinación</h1>
+          <p className="mt-2 text-muted-foreground">Operación del día de tu CRA</p>
+        </div>
+        <CoordinacionInicio resumen={resumen} ciudad={ciudadCentro} flota={flota} />
+      </div>
+    );
+  }
+
   const defaultInicio = "2024-01-01"; // inicio del historial real de combustible y mantenimientos
   const defaultFin = hoyBogota();
 
@@ -248,6 +352,8 @@ export default async function DashboardPage({
     ? gFinOk!
     : searchParams.dispFin?.trim() || fechaFin;
 
+  const ciudad = prefijoCiudad(searchParams.ciudad) ? (searchParams.ciudad as string) : "";
+
   const supabaseLite = createClient();
   const { data: centrosRaw } = await supabaseLite
     .from("operational_centers")
@@ -269,7 +375,7 @@ export default async function DashboardPage({
         textoTrabajo: searchParams.costoBusqueda,
       };
 
-  const [profile, data, costos, disponibilidad, resoluciones] = await Promise.all([
+  const [profile, data, costos, disponibilidad, resoluciones, coordinacion] = await Promise.all([
     getProfile(),
     Promise.race([
       getDashboardData(),
@@ -280,37 +386,47 @@ export default async function DashboardPage({
     getCostosPorVehiculo(fechaInicio, fechaFin, tipoCosto, opcionesCosto),
     getDisponibilidadPorVehiculo(fechaDispInicio, fechaDispFin, centroValidDisp),
     getResolucionNovedades(fechaInicio, fechaFin),
+    getCoordinacionSectionData(),
   ]);
-  const isReadOnly = profile?.role_codigo === "GERENCIAL";
-  const hideFinanceKpis =
-    profile?.role_codigo === "REGULACION" || profile?.role_codigo === "MANTENIMIENTO";
+  const role = profile?.role_codigo ?? "";
+  const isReadOnly = role === "GERENCIAL";
+  const hideFinanceKpis = role === "REGULACION" || role === "MANTENIMIENTO";
   const puedeToggleEstadoEnTabla = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
-  const canAssignOvem = profile?.role_codigo === "ADMIN" || profile?.role_codigo === "REGULACION";
+  const canAssignOvem = role === "ADMIN" || role === "REGULACION";
 
+  const puedeVerServicios = puedeVerPestanaDashboard("servicios", role);
+  const puedeVerBiomedicos = puedeVerPestanaDashboard("biomedicos", role);
+  const puedeVerFinanciero = puedeVerPestanaDashboard("financiero", role) && !hideFinanceKpis;
+
+  const hoyIso = hoyBogota();
   let ovemUsers: Awaited<ReturnType<typeof getUsuariosPorRol>> = [];
-  let vehicleAssignmentMap: Record<string, { id: number; ovemName: string }> = {};
+  const vehicleAssignmentMap: Record<string, { id: number; ovemName: string }> = {};
 
-  if (canAssignOvem) {
-    const supabaseDash = createClient();
-    const hoyIso = hoyBogota();
-    const [ousers, assignments] = await Promise.all([
-      getUsuariosPorRol("OVEM"),
-      supabaseDash
-        .from("vehicle_assignments")
-        .select("id, vehicle_id, user_id, user_profiles(nombre_completo, email)")
-        .eq("activo", true)
-        .eq("rol_en_turno", "OVEM")
-        .or(`fecha_fin.is.null,fecha_fin.gte.${hoyIso}`),
-    ]);
-    ovemUsers = ousers;
-    for (const a of assignments.data ?? []) {
-      const up = (a as any).user_profiles;
-      vehicleAssignmentMap[a.vehicle_id] = {
-        id: a.id,
-        ovemName: up?.nombre_completo || up?.email || "OVEM",
-      };
-    }
-  }
+  const [, resumenServiciosHoy, estadisticasServiciosCiudad, biomedicos] = await Promise.all([
+    (async () => {
+      if (!canAssignOvem) return;
+      const [ousers, assignments] = await Promise.all([
+        getUsuariosPorRol("OVEM"),
+        createClient()
+          .from("vehicle_assignments")
+          .select("id, vehicle_id, user_id, user_profiles(nombre_completo, email)")
+          .eq("activo", true)
+          .eq("rol_en_turno", "OVEM")
+          .or(`fecha_fin.is.null,fecha_fin.gte.${hoyIso}`),
+      ]);
+      ovemUsers = ousers;
+      for (const a of assignments.data ?? []) {
+        const up = (a as any).user_profiles;
+        vehicleAssignmentMap[a.vehicle_id] = {
+          id: a.id,
+          ovemName: up?.nombre_completo || up?.email || "OVEM",
+        };
+      }
+    })(),
+    puedeVerServicios ? getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }) : Promise.resolve(null),
+    puedeVerServicios ? getEstadisticasServiciosPorCiudad() : Promise.resolve(null),
+    puedeVerBiomedicos ? getAlertasBiomedicos() : Promise.resolve(null),
+  ]);
 
   const placasFueraServicio = (data.vehicles as { placa?: string; estado_actual?: string }[])
     .filter((v) => v.estado_actual === "FUERA_DE_SERVICIO")
@@ -318,26 +434,8 @@ export default async function DashboardPage({
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
 
-  return (
+  const contenidoOperacion = (
     <div className="space-y-8">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-        <div className="min-w-0">
-          <h1 className="text-3xl">Dashboard</h1>
-          <p className="mt-2 text-muted-foreground">Resumen ejecutivo de la flota de ambulancias</p>
-        </div>
-        <DashboardGlobalFiltros
-          className="shrink-0 lg:max-w-[min(100%,36rem)]"
-          centros={centrosOp}
-          globalInicio={globalPeriodoValido ? gInicioOk : null}
-          globalFin={globalPeriodoValido ? gFinOk : null}
-          globalCentroId={globalPeriodoValido ? globalCentroId ?? null : null}
-          fechaDefectoInicio={searchParams.inicio || defaultInicio}
-          fechaDefectoFin={searchParams.fin || defaultFin}
-          modoGlobalActivo={globalPeriodoValido}
-        />
-      </div>
-
-      {/* KPIs resumen: vehículos ~mitad anchura; resto en cuadrícula compacta */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
         <Card className="min-w-0 xl:w-[40%] xl:max-w-[40%]">
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
@@ -375,22 +473,7 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
 
-        <div
-          className="grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3"
-        >
-          {!hideFinanceKpis && (
-            <KpiCard
-              title="Costo"
-              icon={DollarSign}
-              help={<HelpTrigger text="Costo total de operación (mantenimiento + combustible + costos fijos prorrateados) para el período del filtro global." />}
-            >
-              <KpiValue>{formatCurrency(costos.reduce((sum, c) => sum + c.costoTotal, 0))}</KpiValue>
-              <KpiCaption>
-                {formatFechaCortaPeriodo(fechaInicio)} – {formatFechaCortaPeriodo(fechaFin)}
-              </KpiCaption>
-            </KpiCard>
-          )}
-
+        <div className="grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
           <KpiCard
             title="Novedades abiertas"
             icon={AlertTriangle}
@@ -409,41 +492,17 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {/* Métricas principales del período */}
-      <div className={`grid gap-6 ${hideFinanceKpis ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}>
-        {!hideFinanceKpis && (
-          <CostoPorVehiculoCard
-            datos={costos}
-            tipo={tipoCosto}
-            fechaInicio={fechaInicio}
-            fechaFin={fechaFin}
-            centros={centrosOp}
-            centroIdFiltro={centroValidoCosto}
-            placasFiltro={globalPeriodoValido ? "" : searchParams.costoPlacas || ""}
-            textoTrabajo={globalPeriodoValido ? "" : searchParams.costoBusqueda || ""}
-          />
-        )}
-        <DisponibilidadCard
-          datos={disponibilidad}
-          centros={centrosOp}
-          fechaInicio={fechaDispInicio}
-          fechaFin={fechaDispFin}
-          centroIdFiltro={centroValidDisp}
-          puedeToggleEstado={
-            profile?.role_codigo === "ADMIN" ||
-            profile?.role_codigo === "REGULACION" ||
-            profile?.role_codigo === "MANTENIMIENTO"
-          }
-        />
-      </div>
-
-      {/* Resolución de novedades */}
-      <ResolucionNovedadesCard
-        novedades={resoluciones.novedades}
-        resumen={resoluciones.resumen}
+      <DisponibilidadCard
+        datos={disponibilidad}
+        centros={centrosOp}
+        fechaInicio={fechaDispInicio}
+        fechaFin={fechaDispFin}
+        centroIdFiltro={centroValidDisp}
+        puedeToggleEstado={role === "ADMIN" || role === "REGULACION" || role === "MANTENIMIENTO"}
       />
 
-      {/* Estado de Flota */}
+      <ResolucionNovedadesCard novedades={resoluciones.novedades} resumen={resoluciones.resumen} />
+
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
@@ -470,6 +529,239 @@ export default async function DashboardPage({
           )}
         </CardContent>
       </Card>
+
+      {/* Fusionado desde Coordinación */}
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+          <CardTitle>OVEM activos y vehículo asignado</CardTitle>
+          <Link href="/capacitaciones" className="text-sm text-primary hover:underline">
+            Ver capacitaciones y resultados
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {coordinacion.asignaciones.length === 0 ? (
+            <p className="py-4 text-sm text-muted-foreground">No hay asignaciones activas.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>OVEM</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Placa</TableHead>
+                  <TableHead>Estado vehículo</TableHead>
+                  <TableHead>Inicio</TableHead>
+                  <TableHead>Fin</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {coordinacion.asignaciones.map((a: any) => (
+                  <TableRow key={a.id}>
+                    <TableCell>{a.user?.nombre_completo || "N/A"}</TableCell>
+                    <TableCell className="text-muted-foreground">{a.user?.email || "N/A"}</TableCell>
+                    <TableCell className="font-medium">{a.placa}</TableCell>
+                    <TableCell>
+                      <Badge variant={a.estadoVehiculo === "OPERATIVO" ? "success" : "destructive"}>
+                        {a.estadoVehiculo === "OPERATIVO" ? "OPERATIVO" : "FDS"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{a.inicio ? formatDateShort(a.inicio) : "N/A"}</TableCell>
+                    <TableCell>{a.fin ? formatDateShort(a.fin) : "Abierta"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Novedades reportadas (abiertas/en proceso)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {coordinacion.incidentesAbiertos.length === 0 ? (
+              <p className="py-4 text-sm text-muted-foreground">Sin novedades activas.</p>
+            ) : (
+              <div className="max-h-80 space-y-2 overflow-auto">
+                {coordinacion.incidentesAbiertos.map((n: any) => (
+                  <div key={n.id} className="rounded-md border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">{n.vehicles?.placa || "N/A"}</p>
+                      <Badge variant={n.estado === "EN_PROCESO" ? "default" : "destructive"}>{n.estado}</Badge>
+                    </div>
+                    <p className="mt-1 text-sm">{n.descripcion}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Reporte: {formatDateShort(n.fecha_reporte)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Próximos mantenimientos preventivos (alertas)</CardTitle>
+            <CardDescription>Tomado de plan preventivo (niveles roja/naranja)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {coordinacion.alerts.length === 0 ? (
+              <p className="py-4 text-sm text-muted-foreground">Sin alertas preventivas activas.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Placa</TableHead>
+                    <TableHead>Tarea</TableHead>
+                    <TableHead>Km rest.</TableHead>
+                    <TableHead>Días rest.</TableHead>
+                    <TableHead>Nivel</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {coordinacion.alerts.map((a: any, i: number) => (
+                    <TableRow key={`${a.placa}-${a.descripcion}-${i}`}>
+                      <TableCell className="font-medium">{a.placa}</TableCell>
+                      <TableCell className="max-w-xs">
+                        <p className="truncate">{a.descripcion}</p>
+                      </TableCell>
+                      <TableCell>{a.km_restantes ?? "N/A"}</TableCell>
+                      <TableCell>{a.dias_restantes ?? "N/A"}</TableCell>
+                      <TableCell>
+                        <Badge variant={a.nivel_alerta === "ROJA" ? "destructive" : "secondary"}>{a.nivel_alerta}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cobertura por centro</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {coordinacion.centros.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin centros.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {coordinacion.centros.map((c) => (
+                <Badge key={c} variant="outline">
+                  {c}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const contenidoServicios = resumenServiciosHoy && estadisticasServiciosCiudad && (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl">Servicios — Bogotá y Medellín</h2>
+          <HelpTrigger text="Segmentado por ciudad de registro: la del CRA al que está asignado el usuario de Regulación que recibió la solicitud." />
+        </div>
+        <FiltroCiudadUrl />
+      </div>
+      <ResumenOperativo inicial={resumenServiciosHoy} ciudad={ciudad} />
+      <ServiciosPorCiudadChart inicial={estadisticasServiciosCiudad} ciudad={ciudad} />
+    </div>
+  );
+
+  const contenidoBiomedicos = biomedicos && (
+    <div className="grid gap-4 md:grid-cols-3">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Equipos activos</CardTitle>
+        </CardHeader>
+        <CardContent className="text-2xl font-bold">{biomedicos.totalActivos}</CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Vencidos / ≤15 días</CardTitle>
+        </CardHeader>
+        <CardContent className="text-2xl font-bold text-red-600">{biomedicos.totalRojas}</CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Vencen en ≤30 días</CardTitle>
+        </CardHeader>
+        <CardContent className="text-2xl font-bold text-amber-600">{biomedicos.totalNaranjas}</CardContent>
+      </Card>
+    </div>
+  );
+
+  const contenidoFinanciero = (
+    <div className="space-y-6">
+      <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
+        <KpiCard
+          title="Costo"
+          icon={DollarSign}
+          help={<HelpTrigger text="Costo total de operación (mantenimiento + combustible + costos fijos prorrateados) para el período del filtro global." />}
+        >
+          <KpiValue>{formatCurrency(costos.reduce((sum, c) => sum + c.costoTotal, 0))}</KpiValue>
+          <KpiCaption>
+            {formatFechaCortaPeriodo(fechaInicio)} – {formatFechaCortaPeriodo(fechaFin)}
+          </KpiCaption>
+        </KpiCard>
+      </div>
+      <CostoPorVehiculoCard
+        datos={costos}
+        tipo={tipoCosto}
+        fechaInicio={fechaInicio}
+        fechaFin={fechaFin}
+        centros={centrosOp}
+        centroIdFiltro={centroValidoCosto}
+        placasFiltro={globalPeriodoValido ? "" : searchParams.costoPlacas || ""}
+        textoTrabajo={globalPeriodoValido ? "" : searchParams.costoBusqueda || ""}
+      />
+    </div>
+  );
+
+  const tabs: DashboardTabDef[] = [
+    {
+      key: "operacion",
+      label: "Vehículos y Operación",
+      icon: <Truck className="h-4 w-4" aria-hidden />,
+      content: contenidoOperacion,
+    },
+    ...(puedeVerServicios && contenidoServicios
+      ? [{ key: "servicios", label: "Servicios", icon: <Ambulance className="h-4 w-4" aria-hidden />, content: contenidoServicios }]
+      : []),
+    ...(puedeVerBiomedicos && contenidoBiomedicos
+      ? [{ key: "biomedicos", label: "Biomédicos", icon: <Activity className="h-4 w-4" aria-hidden />, content: contenidoBiomedicos }]
+      : []),
+    ...(puedeVerFinanciero
+      ? [{ key: "financiero", label: "Financiero", icon: <DollarSign className="h-4 w-4" aria-hidden />, content: contenidoFinanciero }]
+      : []),
+  ];
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+        <div className="min-w-0">
+          <h1 className="text-3xl">Dashboard</h1>
+          <p className="mt-2 text-muted-foreground">Resumen ejecutivo de la flota de ambulancias</p>
+        </div>
+        <DashboardGlobalFiltros
+          className="shrink-0 lg:max-w-[min(100%,36rem)]"
+          centros={centrosOp}
+          globalInicio={globalPeriodoValido ? gInicioOk : null}
+          globalFin={globalPeriodoValido ? gFinOk : null}
+          globalCentroId={globalPeriodoValido ? globalCentroId ?? null : null}
+          fechaDefectoInicio={searchParams.inicio || defaultInicio}
+          fechaDefectoFin={searchParams.fin || defaultFin}
+          modoGlobalActivo={globalPeriodoValido}
+        />
+      </div>
+
+      <DashboardTabs tabs={tabs} defaultTab="operacion" />
     </div>
   );
 }

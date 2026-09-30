@@ -191,7 +191,7 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
 
 // ── Lista de servicios con filtros de SISRES (mostrarServicios.php) ────────
 
-const ROLES_LISTA_SERVICIOS: UserRole[] = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"];
+const ROLES_LISTA_SERVICIOS: UserRole[] = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA", "COORDINACION"];
 
 // Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este
 // repo (ver CLAUDE.md), y el builder solo recibe filtros encadenados.
