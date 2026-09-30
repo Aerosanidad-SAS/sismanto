@@ -32,7 +32,7 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   // /firmar/<token>: enlace del correo de firma remota (el token es la credencial; no hay sesión).
-  const isPublic = path === "/login" || path === "/pending" || path.startsWith("/api/") || path.startsWith("/firmar/");
+  const isPublic = path === "/login" || path === "/pending" || path.startsWith("/api/") || path.startsWith("/firmar/") || path.startsWith("/seguimiento/");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { ArrowRightLeft, Lock, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -602,7 +603,16 @@ export function ServiciosTabla({
                   <p className="truncate text-sm leading-tight" title={s.tipo_servicio}>
                     {s.tipo_servicio}
                   </p>
-                  <p className="text-xs leading-tight text-muted-foreground">Móvil {s.vehicles?.placa ?? s.movil_placa ?? "—"}</p>
+                  <p className="text-xs leading-tight text-muted-foreground">
+                    Móvil{" "}
+                    {s.vehicles?.placa && (s.etapa === "PROGRAMADO" || s.etapa === "CURSO") ? (
+                      <Link href={`/servicios/${s.id}/seguimiento`} className="underline" title="Ver la ambulancia en el mapa (GPS)">
+                        📍 {s.vehicles.placa}
+                      </Link>
+                    ) : (
+                      s.vehicles?.placa ?? s.movil_placa ?? "—"
+                    )}
+                  </p>
                 </TableCell>
                 <TableCell className="text-sm leading-tight">
                   {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
