@@ -38,16 +38,9 @@ import {
   medicalServiceSchema,
   type MedicalServiceFormData,
   type EtapaServicio,
-  TURNO_OPCIONES,
-  AISLAMIENTO_OPCIONES,
-  FINALIDAD_TRASLADO_OPCIONES,
-  METODO_PAGO_OPCIONES,
-  PERIMETRO_OPCIONES,
   PERFIL_FORMULARIO_SERVICIO,
   perfilFormularioServicio,
   ETAPAS_SERVICIO,
-  MOTIVO_EXTERNO_OPCIONES,
-  MOTIVO_INTERNO_OPCIONES,
   ESTADO_SERVICIO_OPCIONES,
 } from "@/lib/validations";
 import {
@@ -60,6 +53,7 @@ import {
   getUrlBoletaSalida,
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
+import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 
@@ -199,7 +193,11 @@ interface ServiciosTablaProps {
   barra?: ReactNode;
   /** Acciones (p. ej. Exportar) que van junto a «+ Registrar». */
   acciones?: ReactNode;
+  /** Opciones vigentes de los 7 selects administrables (migración 091); sin ellas, las de fábrica. */
+  opciones?: OpcionesServicio;
 }
+
+const OPCIONES_FABRICA = opcionesDeFabrica();
 
 const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p?.email || null;
 
@@ -234,6 +232,7 @@ export function ServiciosTabla({
   viewerNombreCompleto,
   barra,
   acciones,
+  opciones = OPCIONES_FABRICA,
 }: ServiciosTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -817,9 +816,9 @@ export function ServiciosTabla({
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {TURNO_OPCIONES.map((t) => (
+                      {opcionesConValorActual(opciones.turno_programacion, turnoSeleccionado).map((t) => (
                         <SelectItem key={t} value={t}>
-                          {t === "DIA" ? "Diurno" : "Nocturno"}
+                          {t === "DIA" ? "Diurno" : t === "NOCHE" ? "Nocturno" : t}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -877,7 +876,7 @@ export function ServiciosTabla({
                           <SelectValue placeholder="Selecciona…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {AISLAMIENTO_OPCIONES.map((a) => (
+                          {opcionesConValorActual(opciones.requiere_aislamiento, aislamientoSeleccionado).map((a) => (
                             <SelectItem key={a} value={a}>
                               {a}
                             </SelectItem>
@@ -895,7 +894,7 @@ export function ServiciosTabla({
                           <SelectValue placeholder="Selecciona…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {FINALIDAD_TRASLADO_OPCIONES.map((f) => (
+                          {opcionesConValorActual(opciones.finalidad_traslado, finalidadSeleccionada).map((f) => (
                             <SelectItem key={f} value={f}>
                               {f}
                             </SelectItem>
@@ -1005,7 +1004,7 @@ export function ServiciosTabla({
                           <SelectValue placeholder="Selecciona…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {PERIMETRO_OPCIONES.map((p) => (
+                          {opcionesConValorActual(opciones.perimetro, perimetroSeleccionado).map((p) => (
                             <SelectItem key={p} value={p}>
                               {p}
                             </SelectItem>
@@ -1048,7 +1047,7 @@ export function ServiciosTabla({
                         <SelectValue placeholder="Selecciona…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {METODO_PAGO_OPCIONES.map((m) => (
+                        {opcionesConValorActual(opciones.metodo_pago, metodoPagoSeleccionado).map((m) => (
                           <SelectItem key={m} value={m}>
                             {m}
                           </SelectItem>
@@ -1141,7 +1140,7 @@ export function ServiciosTabla({
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MOTIVO_EXTERNO_OPCIONES.map((m) => (
+                      {opcionesConValorActual(opciones.motivo_externo, motivoExternoSeleccionado).map((m) => (
                         <SelectItem key={m} value={m}>
                           {m}
                         </SelectItem>
@@ -1160,7 +1159,7 @@ export function ServiciosTabla({
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MOTIVO_INTERNO_OPCIONES.map((m) => (
+                      {opcionesConValorActual(opciones.motivo_interno, motivoInternoSeleccionado).map((m) => (
                         <SelectItem key={m} value={m}>
                           {m}
                         </SelectItem>

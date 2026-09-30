@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { hoyBogota } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +9,7 @@ import {
 } from "@/app/api/actions/servicios-medicos";
 import { getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
 import { getClientes } from "@/app/api/actions/clientes";
+import { getOpcionesServicio } from "@/app/api/actions/servicios-opciones";
 import { getProfile } from "@/app/api/actions/auth";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
@@ -59,6 +61,7 @@ export default async function ServiciosPage({
     medicosDisponibles,
     reguladoresDisponibles,
     resumenHoy,
+    opcionesCampos,
   ] =
     await Promise.all([
       buscarServicios(filtros, pagina),
@@ -71,6 +74,7 @@ export default async function ServiciosPage({
       getUsuariosPorRol("MEDICO"),
       getUsuariosPorRol("REGULACION"),
       getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
+      getOpcionesServicio(),
     ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const etapasVisibles = Object.fromEntries((servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa]));
@@ -99,6 +103,14 @@ export default async function ServiciosPage({
           <h1 className="text-3xl">Servicios registrados</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Despacho y seguimiento de traslados y servicios asistenciales.
+            {profile?.role_codigo === "ADMIN" && (
+              <>
+                {" "}
+                <Link href="/servicios/configuracion" className="underline">
+                  Configurar opciones del formulario
+                </Link>
+              </>
+            )}
           </p>
         </div>
         <AvisosServicios etapasVisibles={etapasVisibles} />
@@ -139,6 +151,7 @@ export default async function ServiciosPage({
             tripulacionPorVehiculo={tripulacionPorVehiculo}
             ciudadDefault={profile?.ciudad}
             ciudadRegistroDefault={ciudadRegistroDePerfil(profile)}
+            opciones={opcionesCampos}
           />
           {total > 0 && <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
         </CardContent>
