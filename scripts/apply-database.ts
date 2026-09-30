@@ -109,6 +109,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "088_rls_dia_de_colombia.sql",                    file: "scripts/migrations/088_rls_dia_de_colombia.sql" },
   { name: "089_costos_anuales_y_funcion_costos.sql",        file: "scripts/migrations/089_costos_anuales_y_funcion_costos.sql" },
   { name: "090_preoperacional_solo_del_dia.sql",             file: "scripts/migrations/090_preoperacional_solo_del_dia.sql" },
+  { name: "096_campos_obligatorios.sql",                     file: "scripts/migrations/096_campos_obligatorios.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
