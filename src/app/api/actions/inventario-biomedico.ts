@@ -11,6 +11,7 @@ import { HojaVidaBiomedicaPdf } from "@/lib/pdf/hoja-vida-biomedica";
 import { getProfile } from "@/app/api/actions/auth";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
+import { completarFechasProximas, fechasTrasMantenimiento, type FechasEquipo } from "@/lib/biomedico-fechas";
 
 function fechasNulas(d: Record<string, unknown>, campos: string[]) {
   const out: Record<string, unknown> = { ...d };
@@ -134,7 +135,7 @@ export async function crearEquipoBiomedico(formData: BiomedicalEquipmentFormData
   const { data, error } = await supabase
     .from("biomedical_equipment")
     .insert({
-      ...(fechasNulas(parsed.data, CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
+      ...(fechasNulas(completarFechasProximas(parsed.data), CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
       created_by: userData.user?.id ?? null,
       activo: true,
     })
@@ -157,7 +158,7 @@ export async function actualizarEquipoBiomedico(id: number, formData: Biomedical
   const { error } = await supabase
     .from("biomedical_equipment")
     .update({
-      ...(fechasNulas(parsed.data, CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
+      ...(fechasNulas(completarFechasProximas(parsed.data), CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
       updated_at: new Date().toISOString(),
     })
     .eq("id", idParsed.data);
@@ -214,12 +215,24 @@ export async function crearMantenimientoBiomedico(formData: BiomedicalMaintenanc
     .single();
   if (error) return { error: error.message };
 
-  // Igual que SISRES: registrar mantenimiento actualiza la fecha de último
-  // mantenimiento del equipo (la hoja de vida se arma con este historial)
-  await supabase
+  // Registrar un mantenimiento mueve el «último» del equipo y recalcula el «próximo» (o la calibración, según el
+  // tipo). Antes solo se movía el último y el equipo seguía «Vencido» y avisando por correo todos los días.
+  const { data: equipo } = await supabase
     .from("biomedical_equipment")
-    .update({ ultimo_mantenimiento: parsed.data.fecha_mantenimiento, updated_at: new Date().toISOString() })
-    .eq("id", parsed.data.equipment_id);
+    .select("ultimo_mantenimiento, ultima_calibracion, frec_mantenimiento, frec_calibracion")
+    .eq("id", parsed.data.equipment_id)
+    .maybeSingle();
+  const cambios = fechasTrasMantenimiento(
+    (equipo ?? {}) as FechasEquipo,
+    normalizarDia(parsed.data.fecha_mantenimiento),
+    parsed.data.tipo_mantenimiento
+  );
+  if (Object.keys(cambios).length > 0) {
+    await supabase
+      .from("biomedical_equipment")
+      .update({ ...cambios, updated_at: new Date().toISOString() } as never)
+      .eq("id", parsed.data.equipment_id);
+  }
 
   await auditar("INSERTAR", "inventario", parsed.data.equipment_id, "Mantenimiento biomédico registrado");
   revalidatePath("/equipos");
