@@ -8,13 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateField } from "@/components/forms/date-field";
 import { ETAPAS_SERVICIO } from "@/lib/validations";
-import { filtrosAQuery, type FiltrosServicios } from "@/lib/servicios-lista";
+import { UNIDADES_SIN_GESTIONAR, filtrosAQuery, type FiltrosServicios } from "@/lib/servicios-lista";
 import { FiltroCiudad } from "./filtro-ciudad";
 import { cn } from "@/lib/utils";
 import { TIPOS_SERVICIO } from "./servicios-tabla";
 
 const TODOS = "__todos__";
-const AVANZADOS = ["cliente", "origen", "destino", "cedula"] as const;
+const AVANZADOS = ["cliente", "origen", "destino", "cedula", "sinGestionar"] as const;
 
 const ETIQUETA = "text-[11px] font-medium leading-none text-muted-foreground";
 
@@ -142,6 +142,40 @@ export function ServiciosFiltros({
               onChange={(e) => set("cedula", e.target.value)}
             />
           </div>
+          <div className="space-y-1">
+            <label htmlFor="f-sin-gestionar" className={cn(ETIQUETA, "block")}>
+              Sin gestionar hace más de
+            </label>
+            <div className="flex gap-1.5">
+              <Input
+                id="f-sin-gestionar"
+                type="number"
+                min={1}
+                max={9999}
+                inputMode="numeric"
+                placeholder="Cantidad"
+                className="h-8 w-24 text-sm"
+                value={f.sinGestionar ?? ""}
+                onChange={(e) => set("sinGestionar", e.target.value)}
+              />
+              <Select value={f.sinGestionarUnidad || "dia"} onValueChange={(v) => set("sinGestionarUnidad", v)}>
+                <SelectTrigger aria-label="Unidad" className="h-8 w-24 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNIDADES_SIN_GESTIONAR.map((u) => (
+                    <SelectItem key={u.clave} value={u.clave}>
+                      {u.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <p className="basis-full text-[11px] text-muted-foreground">
+            «Sin gestionar» muestra los servicios en PROGRAMADO o CURSO cuya hora programada ya superó ese tiempo sin pasar a
+            un estado final. También aplica a la exportación.
+          </p>
         </div>
       )}
     </form>

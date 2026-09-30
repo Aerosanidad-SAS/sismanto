@@ -4,6 +4,8 @@
  * Sin dependencias de servidor: lo usan la página, las acciones y el cliente.
  */
 
+import { sumarMeses } from "@/lib/fechas";
+
 export const SERVICIOS_POR_PAGINA = 100;
 /** Tope de exportación, igual que EXPORT_MAX_FILAS en export/exportExcel.php. */
 export const EXPORT_MAX_FILAS = 50000;
@@ -52,9 +54,14 @@ export interface FiltrosServicios {
   origen?: string;
   destino?: string;
   cedula?: string;
+  /** «Sin gestionar»: servicios en PROGRAMADO/CURSO cuya hora programada pasó hace más de esta cantidad de `sinGestionarUnidad`. */
+  sinGestionar?: string;
+  sinGestionarUnidad?: string;
 }
 
-const CLAVES: (keyof FiltrosServicios)[] = ["ciudad", "desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula"];
+const CLAVES: (keyof FiltrosServicios)[] = [
+  "ciudad", "desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula", "sinGestionar", "sinGestionarUnidad",
+];
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Lee filtros y página de los searchParams de la URL, descartando valores inválidos. */
@@ -69,6 +76,8 @@ export function leerFiltros(params: Record<string, string | string[] | undefined
     if (!s) continue;
     if ((k === "desde" || k === "hasta") && !FECHA.test(s)) continue;
     if (k === "ciudad" && !prefijoCiudad(s)) continue;
+    if (k === "sinGestionar" && !/^[1-9]\d{0,3}$/.test(s)) continue;
+    if (k === "sinGestionarUnidad" && !esUnidadSinGestionar(s)) continue;
     filtros[k] = s.slice(0, 120);
   }
   const p = Number(Array.isArray(params.pagina) ? params.pagina[0] : params.pagina);
@@ -100,6 +109,33 @@ export function horasEstancado(
   if (Number.isNaN(prog) || prog > ahora) return null;
   const horas = (ahora - prog) / 3_600_000;
   return horas >= umbral ? Math.floor(horas) : null;
+}
+
+// ── Servicios sin gestionar (filtro de mostrarServicios.php) ───────────────
+// Mismo criterio que los estancados: sigue en PROGRAMADO/CURSO y ya pasó el tiempo elegido desde la hora programada.
+
+export const UNIDADES_SIN_GESTIONAR = [
+  { clave: "dia", nombre: "Días" },
+  { clave: "mes", nombre: "Meses" },
+  { clave: "anio", nombre: "Años" },
+] as const;
+export type UnidadSinGestionar = (typeof UNIDADES_SIN_GESTIONAR)[number]["clave"];
+export const ETAPAS_SIN_GESTIONAR = ["PROGRAMADO", "CURSO"] as const;
+
+export function esUnidadSinGestionar(v: string | undefined | null): v is UnidadSinGestionar {
+  return UNIDADES_SIN_GESTIONAR.some((u) => u.clave === v);
+}
+
+/**
+ * Instante límite del filtro «sin gestionar»: `ahora` menos `cantidad` días, meses o años (el `NOW() - INTERVAL` de
+ * SISRES). Meses y años se restan en el calendario de Colombia (UTC-5 todo el año) conservando la hora; si el día no
+ * existe en el mes de llegada (31 de marzo − 1 mes), queda en el último día de ese mes.
+ */
+export function limiteSinGestionar(cantidad: number, unidad: UnidadSinGestionar, ahora: number = Date.now()): string {
+  if (unidad === "dia") return new Date(ahora - cantidad * 86_400_000).toISOString();
+  const local = new Date(ahora - 5 * 3_600_000).toISOString(); // reloj de Colombia escrito como si fuera UTC
+  const dia = sumarMeses(local.slice(0, 10), -(unidad === "mes" ? cantidad : cantidad * 12));
+  return new Date(`${dia}T${local.slice(11, 23)}-05:00`).toISOString();
 }
 
 /** Avisos antes de la hora programada, en minutos (verificarAlertasProximas). */
