@@ -23,6 +23,7 @@ PR contra `dev`.
 | #126 | Documentos del equipo: INVIMA, manuales, guías (`inventario_documento`, `1c93eb9`); bucket privado `equipos-documentos` | 094 | abierto |
 | #127 | Destinatarios de avisos de vencimiento por área Biomédica/Sistemas (`configurarNotificacionesInventario.php`); el cron también avisa de Sistemas y pagina >1000 equipos | 095 | abierto |
 | #130 | Campos obligatorios configurables: **motor genérico** (tabla `campos_obligatorios`, registro de módulos en `src/lib/campos-obligatorios.ts`, pantalla `/admin/campos-obligatorios`) + primer módulo **pacientes** | 096 | abierto |
+| #131 | Campos obligatorios de **clientes**. PR apilado: su base es la rama del #130, así que se mergea después de él | — | abierto |
 
 **Orden de merge:** cualquiera. Cada PR tiene su propio número de migración (091–096). Si se mergean en otro orden,
 solo choca la línea de registro en `scripts/apply-database.ts`: se deja la lista en orden numérico. #124, #125 y
@@ -57,7 +58,7 @@ del merge):
 
 | Brecha | En SISRES | Qué hace falta |
 |---|---|---|
-| **Campos obligatorios en los demás módulos** | `configurarCampos*.php`, 12 módulos en SISRES | El motor y pacientes están en #130. Faltan: servicios (50 campos; ojo, el formulario oculta secciones según el tipo de servicio y bloquea campos según el rol, así que solo se puede exigir lo que el formulario muestra), acta de entrega (37), diagnóstico (33), baja (28), móviles (22), usuarios (17), valoraciones (17), proveedores (15), clientes (14), préstamo (4) y aerolíneas (2). Receta para sumar un módulo: comentario al inicio de `src/lib/campos-obligatorios.ts`. |
+| **Campos obligatorios en los demás módulos** | `configurarCampos*.php`, 12 módulos en SISRES | El motor y pacientes están en #130 y clientes en #131. Proveedores no aplica: en SISMANTO son proveedores de vehículos, con solo 2 campos opcionales. Faltan: servicios (50 campos; ojo, el formulario oculta secciones según el tipo de servicio y bloquea campos según el rol, así que solo se puede exigir lo que el formulario muestra), acta de entrega (37), diagnóstico (33), baja (28), móviles (22), usuarios (17), valoraciones (17), préstamo (4) y aerolíneas (2). Receta para sumar un módulo: comentario al inicio de `src/lib/campos-obligatorios.ts`. |
 | **«GPS» / calculadora de rutas** | `segumientoAmbulanciasMaps.php`: **no rastrea ambulancias**; es una calculadora de rutas con Google Maps (origen, intermedio, destino, tráfico, ubicación del navegador). Hay un helper de «token de seguimiento» (`includes/seguimientoHelper.php`) sin pantalla pública que lo use. | Necesita una llave de Google Maps API con facturación. **Esperando la llave.** |
 | **Permisos y roles editables en pantalla** | `adminPermisos.php`, `adminRoles.php` (tabla `permisos` por cargo, con historial y revertir) | Decisión de arquitectura: SISMANTO usa RLS fija en migraciones. **Esperando decisión de Daniel.** |
 | Catálogo de sedes del inventario | `configurarInventario.php` (sedes para el selector «Aeropuerto / Sede» del equipo) | Menor: en SISMANTO ese campo es texto libre. |
