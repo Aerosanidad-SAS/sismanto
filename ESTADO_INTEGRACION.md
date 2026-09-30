@@ -22,8 +22,9 @@ PR contra `dev`.
 | #125 | Plantillas de texto del mantenimiento biomédico (`9df77b1`) → `/equipos/plantillas` | 093 | abierto |
 | #126 | Documentos del equipo: INVIMA, manuales, guías (`inventario_documento`, `1c93eb9`); bucket privado `equipos-documentos` | 094 | abierto |
 | #127 | Destinatarios de avisos de vencimiento por área Biomédica/Sistemas (`configurarNotificacionesInventario.php`); el cron también avisa de Sistemas y pagina >1000 equipos | 095 | abierto |
+| #130 | Campos obligatorios configurables: **motor genérico** (tabla `campos_obligatorios`, registro de módulos en `src/lib/campos-obligatorios.ts`, pantalla `/admin/campos-obligatorios`) + primer módulo **pacientes** | 096 | abierto |
 
-**Orden de merge:** cualquiera. Cada PR tiene su propio número de migración (091–095). Si se mergean en otro orden,
+**Orden de merge:** cualquiera. Cada PR tiene su propio número de migración (091–096). Si se mergean en otro orden,
 solo choca la línea de registro en `scripts/apply-database.ts`: se deja la lista en orden numérico. #124, #125 y
 #126 tocan zonas distintas de `src/components/equipos/equipos-tabla.tsx` y deberían combinarse sin conflicto.
 
@@ -47,6 +48,7 @@ del merge):
 - #125: «Usar plantilla…» en los 3 campos (campo vacío, reemplazar y agregar al final).
 - #126: subir un PDF y una imagen, verlos (enlace firmado) y eliminarlos. Probar que un archivo que no es
   PDF/JPG/PNG pero se renombró a `.pdf` se rechaza.
+- #130: como ADMIN, marcar «Celular» en `/admin/campos-obligatorios?modulo=pacientes` y comprobar que el formulario lo marca con * y no deja guardar sin él.
 - #127: configurar un correo de prueba en el área Sistemas y lanzar el cron a mano
   (`POST /api/cron/send-biomedical-alerts` con `Authorization: Bearer $CRON_SECRET`). **Ojo:** escribe en
   `biomedical_alerts_log` y envía correos reales.
@@ -55,7 +57,7 @@ del merge):
 
 | Brecha | En SISRES | Qué hace falta |
 |---|---|---|
-| **Campos obligatorios configurables** | `configurarCampos*.php` + `includes/camposObligatoriosGenerico.php`, en **12 módulos** (servicios 50 campos, acta de entrega 37, diagnóstico 33, baja 28, móviles 22, pacientes 19, usuarios 17, valoraciones 17, proveedores 15, clientes 14, préstamo 4, aerolíneas 2) | En SISMANTO solo existe para captación (migración 086, `captacion_campos_obligatorios`). Propuesta: una tabla genérica `(modulo, campo, obligatorio)` y un módulo por PR, empezando por pacientes y servicios. **Esperando que Daniel decida por cuál módulo empezar.** |
+| **Campos obligatorios en los demás módulos** | `configurarCampos*.php`, 12 módulos en SISRES | El motor y pacientes están en #130. Faltan: servicios (50 campos; ojo, el formulario oculta secciones según el tipo de servicio y bloquea campos según el rol, así que solo se puede exigir lo que el formulario muestra), acta de entrega (37), diagnóstico (33), baja (28), móviles (22), usuarios (17), valoraciones (17), proveedores (15), clientes (14), préstamo (4) y aerolíneas (2). Receta para sumar un módulo: comentario al inicio de `src/lib/campos-obligatorios.ts`. |
 | **«GPS» / calculadora de rutas** | `segumientoAmbulanciasMaps.php`: **no rastrea ambulancias**; es una calculadora de rutas con Google Maps (origen, intermedio, destino, tráfico, ubicación del navegador). Hay un helper de «token de seguimiento» (`includes/seguimientoHelper.php`) sin pantalla pública que lo use. | Necesita una llave de Google Maps API con facturación. **Esperando la llave.** |
 | **Permisos y roles editables en pantalla** | `adminPermisos.php`, `adminRoles.php` (tabla `permisos` por cargo, con historial y revertir) | Decisión de arquitectura: SISMANTO usa RLS fija en migraciones. **Esperando decisión de Daniel.** |
 | Catálogo de sedes del inventario | `configurarInventario.php` (sedes para el selector «Aeropuerto / Sede» del equipo) | Menor: en SISMANTO ese campo es texto libre. |
