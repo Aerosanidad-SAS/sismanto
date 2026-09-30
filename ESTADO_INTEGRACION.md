@@ -27,8 +27,9 @@ PR contra `dev`.
 | #132 | 🐞 **Bug:** registrar un mantenimiento biomédico ahora recalcula el próximo mantenimiento o la próxima calibración (con la frecuencia del equipo) | — | abierto |
 | #133 | Prestadores médicos: **crear y editar** en `/proveedores` (ADMIN/ANALISTA); el directorio ahora muestra los **1.332** (antes 3: filtraba `activo` y 1.329 vienen en estado 0 de SISRES) | — | abierto |
 | #134 | **Recuperar contraseña** con código por correo (`/recuperar`, público). Necesita las variables de Microsoft Graph en el entorno | 097 | abierto |
+| #135 | Umbral **configurable** de servicios estancados (activar/apagar y horas por etapa) en Configuración → Servicios | 098 | abierto |
 
-**Orden de merge:** cualquiera, salvo #131 (va después de #130). Cada PR tiene su propio número de migración (091–097). Si se mergean en otro orden,
+**Orden de merge:** cualquiera, salvo #131 (va después de #130). Cada PR tiene su propio número de migración (091–098). Si se mergean en otro orden,
 solo choca la línea de registro en `scripts/apply-database.ts`: se deja la lista en orden numérico. #124, #125 y
 #126 tocan zonas distintas de `src/components/equipos/equipos-tabla.tsx` y deberían combinarse sin conflicto.
 
@@ -56,6 +57,7 @@ del merge):
 - #132: registrar un mantenimiento a un equipo «Vencido» y ver que pasa a «Al día».
 - #133: crear un prestador y editar uno existente como ANALISTA.
 - #134: con un usuario de correo real, pedir el código, cambiar la clave y entrar con la nueva.
+- #135: como ADMIN, bajar el umbral de CURSO a 1 h y ver aparecer el ⏰ en la lista.
 - #127: configurar un correo de prueba en el área Sistemas y lanzar el cron a mano
   (`POST /api/cron/send-biomedical-alerts` con `Authorization: Bearer $CRON_SECRET`). **Ojo:** escribe en
   `biomedical_alerts_log` y envía correos reales.
@@ -72,7 +74,7 @@ del merge):
 | ✅ (#133) **Prestadores médicos: crear y editar** | `registroProveedores.php`/`editarProveedor.php` (tabla `proveedores` → `medical_providers`, 1.332 filas) | En SISMANTO `/proveedores` es un directorio **de solo lectura**: no hay forma de crear ni editar un prestador. |
 | ✅ (#134) **Recuperar contraseña** | `recuperarPassword.php`: código de 6 dígitos al correo, válido 15 min, 5 intentos; enlace «¿Olvidaste tu contraseña?» en el login | SISMANTO no tiene recuperación: el login es con cédula y hoy solo un ADMIN puede cambiar la clave. |
 | **Tipos de servicio visibles por rol** | Permisos `tipo_ver_*` (registrar y editar): Regulador solo ve MD, TAB y TAM; los demás, todos | SISMANTO muestra los 10 tipos a todos los roles. Se puede hacer como configuración por rol sin el sistema de permisos dinámicos. |
-| Umbral de servicios estancados configurable | `configuracionSistema.php` → activo/inactivo + horas para PROGRAMADO y CURSO | En SISMANTO está fijo en el código (`UMBRAL_ESTANCADO_HORAS`, 4 h) «hasta que Regulación confirme». |
+| ✅ (#135) Umbral de servicios estancados configurable | `configuracionSistema.php` → activo/inactivo + horas para PROGRAMADO y CURSO | En SISMANTO está fijo en el código (`UMBRAL_ESTANCADO_HORAS`, 4 h) «hasta que Regulación confirme». |
 | **Mantenimiento biomédico incompleto** | Editar mantenimiento (`editarMantenimientoBiomedica.php`), tipo PREVENTIVO/CORRECTIVO/CALIBRACION como lista, evidencia PDF del proveedor externo, **orden de mantenimiento en PDF** (`OrdenMantenimientoRender.php`) e impresión por rango | SISMANTO solo registra (sin editar), el tipo es texto libre, y no hay evidencia ni orden PDF. |
 | Equipo biomédico: foto, descripción e instrucciones de uso | `inventario.imagen`, `descripcionEquipo`, `instruccionesUso`; la foto sale en la hoja de vida y en el PDF | `biomedical_equipment.imagen_url` existe pero ninguna pantalla lo usa; no hay columnas de descripción ni instrucciones. |
 | Catálogo de sedes del inventario | `configurarInventario.php` (sedes para el selector «Aeropuerto / Sede» del equipo) | Menor: en SISMANTO ese campo es texto libre. |
