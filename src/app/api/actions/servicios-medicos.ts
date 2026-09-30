@@ -15,6 +15,9 @@ import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
   prefijoCiudad,
+  ETAPAS_SIN_GESTIONAR,
+  esUnidadSinGestionar,
+  limiteSinGestionar,
   type FiltrosServicios,
 } from "@/lib/servicios-lista";
 
@@ -209,6 +212,12 @@ function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centroId
   // Como SISRES: el rango es sobre la fecha programada, en hora de Colombia.
   if (filtros.desde) q = q.gte("fecha_hora_programacion", `${filtros.desde}T00:00:00-05:00`);
   if (filtros.hasta) q = q.lte("fecha_hora_programacion", `${filtros.hasta}T23:59:59.999-05:00`);
+  // «Sin gestionar»: se suma (AND) a los demás filtros, incluida la etapa, como en SISRES.
+  const cantidad = Number(filtros.sinGestionar);
+  if (Number.isInteger(cantidad) && cantidad > 0) {
+    const unidad = esUnidadSinGestionar(filtros.sinGestionarUnidad) ? filtros.sinGestionarUnidad : "dia";
+    q = q.in("etapa", ETAPAS_SIN_GESTIONAR).lte("fecha_hora_programacion", limiteSinGestionar(cantidad, unidad));
+  }
   return q;
 }
 
