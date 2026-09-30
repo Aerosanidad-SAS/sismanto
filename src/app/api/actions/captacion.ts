@@ -11,6 +11,8 @@ import { getProfile } from "@/app/api/actions/auth";
 import { auditar } from "@/lib/auditoria";
 import { CaptacionPdf, type CaptacionPdfDatos } from "@/lib/pdf/captacion";
 import { aTimestamptzColombia } from "@/lib/hora-colombia";
+import { limitesInstante } from "@/lib/fechas";
+import type { FilaInforme } from "@/lib/informes-captacion";
 import { captacionSchema } from "@/lib/validations";
 import {
   CAMPOS_CONFIGURABLES,
@@ -417,6 +419,42 @@ export async function getFilasSisproMes(mes: string): Promise<{ filas: (string |
   // Garantía extra por si el rango de la consulta se desplazara: solo días del mes pedido (hora de Bogotá).
   const delMes = lista.filter((c) => diaColombia(c.fecha_atencion).startsWith(m.data));
   return { filas: delMes.map((c, i) => filaSispro(c, i + 1, cat)), total: delMes.length };
+}
+
+// ─── Informes ACM / Aerocivil / PME / PAE ───────────────────────────────────
+
+const COLUMNAS_INFORME =
+  "fecha_atencion, fecha_nacimiento, sexo, tipo_identificacion, tipo_atencion, resultado_autorizacion, lugar_atencion, condicion, accidente_especial, notificacion_obligatoria, tipo_vuelo, patologia_sistema, otra_patologia, post_operatorio, emergencia_tipo, procedimientos, aerolinea";
+
+/**
+ * Captaciones activas de un rango de días de Bogotá (y un aeropuerto, si se da), con solo las columnas que usan los
+ * informes, más el catálogo de aerolíneas activas en su orden de alta (el del formato PAE). Solo roles de captación.
+ */
+export async function getDatosInformeCaptacion(
+  desde: string,
+  hasta: string,
+  aeropuerto?: string,
+): Promise<{ filas: FilaInforme[]; aerolineas: string[] } | { error: string }> {
+  if (!fechaIso.safeParse(desde).success || !fechaIso.safeParse(hasta).success) return { error: "Rango de fechas inválido" };
+  if (desde > hasta) return { error: "La fecha inicial es posterior a la final" };
+  if (!(await usuario())) return { error: "Sin permisos" };
+
+  const s = createClient();
+  const rango = limitesInstante(desde, hasta);
+  const [filas, aerolineas] = await Promise.all([
+    leerTodo<FilaInforme>((d, h) => {
+      let q = s
+        .from("captaciones_aeroportuarias")
+        .select(COLUMNAS_INFORME)
+        .eq("activo", true)
+        .gte("fecha_atencion", rango.desde)
+        .lt("fecha_atencion", rango.hastaExclusivo);
+      if (aeropuerto) q = q.eq("aeropuerto_atencion", aeropuerto.slice(0, 150));
+      return q.order("id", { ascending: true }).range(d, h);
+    }),
+    leerTodo<{ nombre: string }>((d, h) => s.from("airlines").select("nombre").eq("activo", true).order("id").range(d, h)),
+  ]);
+  return { filas, aerolineas: aerolineas.map((a) => a.nombre) };
 }
 
 // ─── PDF individual ─────────────────────────────────────────────────────────
