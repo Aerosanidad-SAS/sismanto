@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { KPIDashboard } from "@/components/charts/kpi-dashboard";
+import { KpiMantenimiento } from "@/components/charts/kpi-mantenimiento";
+import { getKpisMantenimiento } from "@/app/api/actions/kpis-mantenimiento";
 import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 import { getMetricasConsumo } from "@/app/api/actions/consumo";
 import { requireRole } from "@/app/api/actions/auth";
@@ -243,7 +245,7 @@ export default async function KPIsPage({
     )
   );
 
-  const [kpiData, fuelResumen] = await Promise.all([
+  const [kpiData, fuelResumen, kpisMant] = await Promise.all([
     getKPIData(
       fechaInicio,
       fechaFin,
@@ -251,6 +253,7 @@ export default async function KPIsPage({
       dispCentroId
     ),
     getFuelResumen(fechaInicio, fechaFin),
+    getKpisMantenimiento(fechaInicio, fechaFin),
   ]);
 
   return (
@@ -279,6 +282,8 @@ export default async function KPIsPage({
           fuelResumen={fuelResumen}
         />
       </Suspense>
+
+      <KpiMantenimiento datos={kpisMant} />
     </div>
   );
 }
