@@ -112,6 +112,15 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "091_servicio_opciones_campo.sql",                 file: "scripts/migrations/091_servicio_opciones_campo.sql" },
   { name: "092_hoja_de_vida_vehiculos.sql",                  file: "scripts/migrations/092_hoja_de_vida_vehiculos.sql" },
   { name: "093_combustible_carga_proveedor.sql",             file: "scripts/migrations/093_combustible_carga_proveedor.sql" },
+  { name: "094_motor_alertas_preoperacional.sql",            file: "scripts/migrations/094_motor_alertas_preoperacional.sql" },
+  { name: "095_usuarios_codigo_acceso_cambio_clave.sql",     file: "scripts/migrations/095_usuarios_codigo_acceso_cambio_clave.sql" },
+  { name: "096_checklist_por_tipo_vehiculo.sql",             file: "scripts/migrations/096_checklist_por_tipo_vehiculo.sql" },
+  { name: "097_biomedical_checklists.sql",                   file: "scripts/migrations/097_biomedical_checklists.sql" },
+  { name: "098_biomedical_plantillas_texto.sql",             file: "scripts/migrations/098_biomedical_plantillas_texto.sql" },
+  { name: "099_biomedical_documentos.sql",                  file: "scripts/migrations/099_biomedical_documentos.sql" },
+  { name: "100_inventario_notificaciones_area.sql",          file: "scripts/migrations/100_inventario_notificaciones_area.sql" },
+  { name: "101_campos_obligatorios.sql",                     file: "scripts/migrations/101_campos_obligatorios.sql" },
+  { name: "102_codigos_recuperacion_contrasena.sql",         file: "scripts/migrations/102_codigos_recuperacion_contrasena.sql" },
   { name: "103_umbral_servicios_estancados.sql",             file: "scripts/migrations/103_umbral_servicios_estancados.sql" },
 ];
 
