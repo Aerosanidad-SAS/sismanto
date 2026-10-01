@@ -1,6 +1,12 @@
+import NextLink from "next/link";
 import { hoyBogota, sumarDias } from "@/lib/fechas";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getEquiposBiomedicos, getMantenimientosBiomedicos } from "@/app/api/actions/inventario-biomedico";
+import Link from "next/link";
+import {
+  getChecklistsBiomedicos,
+  getEquiposBiomedicos,
+  getMantenimientosBiomedicos,
+} from "@/app/api/actions/inventario-biomedico";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { EquiposTabla } from "@/components/equipos/equipos-tabla";
 
@@ -8,10 +14,11 @@ const ROLES_EDICION = ["ADMIN", "MANTENIMIENTO", "ANALISTA"];
 
 export default async function EquiposPage() {
   await requireRole(["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"]);
-  const [profile, equipos, mantenimientos] = await Promise.all([
+  const [profile, equipos, mantenimientos, checklists] = await Promise.all([
     getProfile(),
     getEquiposBiomedicos(),
     getMantenimientosBiomedicos(),
+    getChecklistsBiomedicos(),
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
 
@@ -29,7 +36,10 @@ export default async function EquiposPage() {
       <div>
         <h1 className="text-3xl">Equipos biomédicos</h1>
         <p className="mt-2 text-muted-foreground">
-          Inventario, mantenimientos y hoja de vida de equipos médicos.
+          Inventario, mantenimientos y hoja de vida de equipos médicos.{" "}
+          <Link href="/equipos/checklists" className="underline">
+            Listas de chequeo
+          </Link>
         </p>
       </div>
 
@@ -69,9 +79,22 @@ export default async function EquiposPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <EquiposTabla equipos={equipos} mantenimientos={mantenimientos} puedeEditar={puedeEditar} />
+          <EquiposTabla
+            equipos={equipos}
+            mantenimientos={mantenimientos}
+            puedeEditar={puedeEditar}
+            checklists={checklists}
+          />
         </CardContent>
       </Card>
+
+      {profile?.role_codigo === "ADMIN" && (
+        <p className="text-sm text-muted-foreground">
+          <NextLink href="/equipos/notificaciones" className="underline">
+            Avisos de vencimiento por correo (Biomédica / Sistemas)
+          </NextLink>
+        </p>
+      )}
     </div>
   );
 }
