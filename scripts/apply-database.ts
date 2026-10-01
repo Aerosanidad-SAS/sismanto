@@ -112,6 +112,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "091_servicio_opciones_campo.sql",                 file: "scripts/migrations/091_servicio_opciones_campo.sql" },
   { name: "092_hoja_de_vida_vehiculos.sql",                  file: "scripts/migrations/092_hoja_de_vida_vehiculos.sql" },
   { name: "093_combustible_carga_proveedor.sql",             file: "scripts/migrations/093_combustible_carga_proveedor.sql" },
+  { name: "095_usuarios_codigo_acceso_cambio_clave.sql",     file: "scripts/migrations/095_usuarios_codigo_acceso_cambio_clave.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
