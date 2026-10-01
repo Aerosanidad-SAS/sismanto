@@ -120,6 +120,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "099_biomedical_documentos.sql",                  file: "scripts/migrations/099_biomedical_documentos.sql" },
   { name: "100_inventario_notificaciones_area.sql",          file: "scripts/migrations/100_inventario_notificaciones_area.sql" },
   { name: "101_campos_obligatorios.sql",                     file: "scripts/migrations/101_campos_obligatorios.sql" },
+  { name: "102_codigos_recuperacion_contrasena.sql",         file: "scripts/migrations/102_codigos_recuperacion_contrasena.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

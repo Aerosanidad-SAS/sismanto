@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -103,6 +104,11 @@ export default function LoginPage() {
             <Button type="submit" className="w-full min-h-11 touch-manipulation" disabled={loading}>
               {loading ? "Iniciando sesión..." : "Iniciar sesión"}
             </Button>
+            <p className="text-center text-sm">
+              <Link href="/recuperar" className="text-muted-foreground underline">
+                ¿Olvidó su contraseña?
+              </Link>
+            </p>
           </form>
         </CardContent>
       </Card>
