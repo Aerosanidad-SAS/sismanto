@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 101: cotizaciones de ruta
+-- Migración 106: cotizaciones de ruta
 --
 -- SISRES: segumientoAmbulanciasMaps.php — calculadora con Google Maps: origen, punto intermedio y destino, rutas
 -- alternativas con tráfico, y costo = km × valor por km. No guardaba nada. Aquí la calculadora es una COTIZACIÓN:

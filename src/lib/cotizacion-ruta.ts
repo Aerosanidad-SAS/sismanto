@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Cotización de ruta (migración 101), a partir de la calculadora de segumientoAmbulanciasMaps.php de SISRES.
+// Cotización de ruta (migración 106), a partir de la calculadora de segumientoAmbulanciasMaps.php de SISRES.
 // Puro: lo usan el navegador (cálculo en pantalla), la acción (recalcula y guarda) y el PDF.
 
 export const ROLES_COTIZACION = ["ADMIN", "REGULACION", "ANALISTA"] as const;

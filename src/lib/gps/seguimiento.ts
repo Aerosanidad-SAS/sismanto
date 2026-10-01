@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-// Reglas del enlace de seguimiento GPS de un servicio (migración 100). Solo servidor (usa node:crypto).
+// Reglas del enlace de seguimiento GPS de un servicio (migración 105). Solo servidor (usa node:crypto).
 
 export const HORAS_VIGENCIA_ENLACE = 24;
 /** Etapas en las que tiene sentido seguir la ambulancia (va en camino o está en el servicio). */

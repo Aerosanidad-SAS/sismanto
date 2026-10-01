@@ -23,7 +23,7 @@ import {
   type TramoRuta,
 } from "@/lib/cotizacion-ruta";
 
-// Cotizaciones de ruta (migración 101). La llave de Google Maps sale de Administración → Integraciones (migración 099).
+// Cotizaciones de ruta (migración 106). La llave de Google Maps sale de Administración → Integraciones (migración 099).
 
 async function autorizado() {
   const profile = await getProfile();

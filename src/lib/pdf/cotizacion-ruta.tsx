@@ -1,7 +1,7 @@
 import { Document, Image, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { estadoTrafico, formatoCOP, formatoDuracion, formatoKm, type TramoRuta } from "@/lib/cotizacion-ruta";
 
-// PDF de la cotización de ruta (migración 101): encabezado, datos, mapa del trazo, tramos y total.
+// PDF de la cotización de ruta (migración 106): encabezado, datos, mapa del trazo, tramos y total.
 
 export interface CotizacionPdfDatos {
   numero: string;
