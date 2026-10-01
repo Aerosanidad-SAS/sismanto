@@ -26,6 +26,7 @@ const politicaCSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  "frame-src 'self' https://www.openstreetmap.org", // mapa del seguimiento GPS
   "frame-ancestors 'self'",
 ].join("; ");
 
