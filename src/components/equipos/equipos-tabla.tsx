@@ -1,7 +1,7 @@
 "use client";
 
 import { hoyBogota, sumarDias } from "@/lib/fechas";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -38,6 +38,9 @@ import {
   crearMantenimientoBiomedico,
   generarHojaVidaPdf,
 } from "@/app/api/actions/inventario-biomedico";
+import { getPlantillasBiomedicas } from "@/app/api/actions/biomedico-plantillas";
+import { plantillasDelCampo, type PlantillaTexto } from "@/lib/biomedico-plantillas";
+import { SelectorPlantilla } from "@/components/equipos/selector-plantilla";
 
 export interface EquipoRow {
   id: number;
@@ -139,6 +142,18 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
   const formMant = useForm<BiomedicalMaintenanceFormData>({
     resolver: zodResolver(biomedicalMaintenanceSchema),
   });
+
+  // Plantillas de texto del mantenimiento (migración 098): se leen la primera vez que se abre el registro.
+  const [plantillas, setPlantillas] = useState<{ plantillas: PlantillaTexto[]; puedeEditar: boolean }>({
+    plantillas: [],
+    puedeEditar: false,
+  });
+  const [plantillasCargadas, setPlantillasCargadas] = useState(false);
+  useEffect(() => {
+    if (!dialogMantenimiento || plantillasCargadas) return;
+    setPlantillasCargadas(true);
+    getPlantillasBiomedicas().then(setPlantillas);
+  }, [dialogMantenimiento, plantillasCargadas]);
 
   const filtrados = useMemo(() => filtrarEquipos(equipos, filtros), [equipos, filtros]);
   const areas = useMemo(() => valoresDistintos(equipos, (e) => e.area), [equipos]);
@@ -623,14 +638,24 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
               ))}
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="descripcion_falla">Descripción de la falla</Label>
-              <Textarea id="descripcion_falla" rows={2} {...formMant.register("descripcion_falla")} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="observaciones_mant">Observaciones</Label>
-              <Textarea id="observaciones_mant" rows={2} {...formMant.register("observaciones")} />
-            </div>
+            {(
+              [
+                ["descripcion_falla", "descripcion_falla", "Descripción de la falla / actividad realizada"],
+                ["observaciones", "observaciones_mant", "Observaciones"],
+                ["obs_reparaciones", "obs_reparaciones", "Observaciones de reparación"],
+              ] as const
+            ).map(([campo, id, etiqueta]) => (
+              <div key={campo} className="space-y-1">
+                <Label htmlFor={id}>{etiqueta}</Label>
+                <SelectorPlantilla
+                  plantillas={plantillasDelCampo(plantillas.plantillas, campo)}
+                  puedeEditar={plantillas.puedeEditar}
+                  valorActual={formMant.watch(campo)}
+                  onAplicar={(texto) => formMant.setValue(campo, texto, { shouldDirty: true })}
+                />
+                <Textarea id={id} rows={2} {...formMant.register(campo)} />
+              </div>
+            ))}
 
             {(error || Object.values(formMant.formState.errors)[0]?.message) && (
               <p className="text-sm text-destructive">
