@@ -128,6 +128,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "103_umbral_servicios_estancados.sql",       file: "scripts/migrations/103_umbral_servicios_estancados.sql" },
   { name: "104_integraciones_config.sql",              file: "scripts/migrations/104_integraciones_config.sql" },
   { name: "105_seguimiento_gps_servicio.sql",          file: "scripts/migrations/105_seguimiento_gps_servicio.sql" },
+  { name: "106_cotizaciones_ruta.sql",                       file: "scripts/migrations/106_cotizaciones_ruta.sql" },
   { name: "107_rol_modulo_oculto.sql",                     file: "scripts/migrations/107_rol_modulo_oculto.sql" },
 ];
 
