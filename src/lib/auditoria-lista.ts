@@ -28,6 +28,7 @@ export const ENTIDADES_AUDITORIA = [
   "proveedores",
   "capacitaciones",
   "carga_masiva",
+  "cotizaciones",
   "role_switch", // «Ver como» del ADMIN (role-switcher.ts)
 ] as const;
 
