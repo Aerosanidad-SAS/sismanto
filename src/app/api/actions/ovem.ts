@@ -26,7 +26,7 @@ export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACI
   const supabase = createClient();
   const { data, error } = await supabase
     .from("checklist_items")
-    .select("id, categoria, descripcion, cantidad_esperada, orden, activo, severidad_falla")
+    .select("id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo")
     .eq("activo", true)
     .eq("lista", lista)
     .order("orden", { ascending: true });

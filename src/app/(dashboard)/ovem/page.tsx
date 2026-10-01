@@ -21,7 +21,7 @@ export default async function OvemPage() {
   let vehiclesQuery = supabase
     .from("vehicles")
     .select(
-      "id, placa, marca, modelo, estado_actual, centro_operativo, vencimiento_soat, vencimiento_rtm, vencimiento_tecnicomecanica, fecha_pase_aeroportuario"
+      "id, placa, marca, modelo, estado_actual, centro_operativo, tipo_vehiculo, vencimiento_soat, vencimiento_rtm, vencimiento_tecnicomecanica, fecha_pase_aeroportuario"
     )
     .order("placa");
   const centro = centroVisible(profile);
