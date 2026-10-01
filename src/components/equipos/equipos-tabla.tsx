@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatDateShort } from "@/lib/utils";
 import { DateField } from "@/components/forms/date-field";
+import { DocumentosEquipo } from "@/components/equipos/documentos-equipo";
 import {
   biomedicalEquipmentSchema,
   biomedicalMaintenanceSchema,
@@ -382,7 +383,11 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
                 <TabsTrigger value="historial">
                   Mantenimientos ({historialEquipo.length})
                 </TabsTrigger>
+                <TabsTrigger value="documentos">Documentos</TabsTrigger>
               </TabsList>
+              <TabsContent value="documentos">
+                <DocumentosEquipo equipmentId={hojaDeVida.id} />
+              </TabsContent>
               <TabsContent value="ficha">
                 <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                   {[
@@ -509,6 +514,10 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
               Al guardar, la fecha de último mantenimiento del equipo se actualiza automáticamente.
             </DialogDescription>
           </DialogHeader>
+          {/* Documentos del equipo (INVIMA, manuales…): se guardan al subirlos, aparte del mantenimiento. */}
+          {dialogMantenimiento && formMant.getValues("equipment_id") ? (
+            <DocumentosEquipo equipmentId={formMant.getValues("equipment_id")} />
+          ) : null}
           <form onSubmit={formMant.handleSubmit(onSubmitMantenimiento)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
