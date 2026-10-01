@@ -28,6 +28,18 @@ interface IncidentFormProps {
   initialDescripcion?: string;
 }
 
+/** Hallazgos que sacan el vehículo de servicio en el acto (decisión de Daniel, 2026-09-30). */
+const HALLAZGOS_CRITICOS = [
+  "Sin aceite de motor",
+  "Fuga excesiva de líquido en el piso",
+  "Falla de frenos",
+  "Falla de dirección o suspensión",
+  "Sobrecalentamiento del motor",
+  "Humo excesivo",
+  "Sin SOAT o SOAT vencido",
+  "Sin revisión técnico-mecánica vigente",
+] as const;
+
 export function IncidentForm({
   vehicleId,
   afectaOperatividad,
@@ -57,6 +69,16 @@ export function IncidentForm({
   });
 
   const severidad = watch("severidad");
+  const afecta = watch("afectaOperatividad");
+  const [critico, setCritico] = useState<string | null>(null);
+
+  // Un hallazgo crítico marca la novedad como severa y que impide operar: el trigger de la base pasa el vehículo a FDS.
+  const elegirCritico = (hallazgo: string | null) => {
+    setCritico(hallazgo);
+    setValue("afectaOperatividad", hallazgo !== null);
+    setValue("severidad", hallazgo !== null ? "ALTA" : "MEDIA");
+    setValue("descripcion", hallazgo !== null ? `CRÍTICO: ${hallazgo}. ` : "");
+  };
 
   const onSubmit = async (data: IncidentFormData) => {
     setIsSubmitting(true);
@@ -78,6 +100,37 @@ export function IncidentForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {hideSeveridad && (
+        <div>
+          <Label>¿Es un hallazgo crítico?</Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Si lo es, el vehículo queda fuera de servicio y se avisa a Regulación y Mantenimiento.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {HALLAZGOS_CRITICOS.map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => elegirCritico(critico === h ? null : h)}
+                className={`rounded-md border px-3 py-1.5 text-sm ${critico === h ? "border-red-600 bg-red-50 text-red-700" : "hover:bg-muted"}`}
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+          {critico === null && (
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={Boolean(afecta)}
+                onChange={(e) => setValue("afectaOperatividad", e.target.checked)}
+              />
+              Otro problema que impide seguir operando el vehículo
+            </label>
+          )}
+        </div>
+      )}
+
       <div>
         <Label htmlFor="descripcion">Descripción *</Label>
         <Textarea

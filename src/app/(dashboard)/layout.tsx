@@ -463,6 +463,11 @@ export default function DashboardLayout({
       setProfile(p);
       setLoading(false);
       if (p) {
+        // Primer ingreso tras la carga masiva: hay que elegir una clave propia antes de usar nada.
+        if (p.debe_cambiar_password) {
+          router.replace("/cambiar-password");
+          return;
+        }
         // Roles de soporte: solo ven el soporte técnico (la barrera real es la RLS restrictiva de la migración 076).
         if (esRolRestringido(p.role_codigo) && !rutaPermitidaARolRestringido(pathname)) {
           router.replace("/soporte");
