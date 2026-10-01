@@ -121,6 +121,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "100_inventario_notificaciones_area.sql",          file: "scripts/migrations/100_inventario_notificaciones_area.sql" },
   { name: "101_campos_obligatorios.sql",                     file: "scripts/migrations/101_campos_obligatorios.sql" },
   { name: "102_codigos_recuperacion_contrasena.sql",         file: "scripts/migrations/102_codigos_recuperacion_contrasena.sql" },
+  { name: "103_umbral_servicios_estancados.sql",             file: "scripts/migrations/103_umbral_servicios_estancados.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
