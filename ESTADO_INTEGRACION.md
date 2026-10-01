@@ -1,9 +1,9 @@
 # Estado de la integración SISRES → Aeromanto
 
-> **Lo más reciente está en la primera sección** («Cierre de brechas funcionales», 2026-09-30). Las secciones de
-> más abajo son la historia de julio y se dejan como registro.
+> **Lo más reciente está en la primera sección** («Cierre de brechas funcionales», actualizada el 2026-10-01). Las
+> secciones de más abajo son la historia de julio y se dejan como registro.
 
-## 🔄 Cierre de brechas funcionales SISRES → SISMANTO (2026-09-30)
+## 🔄 Cierre de brechas funcionales SISRES → SISMANTO (actualizado 2026-10-01)
 
 **Qué es:** una revisión del código actual de SISRES (`C:\xampp\htdocs\sisres`, que sigue recibiendo commits casi a
 diario) contra SISMANTO, para portar lo que falta. `FEATURE_MATRIX.md` (julio) quedó desactualizada: hoy SISMANTO
@@ -11,53 +11,77 @@ ya tiene casi todos los **módulos** de SISRES (servicios, pacientes, captación
 TI, soporte, equipos, campañas). Las brechas que quedan son **funciones dentro de esos módulos**. Se porta una por
 PR contra `dev`.
 
+**SISRES revisado hasta el commit `07ae2f6` (2026-10-01 11:15).** La próxima revisión arranca ahí:
+`git -C C:/xampp/htdocs/sisres log 07ae2f6..origin/main`.
+
 ### PRs de esta tanda
 
-| PR | Brecha (origen en SISRES) | Migración | Estado al 2026-09-30 |
+| PR | Brecha (origen en SISRES) | Migración | Estado al 2026-10-01 |
 |---|---|---|---|
-| #121 | Informes ACM, Aerocivil, PME y PAE de captación (`informe*.php`, `includes/informe*Calculo.php`) → `/captacion/informes` | — | ✅ mergeado |
-| #122 | Filtro «servicios sin gestionar» en la lista de servicios (commit SISRES `f5fd5ff`) | — | abierto |
-| #123 | Opciones administrables de 7 selects del formulario de servicios (`configurarCamposServicio.php`, `2726772`) → `/servicios/configuracion` | 091 | abierto |
-| #124 | Listas de chequeo del mantenimiento biomédico, 47 sembradas desde SISRES (`mantenimiento_checklist`) → `/equipos/checklists` | 092 | abierto |
-| #125 | Plantillas de texto del mantenimiento biomédico (`9df77b1`) → `/equipos/plantillas` | 093 | abierto |
-| #126 | Documentos del equipo: INVIMA, manuales, guías (`inventario_documento`, `1c93eb9`); bucket privado `equipos-documentos` | 094 | abierto |
-| #127 | Destinatarios de avisos de vencimiento por área Biomédica/Sistemas (`configurarNotificacionesInventario.php`); el cron también avisa de Sistemas y pagina >1000 equipos | 095 | abierto |
-| #130 | Campos obligatorios configurables: **motor genérico** (tabla `campos_obligatorios`, registro de módulos en `src/lib/campos-obligatorios.ts`, pantalla `/admin/campos-obligatorios`) + primer módulo **pacientes** | 096 | abierto |
-| #131 | Campos obligatorios de **clientes**. PR apilado: su base es la rama del #130, así que se mergea después de él | — | abierto |
-| #132 | 🐞 **Bug:** registrar un mantenimiento biomédico ahora recalcula el próximo mantenimiento o la próxima calibración (con la frecuencia del equipo) | — | abierto |
-| #133 | Prestadores médicos: **crear y editar** en `/proveedores` (ADMIN/ANALISTA); el directorio ahora muestra los **1.332** (antes 3: filtraba `activo` y 1.329 vienen en estado 0 de SISRES) | — | abierto |
-| #134 | **Recuperar contraseña** con código por correo (`/recuperar`, público). Necesita las variables de Microsoft Graph en el entorno | 097 | abierto |
-| #135 | Umbral **configurable** de servicios estancados (activar/apagar y horas por etapa) en Configuración → Servicios | 098 | abierto |
+| #121 | Informes ACM, Aerocivil, PME y PAE de captación (`informe*.php`) → `/captacion/informes` | — | ✅ en `dev` |
+| #122 | Filtro «servicios sin gestionar» (`f5fd5ff`) | — | ✅ en `dev` |
+| #123 | Opciones administrables de 7 selects del formulario de servicios (`2726772`) → `/servicios/configuracion` | 091 | ✅ en `dev` |
+| #124 | Listas de chequeo del mantenimiento biomédico (`mantenimiento_checklist`) → `/equipos/checklists` | 097 | ✅ en `dev` |
+| #125 | Plantillas de texto del mantenimiento biomédico (`9df77b1`) → `/equipos/plantillas` | 098 | ✅ en `dev` |
+| #126 | Documentos del equipo: INVIMA, manuales, guías (`1c93eb9`); bucket privado `equipos-documentos` | 099 | ✅ en `dev` |
+| #127 | Destinatarios de avisos de vencimiento por área Biomédica/Sistemas | 100 | ✅ en `dev` |
+| #130 + #131 | Campos obligatorios configurables: motor genérico + **pacientes** y **clientes** → `/admin/campos-obligatorios` | 101 | ✅ en `dev` |
+| #132 | 🐞 Registrar un mantenimiento biomédico recalcula el próximo mantenimiento / calibración | — | ✅ en `dev` |
+| #133 | Prestadores médicos: crear y editar; el directorio muestra los 1.332 (antes 3) | — | ✅ en `dev` |
+| #134 | Recuperar contraseña con código por correo (`/recuperar`). Necesita las variables de Microsoft Graph | 102 | ✅ en `dev` |
+| #135 | Umbral configurable de servicios estancados (Configuración → Servicios) | 103 | ✅ en `dev` |
+| #136 + #137 | Integraciones editables (`/admin/integraciones`: ProTrack365, plantilla de WhatsApp, llave de Google Maps) y **rastreo GPS** de la ambulancia con enlace público para el paciente | 104, 105 | ✅ en `dev` |
+| #152 | **Permisos editables:** `/admin/permisos`, qué módulos del menú ve cada rol. Solo restringe la interfaz; la RLS no cambia | 107 | ✅ en `dev` |
+| #154 | Excel de Servicios con los datos del paciente (`07ae2f6`). Solo para los roles que ya exportan pacientes | — | abierto |
+| #155 | Bitácora: el filtro «Módulo» incluye `role_switch` + prueba que lo vigila (`b137a58`) | — | abierto |
+| #156 | 🐞 Vuelve «Integraciones» al menú (se perdió al mezclar #136 con #152) | — | abierto |
+| #157 | 🐞 Registra las migraciones 100–105 en `apply-database.ts` + prueba en CI que exige registrar toda migración | — | abierto |
+| #158 | **Cotizador de rutas** con PDF, impresión y correo (`segumientoAmbulanciasMaps.php`). Va después de #157 | 106 | abierto |
 
-**Orden de merge:** cualquiera, salvo #131 (va después de #130). Cada PR tiene su propio número de migración (091–098). Si se mergean en otro orden,
-solo choca la línea de registro en `scripts/apply-database.ts`: se deja la lista en orden numérico. #124, #125 y
-#126 tocan zonas distintas de `src/components/equipos/equipos-tabla.tsx` y deberían combinarse sin conflicto.
+**De la revisión del 2026-10-01 que no aplica a SISMANTO:** `a9a7fa0` (no hay `type="number"` en campos de
+identificación), `f9fd84b` y `982f111` (bugs propios del PHP de SISRES), y la parte de `b137a58` sobre fechas sueltas
+(en SISMANTO cada fecha ya se aplica por separado).
+
+### ⚠️ Dos accidentes de merge del 2026-10-01 (para no repetirlos)
+
+1. **PRs apilados que se quedan fuera de `dev`.** El cotizador se mergeó dos veces dentro de la rama de otro PR (#138
+   en `feat/daniel-rastreo-gps`, #153 en `feat/daniel-integraciones-config`) **después** de que esa rama ya había
+   entrado a `dev`. GitHub solo cambia la base a `dev` si se borra la rama de abajo. Regla: **antes de mergear un PR,
+   verificar que su base sea `dev`**. Si no, cambiarla primero.
+2. **Líneas perdidas en `scripts/apply-database.ts`.** Al resolver conflictos de ese archivo en los squash merges se
+   borraron las líneas de 094–096 (#151) y de 100–105 (#157). Las migraciones se aplicaron en staging, pero producción
+   y cualquier base nueva no las aplicarían. Desde #157, `src/lib/migraciones-registradas.test.ts` (corre en CI) falla
+   si una migración no está registrada ni explicada en el comentario de exclusiones.
 
 **Cómo se verificó (sirve de guía para las próximas):**
 - La lógica se escribe como funciones puras en `src/lib/*.ts`, con pruebas `*.test.ts` (`npm test` las corre en
   UTC, Bogotá y Tokio). Cuando existe un PHP equivalente, se comparan las salidas del PHP de SISRES y del TS nuevo
   con los mismos datos (reales si hay; si no, aleatorios).
 - Cada migración se ensayó **contra staging dentro de una transacción con `ROLLBACK`**: se corre dos veces
-  (idempotencia) y se prueba la RLS por rol simulando el JWT con `SET LOCAL ROLE authenticated` +
-  `set_config('request.jwt.claims', '{"sub":"<user_id>","role":"authenticated"}', true)`. No queda nada aplicado:
-  las migraciones las aplica `db-migrate.yml` al mergear, nunca a mano en la base compartida.
-- Pantallas: `npm run dev` y Playwright con un usuario `test.<rol>@sismanto.test`. **No hay usuario `test.admin`**,
+  (idempotencia) y se prueba la RLS por rol simulando el JWT con `set_config('request.jwt.claims',
+  '{"sub":"<user_id>","role":"authenticated"}', true)` + `SET LOCAL ROLE authenticated` (en dos consultas separadas).
+  No queda nada aplicado: las migraciones las aplica `db-migrate.yml` al mergear, nunca a mano en la base compartida.
+- Pantallas: Playwright con un usuario `test.<rol>@sismanto.test` sobre `next start`. **No hay usuario `test.admin`**,
   así que las pantallas solo-ADMIN no se probaron de punta a punta.
 - Conocido: en `next dev`, un rol que no es ADMIN al abrir una página solo-ADMIN ve «Application error» (`Rendered
   more hooks` en el Router interno de Next). En `next build && next start` redirige bien: es solo de desarrollo.
 
-**Pendiente de probar en `dev` después de cada merge** (dependen de tablas nuevas, que no existen en staging antes
-del merge):
+**Pendiente de probar en `dev`** (las tablas ya existen en staging; falta el recorrido como usuario):
 - #123: agregar o quitar una opción en `/servicios/configuracion` como ADMIN y verla en «Nuevo servicio».
 - #124: registrar un mantenimiento y ver la lista de chequeo del tipo de equipo; editar una lista.
 - #125: «Usar plantilla…» en los 3 campos (campo vacío, reemplazar y agregar al final).
 - #126: subir un PDF y una imagen, verlos (enlace firmado) y eliminarlos. Probar que un archivo que no es
   PDF/JPG/PNG pero se renombró a `.pdf` se rechaza.
-- #130: como ADMIN, marcar «Celular» en `/admin/campos-obligatorios?modulo=pacientes` y comprobar que el formulario lo marca con * y no deja guardar sin él.
+- #130: como ADMIN, marcar «Celular» en `/admin/campos-obligatorios?modulo=pacientes` y comprobar que el formulario lo
+  marca con * y no deja guardar sin él.
 - #132: registrar un mantenimiento a un equipo «Vencido» y ver que pasa a «Al día».
 - #133: crear un prestador y editar uno existente como ANALISTA.
 - #134: con un usuario de correo real, pedir el código, cambiar la clave y entrar con la nueva.
 - #135: como ADMIN, bajar el umbral de CURSO a 1 h y ver aparecer el ⏰ en la lista.
+- #136/#137: cargar las credenciales de ProTrack365 en `/admin/integraciones` y abrir el seguimiento de un servicio con
+  móvil asignado. Ojo: 18 móviles tienen IMEI «0».
+- #152: como ADMIN, ocultarle «Valoraciones» a MEDICO y comprobar con «Ver como» que desaparece del menú y que la URL
+  lo redirige.
 - #127: configurar un correo de prueba en el área Sistemas y lanzar el cron a mano
   (`POST /api/cron/send-biomedical-alerts` con `Authorization: Bearer $CRON_SECRET`). **Ojo:** escribe en
   `biomedical_alerts_log` y envía correos reales.
@@ -66,21 +90,19 @@ del merge):
 
 | Brecha | En SISRES | Qué hace falta |
 |---|---|---|
-| **Campos obligatorios en los demás módulos** | `configurarCampos*.php`, 12 módulos en SISRES | El motor y pacientes están en #130 y clientes en #131. Proveedores (prestadores médicos) queda pendiente hasta que exista su formulario (ver «Prestadores médicos» abajo). Faltan: servicios (50 campos; ojo, el formulario oculta secciones según el tipo de servicio y bloquea campos según el rol, así que solo se puede exigir lo que el formulario muestra), acta de entrega (37), diagnóstico (33), baja (28), móviles (22), usuarios (17), valoraciones (17), préstamo (4) y aerolíneas (2). Receta para sumar un módulo: comentario al inicio de `src/lib/campos-obligatorios.ts`. |
-| **Rastreo GPS de la ambulancia del servicio** | Desde la lista de servicios, «ver seguimiento» abre `PHPMailer/seguimiento.php?id=` con la **ubicación en vivo** del vehículo asignado (API **ProTrack365**, `PHPMailer/apiProtrack.php`, por el IMEI del GPS del móvil). «Notificar» (`PHPMailer/enviarNotificacion.php`) le manda al paciente, por WhatsApp (plantilla `ubicacion_vehiculo`) y por correo, un enlace **público con token** (`servicios.token_seguimiento`, `includes/seguimientoHelper.php`) para ver el vehículo en camino. | SISMANTO ya tiene `vehicles.imei_gps` (036). Faltan las **credenciales de ProTrack365** (cuenta y clave de la API), la plantilla de WhatsApp aprobada y una página pública con token. **Esperando credenciales.** |
-| Calculadora de rutas | `segumientoAmbulanciasMaps.php`: Google Maps (origen, intermedio, destino, tráfico, ubicación del navegador). No rastrea nada. | Necesita una llave de Google Maps API con facturación. Prioridad baja. |
-| **Permisos y roles editables en pantalla** | `adminPermisos.php`, `adminRoles.php` (tabla `permisos` por cargo, con historial y revertir) | Decisión de arquitectura: SISMANTO usa RLS fija en migraciones. **Esperando decisión de Daniel.** |
-| ✅ (#132) 🐞 **Próximo mantenimiento no se recalcula** | En SISRES, próximo = último + 6 meses y próxima calibración = última + 12 meses (`insertarInventario.php`/`modificar_inventario.php`). | **Bug en SISMANTO:** `crearMantenimientoBiomedico` actualiza `ultimo_mantenimiento` pero no `proximo_mantenimiento`, así que el equipo recién mantenido sigue «Vencido» y el cron avisa todos los días. **Prioridad alta.** |
-| ✅ (#133) **Prestadores médicos: crear y editar** | `registroProveedores.php`/`editarProveedor.php` (tabla `proveedores` → `medical_providers`, 1.332 filas) | En SISMANTO `/proveedores` es un directorio **de solo lectura**: no hay forma de crear ni editar un prestador. |
-| ✅ (#134) **Recuperar contraseña** | `recuperarPassword.php`: código de 6 dígitos al correo, válido 15 min, 5 intentos; enlace «¿Olvidaste tu contraseña?» en el login | SISMANTO no tiene recuperación: el login es con cédula y hoy solo un ADMIN puede cambiar la clave. |
-| **Tipos de servicio visibles por rol** | Permisos `tipo_ver_*` (registrar y editar): Regulador solo ve MD, TAB y TAM; los demás, todos | SISMANTO muestra los 10 tipos a todos los roles. Se puede hacer como configuración por rol sin el sistema de permisos dinámicos. |
-| ✅ (#135) Umbral de servicios estancados configurable | `configuracionSistema.php` → activo/inactivo + horas para PROGRAMADO y CURSO | En SISMANTO está fijo en el código (`UMBRAL_ESTANCADO_HORAS`, 4 h) «hasta que Regulación confirme». |
+| **Campos obligatorios en los demás módulos** | `configurarCampos*.php`, 12 módulos en SISRES | Pacientes y clientes ya están. Faltan: servicios (50 campos; ojo, el formulario oculta secciones según el tipo de servicio y bloquea campos según el rol, así que solo se puede exigir lo que el formulario muestra), proveedores, acta de entrega (37), diagnóstico (33), baja (28), móviles (22), usuarios (17), valoraciones (17), préstamo (4) y aerolíneas (2). Receta para sumar un módulo: comentario al inicio de `src/lib/campos-obligatorios.ts`. |
+| **Tipos de servicio visibles por rol** | Permisos `tipo_ver_*` (registrar y editar): Regulador solo ve MD, TAB y TAM; los demás, todos | SISMANTO muestra los 10 tipos a todos los roles. Se puede hacer como configuración por rol, al estilo de #152. |
+| **Permisos finos por acción** | `adminPermisos.php`, `adminRoles.php` (permisos por cargo, con historial y revertir) | #152 resolvió la visibilidad de módulos. Permisos de ver/editar por acción y roles nuevos quedan fuera: tocarían las server actions y la RLS. Daniel decidió empezar solo por la visibilidad. |
 | **Mantenimiento biomédico incompleto** | Editar mantenimiento (`editarMantenimientoBiomedica.php`), tipo PREVENTIVO/CORRECTIVO/CALIBRACION como lista, evidencia PDF del proveedor externo, **orden de mantenimiento en PDF** (`OrdenMantenimientoRender.php`) e impresión por rango | SISMANTO solo registra (sin editar), el tipo es texto libre, y no hay evidencia ni orden PDF. |
 | Equipo biomédico: foto, descripción e instrucciones de uso | `inventario.imagen`, `descripcionEquipo`, `instruccionesUso`; la foto sale en la hoja de vida y en el PDF | `biomedical_equipment.imagen_url` existe pero ninguna pantalla lo usa; no hay columnas de descripción ni instrucciones. |
 | Catálogo de sedes del inventario | `configurarInventario.php` (sedes para el selector «Aeropuerto / Sede» del equipo) | Menor: en SISMANTO ese campo es texto libre. |
+| Títulos coloreados en el Excel de Servicios | `includes/xlsxWriter.php` (`07ae2f6`) | `xlsx` 0.18 (community) no escribe estilos. Solo vale la pena si se adopta otra librería. |
 
-**Antes de portar cualquier brecha**, revisar `git -C C:/xampp/htdocs/sisres log --since=<última fecha>`, porque SISRES
-cambia seguido. Por ejemplo, el 30/09 agregó checklist, plantillas y documentos en el mismo día.
+**Bloqueado por algo externo:** el cotizador (#158) necesita una llave de Google Maps **con facturación** (la de SISRES
+responde `REQUEST_DENIED`), y el rastreo GPS necesita cargar las credenciales de ProTrack365 en `/admin/integraciones`.
+
+**Antes de portar cualquier brecha**, revisar `git -C C:/xampp/htdocs/sisres log 07ae2f6..origin/main`, porque SISRES
+cambia seguido.
 
 ---
 
