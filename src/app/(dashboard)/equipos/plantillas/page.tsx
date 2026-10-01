@@ -4,7 +4,7 @@ import { getPlantillasBiomedicas } from "@/app/api/actions/biomedico-plantillas"
 import { PlantillasBiomedicas } from "@/components/equipos/plantillas-biomedicas";
 
 export default async function PlantillasBiomedicasPage() {
-  // Mismos roles que ven Equipos biomédicos; editar, solo ADMIN y MANTENIMIENTO (la RLS de la 093 lo exige igual).
+  // Mismos roles que ven Equipos biomédicos; editar, solo ADMIN y MANTENIMIENTO (la RLS de la 098 lo exige igual).
   await requireRole(["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"]);
   const { plantillas, puedeEditar } = await getPlantillasBiomedicas();
 

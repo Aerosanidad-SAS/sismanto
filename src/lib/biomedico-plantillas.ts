@@ -1,4 +1,4 @@
-// Plantillas de texto del mantenimiento biomédico (migración 093), portado de includes/plantillasMantenimientoConfig.php
+// Plantillas de texto del mantenimiento biomédico (migración 098), portado de includes/plantillasMantenimientoConfig.php
 // de SISRES. Puro: lo usan las acciones, la configuración y el formulario.
 
 export const CAMPOS_PLANTILLA = [

@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 093: plantillas de texto del mantenimiento biomédico
+-- Migración 098: plantillas de texto del mantenimiento biomédico
 --
 -- SISRES: Inventario → Configurar → Plantillas de texto (configurarPlantillasMantenimiento.php, tabla
 -- mantenimiento_plantilla_texto, sql/mantenimiento_plantillas_texto_2026-09-30.sql). En el registro de mantenimiento,

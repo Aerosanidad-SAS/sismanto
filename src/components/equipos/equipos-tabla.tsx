@@ -136,7 +136,7 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
     resolver: zodResolver(biomedicalMaintenanceSchema),
   });
 
-  // Plantillas de texto del mantenimiento (migración 093): se leen la primera vez que se abre el registro.
+  // Plantillas de texto del mantenimiento (migración 098): se leen la primera vez que se abre el registro.
   const [plantillas, setPlantillas] = useState<{ plantillas: PlantillaTexto[]; puedeEditar: boolean }>({
     plantillas: [],
     puedeEditar: false,

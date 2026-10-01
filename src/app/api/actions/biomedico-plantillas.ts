@@ -12,7 +12,7 @@ import {
   type PlantillaTexto,
 } from "@/lib/biomedico-plantillas";
 
-// Plantillas de texto del mantenimiento biomédico. Esquema y RLS: migración 093.
+// Plantillas de texto del mantenimiento biomédico. Esquema y RLS: migración 098.
 const ROLES_LEER = ["ADMIN", "MANTENIMIENTO", "COORDINACION", "GERENCIAL", "ANALISTA", "VISTA"];
 const ROLES_EDITAR = ["ADMIN", "MANTENIMIENTO"];
 
