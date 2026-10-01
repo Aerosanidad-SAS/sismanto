@@ -36,7 +36,7 @@ export default function LoginPage() {
         if (!profile) {
           router.push("/pending");
         } else {
-          router.push(getDefaultRoute(profile.role_codigo));
+          router.push(profile.debe_cambiar_password ? "/cambiar-password" : getDefaultRoute(profile.role_codigo));
         }
         router.refresh();
       }
