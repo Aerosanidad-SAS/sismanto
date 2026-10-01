@@ -18,11 +18,11 @@ const supabaseWs = supabaseOrigin.replace(/^https:/, "wss:");
 const politicaCSP = [
   "default-src 'self'",
   // Next.js necesita scripts inline (bootstrap de hidratación) y eval en dev; en report-only no hay riesgo de romper nada.
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'", // Tailwind/shadcn inyectan estilos inline.
-  `img-src 'self' data: blob: ${supabaseOrigin}`,
-  "font-src 'self' data:",
-  `connect-src 'self' ${supabaseOrigin} ${supabaseWs}`,
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com", // Google Maps (cotizador)
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Tailwind/shadcn inline; fuentes de Google Maps.
+  `img-src 'self' data: blob: ${supabaseOrigin} https://*.googleapis.com https://*.gstatic.com https://*.google.com`,
+  "font-src 'self' data: https://fonts.gstatic.com",
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://maps.googleapis.com`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

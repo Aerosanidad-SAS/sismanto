@@ -118,6 +118,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "099_biomedical_documentos.sql",                  file: "scripts/migrations/099_biomedical_documentos.sql" },
   { name: "104_integraciones_config.sql",                   file: "scripts/migrations/104_integraciones_config.sql" },
   { name: "105_seguimiento_gps_servicio.sql",               file: "scripts/migrations/105_seguimiento_gps_servicio.sql" },
+  { name: "106_cotizaciones_ruta.sql",                       file: "scripts/migrations/106_cotizaciones_ruta.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
