@@ -201,7 +201,9 @@ export function OvemPortal({
     });
     if (result?.error) setError(result.error);
     else {
-      setSuccess("Checklist completado correctamente");
+      const aviso = result?.hallazgos?.mensaje;
+      if (aviso && (result?.hallazgos?.criticos ?? 0) > 0) setError(`Checklist guardado. ${aviso}`);
+      else setSuccess(aviso ? `Checklist guardado. ${aviso}` : "Checklist completado correctamente");
       setDailyCheckDone(true);
       router.refresh();
     }
