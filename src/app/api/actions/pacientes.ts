@@ -5,6 +5,8 @@ import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { PatientFormData } from "@/lib/validations";
 import { patientSchema } from "@/lib/validations";
+import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
+import { camposFaltantes, mensajeFaltantes } from "@/lib/campos-obligatorios";
 import { z } from "zod";
 import { requireRole } from "@/app/api/actions/auth";
 import { EXPORT_PACIENTES_MAX_FILAS, ROLES_EXPORTAR_PACIENTES, type PacienteExport } from "@/lib/pacientes-export";
@@ -115,6 +117,9 @@ export async function buscarPacientesTypeahead(busqueda: string): Promise<Pacien
 export async function crearPaciente(formData: PatientFormData) {
   const parsed = patientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  // Campos opcionales que el administrador volvió obligatorios (migración 101).
+  const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
+  if (faltan) return { error: faltan };
 
   const supabase = createClient();
 
@@ -150,6 +155,9 @@ export async function actualizarPaciente(id: number, formData: PatientFormData) 
 
   const parsed = patientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  // Campos opcionales que el administrador volvió obligatorios (migración 101).
+  const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
+  if (faltan) return { error: faltan };
 
   const supabase = createClient();
   const { error } = await supabase
