@@ -5,7 +5,7 @@ import { getUmbralesEstancado } from "@/app/api/actions/servicios-estancados";
 import { UMBRAL_ESTANCADO_HORAS, type UmbralesEstancado } from "@/lib/servicios-lista";
 
 /**
- * Umbrales de servicios estancados configurados por el ADMIN (migración 098). Mientras llegan se usan los de por
+ * Umbrales de servicios estancados configurados por el ADMIN (migración 103). Mientras llegan se usan los de por
  * defecto, que son los mismos que había fijos en el código.
  */
 export function useUmbralesEstancado(): UmbralesEstancado {

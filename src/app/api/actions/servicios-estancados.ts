@@ -7,7 +7,7 @@ import { getProfile } from "@/app/api/actions/auth";
 import { auditar } from "@/lib/auditoria";
 import { UMBRAL_ESTANCADO_HORAS, type UmbralesEstancado } from "@/lib/servicios-lista";
 
-// Umbral configurable de servicios estancados (migración 098, columnas de company_settings).
+// Umbral configurable de servicios estancados (migración 103, columnas de company_settings).
 
 export interface ConfigEstancado {
   activo: boolean;

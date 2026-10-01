@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { VehiculosTablaExpandible } from "@/components/vehiculos/vehiculos-tabla-expandible";
 import { getProfile } from "@/app/api/actions/auth";
 import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
+import { AlertasHojaDeVida } from "@/components/vehiculos/alertas-hoja-de-vida";
+import { hoyBogota } from "@/lib/fechas";
 
 async function getVehicles() {
   try {
@@ -18,8 +20,17 @@ async function getVehicles() {
   }
 }
 
+async function contarCostosEstimados(): Promise<number> {
+  try {
+    const { count } = await createClient().from("vehicle_annual_costs").select("id", { count: "exact", head: true }).eq("estimado", true);
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export default async function VehiculosPage() {
-  const [vehicles, profile] = await Promise.all([getVehicles(), getProfile()]);
+  const [vehicles, profile, estimados] = await Promise.all([getVehicles(), getProfile(), contarCostosEstimados()]);
   const puedeEditarEstado = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
 
   return (
@@ -28,6 +39,8 @@ export default async function VehiculosPage() {
         <h1 className="text-3xl">Vehículos</h1>
         <p className="mt-2 text-muted-foreground">Gestión de la flota de ambulancias</p>
       </div>
+
+      <AlertasHojaDeVida vehiculos={vehicles as any[]} hoy={hoyBogota()} estimados={estimados} />
 
       <Card>
         <CardHeader>

@@ -116,7 +116,7 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
   }, []);
 
   const revisar = useCallback(async () => {
-    // Umbral de estancados configurado por el ADMIN (migración 098): se lee en cada revisión para no quedar viejo.
+    // Umbral de estancados configurado por el ADMIN (migración 103): se lee en cada revisión para no quedar viejo.
     const [servicios, umbrales] = await Promise.all([getServiciosParaAvisos(), getUmbralesEstancado()]);
     const ahora = Date.now();
     const nuevos: Aviso[] = [];

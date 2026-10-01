@@ -249,7 +249,7 @@ export function ServiciosTabla({
   // así nunca se cuela en el payload de actualizarServicioMedico y pisa la
   // etapa real de un servicio ya existente.
   const [etapaInicial, setEtapaInicial] = useState<string>("");
-  // Umbral de servicios estancados configurado por el ADMIN (migración 098).
+  // Umbral de servicios estancados configurado por el ADMIN (migración 103).
   const umbralesEstancado = useUmbralesEstancado();
 
   const { register, handleSubmit, reset, setValue, watch, formState } =

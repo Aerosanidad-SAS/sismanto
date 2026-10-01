@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 098: umbral configurable de servicios estancados
+-- Migración 103: umbral configurable de servicios estancados
 --
 -- SISRES: Configuración General → «Alertas de Servicios Estancados» (includes/alertaEstancadoConfig.php, 2026-07-31):
 -- activar o no el aviso y las horas, desde la hora programada, a partir de las cuales un servicio en PROGRAMADO o

@@ -93,7 +93,7 @@ export function filtrosAQuery(filtros: FiltrosServicios, pagina = 1): string {
 }
 
 // ── Servicios estancados (includes/alertaEstancadoConfig.php) ──────────────
-// Horas desde la hora programada sin salir de la etapa. Configurables por el ADMIN (migración 098, Configuración →
+// Horas desde la hora programada sin salir de la etapa. Configurables por el ADMIN (migración 103, Configuración →
 // Servicios); estos son los valores por defecto mientras no se configure.
 export const UMBRAL_ESTANCADO_HORAS: Record<string, number> = { PROGRAMADO: 4, CURSO: 4 };
 
