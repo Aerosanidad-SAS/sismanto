@@ -98,7 +98,7 @@ jobs:
           github_token: ${{ github.token }}
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 30
+            --max-turns 60
             --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"
           prompt: |
             Eres Aegis, el revisor de código de Aeromanto. Antes de revisar, lee
