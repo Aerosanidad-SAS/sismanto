@@ -114,7 +114,7 @@ interface PacientesTablaProps {
   epsOptions: string[];
   /** Texto de la búsqueda actual (parámetro `q` de la URL); la búsqueda se hace en el servidor. */
   busqueda: string;
-  /** Campos opcionales que el administrador volvió obligatorios (migración 096): se marcan con *. */
+  /** Campos opcionales que el administrador volvió obligatorios (migración 101): se marcan con *. */
   obligatorios?: string[];
 }
 

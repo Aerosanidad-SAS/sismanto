@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 096: campos obligatorios configurables por módulo (motor genérico)
+-- Migración 101: campos obligatorios configurables por módulo (motor genérico)
 --
 -- SISRES: «Configurar campos» en 12 módulos (configurarCampos*.php + includes/camposObligatoriosGenerico.php, clave
 -- "{modulo}_obligatorio_{campo}" en configuracion_sistema). El administrador marca qué campos OPCIONALES de un

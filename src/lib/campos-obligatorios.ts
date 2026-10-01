@@ -1,4 +1,4 @@
-// Campos obligatorios configurables por módulo (migración 096), portado del motor genérico de SISRES
+// Campos obligatorios configurables por módulo (migración 101), portado del motor genérico de SISRES
 // (includes/camposObligatoriosGenerico.php + un *CamposConfig.php por módulo). Puro: lo usan las acciones de cada
 // módulo, la pantalla de configuración y los formularios.
 //

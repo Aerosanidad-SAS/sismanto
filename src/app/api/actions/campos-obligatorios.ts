@@ -7,7 +7,7 @@ import { getProfile } from "@/app/api/actions/auth";
 import { auditar } from "@/lib/auditoria";
 import { MODULOS_CAMPOS, camposDelModulo, esModuloCampos, filtrarConocidos } from "@/lib/campos-obligatorios";
 
-// Campos obligatorios configurables por módulo. Esquema y RLS: migración 096.
+// Campos obligatorios configurables por módulo. Esquema y RLS: migración 101.
 
 /**
  * Campos marcados como obligatorios en un módulo. Vacío si no hay sesión, el módulo no existe o la tabla aún no está

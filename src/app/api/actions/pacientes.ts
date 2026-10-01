@@ -117,7 +117,7 @@ export async function buscarPacientesTypeahead(busqueda: string): Promise<Pacien
 export async function crearPaciente(formData: PatientFormData) {
   const parsed = patientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-  // Campos opcionales que el administrador volvió obligatorios (migración 096).
+  // Campos opcionales que el administrador volvió obligatorios (migración 101).
   const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
   if (faltan) return { error: faltan };
 
@@ -155,7 +155,7 @@ export async function actualizarPaciente(id: number, formData: PatientFormData) 
 
   const parsed = patientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-  // Campos opcionales que el administrador volvió obligatorios (migración 096).
+  // Campos opcionales que el administrador volvió obligatorios (migración 101).
   const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
   if (faltan) return { error: faltan };
 
