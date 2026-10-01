@@ -118,8 +118,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "097_biomedical_checklists.sql",                   file: "scripts/migrations/097_biomedical_checklists.sql" },
   { name: "098_biomedical_plantillas_texto.sql",             file: "scripts/migrations/098_biomedical_plantillas_texto.sql" },
   { name: "099_biomedical_documentos.sql",                  file: "scripts/migrations/099_biomedical_documentos.sql" },
-  { name: "104_integraciones_config.sql",                   file: "scripts/migrations/104_integraciones_config.sql" },
-  { name: "105_seguimiento_gps_servicio.sql",               file: "scripts/migrations/105_seguimiento_gps_servicio.sql" },
+  { name: "107_rol_modulo_oculto.sql",                     file: "scripts/migrations/107_rol_modulo_oculto.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
