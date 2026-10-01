@@ -118,6 +118,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "097_biomedical_checklists.sql",                   file: "scripts/migrations/097_biomedical_checklists.sql" },
   { name: "098_biomedical_plantillas_texto.sql",             file: "scripts/migrations/098_biomedical_plantillas_texto.sql" },
   { name: "099_biomedical_documentos.sql",                  file: "scripts/migrations/099_biomedical_documentos.sql" },
+  { name: "100_inventario_notificaciones_area.sql",          file: "scripts/migrations/100_inventario_notificaciones_area.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import NextLink from "next/link";
 import { hoyBogota, sumarDias } from "@/lib/fechas";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
@@ -86,6 +87,14 @@ export default async function EquiposPage() {
           />
         </CardContent>
       </Card>
+
+      {profile?.role_codigo === "ADMIN" && (
+        <p className="text-sm text-muted-foreground">
+          <NextLink href="/equipos/notificaciones" className="underline">
+            Avisos de vencimiento por correo (Biomédica / Sistemas)
+          </NextLink>
+        </p>
+      )}
     </div>
   );
 }
