@@ -131,6 +131,8 @@ export async function restablecerContrasena(datos: z.input<typeof restablecerSch
 
   const { error } = await admin.auth.admin.updateUserById(usuario.userId, { password: parsed.data.nueva });
   if (error) return { error: "No se pudo cambiar la contraseña. Intente de nuevo o pida ayuda a un administrador." };
+  // La eligió la persona misma: ya no hace falta llevarla a /cambiar-password (marca de la carga masiva).
+  await admin.from("user_profiles").update({ debe_cambiar_password: false, updated_at: new Date().toISOString() } as never).eq("user_id", usuario.userId);
   await auditar("MODIFICAR", "login", usuario.userId, "Contraseña restablecida con código", ANONIMO);
   return { success: true as const };
 }
