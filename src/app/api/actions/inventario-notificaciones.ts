@@ -7,14 +7,14 @@ import { getProfile } from "@/app/api/actions/auth";
 import { auditar } from "@/lib/auditoria";
 import { AREAS_INVENTARIO, MAX_CORREOS_AREA, esAreaInventario, leerCorreos, type AreaInventario } from "@/lib/inventario-notificaciones";
 
-// Destinatarios de los avisos de vencimiento del inventario por área. Esquema y RLS: migración 095 (solo ADMIN).
+// Destinatarios de los avisos de vencimiento del inventario por área. Esquema y RLS: migración 100 (solo ADMIN).
 
 /** Correos configurados por área (vacío = comportamiento por defecto de esa área). */
 export async function getNotificacionesInventario(): Promise<Record<AreaInventario, string[]> | { error: string }> {
   const profile = await getProfile();
   if (!profile || profile.role_codigo !== "ADMIN") return { error: "Solo un Administrador puede ver esta configuración" };
   const { data, error } = await createClient().from("inventario_notificaciones_config").select("area, correos");
-  if (error) return { error: "La configuración todavía no está disponible (falta aplicar la migración 095)" };
+  if (error) return { error: "La configuración todavía no está disponible (falta aplicar la migración 100)" };
   const r = Object.fromEntries(AREAS_INVENTARIO.map(({ area }) => [area, [] as string[]])) as Record<AreaInventario, string[]>;
   for (const f of (data ?? []) as unknown as { area: string; correos: string[] | null }[]) {
     if (esAreaInventario(f.area)) r[f.area] = f.correos ?? [];

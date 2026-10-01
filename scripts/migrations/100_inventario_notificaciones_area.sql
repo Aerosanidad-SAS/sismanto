@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 095: destinatarios de los avisos de vencimiento del inventario, por área
+-- Migración 100: destinatarios de los avisos de vencimiento del inventario, por área
 --
 -- SISRES: Inventario → Configurar → Notificaciones (configurarNotificacionesInventario.php?area=biomedica|sistemas,
 -- includes/inventarioNotificacionConfig.php): cada área (Biomédica, Sistemas) tiene su lista de correos que recibe el

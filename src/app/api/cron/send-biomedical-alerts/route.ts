@@ -34,7 +34,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   const supabase = createAdminClient();
   const hoy = hoyBogota();
 
-  // ── 1. Destinatarios por área (migración 095). Biomédica sin correos configurados → los roles operativos de
+  // ── 1. Destinatarios por área (migración 100). Biomédica sin correos configurados → los roles operativos de
   //      siempre; Sistemas sin correos → no avisa (como SISRES). Si la tabla aún no existe, config vacía. ──
   const { data: config } = await supabase.from("inventario_notificaciones_config").select("area, correos");
   const correosPorArea = new Map(((config ?? []) as { area: string; correos: string[] | null }[]).map((c) => [c.area, c.correos ?? []]));

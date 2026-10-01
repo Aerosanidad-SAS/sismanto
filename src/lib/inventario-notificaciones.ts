@@ -1,4 +1,4 @@
-// Destinatarios de los avisos de vencimiento del inventario por área (migración 095), portado de
+// Destinatarios de los avisos de vencimiento del inventario por área (migración 100), portado de
 // includes/inventarioNotificacionConfig.php de SISRES. Puro: lo usan el cron, la acción y la pantalla.
 
 export const AREAS_INVENTARIO = [
