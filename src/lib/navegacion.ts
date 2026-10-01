@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BarChart3,
   Settings,
+  Plug,
   Settings2,
   ShieldCheck,
   Fuel,
@@ -307,6 +308,13 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: History,
         roles: ["ADMIN"],
         hint: "Quién hizo qué y cuándo (registro inmutable de auditoría).",
+      },
+      {
+        name: "Integraciones",
+        href: "/admin/integraciones",
+        icon: Plug,
+        roles: ["ADMIN"],
+        hint: "Credenciales de GPS (ProTrack365), plantilla de WhatsApp de ubicación y llave de Google Maps.",
       },
       {
         name: "Aerolíneas",
