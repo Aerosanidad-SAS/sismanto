@@ -93,17 +93,21 @@ export function filtrosAQuery(filtros: FiltrosServicios, pagina = 1): string {
 }
 
 // ── Servicios estancados (includes/alertaEstancadoConfig.php) ──────────────
-// Horas desde la hora programada sin salir de la etapa. En SISRES son
-// configurables (configuracion_sistema); acá quedan fijas hasta que
-// Regulación confirme los valores de producción.
+// Horas desde la hora programada sin salir de la etapa. Configurables por el ADMIN (migración 103, Configuración →
+// Servicios); estos son los valores por defecto mientras no se configure.
 export const UMBRAL_ESTANCADO_HORAS: Record<string, number> = { PROGRAMADO: 4, CURSO: 4 };
 
-/** Horas enteras de atraso si el servicio cruzó el umbral de su etapa; si no, null. */
+/** Umbrales vigentes por etapa, o null si el aviso de estancados está desactivado. */
+export type UmbralesEstancado = Record<string, number> | null;
+
+/** Horas enteras de atraso si el servicio cruzó el umbral de su etapa; si no (o si el aviso está apagado), null. */
 export function horasEstancado(
   s: { etapa: string; fecha_hora_programacion?: string | null },
-  ahora: number = Date.now()
+  ahora: number = Date.now(),
+  umbrales: UmbralesEstancado = UMBRAL_ESTANCADO_HORAS
 ): number | null {
-  const umbral = UMBRAL_ESTANCADO_HORAS[s.etapa];
+  if (!umbrales) return null;
+  const umbral = umbrales[s.etapa];
   if (!umbral || !s.fecha_hora_programacion) return null;
   const prog = Date.parse(s.fecha_hora_programacion);
   if (Number.isNaN(prog) || prog > ahora) return null;

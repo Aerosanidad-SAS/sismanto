@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { AlertaEstancadoCard } from "./alerta-estancado-card";
 import { createServiceType } from "@/app/api/actions/service-revenue";
 
 interface ServiceTypeRow {
@@ -48,6 +49,7 @@ export function ServiciosTab({ initialTypes }: { initialTypes: ServiceTypeRow[] 
 
   return (
     <div className="space-y-8">
+      <AlertaEstancadoCard />
       <Card>
         <CardHeader>
           <CardTitle>Tipos de servicio (prestación)</CardTitle>

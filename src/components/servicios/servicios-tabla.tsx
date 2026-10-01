@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { ArrowRightLeft, Lock, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fechaHora24, horasEstancado } from "@/lib/servicios-lista";
+import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
@@ -248,6 +250,8 @@ export function ServiciosTabla({
   // así nunca se cuela en el payload de actualizarServicioMedico y pisa la
   // etapa real de un servicio ya existente.
   const [etapaInicial, setEtapaInicial] = useState<string>("");
+  // Umbral de servicios estancados configurado por el ADMIN (migración 103).
+  const umbralesEstancado = useUmbralesEstancado();
 
   const { register, handleSubmit, reset, setValue, watch, formState } =
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
@@ -561,10 +565,11 @@ export function ServiciosTabla({
               </TableRow>
             )}
             {filtrados.map((s) => {
-              const estancado = horasEstancado({
-                etapa: s.etapa,
-                fecha_hora_programacion: (s.fecha_hora_programacion as string | null) ?? null,
-              });
+              const estancado = horasEstancado(
+                { etapa: s.etapa, fecha_hora_programacion: (s.fecha_hora_programacion as string | null) ?? null },
+                Date.now(),
+                umbralesEstancado
+              );
               return (
               <TableRow key={s.id}>
                 <TableCell className="w-12 !px-2 text-xs tabular-nums text-muted-foreground">{s.id}</TableCell>
@@ -602,7 +607,16 @@ export function ServiciosTabla({
                   <p className="truncate text-sm leading-tight" title={s.tipo_servicio}>
                     {s.tipo_servicio}
                   </p>
-                  <p className="text-xs leading-tight text-muted-foreground">Móvil {s.vehicles?.placa ?? s.movil_placa ?? "—"}</p>
+                  <p className="text-xs leading-tight text-muted-foreground">
+                    Móvil{" "}
+                    {s.vehicles?.placa && (s.etapa === "PROGRAMADO" || s.etapa === "CURSO") ? (
+                      <Link href={`/servicios/${s.id}/seguimiento`} className="underline" title="Ver la ambulancia en el mapa (GPS)">
+                        📍 {s.vehicles.placa}
+                      </Link>
+                    ) : (
+                      s.vehicles?.placa ?? s.movil_placa ?? "—"
+                    )}
+                  </p>
                 </TableCell>
                 <TableCell className="text-sm leading-tight">
                   {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
