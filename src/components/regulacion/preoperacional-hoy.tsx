@@ -29,7 +29,10 @@ export function PreoperacionalHoyCard({ datos }: { datos: PreoperacionalHoy }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {esperados === 0 && (
-          <p className="py-2 text-sm text-muted-foreground">Ningún vehículo tiene tripulación asignada hoy.</p>
+          <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            Regulación aún no asigna tripulaciones hoy: sin eso no se sabe qué vehículos deben operar ni quién debe hacer el
+            preoperacional. Los vehículos operativos se cuentan como esperados en cuanto tengan tripulación asignada.
+          </p>
         )}
 
         {esperados > 0 && pendientes.length === 0 && conFalla.length === 0 && (
