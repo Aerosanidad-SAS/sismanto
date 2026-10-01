@@ -50,7 +50,7 @@ export function DocumentosEquipo({ equipmentId }: { equipmentId: number }) {
   }, [equipmentId]);
 
   if (!estado) return <p className="text-xs text-muted-foreground">Cargando documentos…</p>;
-  // Código desplegado antes que la migración 094 (en producción las migraciones van a mano): aviso en vez de error.
+  // Código desplegado antes que la migración 099 (en producción las migraciones van a mano): aviso en vez de error.
   if (estado.sinTabla) return <p className="text-xs text-muted-foreground">Los documentos del equipo todavía no están disponibles.</p>;
 
   async function subir() {

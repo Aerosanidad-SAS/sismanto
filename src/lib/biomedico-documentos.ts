@@ -1,4 +1,4 @@
-// Documentos del equipo biomédico (migración 094), portado de includes/documentosEquipoConfig.php de SISRES.
+// Documentos del equipo biomédico (migración 099), portado de includes/documentosEquipoConfig.php de SISRES.
 // Puro: lo usan las acciones y el componente.
 
 export const BUCKET_DOCUMENTOS_EQUIPO = "equipos-documentos";

@@ -9,6 +9,8 @@ import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
 import { ServiciosDelDia, type ServicioDelDia } from "@/components/regulacion/servicios-del-dia";
 import { MantenimientoCard, VencimientosCard } from "@/components/regulacion/alertas-flota";
 import { BarraTablero } from "@/components/regulacion/barra-tablero";
+import { PreoperacionalHoyCard } from "@/components/regulacion/preoperacional-hoy";
+import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
@@ -28,12 +30,13 @@ export default async function RegulacionPage({
     redirect("/");
   }
 
-  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers] = await Promise.all([
+  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional] = await Promise.all([
     getTableroRegulacion(),
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
     getUsuariosPorRol("MEDICO"),
     getUsuariosPorRol("AUXILIAR_ENFERMERIA"),
+    getPreoperacionalHoy(),
   ]);
 
   const vehiculosOperativos = (fleet as { id: string; placa: string; estado_actual: string }[])
@@ -73,6 +76,8 @@ export default async function RegulacionPage({
           (s) => !prefijoDeCiudad || (s.ciudad_registro ?? "").toLowerCase().startsWith(prefijoDeCiudad)
         )}
       />
+
+      <PreoperacionalHoyCard datos={preoperacional} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <VencimientosCard vencimientos={tablero.vencimientos} />

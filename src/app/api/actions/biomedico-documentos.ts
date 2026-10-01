@@ -15,7 +15,7 @@ import {
   validarRutaDocumento,
 } from "@/lib/biomedico-documentos";
 
-// Documentos del equipo biomédico. Esquema, bucket y RLS: migración 094. El navegador sube el archivo a Storage con la
+// Documentos del equipo biomédico. Esquema, bucket y RLS: migración 099. El navegador sube el archivo a Storage con la
 // sesión del usuario; aquí se verifica el contenido y se registra (o se descarta el archivo).
 
 const ROLES_VER = ["ADMIN", "MANTENIMIENTO", "COORDINACION", "GERENCIAL", "ANALISTA", "VISTA"];

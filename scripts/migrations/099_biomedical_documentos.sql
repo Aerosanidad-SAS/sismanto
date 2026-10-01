@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 094: documentos del equipo biomédico (Registro INVIMA, manuales, guías, fichas, certificados)
+-- Migración 099: documentos del equipo biomédico (Registro INVIMA, manuales, guías, fichas, certificados)
 --
 -- SISRES: tabla inventario_documento (sql/inventario_documentos_2026-09-30.sql, commit 1c93eb9), archivos en
 -- img/documentosInventario/. Se adjuntan al EQUIPO, no a cada mantenimiento: se suben una vez y se ven en la hoja de
