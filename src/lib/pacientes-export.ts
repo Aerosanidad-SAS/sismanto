@@ -75,6 +75,34 @@ export const COLUMNAS_EXPORT_PACIENTES: [titulo: string, valor: (p: PacienteExpo
   ["ESTADO", (p) => (p.activo === false ? "Inactivo" : "Activo")],
 ];
 
+/** Roles a los que el Excel de servicios les agrega los datos del paciente: los mismos que pueden exportar pacientes. */
+export function exportaDatosPaciente(rol: string): boolean {
+  return (ROLES_EXPORTAR_PACIENTES as readonly string[]).includes(rol);
+}
+
+/** Campos de `patients` que se embeben en el Excel de servicios (`patients(...)`). */
+export const CAMPOS_PACIENTE_EN_SERVICIO =
+  "id, cedula, tipo_documento, nombre1, nombre2, apellido1, apellido2, fecha_nacimiento, direccion, barrio, localidad, departamento, ciudad, rh, sexo, estatura, eps, celular, correo, activo";
+
+// SISRES 07ae2f6 (2026-10-01): el Excel de servicios lleva, a la derecha, las columnas del paciente. ID y cédula no se
+// repiten (el servicio ya trae su cédula); «PACIENTE REGISTRADO» dice si el servicio tiene paciente en el registro.
+const COLUMNAS_PACIENTE_EN_SERVICIO = COLUMNAS_EXPORT_PACIENTES.filter(([titulo]) => titulo !== "ID" && titulo !== "CEDULA");
+
+export const TITULOS_PACIENTE_EN_SERVICIO = [
+  "PACIENTE REGISTRADO",
+  ...COLUMNAS_PACIENTE_EN_SERVICIO.map(([titulo]) => `PACIENTE - ${titulo}`),
+];
+
+/**
+ * Celdas del paciente para una fila del Excel de servicios. Registrado = el servicio tiene patient_id; si la RLS no
+ * deja leer a ese paciente, sus columnas salen vacías.
+ */
+export function celdasPacienteEnServicio(patientId: unknown, p: PacienteExport | null, hoyIso: string): unknown[] {
+  const registrado = patientId !== null && patientId !== undefined;
+  const datos = COLUMNAS_PACIENTE_EN_SERVICIO.map(([, valor]) => (p ? valor(p, hoyIso) : ""));
+  return [registrado ? "SI" : "NO", ...datos];
+}
+
 /** Matriz lista para `aoa_to_sheet`: encabezados + una fila por paciente, con celdas a prueba de fórmulas. */
 export function matrizExportPacientes(pacientes: PacienteExport[], hoyIso: string): (string | number)[][] {
   return [

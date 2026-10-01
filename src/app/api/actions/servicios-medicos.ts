@@ -11,6 +11,8 @@ import { centroVisible, type UserRole } from "@/lib/auth-utils";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
+import { hoyBogota } from "@/lib/fechas";
+import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -261,11 +263,13 @@ export async function exportarServicios(filtros: FiltrosServicios) {
   const profile = await requireRole(ROLES_LISTA_SERVICIOS);
   const supabase = createClient();
   const filas: Record<string, unknown>[] = [];
+  // Datos del paciente solo para quien ya puede exportar pacientes: a los demás roles no se les vuelca la tabla por aquí.
+  const conPaciente = exportaDatosPaciente(profile.role_codigo);
   const LOTE = 1000; // PostgREST devuelve máximo 1000 filas por consulta
   for (let desde = 0; desde < EXPORT_MAX_FILAS; desde += LOTE) {
     const query = supabase
       .from("medical_services")
-      .select("*, vehicles(placa)")
+      .select(conPaciente ? `*, vehicles(placa), patients(${CAMPOS_PACIENTE_EN_SERVICIO})` : "*, vehicles(placa)")
       .order("fecha_hora_registro", { ascending: false })
       .order("id", { ascending: false })
       .range(desde, desde + LOTE - 1);
@@ -275,14 +279,22 @@ export async function exportarServicios(filtros: FiltrosServicios) {
     if (!data || data.length < LOTE) break;
   }
   // Quién sacó datos de servicios (pacientes, diagnósticos) a un archivo y cuántas filas: solo la cuenta, no el contenido.
-  await auditar("EXPORTAR", "servicios", "", `Exportación de servicios (${filas.length} filas${filas.length >= EXPORT_MAX_FILAS ? ", truncada" : ""})`);
+  await auditar(
+    "EXPORTAR",
+    "servicios",
+    "",
+    `Exportación de servicios (${filas.length} filas${filas.length >= EXPORT_MAX_FILAS ? ", truncada" : ""}${conPaciente ? ", con datos del paciente" : ""})`
+  );
+  const hoy = hoyBogota();
   return {
-    filas: filas.map((s) => ({
+    filas: filas.map(({ patients, ...s }) => ({
       ...s,
       movil: (s.vehicles as { placa?: string } | null)?.placa ?? s.movil_placa ?? "",
       diagnostico: [s.cie_codigo, s.cie_descripcion].filter(Boolean).join(" — "),
+      paciente: conPaciente ? celdasPacienteEnServicio(s.patient_id, (patients ?? null) as PacienteExport | null, hoy) : null,
     })),
     truncado: filas.length >= EXPORT_MAX_FILAS,
+    conPaciente,
   };
 }
 
