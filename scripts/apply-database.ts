@@ -116,6 +116,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "095_usuarios_codigo_acceso_cambio_clave.sql",     file: "scripts/migrations/095_usuarios_codigo_acceso_cambio_clave.sql" },
   { name: "096_checklist_por_tipo_vehiculo.sql",             file: "scripts/migrations/096_checklist_por_tipo_vehiculo.sql" },
   { name: "099_biomedical_documentos.sql",                  file: "scripts/migrations/099_biomedical_documentos.sql" },
+  { name: "107_rol_modulo_oculto.sql",                     file: "scripts/migrations/107_rol_modulo_oculto.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
