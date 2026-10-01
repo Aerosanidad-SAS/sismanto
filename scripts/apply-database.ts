@@ -17,6 +17,10 @@ import pg from "pg";
 //   013_coordinacion_role_access.sql → duplicado parcial de 013_coordinacion_capacitaciones.sql
 //   018_kia_picanto_bogota.sql  → SUPERSEDED (Kia Picanto no son vehículos de flota)
 //   021_reset_fuel_logs_manual_reload.sql → TRUNCATE destructivo, no repetir
+//   026_clear_maintenance_records.sql → limpieza destructiva, no repetir
+//   027_tco_debug_seed.sql      → datos semilla de debug
+//   024_ai_usage_log.sql        → nunca estuvo registrada; sin decidir si se registra
+// Toda migración nueva va en MIGRATIONS o aquí con su motivo: src/lib/migraciones-registradas.test.ts lo exige.
 const MIGRATIONS: { name: string; file: string }[] = [
   { name: "schema.sql",                              file: "scripts/schema.sql" },
   { name: "002_iteracion2.sql",                      file: "scripts/migrations/002_iteracion2.sql" },
@@ -118,6 +122,12 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "097_biomedical_checklists.sql",                   file: "scripts/migrations/097_biomedical_checklists.sql" },
   { name: "098_biomedical_plantillas_texto.sql",             file: "scripts/migrations/098_biomedical_plantillas_texto.sql" },
   { name: "099_biomedical_documentos.sql",                  file: "scripts/migrations/099_biomedical_documentos.sql" },
+  { name: "100_inventario_notificaciones_area.sql",    file: "scripts/migrations/100_inventario_notificaciones_area.sql" },
+  { name: "101_campos_obligatorios.sql",               file: "scripts/migrations/101_campos_obligatorios.sql" },
+  { name: "102_codigos_recuperacion_contrasena.sql",   file: "scripts/migrations/102_codigos_recuperacion_contrasena.sql" },
+  { name: "103_umbral_servicios_estancados.sql",       file: "scripts/migrations/103_umbral_servicios_estancados.sql" },
+  { name: "104_integraciones_config.sql",              file: "scripts/migrations/104_integraciones_config.sql" },
+  { name: "105_seguimiento_gps_servicio.sql",          file: "scripts/migrations/105_seguimiento_gps_servicio.sql" },
   { name: "107_rol_modulo_oculto.sql",                     file: "scripts/migrations/107_rol_modulo_oculto.sql" },
 ];
 
