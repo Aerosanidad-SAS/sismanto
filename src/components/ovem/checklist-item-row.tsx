@@ -15,6 +15,8 @@ export interface ChecklistItem {
   cantidad_esperada: string | null;
   orden: number;
   activo: boolean;
+  /** NULL = aplica a todos los tipos de vehículo (migración 096). */
+  tipos_vehiculo?: string[] | null;
 }
 
 export interface ChecklistItemState {
