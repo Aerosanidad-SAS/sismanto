@@ -14,6 +14,8 @@ import {
 } from "@/lib/validations";
 import type { RoadAccidentFormData } from "@/lib/validations";
 import { validarPreoperacional } from "@/lib/preoperacional";
+import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
+import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
 
 /** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
 function hoyOvem() {
@@ -24,7 +26,7 @@ export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACI
   const supabase = createClient();
   const { data, error } = await supabase
     .from("checklist_items")
-    .select("id, categoria, descripcion, cantidad_esperada, orden, activo")
+    .select("id, categoria, descripcion, cantidad_esperada, orden, activo, severidad_falla")
     .eq("activo", true)
     .eq("lista", lista)
     .order("orden", { ascending: true });
@@ -133,8 +135,34 @@ export async function submitDailyCheck(data: {
     .upsert(payload, { onConflict: "daily_check_id,checklist_item_id" });
   if (itemsErr) return { error: itemsErr.message };
 
+  // Motor de alertas: las fallas y los documentos vencidos se vuelven novedades; las críticas sacan el vehículo de
+  // servicio. Un fallo aquí no debe perder el preoperacional que ya quedó guardado.
+  const porId = new Map((catalogo as any[]).map((c) => [c.id as number, c]));
+  let hallazgos: Awaited<ReturnType<typeof registrarHallazgosPreoperacional>> | null = null;
+  try {
+    hallazgos = await registrarHallazgosPreoperacional(supabase, {
+      vehicleId: row.vehicleId,
+      reportadoPor: profile.nombre_completo || profile.email || "OVEM",
+      hoy: fecha,
+      items: (row.items ?? []).map((it) => {
+        const c = porId.get(it.checklistItemId);
+        return {
+          descripcion: c?.descripcion ?? `Ítem ${it.checklistItemId}`,
+          estado: it.estado,
+          observacion: it.observacion,
+          severidadFalla: (c?.severidad_falla as SeveridadFalla | undefined) ?? null,
+        };
+      }),
+    });
+  } catch (e) {
+    console.error("[preoperacional] no se pudieron registrar los hallazgos:", e instanceof Error ? e.message : e);
+  }
+
   revalidatePath("/ovem");
-  return { success: true };
+  revalidatePath("/novedades");
+  revalidatePath("/regulacion");
+  revalidatePath("/vehiculos");
+  return { success: true, hallazgos };
 }
 
 export async function updateKilometrajeOdometer(
