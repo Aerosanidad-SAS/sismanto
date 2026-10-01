@@ -110,8 +110,10 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "089_costos_anuales_y_funcion_costos.sql",        file: "scripts/migrations/089_costos_anuales_y_funcion_costos.sql" },
   { name: "090_preoperacional_solo_del_dia.sql",             file: "scripts/migrations/090_preoperacional_solo_del_dia.sql" },
   { name: "091_servicio_opciones_campo.sql",                 file: "scripts/migrations/091_servicio_opciones_campo.sql" },
-  { name: "099_integraciones_config.sql",                   file: "scripts/migrations/099_integraciones_config.sql" },
-  { name: "100_seguimiento_gps_servicio.sql",               file: "scripts/migrations/100_seguimiento_gps_servicio.sql" },
+  { name: "092_hoja_de_vida_vehiculos.sql",                  file: "scripts/migrations/092_hoja_de_vida_vehiculos.sql" },
+  { name: "093_combustible_carga_proveedor.sql",             file: "scripts/migrations/093_combustible_carga_proveedor.sql" },
+  { name: "104_integraciones_config.sql",                   file: "scripts/migrations/104_integraciones_config.sql" },
+  { name: "105_seguimiento_gps_servicio.sql",               file: "scripts/migrations/105_seguimiento_gps_servicio.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

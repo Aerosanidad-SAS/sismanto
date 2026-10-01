@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 099: credenciales y parámetros de integraciones externas, editables desde la aplicación
+-- Migración 104: credenciales y parámetros de integraciones externas, editables desde la aplicación
 --
 -- Para el rastreo GPS (ProTrack365), el aviso «su vehículo va en camino» por WhatsApp y la cotización de rutas
 -- (Google Maps). En SISRES estaban en bd/secrets.php y en el código (cuenta 'AEROSANIDAD'); aquí el ADMIN las escribe en
