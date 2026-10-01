@@ -1,6 +1,6 @@
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 
-// Recuperación de contraseña con código por correo (migración 097), como recuperarPassword.php de SISRES.
+// Recuperación de contraseña con código por correo (migración 102), como recuperarPassword.php de SISRES.
 // Solo servidor (usa node:crypto).
 
 export const MINUTOS_VIGENCIA_CODIGO = 15;

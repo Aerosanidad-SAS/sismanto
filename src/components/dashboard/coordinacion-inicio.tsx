@@ -7,6 +7,8 @@ import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import type { ResumenOperativoConsolidado } from "@/app/api/actions/estadisticas-servicios";
 import type { VehiculoDelDia } from "@/app/api/actions/coordinacion";
 import { CIUDADES_SERVICIO } from "@/lib/servicios-lista";
+import { PreoperacionalHoyCard } from "@/components/regulacion/preoperacional-hoy";
+import type { PreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
 
 const ETAPA_VARIANTE: Record<string, "default" | "secondary" | "success" | "destructive" | "outline"> = {
   PROGRAMADO: "secondary",
@@ -28,10 +30,12 @@ export function CoordinacionInicio({
   resumen,
   ciudad,
   flota,
+  preoperacional,
 }: {
   resumen: ResumenOperativoConsolidado;
   ciudad: string;
   flota: VehiculoDelDia[];
+  preoperacional: PreoperacionalHoy;
 }) {
   const nombreCiudad = CIUDADES_SERVICIO.find((c) => c.clave === ciudad)?.nombre;
   const totalServicios = flota.reduce((s, v) => s + v.servicios.length, 0);
@@ -89,6 +93,8 @@ export function CoordinacionInicio({
           )}
         </CardContent>
       </Card>
+
+      <PreoperacionalHoyCard datos={preoperacional} />
 
       {/* Placeholder: el copago se capta en el formulario de servicio (paridad SISRES, a cargo de León y David).
           Cuando existan copago_esperado / copago_cobrado y la tabla de reglas por cliente y plan, esta tarjeta

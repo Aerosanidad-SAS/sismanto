@@ -16,7 +16,7 @@ import {
   normalizarCedula,
 } from "@/lib/recuperar-contrasena";
 
-// Recuperar la contraseña con un código por correo (migración 097), como recuperarPassword.php de SISRES.
+// Recuperar la contraseña con un código por correo (migración 102), como recuperarPassword.php de SISRES.
 // Es público (sin sesión): todo pasa por la clave de servicio y las respuestas no revelan si una cédula tiene cuenta.
 
 const MENSAJE_ENVIO =

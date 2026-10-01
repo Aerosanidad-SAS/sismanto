@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 097: códigos para recuperar la contraseña
+-- Migración 102: códigos para recuperar la contraseña
 --
 -- SISRES: recuperarPassword.php (2026-08-06, tabla password_reset_codes): con la cédula se envía al correo del
 -- perfil un código de 6 dígitos, válido 15 minutos, de un solo uso y con máximo 5 intentos. En SISMANTO no había
