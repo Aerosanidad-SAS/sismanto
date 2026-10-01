@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import type { VehiculoConDocumentos } from "@/lib/vencimientos";
 import { ChecklistItemRow, agruparPorCategoria, checklistPayload, type ChecklistItem } from "./checklist-item-row";
 import { validarPreoperacional } from "@/lib/preoperacional";
+import { aplicaAlTipo } from "@/lib/checklist-tipo";
 import { CombustibleForm } from "./combustible-form";
 import { SiniestroForm } from "./siniestro-form";
 import { DocumentosVehiculo } from "./documentos-vehiculo";
@@ -52,6 +53,7 @@ interface OvemPortalProps {
       modelo?: string | null;
       estado_actual?: string;
       centro_operativo?: string;
+      tipo_vehiculo?: string | null;
     }
   >;
   checklistItems: ChecklistItem[];
@@ -154,9 +156,11 @@ export function OvemPortal({
         const co = selectedVehicle?.centro_operativo;
         if (!co || String(co).toUpperCase() !== "AIRPLAN") return false;
       }
+      // Dos listas: ambulancia (TAB/TAM) y automóvil o van (DOMI, VAN, ADMIN). Lo que no aplica va como NO_APLICA.
+      if (!aplicaAlTipo(it.tipos_vehiculo, selectedVehicle?.tipo_vehiculo)) return false;
       return true;
     });
-  }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo]);
+  }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo, selectedVehicle?.tipo_vehiculo]);
 
   const checklistItemsByCategoria = useMemo(() => agruparPorCategoria(checklistFiltrado), [checklistFiltrado]);
 
@@ -201,7 +205,9 @@ export function OvemPortal({
     });
     if (result?.error) setError(result.error);
     else {
-      setSuccess("Checklist completado correctamente");
+      const aviso = result?.hallazgos?.mensaje;
+      if (aviso && (result?.hallazgos?.criticos ?? 0) > 0) setError(`Checklist guardado. ${aviso}`);
+      else setSuccess(aviso ? `Checklist guardado. ${aviso}` : "Checklist completado correctamente");
       setDailyCheckDone(true);
       router.refresh();
     }
