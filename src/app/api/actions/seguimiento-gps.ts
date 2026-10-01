@@ -14,7 +14,7 @@ import { enviarCorreo } from "@/lib/notifications/email";
 import { permitirIntento } from "@/lib/rate-limit-memoria";
 
 // Rastreo GPS de la ambulancia de un servicio (ProTrack365), portado de PHPMailer/seguimiento.php y
-// enviarNotificacion.php de SISRES. Credenciales: Administración → Integraciones (migración 099). Token: migración 100.
+// enviarNotificacion.php de SISRES. Credenciales: Administración → Integraciones (migración 104). Token: migración 105.
 
 /** Mismos roles que ven la lista de servicios. La RLS de medical_services decide qué servicio puede leer cada uno. */
 const ROLES_SEGUIMIENTO = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"];

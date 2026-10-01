@@ -9,7 +9,7 @@ import { CAMPOS_INTEGRACION, campoIntegracion, enmascarar, type EstadoCampoInteg
 import { leerIntegracionesGuardadas, valorIntegracion } from "@/lib/integraciones-servidor";
 import { tokenProtrack } from "@/lib/gps/protrack";
 
-// Administración → Integraciones (migración 099). Solo ADMIN. Nunca devuelve un secreto completo.
+// Administración → Integraciones (migración 104). Solo ADMIN. Nunca devuelve un secreto completo.
 
 async function admin() {
   const profile = await getProfile();

@@ -1,4 +1,4 @@
-// Parámetros de integraciones externas editables por el ADMIN (migración 099). Puro: el catálogo y cómo se muestran.
+// Parámetros de integraciones externas editables por el ADMIN (migración 104). Puro: el catálogo y cómo se muestran.
 // La lectura real (con la clave de servicio y el respaldo en variables de entorno) está en integraciones-servidor.ts.
 
 export interface CampoIntegracion {

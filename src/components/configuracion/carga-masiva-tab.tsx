@@ -2,6 +2,8 @@
 
 import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
+import { HojaDeVidaImport } from "@/components/configuracion/hoja-de-vida-import";
+import { CombustibleProveedorImport } from "@/components/configuracion/combustible-proveedor-import";
 import {
   importarMantenimientos,
   importarCombustible,
@@ -214,6 +216,8 @@ export function CargaMasivaTab() {
 
   return (
     <div className="space-y-6">
+      <HojaDeVidaImport />
+      <CombustibleProveedorImport />
       <Card>
         <CardHeader>
           <CardTitle>Carga Masiva de Datos</CardTitle>

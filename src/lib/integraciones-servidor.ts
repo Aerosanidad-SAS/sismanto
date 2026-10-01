@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CAMPOS_INTEGRACION, campoIntegracion } from "@/lib/integraciones";
 
-// Lectura de los parámetros de integraciones (migración 099) SOLO en el servidor, con la clave de servicio: la tabla
+// Lectura de los parámetros de integraciones (migración 104) SOLO en el servidor, con la clave de servicio: la tabla
 // no tiene políticas. Orden: valor escrito en la aplicación → variable de entorno → valor por defecto del catálogo.
 // Nunca importar esto desde un componente de cliente (usa la clave de servicio).
 

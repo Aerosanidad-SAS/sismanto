@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 100: enlace público de seguimiento GPS del servicio
+-- Migración 105: enlace público de seguimiento GPS del servicio
 --
 -- SISRES: servicios.token_seguimiento (includes/seguimientoHelper.php) + PHPMailer/seguimiento.php?token=: el paciente
 -- recibe por WhatsApp/correo un enlace, sin sesión, para ver en el mapa la ambulancia que va en camino. El token es

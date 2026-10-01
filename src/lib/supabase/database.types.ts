@@ -204,6 +204,12 @@ export type Database = {
           costo_soat_anual: number | null
           costo_tecnomecanica_anual: number | null
           costo_poliza_anual: number | null
+          tipo_vehiculo: string | null
+          color: string | null
+          propietario: string | null
+          fecha_matricula: string | null
+          km_actual: number | null
+          fecha_km_actual: string | null
           estado_actual: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
           centro_operativo: string
           centro_operativo_id: number | null
@@ -240,6 +246,12 @@ export type Database = {
           costo_soat_anual?: number | null
           costo_tecnomecanica_anual?: number | null
           costo_poliza_anual?: number | null
+          tipo_vehiculo?: string | null
+          color?: string | null
+          propietario?: string | null
+          fecha_matricula?: string | null
+          km_actual?: number | null
+          fecha_km_actual?: string | null
           estado_actual?: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
           centro_operativo: string
           centro_operativo_id?: number | null
@@ -275,6 +287,12 @@ export type Database = {
           costo_soat_anual?: number | null
           costo_tecnomecanica_anual?: number | null
           costo_poliza_anual?: number | null
+          tipo_vehiculo?: string | null
+          color?: string | null
+          propietario?: string | null
+          fecha_matricula?: string | null
+          km_actual?: number | null
+          fecha_km_actual?: string | null
           estado_actual?: 'OPERATIVO' | 'FUERA_DE_SERVICIO'
           centro_operativo?: string
           centro_operativo_id?: number | null
