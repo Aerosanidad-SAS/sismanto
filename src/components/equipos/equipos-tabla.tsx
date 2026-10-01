@@ -114,7 +114,7 @@ interface EquiposTablaProps {
   equipos: EquipoRow[];
   mantenimientos: MantenimientoBioRow[];
   puedeEditar: boolean;
-  /** Listas de chequeo por tipo de equipo (migración 092); vacío = el mantenimiento se registra sin checklist. */
+  /** Listas de chequeo por tipo de equipo (migración 097); vacío = el mantenimiento se registra sin checklist. */
   checklists?: CatalogoChecklists;
 }
 

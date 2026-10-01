@@ -4,7 +4,7 @@ import { getChecklistsBiomedicos } from "@/app/api/actions/inventario-biomedico"
 import { ChecklistsBiomedicos } from "@/components/equipos/checklists-biomedicos";
 
 export default async function ChecklistsBiomedicosPage() {
-  // Mismos roles que ven Equipos biomédicos; editar, solo ADMIN y MANTENIMIENTO (la RLS de la 092 lo exige igual).
+  // Mismos roles que ven Equipos biomédicos; editar, solo ADMIN y MANTENIMIENTO (la RLS de la 097 lo exige igual).
   await requireRole(["ADMIN", "MANTENIMIENTO", "COORDINACION", "ANALISTA", "VISTA"]);
   const [profile, checklists] = await Promise.all([getProfile(), getChecklistsBiomedicos()]);
   const puedeEditar = ["ADMIN", "MANTENIMIENTO"].includes(profile?.role_codigo ?? "");

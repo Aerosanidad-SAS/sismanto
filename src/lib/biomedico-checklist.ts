@@ -1,4 +1,4 @@
-// Listas de chequeo del mantenimiento biomédico (migración 092), portado de SISRES:
+// Listas de chequeo del mantenimiento biomédico (migración 097), portado de SISRES:
 // includes/normalizarEquipo.php + includes/mantenimientoChecklistHelper.php + el armado del formulario de
 // registroMantenimientoBiomedica.php. Puro (sin base de datos): lo usan las acciones, la configuración y el formulario.
 

@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 092: listas de chequeo del mantenimiento biomédico, configurables por tipo de equipo
+-- Migración 097: listas de chequeo del mantenimiento biomédico, configurables por tipo de equipo
 --
 -- SISRES: Inventario → Configurar → Listas de chequeo (mostrarChecklistMantenimiento.php, tabla
 -- mantenimiento_checklist, sql/checklist_mantenimiento_2026-07-31.sql). Cada tipo de equipo tiene su lista de ítems;

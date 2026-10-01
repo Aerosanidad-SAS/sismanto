@@ -215,7 +215,7 @@ const checklistEnviadoSchema = z
   .optional();
 
 /**
- * `checklist`: todos los ítems que se mostraron y los que se marcaron como «cumple» (migración 092). Si no viene
+ * `checklist`: todos los ítems que se mostraron y los que se marcaron como «cumple» (migración 097). Si no viene
  * o está vacío, el mantenimiento se guarda sin checklist, como antes.
  */
 export async function crearMantenimientoBiomedico(
@@ -268,7 +268,7 @@ export async function crearMantenimientoBiomedico(
   return { success: true, data };
 }
 
-// ── Listas de chequeo (migración 092) ────────────────────────
+// ── Listas de chequeo (migración 097) ────────────────────────
 
 const ROLES_LEER_CHECKLIST = ["ADMIN", "MANTENIMIENTO", "COORDINACION", "GERENCIAL", "ANALISTA", "VISTA"];
 const ROLES_EDITAR_CHECKLIST = ["ADMIN", "MANTENIMIENTO"];
