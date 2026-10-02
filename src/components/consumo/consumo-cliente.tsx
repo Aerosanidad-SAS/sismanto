@@ -12,7 +12,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 import {
   Card,
@@ -22,6 +21,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ChartFigure } from "@/components/charts/chart-figure";
+import { describeSeries } from "@/lib/chart-summary";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/forms/date-field";
 import {
@@ -230,31 +231,46 @@ export function ConsumoCliente({
               o verifique cargas por mes.
             </p>
           ) : (
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={chartLineRendimiento} margin={{ left: 4, right: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mesLabel" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
-                <Tooltip
-                  formatter={(value) => {
-                    const v = typeof value === "number" ? value : Number(value);
-                    return v != null && !Number.isNaN(v)
-                      ? [`${v} km/gal`, "Promedio"]
-                      : ["Sin dato", ""];
-                  }}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="km/gal"
-                  name="km/gal (prom.)"
-                  stroke="hsl(var(--chart-1))"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <ChartFigure
+              label={describeSeries({
+                title: "Rendimiento mensual en km por galón",
+                rows: chartLineRendimiento,
+                labelKey: "mesLabel",
+                valueKey: "km/gal",
+                format: (v) => `${v.toFixed(2)} km/gal`,
+                noun: ["mes", "meses"],
+              })}
+              columns={[
+                { key: "mesLabel", header: "Mes" },
+                { key: "km/gal", header: "km/gal (prom.)" },
+              ]}
+              rows={chartLineRendimiento}
+            >
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={chartLineRendimiento} margin={{ left: 4, right: 8 }} accessibilityLayer>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mesLabel" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} domain={["auto", "auto"]} />
+                  <Tooltip
+                    formatter={(value) => {
+                      const v = typeof value === "number" ? value : Number(value);
+                      return v != null && !Number.isNaN(v)
+                        ? [`${v} km/gal`, "Promedio"]
+                        : ["Sin dato", ""];
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="km/gal"
+                    name="km/gal (prom.)"
+                    stroke="hsl(var(--chart-1))"
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartFigure>
           )}
         </CardContent>
       </Card>
@@ -268,15 +284,32 @@ export function ConsumoCliente({
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            <ResponsiveContainer width="100%" height={Math.min(720, 120 + chartDataConsumo.length * 18)}>
-              <BarChart data={chartDataConsumo} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="placa" width={72} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [`${v} km/gal`, ""]} />
-                <Bar dataKey="km/gal" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ChartFigure
+              label={describeSeries({
+                title: "Rendimiento por vehículo en km por galón",
+                rows: chartDataConsumo,
+                labelKey: "placa",
+                valueKey: "km/gal",
+                format: (v) => `${v.toFixed(2)} km/gal`,
+                noun: ["vehículo", "vehículos"],
+                labelPrefix: "placa",
+              })}
+              columns={[
+                { key: "placa", header: "Placa" },
+                { key: "km/gal", header: "km/gal" },
+              ]}
+              rows={chartDataConsumo}
+            >
+              <ResponsiveContainer width="100%" height={Math.min(720, 120 + chartDataConsumo.length * 18)}>
+                <BarChart data={chartDataConsumo} layout="vertical" margin={{ left: 8, right: 16 }} accessibilityLayer>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="placa" width={72} interval={0} tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v: number) => [`${v} km/gal`, ""]} />
+                  <Bar dataKey="km/gal" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartFigure>
           </CardContent>
         </Card>
       )}
@@ -353,22 +386,39 @@ export function ConsumoCliente({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartDataKm} margin={{ top: 8, right: 12, left: 4, bottom: 64 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="placa"
-                  tick={{ fontSize: 11 }}
-                  angle={-30}
-                  textAnchor="end"
-                  height={62}
-                  interval={0}
-                />
-                <YAxis tickFormatter={(v) => v.toLocaleString()} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [`${v.toLocaleString()} km`, ""]} />
-                <Bar dataKey="km" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ChartFigure
+              label={describeSeries({
+                title: "Km recorridos por vehículo",
+                rows: chartDataKm,
+                labelKey: "placa",
+                valueKey: "km",
+                format: (v) => `${Math.round(v).toLocaleString("es-CO")} km`,
+                noun: ["vehículo", "vehículos"],
+                labelPrefix: "placa",
+              })}
+              columns={[
+                { key: "placa", header: "Placa" },
+                { key: "km", header: "Km recorridos", format: (v) => Number(v).toLocaleString("es-CO") },
+              ]}
+              rows={chartDataKm}
+            >
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={chartDataKm} margin={{ top: 8, right: 12, left: 4, bottom: 64 }} accessibilityLayer>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="placa"
+                    tick={{ fontSize: 12 }}
+                    angle={-30}
+                    textAnchor="end"
+                    height={62}
+                    interval={0}
+                  />
+                  <YAxis tickFormatter={(v) => v.toLocaleString()} tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v: number) => [`${v.toLocaleString()} km`, ""]} />
+                  <Bar dataKey="km" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartFigure>
           </CardContent>
         </Card>
       )}
