@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useId } from "react";
 import { Check, ChevronsUpDown, Loader2, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -65,8 +66,9 @@ function TipoCell({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className="flex items-center gap-1 group focus:outline-none"
-          title="Haz clic para cambiar"
+          type="button"
+          className="flex items-center gap-1 group rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Cambiar tipo de mantenimiento: ${tipo}`}
         >
           <Badge
             variant={tipo === "PREVENTIVO" ? "default" : "secondary"}
@@ -76,7 +78,7 @@ function TipoCell({
           </Badge>
           {saving
             ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-            : <ChevronsUpDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            : <ChevronsUpDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
           }
         </button>
       </PopoverTrigger>
@@ -144,15 +146,16 @@ function CategoriaCell({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className="flex items-center gap-1 group text-left focus:outline-none max-w-[160px]"
-          title="Haz clic para cambiar categoría"
+          type="button"
+          className="flex items-center gap-1 group text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-w-[160px]"
+          aria-label={`Cambiar categoría: ${categoriaNombre || "sin categoría"}`}
         >
           <span className={cn("text-sm truncate", !categoriaNombre && "text-muted-foreground")}>
             {categoriaNombre || "N/A"}
           </span>
           {saving
             ? <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
-            : <Pencil className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            : <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           }
         </button>
       </PopoverTrigger>
@@ -192,64 +195,90 @@ function CategoriaCell({
 
 function DescripcionCell({
   idManto,
+  placa,
   descripcion,
   onUpdate,
 }: {
   idManto: number;
+  placa: string | null | undefined;
   descripcion: string | null;
   onUpdate: (d: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(descripcion || "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const errorId = useId();
+  const label = placa ? `Editar descripción del mantenimiento de ${placa}` : "Editar descripción";
 
   const startEdit = () => {
     setDraft(descripcion || "");
+    setError(null);
     setEditing(true);
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
-  const save = useCallback(async () => {
-    if (!editing) return;
-    setEditing(false);
-    const trimmed = draft.trim();
-    if (trimmed === (descripcion || "").trim()) return; // sin cambios
-    if (trimmed.length < 3) { setDraft(descripcion || ""); return; }
-    setSaving(true);
-    onUpdate(trimmed); // optimistic
-    const { error } = await actualizarMantenimientoCampo(idManto, { descripcionTrabajo: trimmed });
-    if (error) onUpdate(descripcion || ""); // revert
-    setSaving(false);
-  }, [editing, draft, descripcion, idManto, onUpdate]);
-
   const cancel = () => {
     setDraft(descripcion || "");
+    setError(null);
     setEditing(false);
   };
 
+  const save = useCallback(async () => {
+    if (!editing) return;
+    const trimmed = draft.trim();
+    if (trimmed === (descripcion || "").trim()) { setEditing(false); return; } // sin cambios
+    if (trimmed.length < 3) { setError("Escribe al menos 3 caracteres."); return; }
+    setError(null);
+    setEditing(false);
+    setSaving(true);
+    onUpdate(trimmed); // optimistic
+    const { error: saveError } = await actualizarMantenimientoCampo(idManto, { descripcionTrabajo: trimmed });
+    if (saveError) onUpdate(descripcion || ""); // revert on error
+    setSaving(false);
+  }, [editing, draft, descripcion, idManto, onUpdate]);
+
   if (editing) {
     return (
-      <textarea
-        ref={textareaRef}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={save}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); }
-          if (e.key === "Escape") cancel();
-        }}
-        rows={3}
-        className="w-full min-w-[220px] rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
-      />
+      <div className="min-w-[220px] space-y-2">
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); }
+            if (e.key === "Escape") cancel();
+          }}
+          rows={3}
+          aria-label={label}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        {error && (
+          <p id={errorId} role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button type="button" size="sm" onClick={save}>
+            Guardar
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={cancel}>
+            Cancelar
+          </Button>
+        </div>
+      </div>
     );
   }
 
   return (
     <button
+      type="button"
       onClick={startEdit}
-      className="flex items-start gap-1 group text-left focus:outline-none w-full"
-      title={descripcion || "Sin descripción — clic para agregar"}
+      aria-label={label}
+      className="flex items-start gap-1 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full"
     >
       <span className={cn(
         "text-sm line-clamp-2 max-w-[240px]",
@@ -258,8 +287,8 @@ function DescripcionCell({
         {descripcion || "Sin descripción"}
       </span>
       {saving
-        ? <Loader2 className="h-3 w-3 shrink-0 mt-0.5 animate-spin text-muted-foreground" />
-        : <Pencil className="h-3 w-3 shrink-0 mt-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        ? <Loader2 className="h-3 w-3 shrink-0 mt-0.5 animate-spin text-muted-foreground" aria-hidden="true" />
+        : <Pencil className="h-3.5 w-3.5 shrink-0 mt-0.5 text-muted-foreground" aria-hidden="true" />
       }
     </button>
   );
@@ -288,73 +317,119 @@ export function MantenimientosTabla({
     );
   }
 
+  const categoriaCell = (m: MantenimientoRow) => (
+    <CategoriaCell
+      idManto={m.id_manto}
+      categoriaId={m.categoria_id}
+      categoriaNombre={m.maintenance_categories?.nombre ?? null}
+      categories={categories}
+      onUpdate={(id, nombre) =>
+        updateRow(m.id_manto, {
+          categoria_id: id,
+          maintenance_categories: nombre ? { nombre } : null,
+        })
+      }
+    />
+  );
+  const descripcionCell = (m: MantenimientoRow) => (
+    <DescripcionCell
+      idManto={m.id_manto}
+      placa={m.vehicles?.placa}
+      descripcion={m.descripcion_trabajo}
+      onUpdate={(d) => updateRow(m.id_manto, { descripcion_trabajo: d })}
+    />
+  );
+  const tipoCell = (m: MantenimientoRow) => (
+    <TipoCell
+      idManto={m.id_manto}
+      tipo={m.tipo}
+      onUpdate={(t) => updateRow(m.id_manto, { tipo: t })}
+    />
+  );
+
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Fecha</TableHead>
-            <TableHead>Vehículo</TableHead>
-            <TableHead>Categoría</TableHead>
-            <TableHead>Descripción</TableHead>
-            <TableHead>Tipo</TableHead>
-            <TableHead className="text-right">Kilometraje</TableHead>
-            <TableHead>Proveedor</TableHead>
-            <TableHead className="text-right">Valor</TableHead>
-            <TableHead>Factura</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((m) => (
-            <TableRow key={m.id_manto}>
-              <TableCell className="whitespace-nowrap">{formatDateShort(m.fecha)}</TableCell>
-              <TableCell className="font-medium">{m.vehicles?.placa}</TableCell>
+    <>
+      {/* Móvil: tarjetas con placa, fecha y valor; los campos editables van dentro */}
+      <ul className="space-y-3 md:hidden">
+        {rows.map((m) => (
+          <li key={m.id_manto} className="rounded-lg border bg-card p-3 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold">{m.vehicles?.placa}</p>
+                <p className="text-sm text-muted-foreground">{formatDateShort(m.fecha)}</p>
+              </div>
+              <p className="font-mono text-sm">{m.valor ? formatCurrency(m.valor) : "N/A"}</p>
+            </div>
+            <dl className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Tipo</dt>
+                <dd>{tipoCell(m)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Kilometraje</dt>
+                <dd className="font-mono">{m.kilometraje_actual.toLocaleString()} km</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-muted-foreground">Categoría</dt>
+                <dd>{categoriaCell(m)}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-muted-foreground">Descripción</dt>
+                <dd>{descripcionCell(m)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Proveedor</dt>
+                <dd>{m.proveedor || "N/A"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Factura</dt>
+                <dd>{m.numero_factura || "—"}</dd>
+              </div>
+            </dl>
+          </li>
+        ))}
+      </ul>
 
-              <TableCell>
-                <CategoriaCell
-                  idManto={m.id_manto}
-                  categoriaId={m.categoria_id}
-                  categoriaNombre={m.maintenance_categories?.nombre ?? null}
-                  categories={categories}
-                  onUpdate={(id, nombre) =>
-                    updateRow(m.id_manto, {
-                      categoria_id: id,
-                      maintenance_categories: nombre ? { nombre } : null,
-                    })
-                  }
-                />
-              </TableCell>
-
-              <TableCell>
-                <DescripcionCell
-                  idManto={m.id_manto}
-                  descripcion={m.descripcion_trabajo}
-                  onUpdate={(d) => updateRow(m.id_manto, { descripcion_trabajo: d })}
-                />
-              </TableCell>
-
-              <TableCell>
-                <TipoCell
-                  idManto={m.id_manto}
-                  tipo={m.tipo}
-                  onUpdate={(t) => updateRow(m.id_manto, { tipo: t })}
-                />
-              </TableCell>
-
-              <TableCell className="text-right font-mono">
-                {m.kilometraje_actual.toLocaleString()} km
-              </TableCell>
-              <TableCell>{m.proveedor || "N/A"}</TableCell>
-              <TableCell className="text-right font-mono">
-                {m.valor ? formatCurrency(m.valor) : "N/A"}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {m.numero_factura || "—"}
-              </TableCell>
+      <div className="hidden md:block overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Fecha</TableHead>
+              <TableHead>Vehículo</TableHead>
+              <TableHead>Categoría</TableHead>
+              <TableHead>Descripción</TableHead>
+              <TableHead>Tipo</TableHead>
+              <TableHead className="text-right">Kilometraje</TableHead>
+              <TableHead>Proveedor</TableHead>
+              <TableHead className="text-right">Valor</TableHead>
+              <TableHead>Factura</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {rows.map((m) => (
+              <TableRow key={m.id_manto}>
+                <TableCell className="whitespace-nowrap">{formatDateShort(m.fecha)}</TableCell>
+                <TableCell className="font-medium">{m.vehicles?.placa}</TableCell>
+
+                <TableCell>{categoriaCell(m)}</TableCell>
+                <TableCell>{descripcionCell(m)}</TableCell>
+                <TableCell>{tipoCell(m)}</TableCell>
+
+                <TableCell className="text-right font-mono">
+                  {m.kilometraje_actual.toLocaleString()} km
+                </TableCell>
+                <TableCell>{m.proveedor || "N/A"}</TableCell>
+                <TableCell className="text-right font-mono">
+                  {m.valor ? formatCurrency(m.valor) : "N/A"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {m.numero_factura || "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }

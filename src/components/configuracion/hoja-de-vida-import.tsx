@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import * as XLSX from "xlsx";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet } from "lucide-react";
 
@@ -8,6 +8,7 @@ import { cargarHojaDeVida, type HojaDeVidaPayload, type ReporteHojaDeVida, type 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { FilaCruda } from "@/lib/hoja-de-vida";
+import { ImportFileDrop, ImportSteps } from "@/components/configuracion/import-flow";
 
 const HOJAS = {
   vehiculos: "1_VEHICULOS",
@@ -60,18 +61,29 @@ function descargarCsv(nombre: string, filas: string[][]) {
 }
 
 export function HojaDeVidaImport() {
-  const inputRef = useRef<HTMLInputElement>(null);
   const [payload, setPayload] = useState<HojaDeVidaPayload | null>(null);
   const [nombre, setNombre] = useState("");
   const [reporte, setReporte] = useState<ReporteHojaDeVida | null>(null);
+  const [leyendo, setLeyendo] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
+  const ejecutar = async (datos: HojaDeVidaPayload, confirmar: boolean) => {
+    setCargando(true);
+    setAviso(null);
+    const res = await cargarHojaDeVida(datos, confirmar);
+    setCargando(false);
+    if ("error" in res) setAviso(res.error);
+    else setReporte(res);
+  };
+
+  // La vista previa corre sola al elegir el archivo; nada se escribe hasta confirmar.
   const elegirArchivo = async (file: File | undefined) => {
     setReporte(null);
     setAviso(null);
     setPayload(null);
     if (!file) return;
+    setLeyendo(true);
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const vehiculos = leerHoja(wb, HOJAS.vehiculos);
@@ -79,26 +91,25 @@ export function HojaDeVidaImport() {
         setAviso(`El archivo no tiene la hoja «${HOJAS.vehiculos}». Usa la plantilla de hoja de vida sin renombrar las hojas.`);
         return;
       }
-      setNombre(file.name);
-      setPayload({
+      const datos: HojaDeVidaPayload = {
         vehiculos,
         documentos: leerHoja(wb, HOJAS.documentos) ?? [],
         mantenimientos: leerHoja(wb, HOJAS.mantenimientos) ?? [],
-      });
+      };
+      setNombre(file.name);
+      setPayload(datos);
+      setLeyendo(false);
+      await ejecutar(datos, false);
     } catch {
       setAviso("No se pudo leer el archivo. Asegúrate de que sea un Excel (.xlsx) de la plantilla.");
+    } finally {
+      setLeyendo(false);
     }
   };
 
-  const ejecutar = async (confirmar: boolean) => {
-    if (!payload) return;
-    setCargando(true);
-    setAviso(null);
-    const res = await cargarHojaDeVida(payload, confirmar);
-    setCargando(false);
-    if ("error" in res) setAviso(res.error);
-    else setReporte(res);
-  };
+  const nVehiculos = reporte ? reporte.vehiculos.nuevos + reporte.vehiculos.actualizados : 0;
+  const nDocumentos = reporte ? reporte.documentos.nuevos + reporte.documentos.actualizados : 0;
+  const hayAlgoQueCargar = nVehiculos + nDocumentos + (reporte ? reporte.mantenimientos.nuevos + reporte.mantenimientos.actualizados : 0) > 0;
 
   const descargarErrores = () =>
     reporte && descargarCsv("errores_hoja_de_vida.csv", [["hoja", "fila", "columna", "mensaje"], ...reporte.errores.map((e) => [e.hoja, String(e.fila), e.columna ?? "", e.mensaje])]);
@@ -117,35 +128,33 @@ export function HojaDeVidaImport() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <input ref={inputRef} type="file" accept=".xlsx" onChange={(e) => elegirArchivo(e.target.files?.[0])} className="block text-sm" />
+        <ImportSteps current={reporte ? "confirmar" : payload || leyendo ? "revisar" : "subir"} />
+        <ImportFileDrop
+          accept=".xlsx"
+          hint="Plantilla de hoja de vida en Excel (.xlsx), con las hojas sin renombrar."
+          label="Elige la plantilla diligenciada o arrástrala aquí"
+          busy={leyendo || cargando}
+          busyLabel={leyendo ? "Leyendo el archivo…" : "Revisando qué pasaría…"}
+          onFiles={(files) => elegirArchivo(files[0])}
+        />
 
         {aviso && (
-          <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
             {aviso}
           </p>
         )}
 
         {payload && (
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-muted-foreground">
-              {nombre}: {payload.vehiculos.length} vehículos · {payload.documentos.length} documentos · {payload.mantenimientos.length} últimos mantenimientos
-            </p>
-            <Button type="button" variant="outline" onClick={() => ejecutar(false)} disabled={cargando}>
-              {cargando && !reporte?.aplicado ? "Revisando…" : "Vista previa"}
-            </Button>
-            {reporte && !reporte.aplicado && (
-              <Button type="button" onClick={() => ejecutar(true)} disabled={cargando}>
-                {cargando ? "Cargando…" : "Confirmar carga"}
-              </Button>
-            )}
-          </div>
+          <p className="text-sm text-muted-foreground">
+            {nombre}: {payload.vehiculos.length} vehículos · {payload.documentos.length} documentos · {payload.mantenimientos.length} últimos mantenimientos
+          </p>
         )}
 
         {reporte && (
           <div className="space-y-4">
             <p className={`flex items-center gap-2 text-sm font-medium ${reporte.aplicado ? "text-green-700" : "text-amber-700"}`}>
-              {reporte.aplicado ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <AlertTriangle className="h-4 w-4" aria-hidden />}
-              {reporte.aplicado ? "Carga aplicada." : "Vista previa: todavía no se escribió nada."}
+              {reporte.aplicado ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <AlertTriangle className="h-4 w-4" aria-hidden="true" />}
+              {reporte.aplicado ? "Carga aplicada." : "Vista previa: todavía no se escribió nada. Revisa las cifras y confirma."}
             </p>
             <div className="grid gap-3 md:grid-cols-3">
               <Resumen titulo="Vehículos" r={reporte.vehiculos} />
@@ -156,10 +165,22 @@ export function HojaDeVidaImport() {
               {reporte.lecturasKm} lecturas de kilometraje · {reporte.vencimientos} vencimientos de SOAT/técnico-mecánica actualizados · {reporte.sinValor} documentos sin valor (solo aportan vencimiento) · {reporte.cambiosDeEstado.length} vehículos nuevos o con cambio de estado
             </p>
 
+            {!reporte.aplicado && (
+              <Button
+                type="button"
+                onClick={() => payload && ejecutar(payload, true)}
+                disabled={cargando || !hayAlgoQueCargar}
+              >
+                {cargando
+                  ? "Cargando…"
+                  : `Confirmar carga de ${nVehiculos} vehículos y ${nDocumentos} documentos`}
+              </Button>
+            )}
+
             {reporte.errores.length > 0 && (
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-sm font-medium text-red-700">{reporte.errores.length} filas con error (no se cargan)</p>
+                  <p className="text-sm font-medium text-destructive">{reporte.errores.length} filas con error (no se cargan)</p>
                   <Button type="button" size="sm" variant="outline" onClick={descargarErrores}>
                     Descargar CSV
                   </Button>
