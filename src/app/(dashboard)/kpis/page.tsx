@@ -8,6 +8,7 @@ import { getMetricasConsumo } from "@/app/api/actions/consumo";
 import { requireRole } from "@/app/api/actions/auth";
 import { costosPorVehiculo } from "@/lib/costos-vehiculo";
 import { diasDelRango, esDia, hoyBogota, limitesInstante } from "@/lib/fechas";
+import { KpisSkeleton } from "@/components/layout/skeletons";
 
 export const metadata = { title: "KPIs y métricas" };
 
@@ -267,7 +268,7 @@ export default async function KPIsPage({
         </p>
       </div>
 
-      <Suspense fallback={<div>Cargando KPIs...</div>}>
+      <Suspense fallback={<KpisSkeleton />}>
         <KPIDashboard
           uptimeData={kpiData.uptimeData}
           tcoData={kpiData.tcoData}
