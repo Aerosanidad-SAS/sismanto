@@ -12,6 +12,7 @@ import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
 import { hoyBogota } from "@/lib/fechas";
+import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
 import {
   EXPORT_MAX_FILAS,
@@ -26,7 +27,6 @@ import {
 // Mismo rol que ve la sección completa en SISRES (editarServicio.php,
 // "!$esMedicoAux") — Médico/Auxiliar no ven ni suben la Boleta de Salida.
 const ROLES_BOLETA_SALIDA: UserRole[] = ["ADMIN", "REGULACION", "ANALISTA"];
-const BOLETA_TIPOS_PERMITIDOS = ["image/png", "image/jpeg", "image/webp"];
 const BOLETA_TAMANO_MAXIMO = 8 * 1024 * 1024; // 8MB — foto de un documento físico
 
 // SISRES no tiene una máquina de estados fija (Ronda 2, pregunta 3 en
@@ -492,20 +492,23 @@ export async function subirBoletaSalida(servicioId: number, file: File) {
 
   const idParsed = z.number().int().positive().safeParse(servicioId);
   if (!idParsed.success) return { error: "ID inválido" };
-  if (!BOLETA_TIPOS_PERMITIDOS.includes(file.type)) {
-    return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
-  }
   if (file.size > BOLETA_TAMANO_MAXIMO) {
     return { error: "La imagen no puede pesar más de 8MB" };
   }
+  // Por el contenido real del archivo, no por lo que declare el navegador (auditoría 2026-10-01, hallazgo #5).
+  const cabecera = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const tipo = tipoImagenPorContenido(cabecera);
+  if (!tipo) {
+    return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
+  }
 
   const supabase = createClient();
-  const extension = file.name.split(".").pop() || "jpg";
-  const ruta = `servicio-${idParsed.data}-${Date.now()}.${extension}`;
+  const ruta = `servicio-${idParsed.data}-${Date.now()}.${tipo.ext}`;
 
   const { error: uploadError } = await supabase.storage.from("servicios-boletas").upload(ruta, file, {
     cacheControl: "3600",
     upsert: false,
+    contentType: tipo.mime,
   });
   if (uploadError) return { error: uploadError.message };
 
