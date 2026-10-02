@@ -1,6 +1,7 @@
 "use client";
 
 import { HALLAZGOS_CRITICOS, PREFIJO_CRITICO } from "@/lib/hallazgos-criticos";
+import { crearSolicitudNoApto } from "@/app/api/actions/solicitudes-no-apto";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -63,6 +64,8 @@ export function IncidentForm({
 
   const severidad = watch("severidad");
   const [critico, setCritico] = useState<string | null>(null);
+  /** Pide que el vehículo quede NO APTO: no lo cambia, abre una solicitud que avala Coordinación o el administrador. */
+  const [pedirNoApto, setPedirNoApto] = useState(false);
 
   // Un hallazgo crítico marca la novedad como severa y que impide operar: el trigger de la base pasa el vehículo a FDS.
   const elegirCritico = (hallazgo: string | null) => {
@@ -87,6 +90,14 @@ export function IncidentForm({
       if (result.error) {
         setError(result.error);
       } else {
+        if (pedirNoApto) {
+          const incidentId = (result.data as { id?: number } | undefined)?.id;
+          const sol = await crearSolicitudNoApto({ vehicleId: data.vehicleId, motivo: data.descripcion, origen: "REPORTE_OVEM", incidentId });
+          if ("error" in sol && sol.error) {
+            setError("La novedad quedó reportada, pero la solicitud de NO APTO no se envió: " + sol.error);
+            return;
+          }
+        }
         onSuccess();
       }
     } catch (err) {
@@ -120,14 +131,22 @@ export function IncidentForm({
             ))}
           </div>
           {critico === null && (
-            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm">
+            <label className="mt-3 flex min-h-11 items-start gap-2 text-sm">
               <input
                 type="checkbox"
-                className="h-5 w-5"
-                checked={severidad === "ALTA"}
-                onChange={(e) => setValue("severidad", e.target.checked ? "ALTA" : "MEDIA")}
+                className="mt-0.5 h-5 w-5 shrink-0"
+                checked={pedirNoApto}
+                onChange={(e) => {
+                  setPedirNoApto(e.target.checked);
+                  setValue("severidad", e.target.checked ? "ALTA" : "MEDIA");
+                }}
               />
-              Es urgente: Regulación debe revisarlo ya (no operes hasta que te confirmen)
+              <span>
+                Solicitar que el vehículo quede NO APTO
+                <span className="block text-xs text-muted-foreground">
+                  Coordinación o Mantenimiento deben avalarlo. Mientras tanto el vehículo queda bloqueado: no lo operes.
+                </span>
+              </span>
             </label>
           )}
         </div>

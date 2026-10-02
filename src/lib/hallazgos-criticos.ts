@@ -31,16 +31,29 @@ export interface DatosAlertaNoApto {
   reportadoPor: string;
   /** Texto ya formateado en hora de Colombia. */
   cuando: string;
+  /** NO_APTO: el sistema lo dejó fuera de servicio. SOLICITUD: el OVEM pide el NO APTO y alguien superior debe avalarlo. */
+  tipo?: "NO_APTO" | "SOLICITUD";
 }
 
-/** Asunto y cuerpo del aviso inmediato de «vehículo NO APTO». Puro, para poder probarlo. */
+/** Asunto y cuerpo del aviso inmediato de «vehículo NO APTO» o de solicitud de NO APTO. Puro, para poder probarlo. */
 export function armarAlertaNoApto(d: DatosAlertaNoApto): { asunto: string; html: string } {
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const lista = d.hallazgos.map((h) => `<li>${esc(h)}</li>`).join("");
+  const sitio = `${esc(d.placa)}${d.centro ? ` (${esc(d.centro)})` : ""}`;
+  if (d.tipo === "SOLICITUD") {
+    return {
+      asunto: `SOLICITUD DE NO APTO — ${d.placa}: requiere tu aval`,
+      html:
+        `<p><strong>${esc(d.reportadoPor)} solicita que el vehículo ${sitio} quede NO APTO y necesita tu aval.</strong></p>` +
+        `<p>Motivo:</p><ul>${lista}</ul>` +
+        `<p>Enviada el ${esc(d.cuando)} (hora de Colombia). Mientras se resuelve, el vehículo está en bloqueo provisional: no debe operar ni recibir servicios.</p>` +
+        `<p>Coordinación del CRA o el administrador: avala o rechaza la solicitud en SISMANTO.</p>`,
+    };
+  }
   return {
     asunto: `VEHÍCULO NO APTO — ${d.placa}: no debe operar`,
     html:
-      `<p><strong>El vehículo ${esc(d.placa)}${d.centro ? ` (${esc(d.centro)})` : ""} quedó NO APTO y no debe operar.</strong></p>` +
+      `<p><strong>El vehículo ${sitio} quedó NO APTO y no debe operar.</strong></p>` +
       `<p>Hallazgos:</p><ul>${lista}</ul>` +
       `<p>Reportado por ${esc(d.reportadoPor)} el ${esc(d.cuando)} (hora de Colombia).</p>` +
       `<p>Regulación: no asignes servicios a este vehículo. Mantenimiento: se requiere revisión inmediata.</p>`,

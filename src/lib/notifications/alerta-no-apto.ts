@@ -17,7 +17,7 @@ const NO_ENVIABLE = /@sismanto\.(test|invalid)$/i;
  */
 export async function avisarVehiculoNoApto(
   supabase: Cliente,
-  args: { vehicleId: string; hallazgos: string[]; reportadoPor: string }
+  args: { vehicleId: string; hallazgos: string[]; reportadoPor: string; tipo?: "NO_APTO" | "SOLICITUD" }
 ): Promise<{ destinatarios: number; enviado: boolean }> {
   try {
     const { data: v } = await supabase.from("vehicles").select("placa, centro_operativo").eq("id", args.vehicleId).maybeSingle();
@@ -26,7 +26,7 @@ export async function avisarVehiculoNoApto(
     const correos = new Set<string>();
     const { data: centro } = await supabase.from("operational_centers").select("id, nombre").eq("codigo", v.centro_operativo).maybeSingle();
     if (centro) {
-      const { data: roles } = await supabase.from("roles").select("id").in("codigo", ["REGULACION", "COORDINACION"]);
+      const { data: roles } = await supabase.from("roles").select("id").in("codigo", args.tipo === "SOLICITUD" ? ["COORDINACION"] : ["REGULACION", "COORDINACION"]);
       const ids = ((roles ?? []) as { id: number }[]).map((r) => r.id);
       if (ids.length > 0) {
         const { data: personas } = await supabase
@@ -51,7 +51,7 @@ export async function avisarVehiculoNoApto(
     }
 
     const cuando = new Intl.DateTimeFormat("es-CO", { timeZone: ZONA, dateStyle: "short", timeStyle: "short", hour12: false }).format(new Date());
-    const { asunto, html } = armarAlertaNoApto({ placa: v.placa, centro: centro?.nombre ?? null, hallazgos: args.hallazgos, reportadoPor: args.reportadoPor, cuando });
+    const { asunto, html } = armarAlertaNoApto({ placa: v.placa, centro: centro?.nombre ?? null, hallazgos: args.hallazgos, reportadoPor: args.reportadoPor, cuando, tipo: args.tipo });
     const r = await enviarCorreo(Array.from(correos), asunto, html);
     if (!r.ok) console.error("[no-apto] " + v.placa + ": el correo falló: " + r.error);
     return { destinatarios: correos.size, enviado: r.ok };
