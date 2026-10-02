@@ -147,7 +147,7 @@ export function ProgramacionDiaria({ datos }: { datos: ProgramacionDelDia }) {
                   <SelectTrigger><SelectValue placeholder="Elegir conductor" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NINGUNO}>Ninguno</SelectItem>
-                    {datos.conductores.map((c) => <SelectItem key={c.user_id} value={c.user_id}>{c.nombre}</SelectItem>)}
+                    {datos.conductores.filter((c) => c.user_id === f.valor || c.user_id !== (f.valor === c1 ? c2 : c1)).map((c) => <SelectItem key={c.user_id} value={c.user_id}>{c.nombre}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
