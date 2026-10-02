@@ -38,8 +38,9 @@ CREATE INDEX IF NOT EXISTS idx_vehicle_titulares_user ON vehicle_titulares (user
 CREATE TABLE IF NOT EXISTS vehicle_operacion_diaria (
   id            BIGSERIAL PRIMARY KEY,
   fecha         DATE NOT NULL,
-  vehicle_id    UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
-  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  -- RESTRICT a propósito: borrar un vehículo o un usuario no debe llevarse el historial de operación.
+  vehicle_id    UUID NOT NULL REFERENCES vehicles(id) ON DELETE RESTRICT,
+  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   origen        VARCHAR(20) NOT NULL DEFAULT 'TITULAR' CHECK (origen IN ('TITULAR', 'CAMBIO_DEL_DIA')),
   nota          TEXT,
   registrado_por UUID REFERENCES auth.users(id),
@@ -66,6 +67,10 @@ BEGIN
     RAISE EXCEPTION 'No se materializan días pasados (%): el historial no se reescribe', p_fecha;
   END IF;
 
+  IF p_fecha > (now() AT TIME ZONE 'America/Bogota')::date + 7 THEN
+    RAISE EXCEPTION 'No se materializan días a más de 7 días (%)', p_fecha;
+  END IF;
+
   INSERT INTO vehicle_operacion_diaria (fecha, vehicle_id, user_id, origen)
   SELECT p_fecha, t.vehicle_id, t.user_id, 'TITULAR'
   FROM vehicle_titulares t
@@ -83,8 +88,10 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION materializar_operacion_dia(DATE) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION materializar_operacion_dia(DATE) TO authenticated;
+-- SECURITY DEFINER: en Supabase los privilegios por defecto dan EXECUTE a anon, authenticated y service_role de forma
+-- explícita, así que REVOKE ... FROM PUBLIC no basta; se retira a anon y se deja solo a quien la necesita.
+REVOKE ALL ON FUNCTION materializar_operacion_dia(DATE) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION materializar_operacion_dia(DATE) TO authenticated, service_role;
 
 -- ─── RLS ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 ALTER TABLE vehicle_titulares ENABLE ROW LEVEL SECURITY;

@@ -89,9 +89,11 @@ export async function setTitulares(vehicleId: string, userIds: string[]) {
   if (igual) return { success: true };
 
   for (const t of actuales) {
-    // Si se abrió hoy mismo y ahora se cambia, no queda historial útil de un titular de cero días: se cierra con hasta = desde.
-    const hasta = t.desde > ayer ? t.desde : ayer;
-    const { error } = await supabase.from("vehicle_titulares").update({ hasta }).eq("id", t.id);
+    // Un titular abierto hoy mismo no deja historial útil (cero días): se borra en vez de cerrarlo con hasta = hoy,
+    // que lo seguiría contando como titular de hoy. Los demás se cierran ayer.
+    const { error } = t.desde >= hoy
+      ? await supabase.from("vehicle_titulares").delete().eq("id", t.id)
+      : await supabase.from("vehicle_titulares").update({ hasta: ayer }).eq("id", t.id);
     if (error) return { error: error.message };
   }
   const { error } = await supabase.from("vehicle_titulares").insert(
