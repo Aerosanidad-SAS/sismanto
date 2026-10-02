@@ -9,7 +9,6 @@ import { requireRole } from "@/app/api/actions/auth";
 import { costosPorVehiculo } from "@/lib/costos-vehiculo";
 import { diasDelRango, esDia, hoyBogota, limitesInstante } from "@/lib/fechas";
 
-
 export const metadata = { title: "KPIs y métricas" };
 
 type TcoTipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";

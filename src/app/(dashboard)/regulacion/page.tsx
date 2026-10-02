@@ -18,7 +18,6 @@ import { veSoloSuCentro } from "@/lib/auth-utils";
 import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
 import { prefijoCiudad } from "@/lib/servicios-lista";
 
-
 export const metadata = { title: "Sala de control" };
 
 const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];

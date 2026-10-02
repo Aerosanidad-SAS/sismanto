@@ -8,7 +8,6 @@ import { redirect } from "next/navigation";
 import { CapacitacionesAdmin } from "@/components/capacitaciones/capacitaciones-admin";
 import { CapacitacionesOvem } from "@/components/capacitaciones/capacitaciones-ovem";
 
-
 export const metadata = { title: "Capacitaciones" };
 
 export default async function CapacitacionesPage() {

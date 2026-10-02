@@ -4,7 +4,6 @@ import { getDirectorioProveedores } from "@/app/api/actions/directorios";
 import { PrestadoresDirectorio } from "@/components/proveedores/prestadores-directorio";
 import { puedeEditarPrestadores } from "@/lib/prestadores";
 
-
 export const metadata = { title: "Proveedores" };
 
 export default async function ProveedoresPage() {

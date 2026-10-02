@@ -15,7 +15,6 @@ import {
 } from "@/lib/auditoria-lista";
 import { cn, formatNumber } from "@/lib/utils";
 
-
 export const metadata = { title: "Bitácora" };
 
 const CLASE_SELECT =

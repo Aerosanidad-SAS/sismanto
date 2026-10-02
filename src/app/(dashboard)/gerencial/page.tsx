@@ -20,7 +20,6 @@ import { prefijoCiudad } from "@/lib/servicios-lista";
 import { puedeVerPestanaDashboard } from "@/lib/dashboard-tabs";
 import { Activity, Ambulance, DollarSign, Truck } from "lucide-react";
 
-
 export const metadata = { title: "Gerencial" };
 
 const ROLES_PERMITIDOS = ["ADMIN", "GERENCIAL"];

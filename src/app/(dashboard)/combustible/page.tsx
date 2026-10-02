@@ -4,7 +4,6 @@ import { getMetricasConsumo, getRendimientoCombustibleSerieMensual } from "@/app
 import { ConsumoCliente } from "@/components/consumo/consumo-cliente";
 import { requireRole } from "@/app/api/actions/auth";
 
-
 export const metadata = { title: "Combustible" };
 
 async function getInitialData() {

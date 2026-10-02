@@ -28,20 +28,20 @@ import { NAV_GROUPS } from "@/lib/navegacion";
 import { moduloVisible, rutaDeRespaldo, rutaOculta } from "@/lib/permisos";
 import { getMisModulosOcultos } from "@/app/api/actions/permisos";
 
-// El color del rol es solo decoración (punto); el nombre del rol ya es texto y se lee con contraste AA.
-const ROLE_BADGE_STYLES: Record<UserRole, string> = {
-  ADMIN: "bg-muted text-foreground",
-  REGULACION: "bg-muted text-foreground",
-  GERENCIAL: "bg-muted text-foreground",
-  OVEM: "bg-muted text-foreground",
-  MANTENIMIENTO: "bg-muted text-foreground",
-  COORDINACION: "bg-muted text-foreground",
-  ANALISTA: "bg-muted text-foreground",
-  MEDICO: "bg-muted text-foreground",
-  AUXILIAR_ENFERMERIA: "bg-muted text-foreground",
-  VISTA: "bg-muted text-foreground",
-  TECNICO: "bg-muted text-foreground",
-  AEROPUERTO: "bg-muted text-foreground",
+// El color del rol es solo un punto decorativo: el nombre del rol ya es texto y se lee con contraste AA.
+const ROLE_DOT_COLORS: Record<UserRole, string> = {
+  ADMIN: "bg-[#7F7FF4]",
+  REGULACION: "bg-[#2BB6C7]",
+  GERENCIAL: "bg-[#1B6368]",
+  OVEM: "bg-[#9C9B99]",
+  MANTENIMIENTO: "bg-[#666564]",
+  COORDINACION: "bg-[#0E7490]",
+  ANALISTA: "bg-[#8B5CF6]",
+  MEDICO: "bg-[#16A34A]",
+  AUXILIAR_ENFERMERIA: "bg-[#65A30D]",
+  VISTA: "bg-[#94A3B8]",
+  TECNICO: "bg-[#0F766E]",
+  AEROPUERTO: "bg-[#B45309]",
 };
 
 const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
@@ -401,12 +401,8 @@ export default function DashboardLayout({
             {!showCollapsedChrome && (
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground truncate">{profile.nombre_completo || profile.email}</p>
-                <span
-                  className={cn(
-                    "inline-flex mt-1 rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wide max-w-full truncate",
-                    ROLE_BADGE_STYLES[profile.role_codigo]
-                  )}
-                >
+                <span className="mt-1 inline-flex max-w-full items-center gap-1.5 truncate rounded-md bg-muted px-2 py-0.5 text-xs font-semibold tracking-wide text-foreground">
+                  <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", ROLE_DOT_COLORS[profile.role_codigo])} />
                   {profile.role_codigo}
                 </span>
               </div>

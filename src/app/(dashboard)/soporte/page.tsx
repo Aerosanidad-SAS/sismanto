@@ -6,7 +6,6 @@ import { getConfigTickets } from "@/app/api/actions/tickets-config";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { MisTickets } from "@/components/soporte/mis-tickets";
 
-
 export const metadata = { title: "Soporte" };
 
 export default async function SoportePage() {

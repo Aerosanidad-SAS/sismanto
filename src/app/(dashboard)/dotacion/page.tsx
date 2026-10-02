@@ -5,7 +5,6 @@ import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
 import { centroVisible } from "@/lib/auth-utils";
 import { DotacionPanel } from "@/components/dotacion/dotacion-panel";
 
-
 export const metadata = { title: "Dotación" };
 
 /**

@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ListaCaptaciones } from "@/components/captacion/lista-captaciones";
 import { ROLES_CAPTACION_LISTA, puedeAdministrarCaptacion } from "@/lib/captacion";
 
-
 export const metadata = { title: "Captación" };
 
 interface Props {

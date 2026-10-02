@@ -5,7 +5,6 @@ import { isAdminLike } from "@/lib/auth-utils";
 import { ConfiguracionTabs } from "@/components/configuracion/configuracion-tabs";
 import { getCompanyBranding } from "@/app/api/actions/company-settings";
 
-
 export const metadata = { title: "Configuración" };
 
 async function getConfiguracionData() {
