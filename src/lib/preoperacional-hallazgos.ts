@@ -7,6 +7,7 @@ import {
   type ResumenHallazgos,
 } from "@/lib/preoperacional-alertas";
 import type { Dia } from "@/lib/fechas";
+import { avisarVehiculoNoApto } from "@/lib/notifications/alerta-no-apto";
 
 // Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este repo (ver CLAUDE.md).
 type Cliente = any;
@@ -18,8 +19,8 @@ export interface ResultadoHallazgos extends ResumenHallazgos {
 /**
  * Convierte los hallazgos de un preoperacional en novedades (módulo servidor, sin "use server": no es una acción que el
  * navegador pueda invocar). Cada novedad crítica lleva `afecta_operatividad` y el trigger de la base (094) saca el
- * vehículo de servicio con fecha e historial. No duplica: si ya hay una novedad abierta con la misma descripción para el
- * vehículo (p. ej. el mismo SOAT vencido de ayer), no abre otra.
+ * vehículo de servicio con fecha e historial. No duplica: si ya hay una novedad abierta con la misma clave para el vehículo
+ * (el mismo bombillo quemado de ayer, el mismo SOAT vencido), no abre otra hasta que se cierre.
  */
 export async function registrarHallazgosPreoperacional(
   supabase: Cliente,
@@ -41,11 +42,13 @@ export async function registrarHallazgosPreoperacional(
     .select("descripcion")
     .eq("vehicle_id", args.vehicleId)
     .in("estado", ["ABIERTO", "EN_PROCESO"]);
-  const yaAbiertas = new Set<string>((abiertas ?? []).map((i: { descripcion: string }) => i.descripcion));
+  const yaAbiertas: string[] = (abiertas ?? []).map((i: { descripcion: string }) => i.descripcion);
 
   let creadas = 0;
+  const criticosNuevos: string[] = [];
   for (const n of novedades) {
-    if (yaAbiertas.has(n.descripcion)) continue;
+    // La clave es un prefijo estable: «[Preoperacional] Luz de freno» sigue abierta aunque el detalle cambie.
+    if (yaAbiertas.some((d) => d.startsWith(n.clave))) continue;
     const { data, error } = await supabase
       .from("incidents")
       .insert({
@@ -60,6 +63,7 @@ export async function registrarHallazgosPreoperacional(
       .single();
     if (error || !data) continue;
     creadas++;
+    if (n.afectaOperatividad) criticosNuevos.push(n.clave.replace(/^\[Preoperacional\]\s*/, ""));
     await auditar(
       "INSERTAR",
       "novedades",
@@ -67,5 +71,7 @@ export async function registrarHallazgosPreoperacional(
       n.afectaOperatividad ? "Novedad automática del preoperacional (crítica: vehículo a FDS)" : "Novedad automática del preoperacional"
     );
   }
+  // Aviso inmediato solo por los críticos que se abren ahora: un crítico que sigue abierto no repite el correo cada día.
+  if (criticosNuevos.length > 0) await avisarVehiculoNoApto(supabase, { vehicleId: args.vehicleId, hallazgos: criticosNuevos, reportadoPor: args.reportadoPor });
   return { ...resumen, novedadesCreadas: creadas };
 }

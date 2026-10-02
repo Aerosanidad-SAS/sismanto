@@ -45,7 +45,6 @@ import {
   evaluarKilometraje,
   idsNuevos,
   leerBorrador,
-  marcarSinResponderComoOk,
   parseKilometraje,
   resumirRespuestas,
   serializarBorrador,
@@ -348,7 +347,7 @@ export function OvemPortal({
     if (resumen.sinResponder > 0) {
       setResaltarPendientes(true);
       setError(
-        `Faltan ${resumen.sinResponder} ítem${resumen.sinResponder === 1 ? "" : "s"} por responder. Respóndelos uno a uno o usa «Marcar todo OK» para lo que esté bien.`
+        `Faltan ${resumen.sinResponder} ítem${resumen.sinResponder === 1 ? "" : "s"} por responder. Responde cada uno de forma consciente: la revisión es ítem por ítem.`
       );
       return;
     }
@@ -667,18 +666,6 @@ export function OvemPortal({
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3">
                   <p className="text-sm text-foreground">
                     Respondidos {resumen.total - resumen.sinResponder} de {resumen.total}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-11"
-                    disabled={resumen.sinResponder === 0}
-                    onClick={() => setCheckItemsState((prev) => marcarSinResponderComoOk(checklistFiltrado, prev))}
-                  >
-                    Marcar todo OK
-                  </Button>
-                  <p className="basis-full text-sm text-muted-foreground">
-                    Solo marca lo que aún no has respondido; lo que ya respondiste no cambia.
                   </p>
                 </div>
               )}

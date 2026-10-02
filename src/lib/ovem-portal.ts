@@ -87,21 +87,6 @@ export function textoResumen(r: ResumenRespuestas): string {
   return partes.join(" · ");
 }
 
-/** Marca como OK lo que aún no tiene respuesta; no pisa lo que el conductor ya respondió. */
-export function marcarSinResponderComoOk(
-  items: { id: number; cantidad_esperada: string | null }[],
-  respuestas: RespuestasChecklist
-): RespuestasChecklist {
-  const siguiente: RespuestasChecklist = { ...respuestas };
-  for (const it of items) {
-    if (siguiente[it.id]) continue;
-    const esperado = it.cantidad_esperada ? Number(it.cantidad_esperada) : NaN;
-    siguiente[it.id] =
-      Number.isFinite(esperado) && esperado > 0 ? { estado: "OK", cantidadOk: esperado } : { estado: "OK" };
-  }
-  return siguiente;
-}
-
 /* ─── Borrador del preoperacional (sessionStorage por vehículo y día) ─── */
 
 export interface BorradorPreoperacional {

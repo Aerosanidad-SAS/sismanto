@@ -6,7 +6,6 @@ import {
   evaluarKilometraje,
   idsNuevos,
   leerBorrador,
-  marcarSinResponderComoOk,
   parseKilometraje,
   parseNumeroDecimal,
   resumirRespuestas,
@@ -55,20 +54,6 @@ test("resumirRespuestas: lo no respondido no cuenta como OK", () => {
   assert.equal(textoResumen(r), "2 OK · 1 Falla · 1 N/A · 1 sin responder");
   assert.equal(textoResumen({ total: 41, ok: 38, falla: 1, noAplica: 2, sinResponder: 0 }), "38 OK · 1 Falla · 2 N/A");
   assert.equal(textoResumen({ total: 3, ok: 1, falla: 2, noAplica: 0, sinResponder: 0 }), "1 OK · 2 Fallas · 0 N/A");
-});
-
-test("marcarSinResponderComoOk respeta lo ya respondido y completa cantidades", () => {
-  const items = [
-    { id: 1, cantidad_esperada: null },
-    { id: 2, cantidad_esperada: "2" },
-    { id: 3, cantidad_esperada: null },
-  ];
-  const antes = { 3: { estado: "FALLA" as const, observacion: "roto" } };
-  const despues = marcarSinResponderComoOk(items, antes);
-  assert.deepEqual(despues[1], { estado: "OK" });
-  assert.deepEqual(despues[2], { estado: "OK", cantidadOk: 2 });
-  assert.equal(despues[3].estado, "FALLA");
-  assert.equal(Object.keys(antes).length, 1, "no muta el original");
 });
 
 test("borrador: ida y vuelta y clave por vehículo y día", () => {

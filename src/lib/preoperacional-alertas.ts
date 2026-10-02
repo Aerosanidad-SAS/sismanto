@@ -35,6 +35,11 @@ export interface Hallazgo {
 }
 
 export interface NovedadPropuesta {
+  /**
+   * Prefijo estable de la descripción (no lleva fecha ni detalle): identifica el hallazgo para no abrirlo otra vez
+   * mientras haya una novedad abierta con la misma clave.
+   */
+  clave: string;
   descripcion: string;
   /** El enum de `incidents.severidad` solo tiene BAJA, MEDIA y ALTA: una crítica entra como ALTA + afecta_operatividad. */
   severidad: "BAJA" | "MEDIA" | "ALTA";
@@ -76,31 +81,21 @@ export function hallazgosPreoperacional(items: ItemEvaluado[], vehiculo: Vehicul
 }
 
 /**
- * Novedades a abrir: una por cada hallazgo CRÍTICO (cada una saca el vehículo de servicio y se ve por separado) y una
- * sola consolidada para el resto, para no inundar el tablero de Regulación con una novedad por ítem.
+ * Una novedad por hallazgo, con una clave estable: si el bombillo sigue quemado mañana, el preoperacional de mañana
+ * NO abre otra novedad; la primera basta hasta que se cierre (el mantenimiento que lo resuelve). La clave no lleva la
+ * fecha ni lo que escribió el OVEM, por eso coincide día tras día.
  */
-export function novedadesDeHallazgos(hallazgos: Hallazgo[], hoy: Dia): NovedadPropuesta[] {
-  const novedades: NovedadPropuesta[] = [];
-
-  for (const h of hallazgos.filter((x) => x.severidad === "CRITICA")) {
-    novedades.push({
-      descripcion: `${PREFIJO_NOVEDAD} CRÍTICO: ${h.titulo}${h.detalle ? ` — ${h.detalle}` : ""}`,
-      severidad: "ALTA",
-      afectaOperatividad: true,
-    });
-  }
-
-  const resto = hallazgos.filter((x) => x.severidad !== "CRITICA");
-  if (resto.length > 0) {
-    const hayAlta = resto.some((x) => x.severidad === "ALTA");
-    const soloBaja = resto.every((x) => x.severidad === "BAJA");
-    novedades.push({
-      descripcion: `${PREFIJO_NOVEDAD} Hallazgos del ${formatoDia(hoy)}: ${resto.map((h) => (h.detalle ? `${h.titulo} (${h.detalle})` : h.titulo)).join("; ")}`,
-      severidad: hayAlta ? "ALTA" : soloBaja ? "BAJA" : "MEDIA",
-      afectaOperatividad: false,
-    });
-  }
-  return novedades;
+export function novedadesDeHallazgos(hallazgos: Hallazgo[], _hoy: Dia): NovedadPropuesta[] {
+  return hallazgos.map((h) => {
+    const critico = h.severidad === "CRITICA";
+    const clave = `${PREFIJO_NOVEDAD} ${critico ? "CRÍTICO: " : ""}${h.titulo}`;
+    return {
+      clave,
+      descripcion: h.detalle ? `${clave} — ${h.detalle}` : clave,
+      severidad: critico || h.severidad === "ALTA" ? "ALTA" : h.severidad === "BAJA" ? "BAJA" : "MEDIA",
+      afectaOperatividad: critico,
+    };
+  });
 }
 
 export interface ResumenHallazgos {
