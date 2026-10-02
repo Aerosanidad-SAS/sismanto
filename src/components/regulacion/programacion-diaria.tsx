@@ -88,11 +88,11 @@ export function ProgramacionDiaria({ datos }: { datos: ProgramacionDelDia }) {
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" disabled={pending} onClick={() => irAlDia(sumarDias(datos.fecha, -1))}>←</Button>
+            <Button variant="outline" size="sm" disabled={pending} onClick={() => irAlDia(sumarDias(datos.fecha, -1))} aria-label="Día anterior">←</Button>
             <Input type="date" className="w-40" value={datos.fecha} onChange={(e) => e.target.value && irAlDia(e.target.value)} aria-label="Día de la programación" />
-            <Button variant="outline" size="sm" disabled={pending} onClick={() => irAlDia(sumarDias(datos.fecha, 1))}>→</Button>
-            <Button variant={vista === "vehiculo" ? "default" : "outline"} size="sm" onClick={() => setVista("vehiculo")}>Por vehículo</Button>
-            <Button variant={vista === "conductor" ? "default" : "outline"} size="sm" onClick={() => setVista("conductor")}>Por conductor</Button>
+            <Button variant="outline" size="sm" disabled={pending} onClick={() => irAlDia(sumarDias(datos.fecha, 1))} aria-label="Día siguiente">→</Button>
+            <Button variant={vista === "vehiculo" ? "default" : "outline"} size="sm" aria-pressed={vista === "vehiculo"} onClick={() => setVista("vehiculo")}>Por vehículo</Button>
+            <Button variant={vista === "conductor" ? "default" : "outline"} size="sm" aria-pressed={vista === "conductor"} onClick={() => setVista("conductor")}>Por conductor</Button>
           </div>
         </div>
         {!datos.editable ? <p className="text-sm text-muted-foreground">Día pasado: es historial y solo se consulta.</p> : null}
@@ -144,7 +144,7 @@ export function ProgramacionDiaria({ datos }: { datos: ProgramacionDelDia }) {
               <div key={f.etiqueta}>
                 <p className="mb-1 text-sm text-muted-foreground">{f.etiqueta}</p>
                 <Select value={f.valor} onValueChange={f.set}>
-                  <SelectTrigger><SelectValue placeholder="Elegir conductor" /></SelectTrigger>
+                  <SelectTrigger aria-label={f.etiqueta}><SelectValue placeholder="Elige un conductor" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NINGUNO}>Ninguno</SelectItem>
                     {datos.conductores.filter((c) => c.user_id === f.valor || c.user_id !== (f.valor === c1 ? c2 : c1)).map((c) => <SelectItem key={c.user_id} value={c.user_id}>{c.nombre}</SelectItem>)}
@@ -152,8 +152,8 @@ export function ProgramacionDiaria({ datos }: { datos: ProgramacionDelDia }) {
                 </Select>
               </div>
             ))}
-            <Input placeholder="Motivo del cambio (opcional)" value={nota} onChange={(e) => setNota(e.target.value)} />
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            <Input aria-label="Motivo del cambio (opcional)" placeholder="Motivo del cambio (opcional)" value={nota} onChange={(e) => setNota(e.target.value)} />
+            {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
             <div className="flex flex-wrap justify-end gap-2">
               <Button variant="outline" disabled={pending || elegidos.length === 0} onClick={() => guardar("dia")}>Solo este día</Button>
               <Button disabled={pending || elegidos.length === 0} onClick={() => guardar("titulares")}>Fijar como titulares</Button>

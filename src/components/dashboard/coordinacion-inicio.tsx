@@ -102,11 +102,10 @@ export function CoordinacionInicio({
       <Card>
         <CardHeader>
           <CardTitle>Balance de copagos</CardTitle>
-          <CardDescription>Copagos cobrados por Regulación frente a lo que llega en efectivo y por transferencia.</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-            Disponible cuando el formulario de servicio registre el copago (plan de la póliza, valor esperado y valor cobrado).
+            Próximamente: balance de copagos por vehículo y día.
           </p>
         </CardContent>
       </Card>
@@ -114,7 +113,7 @@ export function CoordinacionInicio({
       <Card>
         <CardHeader>
           <CardTitle>Informes y descargas</CardTitle>
-          <CardDescription>Servicios registrados en SISRES: consulta, filtros y exportación a Excel.</CardDescription>
+          <CardDescription>Servicios registrados: consulta, filtros y exportación a Excel.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <Link

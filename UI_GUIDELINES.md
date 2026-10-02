@@ -50,3 +50,112 @@ Ya existen (shadcn/ui sobre Radix): `alert-dialog`, `alert`, `badge`, `button`, 
 ## 5. Responsabilidad
 
 León arranca los módulos de Pacientes/Servicios/Notificaciones — si en algún punto no está claro qué componente de `src/components/ui/` corresponde a algo de SISRES que no tiene equivalente directo, se pregunta antes de improvisar un patrón nuevo. Consistencia visual pesa más que velocidad en esta fase — un módulo que "se ve distinto" es la señal más rápida para un usuario de que algo salió mal en la migración, incluso si funciona bien.
+
+## 6. Componentes de formulario y feedback
+
+Auditoría UX/UI (`AUDITORIA_UX_UI.md`, sección d). Todos en `src/components/ui/`, sobre Radix/cva, sin dependencias nuevas. Dependen de los tokens `success/warning/info(-soft)` y `touch` (PR #164).
+
+### Reglas
+
+- **Texto:** piso de 12 px (`text-xs`) para etiquetas y badges; 14 px (`text-sm`) para acciones y texto que se lee para decidir. Nada de `text-[10px]`.
+- **Objetivo táctil:** 44 px (`min-h-touch`, `h-touch w-touch`, `Button size="touch"`) en OVEM y móvil; nunca menos de 24 px.
+- **Nada solo por color:** todo estado lleva icono y texto (`StatusBadge`), todo error lleva texto (`FormError`).
+- **Todo control con `Field`:** nada de `<Label>` suelto ni `<p className="text-red-600">`.
+- **Tuteo** en el copy de la app interna («Selecciona», «Revisa»); cero emoji (usa `lucide-react` con texto accesible).
+- **Colores solo con tokens** (`bg-success-soft`, `text-destructive`…), nunca `bg-green-600` ni hex.
+- **Sin `alert()`/`confirm()`:** usa `useConfirm()` y `toast()`.
+
+### Ejemplos
+
+**`Field`** — etiqueta, ayuda y error enlazados (`id`, `aria-describedby`, `aria-invalid`). Con un `Select` de Radix usa la función para pasar las props al trigger.
+
+```tsx
+<Field label="Placa" required hint="Sin espacios ni guiones" error={errors.placa?.message}>
+  <Input {...register("placa")} />
+</Field>
+<Field label="Vehículo" required error={errors.vehiculo?.message}>
+  {(p) => (<Select onValueChange={setVehiculo}><SelectTrigger {...p}><SelectValue /></SelectTrigger>{/* items */}</Select>)}
+</Field>
+```
+
+**`FormError`** — mensaje suelto con `role="alert"` (errores de acción dentro de un diálogo, no tras el overlay).
+
+```tsx
+<DialogContent>
+  {/* campos */}
+  <FormError>{serverError}</FormError>
+</DialogContent>
+```
+
+**`StatusBadge`** — `tone`: `success | warning | danger | info | neutral`; icono por defecto según el tono.
+
+```tsx
+<StatusBadge tone="success">Operativo</StatusBadge>
+<StatusBadge tone="danger" icon={Wrench}>Fuera de servicio</StatusBadge>
+<StatusBadge tone="warning">Sin asignar</StatusBadge>
+```
+
+**`useConfirm()` / `ConfirmDialog`** — promesa booleana sobre `alert-dialog`. Renderiza `dialog` una vez en el componente.
+
+```tsx
+const { confirm, dialog } = useConfirm();
+const ok = await confirm({ title: "¿Marcar fuera de servicio?", description: "Saldrá de la programación de hoy.", destructive: true, confirmLabel: "Marcar" });
+if (!ok) return;
+return (<>{/* UI */}{dialog}</>);
+```
+
+**`Toaster` / `toast()`** — el `Toaster` ya está montado en `app/layout.tsx`. Llama `toast` desde código cliente; «Deshacer» cierra el aviso al pulsarlo.
+
+```tsx
+toast.success("Servicio guardado");
+toast.error("No pudimos asignar la tripulación", { description: result.error });
+toast({ title: "Vehículo en FDS", tone: "warning", action: { label: "Deshacer", onClick: revert } });
+```
+
+**`FileDrop`** — zona de arrastre con input real; valida tipo y tamaño y muestra nombre, peso y error.
+
+```tsx
+<Field label="Hoja de vida (Excel)" required>
+  {(p) => <FileDrop {...p} file={file} onFileChange={setFile} accept=".xlsx,.xls" maxBytes={5 * 1024 * 1024} helper="Excel, máximo 5 MB" />}
+</Field>
+```
+
+**`EmptyState`** — vacío con una acción.
+
+```tsx
+<EmptyState icon={Truck} title="Aún no hay vehículos" description="Crea el primero para empezar." action={<Button>Crear vehículo</Button>} />
+```
+
+**`ErrorState`** — fallo de carga con salida (`error.tsx` pasa `reset`).
+
+```tsx
+<ErrorState title="No pudimos cargar los servicios" onRetry={reset} />
+```
+
+**`Skeleton` / `SkeletonRegion`** — esqueleto en `loading.tsx`; la región anuncia «Cargando…» una vez.
+
+```tsx
+<SkeletonRegion className="space-y-3"><Skeleton className="h-8 w-48" /><Skeleton className="h-64 w-full" /></SkeletonRegion>
+```
+
+**`StatTile`** — una métrica (sustituye contadores y tarjetas ad hoc); con `href` es un enlace.
+
+```tsx
+<StatTile label="Sin asignar" value={3} tone="warning" icon={AlertTriangle} hint="Actualizado 14:32" href="/servicios?estado=sin-asignar" />
+```
+
+**`SegmentedControl`** — filtro de una sola opción como `radiogroup` (flechas, Home/End, un solo tab stop).
+
+```tsx
+<SegmentedControl aria-label="Servicios a mostrar" value={filtro} onValueChange={setFiltro}
+  options={[{ value: "abiertos", label: "Abiertos" }, { value: "todos", label: "Todos hoy" }]} />
+```
+
+**`ResponsiveTable`** — tabla desde `md`; tarjetas con las columnas clave y menú «⋯» por debajo.
+
+```tsx
+<ResponsiveTable caption="Vehículos" rows={vehiculos} getRowId={(v) => v.id} empty={<EmptyState title="Sin vehículos" />}
+  columns={[{ key: "placa", header: "Placa", rowHeader: true, cell: (v) => v.placa }, { key: "estado", header: "Estado", cell: (v) => <StatusBadge tone="success">{v.estado}</StatusBadge> }]}
+  actions={(v) => [{ label: "Editar", onSelect: editar }, { label: "Eliminar", destructive: true, onSelect: eliminar }]}
+  actionsLabel={(v) => `Acciones de ${v.placa}`} />
+```
