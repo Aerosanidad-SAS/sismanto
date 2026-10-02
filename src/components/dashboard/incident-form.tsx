@@ -1,5 +1,6 @@
 "use client";
 
+import { HALLAZGOS_CRITICOS, PREFIJO_CRITICO } from "@/lib/hallazgos-criticos";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,18 +28,6 @@ interface IncidentFormProps {
   /** Prefill de descripción (p. ej. desde un ítem fallado del preoperacional) */
   initialDescripcion?: string;
 }
-
-/** Hallazgos que sacan el vehículo de servicio en el acto (decisión de Daniel, 2026-09-30). */
-const HALLAZGOS_CRITICOS = [
-  "Sin aceite de motor",
-  "Fuga excesiva de líquido en el piso",
-  "Falla de frenos",
-  "Falla de dirección o suspensión",
-  "Sobrecalentamiento del motor",
-  "Humo excesivo",
-  "Sin SOAT o SOAT vencido",
-  "Sin revisión técnico-mecánica vigente",
-] as const;
 
 export function IncidentForm({
   vehicleId,
@@ -73,7 +62,6 @@ export function IncidentForm({
   });
 
   const severidad = watch("severidad");
-  const afecta = watch("afectaOperatividad");
   const [critico, setCritico] = useState<string | null>(null);
 
   // Un hallazgo crítico marca la novedad como severa y que impide operar: el trigger de la base pasa el vehículo a FDS.
@@ -82,7 +70,7 @@ export function IncidentForm({
     setConfirmarCritico(false);
     setValue("afectaOperatividad", hallazgo !== null);
     setValue("severidad", hallazgo !== null ? "ALTA" : "MEDIA");
-    setValue("descripcion", hallazgo !== null ? `CRÍTICO: ${hallazgo}. ` : "");
+    setValue("descripcion", hallazgo !== null ? `${PREFIJO_CRITICO}${hallazgo}. ` : "");
   };
 
   const onSubmit = async (data: IncidentFormData) => {
@@ -116,7 +104,7 @@ export function IncidentForm({
             ¿Es un hallazgo crítico?
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Si lo es, el vehículo queda fuera de servicio y se avisa a Regulación y Mantenimiento.
+            Si lo es, el sistema deja el vehículo NO APTO y avisa de inmediato a Regulación, Coordinación y Mantenimiento. No operes el vehículo.
           </p>
           <div role="group" aria-labelledby={`${uid}-critico`} className="mt-2 flex flex-wrap gap-2">
             {HALLAZGOS_CRITICOS.map((h) => (
@@ -136,10 +124,10 @@ export function IncidentForm({
               <input
                 type="checkbox"
                 className="h-5 w-5"
-                checked={Boolean(afecta)}
-                onChange={(e) => setValue("afectaOperatividad", e.target.checked)}
+                checked={severidad === "ALTA"}
+                onChange={(e) => setValue("severidad", e.target.checked ? "ALTA" : "MEDIA")}
               />
-              Otro problema que impide seguir operando el vehículo
+              Es urgente: Regulación debe revisarlo ya (no operes hasta que te confirmen)
             </label>
           )}
         </div>

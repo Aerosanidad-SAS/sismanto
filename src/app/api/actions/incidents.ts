@@ -5,7 +5,9 @@ import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { IncidentFormData } from "@/lib/validations";
 import { incidentSchema, updateIncidentPrioridadSchema } from "@/lib/validations";
-import { requireRole } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { esDescripcionCritica } from "@/lib/hallazgos-criticos";
+import { avisarVehiculoNoApto } from "@/lib/notifications/alerta-no-apto";
 import { z } from "zod";
 
 const ROLES_CIERRE = ["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"] as const;
@@ -19,6 +21,11 @@ export async function createIncident(data: IncidentFormData) {
   try {
     const payload = parsed.data;
     const severidad = payload.severidad ?? "MEDIA";
+    // El OVEM no decide a criterio sacar un vehículo de servicio: solo un hallazgo crítico de la lista cerrada del
+    // sistema lo hace (y avisa de inmediato). Cualquier otra cosa queda como novedad para que Regulación o
+    // Mantenimiento decidan. Los demás roles conservan su criterio.
+    const perfil = await getProfile();
+    const afectaOperatividad = perfil?.role_codigo === "OVEM" ? payload.afectaOperatividad && esDescripcionCritica(payload.descripcion) : payload.afectaOperatividad;
     const { data: incident, error } = await supabase
       .from("incidents")
       .insert({
@@ -26,7 +33,7 @@ export async function createIncident(data: IncidentFormData) {
         descripcion: payload.descripcion,
         severidad,
         reportado_por: payload.reportadoPor,
-        afecta_operatividad: payload.afectaOperatividad,
+        afecta_operatividad: afectaOperatividad,
         estado: "ABIERTO",
       })
       .select()
@@ -37,6 +44,9 @@ export async function createIncident(data: IncidentFormData) {
     }
 
     // El trigger de la BD actualizará el estado del vehículo si afecta_operatividad = true
+    if (afectaOperatividad) {
+      await avisarVehiculoNoApto(supabase, { vehicleId: payload.vehicleId, hallazgos: [payload.descripcion], reportadoPor: payload.reportadoPor });
+    }
 
     await auditar("INSERTAR", "novedades", (incident as unknown as { id: number }).id, `Novedad reportada (severidad ${severidad})`);
     revalidatePath("/");

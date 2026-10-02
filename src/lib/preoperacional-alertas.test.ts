@@ -32,24 +32,26 @@ test("sin aceite de motor es crítico y saca el vehículo de servicio", () => {
   assert.match(n[0].descripcion, /CRÍTICO.*aceite/);
 });
 
-test("una novedad por crítico y una sola consolidada para el resto", () => {
-  const h = hallazgosPreoperacional(
-    [
-      item("Freno de pedal", "FALLA", "CRITICA", "pedal largo"),
-      item("Fuga de líquidos en el piso", "FALLA", "CRITICA", "charco de refrigerante"),
-      item("Pito", "FALLA", "MEDIA", "no suena"),
-      item("Luces principales", "FALLA", "ALTA", "una apagada"),
-    ],
-    AL_DIA,
-    HOY
-  );
-  const n = novedadesDeHallazgos(h, HOY);
+test("una novedad por hallazgo, con clave estable que no lleva fecha ni detalle", () => {
+  const items = [
+    item("Freno de pedal", "FALLA", "CRITICA", "pedal largo"),
+    item("Fuga de líquidos en el piso", "FALLA", "CRITICA", "charco de refrigerante"),
+    item("Pito", "FALLA", "MEDIA", "no suena"),
+    item("Luces principales", "FALLA", "ALTA", "una apagada"),
+  ];
+  const n = novedadesDeHallazgos(hallazgosPreoperacional(items, AL_DIA, HOY), HOY);
+  assert.equal(n.length, 4);
   assert.equal(n.filter((x) => x.afectaOperatividad).length, 2);
-  const resto = n.filter((x) => !x.afectaOperatividad);
-  assert.equal(resto.length, 1);
-  assert.equal(resto[0].severidad, "ALTA");
-  assert.match(resto[0].descripcion, /Pito.*Luces|Luces.*Pito/);
-  assert.equal(h[0].severidad, "CRITICA"); // ordenados de más a menos grave
+  assert.equal(n.find((x) => x.clave.endsWith("Pito"))?.severidad, "MEDIA");
+  assert.equal(n.find((x) => x.clave.endsWith("Luces principales"))?.severidad, "ALTA");
+  assert.match(n.find((x) => x.clave.endsWith("Pito"))?.descripcion ?? "", /^\[Preoperacional\] Pito — no suena$/);
+});
+
+test("el mismo bombillo quemado en días distintos produce la misma clave (no se acumulan novedades)", () => {
+  const ayer = novedadesDeHallazgos(hallazgosPreoperacional([item("Luz de freno", "FALLA", "MEDIA", "izquierda apagada")], AL_DIA, "2026-10-01"), "2026-10-01");
+  const hoy = novedadesDeHallazgos(hallazgosPreoperacional([item("Luz de freno", "FALLA", "MEDIA", "sigue apagada")], AL_DIA, "2026-10-02"), "2026-10-02");
+  assert.equal(ayer[0].clave, hoy[0].clave);
+  assert.ok(hoy[0].descripcion.startsWith(ayer[0].clave));
 });
 
 test("SOAT o técnico-mecánica vencidos son críticos aunque el OVEM no marque nada", () => {
