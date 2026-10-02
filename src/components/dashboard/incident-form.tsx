@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { incidentSchema, type IncidentFormData } from "@/lib/validations";
@@ -48,8 +48,12 @@ export function IncidentForm({
   hideSeveridad = false,
   initialDescripcion,
 }: IncidentFormProps) {
+  const uid = useId();
+  const idSeveridad = `${uid}-severidad`;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Envío con hallazgo crítico: se pide una confirmación explícita antes de sacar el vehículo de servicio. */
+  const [confirmarCritico, setConfirmarCritico] = useState(false);
 
   const {
     register,
@@ -75,12 +79,18 @@ export function IncidentForm({
   // Un hallazgo crítico marca la novedad como severa y que impide operar: el trigger de la base pasa el vehículo a FDS.
   const elegirCritico = (hallazgo: string | null) => {
     setCritico(hallazgo);
+    setConfirmarCritico(false);
     setValue("afectaOperatividad", hallazgo !== null);
     setValue("severidad", hallazgo !== null ? "ALTA" : "MEDIA");
     setValue("descripcion", hallazgo !== null ? `CRÍTICO: ${hallazgo}. ` : "");
   };
 
   const onSubmit = async (data: IncidentFormData) => {
+    if (critico !== null && !confirmarCritico) {
+      setConfirmarCritico(true);
+      return;
+    }
+    setConfirmarCritico(false);
     setIsSubmitting(true);
     setError(null);
 
@@ -92,7 +102,7 @@ export function IncidentForm({
         onSuccess();
       }
     } catch (err) {
-      setError("Error al crear la novedad. Intente nuevamente.");
+      setError("No se pudo crear la novedad. Inténtalo de nuevo.");
     } finally {
       setIsSubmitting(false);
     }
@@ -102,26 +112,30 @@ export function IncidentForm({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       {hideSeveridad && (
         <div>
-          <Label>¿Es un hallazgo crítico?</Label>
+          <p id={`${uid}-critico`} className="text-sm font-medium leading-none">
+            ¿Es un hallazgo crítico?
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Si lo es, el vehículo queda fuera de servicio y se avisa a Regulación y Mantenimiento.
           </p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div role="group" aria-labelledby={`${uid}-critico`} className="mt-2 flex flex-wrap gap-2">
             {HALLAZGOS_CRITICOS.map((h) => (
               <button
                 key={h}
                 type="button"
+                aria-pressed={critico === h}
                 onClick={() => elegirCritico(critico === h ? null : h)}
-                className={`rounded-md border px-3 py-1.5 text-sm ${critico === h ? "border-red-600 bg-red-50 text-red-700" : "hover:bg-muted"}`}
+                className={`min-h-11 rounded-md border px-3 py-2 text-sm ${critico === h ? "border-destructive bg-destructive/10 font-semibold text-destructive" : "hover:bg-muted"}`}
               >
                 {h}
               </button>
             ))}
           </div>
           {critico === null && (
-            <label className="mt-3 flex items-center gap-2 text-sm">
+            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm">
               <input
                 type="checkbox"
+                className="h-5 w-5"
                 checked={Boolean(afecta)}
                 onChange={(e) => setValue("afectaOperatividad", e.target.checked)}
               />
@@ -136,11 +150,13 @@ export function IncidentForm({
         <Textarea
           id="descripcion"
           {...register("descripcion")}
-          placeholder="Describa la novedad o incidente..."
+          aria-invalid={errors.descripcion ? "true" : undefined}
+          aria-describedby={errors.descripcion ? `${uid}-descripcion-error` : undefined}
+          placeholder="Describe la novedad o incidente..."
           className="mt-1"
         />
         {errors.descripcion && (
-          <p className="text-sm text-red-600 mt-1">
+          <p id={`${uid}-descripcion-error`} role="alert" className="text-sm text-destructive mt-1">
             {errors.descripcion.message}
           </p>
         )}
@@ -148,14 +164,14 @@ export function IncidentForm({
 
       {!hideSeveridad && (
         <div>
-          <Label htmlFor="severidad">Clasificación del reporte *</Label>
+          <Label htmlFor={idSeveridad}>Clasificación del reporte *</Label>
           <Select
             value={severidad ?? "MEDIA"}
             onValueChange={(value) =>
               setValue("severidad", value as "BAJA" | "MEDIA" | "ALTA")
             }
           >
-            <SelectTrigger className="mt-1">
+            <SelectTrigger id={idSeveridad} className="mt-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -165,7 +181,7 @@ export function IncidentForm({
             </SelectContent>
           </Select>
           {errors.severidad && (
-            <p className="text-sm text-red-600 mt-1">
+            <p role="alert" className="text-sm text-destructive mt-1">
               {errors.severidad.message}
             </p>
           )}
@@ -177,19 +193,28 @@ export function IncidentForm({
         <Input
           id="reportadoPor"
           {...register("reportadoPor")}
+          aria-invalid={errors.reportadoPor ? "true" : undefined}
+          aria-describedby={errors.reportadoPor ? `${uid}-reportado-error` : undefined}
           placeholder="Nombre de quien reporta"
           className="mt-1"
         />
         {errors.reportadoPor && (
-          <p className="text-sm text-red-600 mt-1">
+          <p id={`${uid}-reportado-error`} role="alert" className="text-sm text-destructive mt-1">
             {errors.reportadoPor.message}
           </p>
         )}
       </div>
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-sm text-red-600">{error}</p>
+        <div role="alert" className="p-3 bg-destructive/10 border border-destructive/30 rounded-md">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
+
+      {confirmarCritico && critico !== null && (
+        <div role="alert" className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-foreground">
+          <p className="font-semibold">Confirma: {critico}</p>
+          <p className="mt-1">Al enviar, el vehículo queda fuera de servicio y se avisa a Regulación y Mantenimiento.</p>
         </div>
       )}
 
@@ -197,13 +222,25 @@ export function IncidentForm({
         <Button
           type="button"
           variant="outline"
+          className="min-h-11"
           onClick={onSuccess}
           disabled={isSubmitting}
         >
           Cancelar
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Guardando..." : "Guardar Novedad"}
+        <Button
+          type="submit"
+          className="min-h-11"
+          variant={confirmarCritico ? "destructive" : "default"}
+          disabled={isSubmitting}
+        >
+          {isSubmitting
+            ? "Guardando..."
+            : confirmarCritico
+              ? "Sí, sacar de servicio y enviar"
+              : critico !== null
+                ? "Revisar y enviar"
+                : "Guardar novedad"}
         </Button>
       </div>
     </form>

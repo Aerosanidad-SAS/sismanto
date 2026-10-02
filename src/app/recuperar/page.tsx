@@ -48,9 +48,9 @@ export default function RecuperarPage() {
         <CardHeader>
           <CardTitle className="text-2xl">Recuperar contraseña</CardTitle>
           <CardDescription>
-            {paso === "cedula" && "Escriba su cédula. Le enviaremos un código a su correo registrado."}
-            {paso === "codigo" && "Escriba el código que le llegó al correo y su contraseña nueva."}
-            {paso === "listo" && "Su contraseña quedó cambiada."}
+            {paso === "cedula" && "Escribe tu cédula. Te enviaremos un código a tu correo registrado."}
+            {paso === "codigo" && "Escribe el código que te llegó al correo y tu contraseña nueva."}
+            {paso === "listo" && "Tu contraseña quedó cambiada."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -130,7 +130,9 @@ export default function RecuperarPage() {
             </Button>
           )}
 
-          {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          {error && <div role="alert" className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>}
           {paso !== "listo" && (
             <p className="text-center text-sm">
               <Link href="/login" className="text-muted-foreground underline">
