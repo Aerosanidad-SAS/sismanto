@@ -96,8 +96,9 @@ export default async function ServiciosPage({
   }
 
   return (
-    // -mx-4 recorta el relleno de 32 px del layout a 16 px: esta lista necesita todo el ancho posible.
-    <div className="-mx-4 space-y-4">
+    // En pantallas grandes, -mx-4 recorta el relleno de 32 px del layout a 16 px (la lista necesita ancho).
+    // Bajo lg no se recorta: el relleno ya es de 16 px y el contenido no debe quedar pegado al borde.
+    <div className="space-y-4 lg:-mx-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl">Servicios registrados</h1>
@@ -133,7 +134,7 @@ export default async function ServiciosPage({
             destinos={opciones.destinos}
           />
           {errorLista && (
-            <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               No se pudo cargar la lista de servicios: {errorLista}
             </p>
           )}
