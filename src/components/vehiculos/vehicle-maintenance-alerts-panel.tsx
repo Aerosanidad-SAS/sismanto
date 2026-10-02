@@ -1,7 +1,7 @@
 "use client";
 
 import { formatoDia, hoyBogota, normalizarDia, sumarDias } from "@/lib/fechas";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { registrarCumplimiento } from "@/app/api/actions/plan-mantenimiento";
 import {
@@ -38,6 +38,13 @@ function nivelBadgeVariant(nivel: AlertLevel): "destructive" | "warning" | "succ
   return "success";
 }
 
+/** Texto visible del nivel: el dato sigue siendo ROJA/NARANJA/OK, la pantalla habla de estado. */
+function nivelLabel(nivel: AlertLevel) {
+  if (nivel === "ROJA")    return "Vencido";
+  if (nivel === "NARANJA") return "Próximo";
+  return "Al día";
+}
+
 function AlertRow({
   alert,
   canLog,
@@ -48,6 +55,11 @@ function AlertRow({
   vehicleId: string;
 }) {
   const router = useRouter();
+  const uid = useId();
+  const fechaId = `${uid}-fecha`;
+  const kmId = `${uid}-km`;
+  const notasId = `${uid}-notas`;
+  const panelId = `${uid}-registro`;
   const [open, setOpen]           = useState(false);
   const [isPending, startTransition] = useTransition();
   const [km, setKm]               = useState("");
@@ -99,7 +111,7 @@ function AlertRow({
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={nivelBadgeVariant(alert.nivel_alerta)} className="text-xs">
-              {alert.nivel_alerta}
+              {nivelLabel(alert.nivel_alerta)}
             </Badge>
             <Badge variant="outline" className="text-xs">{alert.categoria}</Badge>
             <span className="text-sm font-medium truncate">{alert.descripcion}</span>
@@ -113,26 +125,29 @@ function AlertRow({
             size="sm"
             variant="outline"
             className="shrink-0"
+            aria-expanded={open}
+            aria-controls={panelId}
             onClick={() => setOpen(!open)}
           >
-            {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            {open ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
             <span className="ml-1 text-xs">Registrar</span>
           </Button>
         )}
       </div>
 
       {open && (
-        <form onSubmit={handleSubmit} className="mt-3 border-t pt-3 space-y-3">
-          {err && <p className="text-xs text-red-600">{err}</p>}
+        <form id={panelId} onSubmit={handleSubmit} className="mt-3 border-t pt-3 space-y-3">
+          {err && <p role="alert" className="text-xs text-destructive">{err}</p>}
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <Label className="text-xs">Fecha realizado</Label>
-              <DateField value={fecha} onChange={setFecha} />
+              <Label htmlFor={fechaId} className="text-xs">Fecha realizado</Label>
+              <DateField id={fechaId} value={fecha} onChange={setFecha} />
             </div>
             {alert.intervalo_km > 0 && (
               <div>
-                <Label className="text-xs">Kilometraje al realizar</Label>
+                <Label htmlFor={kmId} className="text-xs">Kilometraje al realizar</Label>
                 <Input
+                  id={kmId}
                   type="number"
                   min={0}
                   placeholder="ej. 45000"
@@ -143,8 +158,9 @@ function AlertRow({
               </div>
             )}
             <div>
-              <Label className="text-xs">Notas</Label>
+              <Label htmlFor={notasId} className="text-xs">Notas</Label>
               <Input
+                id={notasId}
                 placeholder="Opcional"
                 value={notas}
                 onChange={(e) => setNotas(e.target.value)}
@@ -179,7 +195,7 @@ export function VehicleMaintenanceAlertsPanel({ vehicleId, placa, alerts, canLog
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-amber-500" />
+          <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden="true" />
           Plan de Mantenimiento Preventivo
         </CardTitle>
         <CardDescription>

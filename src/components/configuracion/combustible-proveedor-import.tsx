@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatoInstante } from "@/lib/fechas";
+import { ImportFileDrop, ImportSteps } from "@/components/configuracion/import-flow";
 
 function descargarCsv(nombre: string, filas: string[][]) {
   const csv = filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
@@ -29,6 +30,7 @@ export function CombustibleProveedorImport() {
   const [nombre, setNombre] = useState("");
   const [reporte, setReporte] = useState<ReporteCombustible | null>(null);
   const [ultima, setUltima] = useState<UltimaCargaCombustible | null>(null);
+  const [leyendo, setLeyendo] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
@@ -36,32 +38,38 @@ export function CombustibleProveedorImport() {
     getUltimaCargaCombustible().then(setUltima).catch(() => setUltima(null));
   }, []);
 
-  const elegirArchivo = async (file: File | undefined) => {
-    setReporte(null);
-    setAviso(null);
-    setHoja(null);
-    if (!file) return;
-    try {
-      // Sin transformar: el archivo del proveedor se sube tal cual; el servidor detecta las columnas por nombre.
-      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const nombreHoja = wb.SheetNames.find((n) => /combustible/i.test(n)) ?? wb.SheetNames[0];
-      setHoja(XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nombreHoja], { header: 1, defval: "", raw: true }));
-      setNombre(file.name);
-    } catch {
-      setAviso("No se pudo leer el archivo. Sube el Excel (.xlsx, .xls) o CSV tal como lo descargas del proveedor.");
-    }
-  };
-
-  const ejecutar = async (confirmar: boolean) => {
-    if (!hoja) return;
+  const ejecutar = async (datos: unknown[][], archivo: string, confirmar: boolean) => {
     setCargando(true);
     setAviso(null);
-    const res = await cargarCombustibleProveedor(hoja, nombre, confirmar);
+    const res = await cargarCombustibleProveedor(datos, archivo, confirmar);
     setCargando(false);
     if ("error" in res) setAviso(res.error);
     else {
       setReporte(res);
       if (res.ultimaCarga) setUltima(res.ultimaCarga);
+    }
+  };
+
+  // La vista previa corre sola al elegir el archivo; nada se escribe hasta confirmar.
+  const elegirArchivo = async (file: File | undefined) => {
+    setReporte(null);
+    setAviso(null);
+    setHoja(null);
+    if (!file) return;
+    setLeyendo(true);
+    try {
+      // Sin transformar: el archivo del proveedor se sube tal cual; el servidor detecta las columnas por nombre.
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const nombreHoja = wb.SheetNames.find((n) => /combustible/i.test(n)) ?? wb.SheetNames[0];
+      const datos = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nombreHoja], { header: 1, defval: "", raw: true });
+      setHoja(datos);
+      setNombre(file.name);
+      setLeyendo(false);
+      await ejecutar(datos, file.name, false);
+    } catch {
+      setAviso("No se pudo leer el archivo. Sube el Excel (.xlsx, .xls) o CSV tal como lo descargas del proveedor.");
+    } finally {
+      setLeyendo(false);
     }
   };
 
@@ -89,33 +97,29 @@ export function CombustibleProveedorImport() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => elegirArchivo(e.target.files?.[0])} className="block text-sm" />
+        <ImportSteps current={reporte ? "confirmar" : hoja || leyendo ? "revisar" : "subir"} />
+        <ImportFileDrop
+          accept=".xlsx,.xls,.csv"
+          hint="Excel (.xlsx, .xls) o CSV, tal como lo descargas del proveedor."
+          label="Elige el archivo del proveedor o arrástralo aquí"
+          busy={leyendo || cargando}
+          busyLabel={leyendo ? "Leyendo el archivo…" : "Revisando qué pasaría…"}
+          onFiles={(files) => elegirArchivo(files[0])}
+        />
 
         {aviso && (
-          <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
             {aviso}
           </p>
         )}
 
-        {hoja && (
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-muted-foreground">{nombre}</p>
-            <Button type="button" variant="outline" onClick={() => ejecutar(false)} disabled={cargando}>
-              {cargando && !reporte ? "Revisando…" : "Vista previa"}
-            </Button>
-            {reporte && !reporte.aplicado && reporte.nuevas > 0 && (
-              <Button type="button" onClick={() => ejecutar(true)} disabled={cargando}>
-                {cargando ? "Cargando…" : `Confirmar carga (${reporte.nuevas})`}
-              </Button>
-            )}
-          </div>
-        )}
+        {hoja && <p className="text-sm text-muted-foreground">{nombre}</p>}
 
         {reporte && (
           <div className="space-y-4">
             <p className={`flex items-center gap-2 text-sm font-medium ${reporte.aplicado ? "text-green-700" : "text-amber-700"}`}>
-              {reporte.aplicado ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <AlertTriangle className="h-4 w-4" aria-hidden />}
-              {reporte.aplicado ? "Carga aplicada." : "Vista previa: todavía no se escribió nada."}
+              {reporte.aplicado ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <AlertTriangle className="h-4 w-4" aria-hidden="true" />}
+              {reporte.aplicado ? "Carga aplicada." : "Vista previa: todavía no se escribió nada. Revisa las cifras y confirma."}
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
@@ -135,6 +139,20 @@ export function CombustibleProveedorImport() {
               {reporte.kmSospechosos} km sospechosos (se cargan, pero no mueven el km del vehículo)
             </p>
 
+            {!reporte.aplicado && (
+              <Button
+                type="button"
+                onClick={() => hoja && ejecutar(hoja, nombre, true)}
+                disabled={cargando || reporte.nuevas === 0}
+              >
+                {cargando
+                  ? "Cargando…"
+                  : reporte.nuevas === 0
+                    ? "No hay filas nuevas para cargar"
+                    : `Confirmar carga de ${reporte.nuevas} ${reporte.nuevas === 1 ? "fila nueva" : "filas nuevas"}`}
+              </Button>
+            )}
+
             {reporte.placasDesconocidas.length > 0 && (
               <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
                 Placas que no están en la flota (no se cargan, el resto sí):{" "}
@@ -150,7 +168,7 @@ export function CombustibleProveedorImport() {
                 <ul className="max-h-64 space-y-1 overflow-auto rounded-md border p-2 text-sm">
                   {reporte.errores.slice(0, 100).map((e, i) => (
                     <li key={`e${i}`}>
-                      <span className="font-mono text-xs text-red-700">Error · fila {e.fila}</span> {e.placa} — {e.mensaje}
+                      <span className="font-mono text-xs text-destructive">Error · fila {e.fila}</span> {e.placa} — {e.mensaje}
                     </li>
                   ))}
                   {reporte.advertencias.slice(0, 100).map((w, i) => (
