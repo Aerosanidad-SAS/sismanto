@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTabParam } from "@/components/layout/use-tab-param";
 
 export interface DashboardTabDef {
   key: string;
@@ -22,16 +23,22 @@ export interface DashboardTabDef {
  * Si al rol le queda una sola pestaña visible, se muestra ese contenido directo, sin la barra.
  */
 export function DashboardTabs({ tabs, defaultTab }: { tabs: DashboardTabDef[]; defaultTab?: string }) {
+  const inicial = tabs.find((t) => t.key === defaultTab)?.key ?? tabs[0]?.key ?? "";
+  // La pestaña activa va en la URL (?tab=servicios): se puede enlazar y sobrevive a recargar.
+  const [tab, setTab] = useTabParam(
+    tabs.map((t) => t.key),
+    inicial
+  );
+
   if (tabs.length === 0) return null;
   if (tabs.length === 1) return <>{tabs[0].content}</>;
 
-  const inicial = tabs.some((t) => t.key === defaultTab) ? defaultTab : tabs[0].key;
-
   return (
-    <Tabs defaultValue={inicial} className="space-y-6">
-      <TabsList className="h-auto flex-wrap justify-start gap-1">
+    <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+      {/* En móvil la barra se desplaza en horizontal; desde sm vuelve a envolver en varias filas. */}
+      <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto sm:flex-wrap">
         {tabs.map((t) => (
-          <TabsTrigger key={t.key} value={t.key} className="gap-1.5">
+          <TabsTrigger key={t.key} value={t.key} className="shrink-0 gap-1.5">
             {t.icon}
             {t.label}
           </TabsTrigger>

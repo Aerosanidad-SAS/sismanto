@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/app/api/actions/auth";
 import { MaintenanceForm } from "@/components/forms/maintenance-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FormSkeleton } from "@/components/layout/skeletons";
 
 async function getFormData() {
   try {
@@ -54,7 +55,7 @@ export default async function NuevoMantenimientoPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={<div>Cargando formulario...</div>}>
+          <Suspense fallback={<FormSkeleton />}>
             <MaintenanceForm
               vehicles={vehicles}
               categories={categoriasAgrupadas}
