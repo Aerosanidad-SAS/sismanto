@@ -4,6 +4,8 @@ import { getProfile } from "@/app/api/actions/auth";
 import { isAdminLike } from "@/lib/auth-utils";
 import { NovedadesTabla } from "@/components/novedades/novedades-tabla";
 
+export const metadata = { title: "Novedades" };
+
 const ROLES_CIERRE = ["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"];
 // Quiénes pueden crear un mantenimiento nuevo desde el cierre de una
 // novedad — mismo set que la RLS de insert en maintenance_records.

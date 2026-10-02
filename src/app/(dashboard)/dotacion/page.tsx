@@ -5,6 +5,8 @@ import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
 import { centroVisible } from "@/lib/auth-utils";
 import { DotacionPanel } from "@/components/dotacion/dotacion-panel";
 
+export const metadata = { title: "Dotación" };
+
 /**
  * Dotación e insumos de la ambulancia. La verifica la auxiliar de enfermería
  * al recibir el turno; el OVEM responde por el vehículo en el preoperacional.

@@ -6,6 +6,8 @@ import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { AlertasHojaDeVida } from "@/components/vehiculos/alertas-hoja-de-vida";
 import { hoyBogota } from "@/lib/fechas";
 
+export const metadata = { title: "Vehículos" };
+
 async function getVehicles() {
   try {
     const supabase = createClient();

@@ -7,6 +7,8 @@ import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
 import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
 import { fechaBogota } from "@/lib/vencimientos";
 
+export const metadata = { title: "Portal OVEM" };
+
 export default async function OvemPage() {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
