@@ -39,12 +39,25 @@ export function BarraTablero({ vehiculos, reportadoPor }: BarraTableroProps) {
   const [vehiculoId, setVehiculoId] = useState("");
 
   useEffect(() => {
+    // Al montar, los datos ya vienen frescos del servidor: se muestra esa hora desde el primer momento
+    // (en el cliente, para no desajustar la hidratación).
+    setUltima(new Date());
     // Sin dependencias: se monta una vez y refresca los datos del servidor.
-    const id = setInterval(() => {
+    const refrescarSiVisible = () => {
+      // Una pestaña oculta no necesita refrescar: se pone al día al volver a verla.
+      if (document.hidden) return;
       router.refresh();
       setUltima(new Date());
-    }, INTERVALO_REFRESCO_MS);
-    return () => clearInterval(id);
+    };
+    const id = setInterval(refrescarSiVisible, INTERVALO_REFRESCO_MS);
+    const alVolver = () => {
+      if (!document.hidden) refrescarSiVisible();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+    };
   }, [router]);
 
   const refrescarAhora = () => {
@@ -54,10 +67,10 @@ export function BarraTablero({ vehiculos, reportadoPor }: BarraTableroProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground" title="Se actualiza cada 30 segundos">
         {ultima
-          ? `Actualizado ${ultima.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "America/Bogota" })}`
-          : "Se actualiza cada 30 segundos"}
+          ? `Actualizado ${ultima.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "America/Bogota" })}`
+          : "Actualizando…"}
       </p>
       <Button variant="outline" size="sm" onClick={refrescarAhora}>
         <RefreshCw className="mr-1 h-4 w-4" />
@@ -78,7 +91,7 @@ export function BarraTablero({ vehiculos, reportadoPor }: BarraTableroProps) {
               <Label>Vehículo *</Label>
               <Select value={vehiculoId} onValueChange={setVehiculoId}>
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Seleccione la placa" />
+                  <SelectValue placeholder="Selecciona la placa" />
                 </SelectTrigger>
                 <SelectContent>
                   {vehiculos.map((v) => (
