@@ -28,19 +28,20 @@ import { NAV_GROUPS } from "@/lib/navegacion";
 import { moduloVisible, rutaDeRespaldo, rutaOculta } from "@/lib/permisos";
 import { getMisModulosOcultos } from "@/app/api/actions/permisos";
 
+// El color del rol es solo decoración (punto); el nombre del rol ya es texto y se lee con contraste AA.
 const ROLE_BADGE_STYLES: Record<UserRole, string> = {
-  ADMIN: "bg-[#7F7FF4] text-white",
-  REGULACION: "bg-[#2BB6C7] text-white",
-  GERENCIAL: "bg-[#1B6368] text-white",
-  OVEM: "bg-[#9C9B99] text-white",
-  MANTENIMIENTO: "bg-[#666564] text-white",
-  COORDINACION: "bg-[#0E7490] text-white",
-  ANALISTA: "bg-[#8B5CF6] text-white",
-  MEDICO: "bg-[#16A34A] text-white",
-  AUXILIAR_ENFERMERIA: "bg-[#65A30D] text-white",
-  VISTA: "bg-[#94A3B8] text-white",
-  TECNICO: "bg-[#0F766E] text-white",
-  AEROPUERTO: "bg-[#B45309] text-white",
+  ADMIN: "bg-muted text-foreground",
+  REGULACION: "bg-muted text-foreground",
+  GERENCIAL: "bg-muted text-foreground",
+  OVEM: "bg-muted text-foreground",
+  MANTENIMIENTO: "bg-muted text-foreground",
+  COORDINACION: "bg-muted text-foreground",
+  ANALISTA: "bg-muted text-foreground",
+  MEDICO: "bg-muted text-foreground",
+  AUXILIAR_ENFERMERIA: "bg-muted text-foreground",
+  VISTA: "bg-muted text-foreground",
+  TECNICO: "bg-muted text-foreground",
+  AEROPUERTO: "bg-muted text-foreground",
 };
 
 const SIDEBAR_COLLAPSE_KEY = "aeromanto-sidebar-collapsed";
@@ -241,10 +242,18 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-background min-h-[100dvh]">
+      <a
+        href="#contenido"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[60] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
+      >
+        Saltar al contenido
+      </a>
       {/* Backdrop solo móvil / tablet cuando el drawer está abierto */}
       <button
         type="button"
         aria-label="Cerrar menú"
+        tabIndex={-1}
+        aria-hidden={!mobileNavOpen}
         className={cn(
           "fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] transition-opacity lg:hidden",
           mobileNavOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
@@ -298,7 +307,7 @@ export default function DashboardLayout({
           "lg:w-72 lg:max-w-none lg:shadow-none",
           showCollapsedChrome && "lg:!w-[4.75rem]",
           /* Drawer móvil */
-          mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full invisible lg:visible lg:translate-x-0",
           "pl-[env(safe-area-inset-left)]"
         )}
       >
@@ -455,6 +464,7 @@ export default function DashboardLayout({
                     <Link
                       key={item.name}
                       href={item.href}
+                      aria-current={isActive ? "page" : undefined}
                       title={showCollapsedChrome ? `${item.name}: ${item.hint}` : item.hint}
                       className={cn(
                         "flex items-center rounded-lg transition-colors touch-manipulation min-h-[44px] lg:min-h-10",
@@ -512,7 +522,10 @@ export default function DashboardLayout({
       >
         <RoleSwitchBanner />
         <main
+          id="contenido"
+          tabIndex={-1}
           className={cn(
+            "outline-none",
             "mx-auto w-full max-w-[100vw]",
             /* Padding contenido más cómodo en móvil; tablas pueden usar overflow-x-auto en cada página */
             "px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-8",

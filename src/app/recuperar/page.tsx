@@ -46,7 +46,7 @@ export default function RecuperarPage() {
     <div className="flex min-h-screen min-h-[100dvh] items-center justify-center bg-muted/40 px-4 py-6">
       <Card className="w-full max-w-md border-border shadow-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Recuperar contraseña</CardTitle>
+          <CardTitle as="h1" className="text-2xl">Recuperar contraseña</CardTitle>
           <CardDescription>
             {paso === "cedula" && "Escriba su cédula. Le enviaremos un código a su correo registrado."}
             {paso === "codigo" && "Escriba el código que le llegó al correo y su contraseña nueva."}

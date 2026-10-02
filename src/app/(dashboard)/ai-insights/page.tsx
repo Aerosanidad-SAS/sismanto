@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/app/api/actions/auth";
 import { InsightsPanel } from "@/components/ai/InsightsPanel";
 
+
+export const metadata = { title: "Análisis con IA" };
+
 export default async function AIInsightsPage() {
   const profile = await getProfile();
   if (!profile || !["ADMIN", "GERENCIAL", "COORDINACION"].includes(profile.role_codigo)) {

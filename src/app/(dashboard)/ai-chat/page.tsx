@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/app/api/actions/auth";
 import { ChatInterface } from "@/components/ai/ChatInterface";
 
+
+export const metadata = { title: "Asistente" };
+
 export default async function AIChatPage() {
   const profile = await getProfile();
   if (!profile || !["ADMIN", "GERENCIAL"].includes(profile.role_codigo)) {

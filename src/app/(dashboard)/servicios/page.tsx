@@ -22,6 +22,9 @@ import { ServiciosPaginacion } from "@/components/servicios/servicios-paginacion
 import { ExportarServicios } from "@/components/servicios/exportar-servicios";
 import { AvisosServicios } from "@/components/servicios/avisos-servicios";
 
+
+export const metadata = { title: "Servicios" };
+
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
 

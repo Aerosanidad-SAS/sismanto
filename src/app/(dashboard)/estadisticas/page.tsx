@@ -7,6 +7,9 @@ import { requireRole } from "@/app/api/actions/auth";
 import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
 import { CIUDADES_SERVICIO, prefijoCiudad } from "@/lib/servicios-lista";
 
+
+export const metadata = { title: "Estadísticas" };
+
 export default async function EstadisticasPage({
   searchParams,
 }: {

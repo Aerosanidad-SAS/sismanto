@@ -10,6 +10,9 @@ import { PacientesPaginacion } from "@/components/pacientes/pacientes-paginacion
 import { ROLES_EXPORTAR_PACIENTES } from "@/lib/pacientes-export";
 import { leerBusquedaPacientes } from "@/lib/pacientes-lista";
 
+
+export const metadata = { title: "Pacientes" };
+
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 
 export default async function PacientesPage({

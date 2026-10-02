@@ -4,6 +4,9 @@ import { getAerolineas } from "@/app/api/actions/aerolineas";
 import { AerolineasTabla } from "@/components/aeropuertos/aerolineas-tabla";
 import { ROLES_ADMIN_AEROLINEAS } from "@/lib/aeropuertos";
 
+
+export const metadata = { title: "Aerolíneas" };
+
 export default async function AerolineasPage() {
   await requireRole(["ADMIN", "MEDICO", "ANALISTA", "VISTA"]);
   const [profile, aerolineas] = await Promise.all([getProfile(), getAerolineas()]);

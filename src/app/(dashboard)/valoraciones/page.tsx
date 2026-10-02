@@ -7,6 +7,9 @@ import { ValoracionesPaginacion } from "@/components/pacientes/valoraciones-pagi
 import { ROLES_ELIMINAR_VALORACION, leerBusquedaValoraciones } from "@/lib/valoraciones-lista";
 import { formatNumber } from "@/lib/utils";
 
+
+export const metadata = { title: "Valoraciones" };
+
 const ROLES_EDICION = ["ADMIN", "MEDICO", "ANALISTA"];
 
 export default async function ValoracionesPage({
