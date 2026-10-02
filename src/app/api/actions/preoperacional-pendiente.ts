@@ -25,12 +25,20 @@ export interface PreoperacionalHoy {
 
 /**
  * Estado del preoperacional de hoy en el centro de quien consulta (todos los centros si no tiene uno).
- * "Se espera que opere" = OPERATIVO con tripulación activa hoy; cuando exista la programación diaria de
- * Regulación, esa lista pasa a ser la fuente. Lo leen Regulación, Coordinación, Analista y Admin (RLS de daily_checks).
+ * "Se espera que opere" = OPERATIVO y programado hoy (vehicle_operacion_diaria); sin programación en su centro, OPERATIVO con tripulación. Lo leen Regulación, Coordinación, Analista y Admin (RLS de daily_checks).
  */
 export async function getPreoperacionalHoy(): Promise<PreoperacionalHoy> {
   const flota = await getFleetWithAssignments();
-  const esperados = flota.filter((v) => v.estado_actual === "OPERATIVO" && v.assignments.length > 0);
+  const operativos = flota.filter((v) => v.estado_actual === "OPERATIVO");
+  // Fuente preferida: la programación del día (migración 108). El respaldo (operativo con tripulación) se decide POR CENTRO:
+  // un centro que ya programó hoy usa solo su programación; los que aún no, conservan el criterio anterior y no pasan a
+  // «0 esperados» porque otro centro empezó a usar la programación.
+  const { data: programados } = await createClient().from("vehicle_operacion_diaria" as never).select("vehicle_id").eq("fecha", hoyBogota());
+  const idsProgramados = new Set(((programados ?? []) as { vehicle_id: string }[]).map((p) => p.vehicle_id));
+  const centrosConProgramacion = new Set(flota.filter((v) => idsProgramados.has(v.id)).map((v) => v.centro_operativo));
+  const esperados = operativos.filter((v) =>
+    centrosConProgramacion.has(v.centro_operativo) ? idsProgramados.has(v.id) : v.assignments.length > 0,
+  );
   const vencido = horaBogota() >= HORA_LIMITE_PREOPERACIONAL;
   const base = { esperados: esperados.length, realizados: 0, pendientes: [], conFalla: [], vencido, horaLimite: HORA_LIMITE_PREOPERACIONAL };
   if (esperados.length === 0) return base;

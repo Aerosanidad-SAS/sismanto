@@ -9,6 +9,8 @@ import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
 import { ServiciosDelDia, type ServicioDelDia } from "@/components/regulacion/servicios-del-dia";
 import { MantenimientoCard, VencimientosCard } from "@/components/regulacion/alertas-flota";
 import { BarraTablero } from "@/components/regulacion/barra-tablero";
+import { ProgramacionDiaria } from "@/components/regulacion/programacion-diaria";
+import { getProgramacionDelDia } from "@/app/api/actions/programacion";
 import { PreoperacionalHoyCard } from "@/components/regulacion/preoperacional-hoy";
 import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
 import { HelpTrigger } from "@/components/ui/help-trigger";
@@ -30,13 +32,15 @@ export default async function RegulacionPage({
     redirect("/");
   }
 
-  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional] = await Promise.all([
+  const diaPedido = Array.isArray(searchParams.dia) ? searchParams.dia[0] : searchParams.dia;
+  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion] = await Promise.all([
     getTableroRegulacion(),
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
     getUsuariosPorRol("MEDICO"),
     getUsuariosPorRol("AUXILIAR_ENFERMERIA"),
     getPreoperacionalHoy(),
+    getProgramacionDelDia(diaPedido ?? ""),
   ]);
 
   const vehiculosOperativos = (fleet as { id: string; placa: string; estado_actual: string }[])
@@ -83,6 +87,8 @@ export default async function RegulacionPage({
         <VencimientosCard vencimientos={tablero.vencimientos} />
         <MantenimientoCard mantenimiento={tablero.mantenimiento} />
       </div>
+
+      <ProgramacionDiaria datos={programacion} />
 
       <div>
         <div className="mb-3 flex flex-wrap items-center gap-2">

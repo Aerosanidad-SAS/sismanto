@@ -130,6 +130,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "105_seguimiento_gps_servicio.sql",          file: "scripts/migrations/105_seguimiento_gps_servicio.sql" },
   { name: "106_cotizaciones_ruta.sql",                   file: "scripts/migrations/106_cotizaciones_ruta.sql" },
   { name: "107_rol_modulo_oculto.sql",                     file: "scripts/migrations/107_rol_modulo_oculto.sql" },
+  { name: "108_programacion_diaria_operadores.sql",        file: "scripts/migrations/108_programacion_diaria_operadores.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
