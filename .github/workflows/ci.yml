@@ -25,6 +25,9 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci
+      # Toda migración de scripts/migrations/ debe estar en MIGRATIONS (apply-database.ts): si no, db-migrate.yml la
+      # salta sin avisar. Solo lee archivos (sin base de datos). Evita que un merge se lleve una línea de registro.
+      - run: npm run db:check
       - run: npm run lint
       # Corre las pruebas con TZ=UTC, America/Bogota y Asia/Tokyo: si un cálculo depende de la zona horaria, falla.
       - run: npm test
