@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatoDuracion, type Indicadores } from "@/lib/tickets-indicadores";
 import type { ConfigTickets } from "@/app/api/actions/tickets-config";
+import { ChartFigure } from "@/components/charts/chart-figure";
+import { describeSeries } from "@/lib/chart-summary";
 
 interface Props {
   datos: Indicadores & { config: ConfigTickets };
@@ -85,17 +87,33 @@ export function IndicadoresSoporte({ datos, desde, hasta }: Props) {
           {datos.cerradosPorTecnico.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay tickets cerrados en el periodo.</p>
           ) : (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={datos.cerradosPorTecnico}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="tecnico" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="cerrados" fill="#2BB6C7" name="Cerrados" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <ChartFigure
+              label={describeSeries({
+                title: "Tickets cerrados por técnico",
+                rows: datos.cerradosPorTecnico,
+                labelKey: "tecnico",
+                valueKey: "cerrados",
+                format: (v) => String(Math.round(v)),
+                noun: ["técnico", "técnicos"],
+              })}
+              columns={[
+                { key: "tecnico", header: "Técnico" },
+                { key: "cerrados", header: "Cerrados" },
+              ]}
+              rows={datos.cerradosPorTecnico}
+            >
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={datos.cerradosPorTecnico} accessibilityLayer>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="tecnico" tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Bar dataKey="cerrados" fill="hsl(var(--chart-1))" name="Cerrados" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </ChartFigure>
           )}
         </CardContent>
       </Card>

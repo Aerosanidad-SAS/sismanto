@@ -36,6 +36,9 @@ import { ciudadDelCentro, getFlotaDelDia } from "@/app/api/actions/coordinacion"
 import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
 import Link from "next/link";
 
+
+export const metadata = { title: "Inicio" };
+
 const DEFAULT_DATA = {
   totalOperativos: 0,
   totalFueraServicio: 0,

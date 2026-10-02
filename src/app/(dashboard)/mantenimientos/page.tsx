@@ -7,6 +7,8 @@ import { MantenimientoFiltrosForm } from "@/components/mantenimientos/mantenimie
 import { MantenimientosTabla } from "@/components/mantenimientos/mantenimientos-tabla";
 import { requireRole } from "@/app/api/actions/auth";
 
+export const metadata = { title: "Mantenimientos" };
+
 async function fetchCategorias() {
   try {
     const supabase = createClient();

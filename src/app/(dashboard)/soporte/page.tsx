@@ -6,6 +6,8 @@ import { getConfigTickets } from "@/app/api/actions/tickets-config";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { MisTickets } from "@/components/soporte/mis-tickets";
 
+export const metadata = { title: "Soporte" };
+
 export default async function SoportePage() {
   // Cualquier usuario con perfil activo puede pedir soporte y ver SUS tickets.
   // Lo que ve cada rol lo decide la base (RLS, migración 065), no esta página.

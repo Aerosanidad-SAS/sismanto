@@ -10,6 +10,8 @@ import {
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { EquiposTabla } from "@/components/equipos/equipos-tabla";
 
+export const metadata = { title: "Equipos" };
+
 const ROLES_EDICION = ["ADMIN", "MANTENIMIENTO", "ANALISTA"];
 
 export default async function EquiposPage() {

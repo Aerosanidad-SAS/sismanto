@@ -2,6 +2,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getDirectorioClientes } from "@/app/api/actions/directorios";
 import { DirectorioTabla } from "@/components/directorio/directorio-tabla";
 
+export const metadata = { title: "Clientes" };
+
 export default async function ClientesPage() {
   const clientes = await getDirectorioClientes();
   return (
