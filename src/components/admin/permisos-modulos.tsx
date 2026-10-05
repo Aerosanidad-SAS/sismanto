@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,90 +64,86 @@ export function PermisosModulos({ inicial }: { inicial: Record<string, string[]>
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Rol">
+    // Pestañas de ui/tabs (Radix): flechas, tabpanel y aria-controls vienen resueltos. Si hay cambios sin guardar,
+    // elegirRol pide confirmación y, si se cancela, el valor controlado no cambia.
+    <Tabs value={rol} onValueChange={(r) => elegirRol(r as UserRole)} className="space-y-4">
+      <TabsList aria-label="Rol" className="h-auto w-full flex-wrap justify-start gap-1">
         {ROLES_CONFIGURABLES.map((r) => {
           const n = guardados[r]?.length ?? 0;
           return (
-            <Button
-              key={r}
-              type="button"
-              role="tab"
-              aria-selected={r === rol}
-              variant={r === rol ? "default" : "outline"}
-              size="sm"
-              onClick={() => elegirRol(r)}
-            >
+            <TabsTrigger key={r} value={r}>
               {NOMBRE_ROL[r] ?? r}
-              {n > 0 && <span className="ml-1 text-xs opacity-80">({n} oculto{n === 1 ? "" : "s"})</span>}
-            </Button>
+              {n > 0 && <span className="ml-1 text-xs">({n} oculto{n === 1 ? "" : "s"})</span>}
+            </TabsTrigger>
           );
         })}
-      </div>
+      </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{NOMBRE_ROL[rol] ?? rol}</CardTitle>
-          <CardDescription>
-            Solo aparecen los módulos que este rol tiene por diseño. Desmarca los que no debe ver en el menú.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {grupos.map((g) => (
-            <fieldset key={g.label ?? "inicio"} className="space-y-2">
-              <legend className="text-sm font-semibold text-muted-foreground">{g.label ?? "Inicio"}</legend>
-              {g.items.map((item) => {
-                const visible = !ocultos.includes(item.href);
-                const id = `mod-${item.href}`;
-                return (
-                  <label
-                    key={item.href}
-                    htmlFor={id}
-                    className={cn(
-                      "flex min-h-11 cursor-pointer items-start gap-3 rounded-md border p-3",
-                      !visible && "bg-muted/50 text-muted-foreground"
-                    )}
-                  >
-                    <Checkbox
-                      id={id}
-                      className="mt-0.5"
-                      checked={visible}
-                      onCheckedChange={(v) => alternar(item.href, v)}
-                    />
-                    <span>
-                      <span className="font-medium">{item.name}</span>
-                      <span className="block text-sm text-muted-foreground">{item.hint}</span>
-                    </span>
-                  </label>
-                );
-              })}
-            </fieldset>
-          ))}
+      <TabsContent value={rol} className="mt-0">
+        <Card>
+          <CardHeader>
+            <CardTitle>{NOMBRE_ROL[rol] ?? rol}</CardTitle>
+            <CardDescription>
+              Solo aparecen los módulos que este rol tiene por diseño. Desmarca los que no debe ver en el menú.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {grupos.map((g) => (
+              <fieldset key={g.label ?? "inicio"} className="space-y-2">
+                <legend className="text-sm font-semibold text-muted-foreground">{g.label ?? "Inicio"}</legend>
+                {g.items.map((item) => {
+                  const visible = !ocultos.includes(item.href);
+                  const id = `mod-${item.href}`;
+                  return (
+                    <label
+                      key={item.href}
+                      htmlFor={id}
+                      className={cn(
+                        "flex min-h-11 cursor-pointer items-start gap-3 rounded-md border p-3",
+                        !visible && "bg-muted/50 text-muted-foreground"
+                      )}
+                    >
+                      <Checkbox
+                        id={id}
+                        className="mt-0.5"
+                        checked={visible}
+                        onCheckedChange={(v) => alternar(item.href, v)}
+                      />
+                      <span>
+                        <span className="font-medium">{item.name}</span>
+                        <span className="block text-sm text-muted-foreground">{item.hint}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </fieldset>
+            ))}
 
-          {mensaje && (
-            <Alert variant={mensaje.tipo === "error" ? "destructive" : "default"}>
-              <AlertDescription>{mensaje.texto}</AlertDescription>
-            </Alert>
-          )}
+            {mensaje && (
+              <Alert variant={mensaje.tipo === "error" ? "destructive" : "default"}>
+                <AlertDescription>{mensaje.texto}</AlertDescription>
+              </Alert>
+            )}
 
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={guardar} disabled={!cambios || guardando}>
-              {guardando ? "Guardando…" : "Guardar"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={ocultos.length === 0}
-              onClick={() => {
-                setOcultos([]);
-                setMensaje(null);
-              }}
-            >
-              Mostrar todos
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={guardar} disabled={!cambios || guardando}>
+                {guardando ? "Guardando…" : "Guardar"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={ocultos.length === 0}
+                onClick={() => {
+                  setOcultos([]);
+                  setMensaje(null);
+                }}
+              >
+                Mostrar todos
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
   );
 }
