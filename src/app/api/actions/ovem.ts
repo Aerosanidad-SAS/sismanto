@@ -15,6 +15,8 @@ import {
 import type { RoadAccidentFormData } from "@/lib/validations";
 import { validarPreoperacional } from "@/lib/preoperacional";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
+import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
+import { crearSolicitudNoApto } from "./solicitudes-no-apto";
 import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
 
 /** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
@@ -390,7 +392,8 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
       descripcion: resumen,
       severidad: row.hayLesionados || !row.vehiculoOperativo ? "ALTA" : "MEDIA",
       reportado_por: profile.nombre_completo || profile.email || "OVEM",
-      afecta_operatividad: !row.vehiculoOperativo,
+      // El OVEM no saca el vehículo de servicio a criterio: pide el NO APTO y lo avala Coordinación o el administrador.
+      afecta_operatividad: profile.role_codigo === "OVEM" ? false : !row.vehiculoOperativo,
       estado: "ABIERTO",
     })
     .select("id")
@@ -422,8 +425,20 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
     return { error: `La novedad #${incident.id} quedó creada, pero el detalle del siniestro no se guardó: ${error.message}` };
   }
 
+  // Siniestro con lesionados o con el vehículo no operativo: solicitud de NO APTO con aval (bloqueo provisional).
+  let solicitudNoApto = false;
+  if (profile.role_codigo === "OVEM" && siniestroPideNoApto(row)) {
+    const sol = await crearSolicitudNoApto({
+      vehicleId: row.vehicleId,
+      motivo: "Siniestro vial en " + row.lugar + ". " + (row.hayLesionados ? "Con lesionados. " : "") + (!row.vehiculoOperativo ? "El vehículo no está operativo. " : "") + row.descripcion,
+      origen: "SINIESTRO",
+      incidentId: incident.id as number,
+    });
+    solicitudNoApto = !("error" in sol && sol.error);
+  }
+
   revalidatePath("/ovem");
   revalidatePath("/novedades");
   revalidatePath("/regulacion");
-  return { success: true, incidentId: incident.id as number };
+  return { success: true, incidentId: incident.id as number, solicitudNoApto };
 }
