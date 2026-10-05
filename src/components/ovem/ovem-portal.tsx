@@ -260,9 +260,12 @@ export function OvemPortal({
     let cancelado = false;
     setCargadoPara(null);
     (async () => {
+      // El propio OVEM: exacto a su nombre. Quien solo supervisa (ADMIN, "Ver como" aparte): el del vehículo hoy,
+      // sea quien sea que lo haya registrado — la RLS de daily_checks ya le deja ver cualquier fila.
+      const propio = viewerRole === "OVEM" ? userId : undefined;
       const [dc, items] = await Promise.all([
-        getDailyCheckForToday(userId, vehicleId),
-        getDailyCheckItemsForToday(userId, vehicleId),
+        getDailyCheckForToday(vehicleId, propio),
+        getDailyCheckItemsForToday(vehicleId, propio),
       ]);
       if (cancelado) return;
       const map: RespuestasChecklist = {};
@@ -289,7 +292,7 @@ export function OvemPortal({
     return () => {
       cancelado = true;
     };
-  }, [vehicleId, userId, flow, hoy]);
+  }, [vehicleId, userId, flow, hoy, viewerRole]);
 
   // Al cambiar de flujo se limpian los campos propios de cada uno; el vehículo se conserva.
   useEffect(() => {
@@ -767,12 +770,13 @@ export function OvemPortal({
                   {success}
                 </p>
               )}
-              {dailyCheckId && viewerRole === "OVEM" && (
+              {dailyCheckId && (
                 <div className="space-y-2 border-t pt-4">
-                  <p className="text-sm font-medium">Fotos del vehículo (opcional)</p>
+                  <p className="text-sm font-medium">Fotos del vehículo{viewerRole === "OVEM" ? " (opcional)" : ""}</p>
                   <FotosVehiculo
                     fotos={fotosPreop}
                     onUpload={(lado, file) => subirFotoPreoperacional(dailyCheckId, lado, file)}
+                    deshabilitado={viewerRole !== "OVEM"}
                   />
                 </div>
               )}
