@@ -162,7 +162,7 @@ export async function submitDailyCheck(data: {
   revalidatePath("/novedades");
   revalidatePath("/regulacion");
   revalidatePath("/vehiculos");
-  return { success: true, hallazgos };
+  return { success: true, hallazgos, dailyCheckId: checkRow.id as number };
 }
 
 export async function updateKilometrajeOdometer(
