@@ -216,6 +216,10 @@ export type Database = {
           /** Inicio operativo fuera de servicio (negocio); ver migración 009. */
           fds_desde: string | null
           onedrive_folder_id: string | null
+          foto_frente: string | null
+          foto_lateral_derecho: string | null
+          foto_trasera: string | null
+          foto_lateral_izquierdo: string | null
           created_at: string
           updated_at: string
         }
@@ -257,6 +261,10 @@ export type Database = {
           centro_operativo_id?: number | null
           fds_desde?: string | null
           onedrive_folder_id?: string | null
+          foto_frente?: string | null
+          foto_lateral_derecho?: string | null
+          foto_trasera?: string | null
+          foto_lateral_izquierdo?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -298,6 +306,10 @@ export type Database = {
           centro_operativo_id?: number | null
           fds_desde?: string | null
           onedrive_folder_id?: string | null
+          foto_frente?: string | null
+          foto_lateral_derecho?: string | null
+          foto_trasera?: string | null
+          foto_lateral_izquierdo?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -640,9 +652,9 @@ export type Database = {
         Relationships: []
       }
       daily_checks: {
-        Row: { id: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial: number | null; kilometraje_final: number | null; checklist_ok: boolean; observaciones: string | null; is_assignment: boolean; created_at: string }
-        Insert: { id?: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok: boolean; observaciones?: string | null; is_assignment?: boolean; created_at?: string }
-        Update: { id?: number; user_id?: string; vehicle_id?: string; fecha?: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok?: boolean; observaciones?: string | null; is_assignment?: boolean; created_at?: string }
+        Row: { id: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial: number | null; kilometraje_final: number | null; checklist_ok: boolean; observaciones: string | null; is_assignment: boolean; foto_frente: string | null; foto_lateral_derecho: string | null; foto_trasera: string | null; foto_lateral_izquierdo: string | null; created_at: string }
+        Insert: { id?: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok: boolean; observaciones?: string | null; is_assignment?: boolean; foto_frente?: string | null; foto_lateral_derecho?: string | null; foto_trasera?: string | null; foto_lateral_izquierdo?: string | null; created_at?: string }
+        Update: { id?: number; user_id?: string; vehicle_id?: string; fecha?: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok?: boolean; observaciones?: string | null; is_assignment?: boolean; foto_frente?: string | null; foto_lateral_derecho?: string | null; foto_trasera?: string | null; foto_lateral_izquierdo?: string | null; created_at?: string }
         Relationships: []
       }
       maintenance_schedule: {

@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitDailyCheck, getDailyCheckForToday, getDailyCheckItemsForToday } from "@/app/api/actions/ovem";
+import { subirFotoPreoperacional } from "@/app/api/actions/vehiculo-fotos";
+import { FotosVehiculo } from "@/components/vehiculos/fotos-vehiculo";
+import type { FotosVehiculo as FotosVehiculoType } from "@/lib/vehiculo-fotos";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -167,6 +170,9 @@ export function OvemPortal({
   /** Ya se intentó enviar con ítems sin responder: se resaltan. */
   const [resaltarPendientes, setResaltarPendientes] = useState(false);
   const [mostrarResumen, setMostrarResumen] = useState(false);
+  /** Preoperacional de hoy ya enviado: habilita el paso opcional de las 4 fotos del vehículo. */
+  const [dailyCheckId, setDailyCheckId] = useState<number | null>(null);
+  const [fotosPreop, setFotosPreop] = useState<FotosVehiculoType>({});
   const [confirmarSalida, setConfirmarSalida] = useState(false);
   /** `${vehicleId}|${hoy}` del borrador ya cargado; evita guardar el estado de un vehículo bajo la clave de otro. */
   const [cargadoPara, setCargadoPara] = useState<string | null>(null);
@@ -245,6 +251,8 @@ export function OvemPortal({
   useEffect(() => {
     if (!vehicleId || flow !== "preoperacional") {
       setDailyCheckDone(false);
+      setDailyCheckId(null);
+      setFotosPreop({});
       setCargadoPara(null);
       baselineRef.current = null;
       return;
@@ -268,6 +276,8 @@ export function OvemPortal({
       const kmServidor = dc?.kilometraje_inicial ? String(dc.kilometraje_inicial) : "";
       const obsServidor = dc?.observaciones || "";
       setDailyCheckDone(Boolean(dc));
+      setDailyCheckId((dc as { id?: number } | null)?.id ?? null);
+      setFotosPreop((dc as FotosVehiculoType | null) ?? {});
       baselineRef.current = serializarBorrador({ km: kmServidor, observaciones: obsServidor, items: map });
       // Un borrador sin enviar de este vehículo y día gana sobre lo ya guardado en el servidor.
       const borrador = leerBorrador(leerSession(claveBorrador(vehicleId, hoy)));
@@ -396,6 +406,7 @@ export function OvemPortal({
         if (avisoServidor && (result?.hallazgos?.criticos ?? 0) > 0) setError(`Checklist guardado. ${avisoServidor}`);
         else setSuccess(avisoServidor ? `Checklist guardado. ${avisoServidor}` : "Checklist completado correctamente");
         setDailyCheckDone(true);
+        setDailyCheckId(result?.dailyCheckId ?? null);
         // Lo enviado pasa a ser la base: ya no hay cambios pendientes ni borrador.
         baselineRef.current = serializarBorrador({ km, observaciones, items: checkItemsState });
         escribirSession(claveBorrador(vehicleId, hoy), null);
@@ -755,6 +766,15 @@ export function OvemPortal({
                 <p role="status" className="text-sm text-success">
                   {success}
                 </p>
+              )}
+              {dailyCheckId && viewerRole === "OVEM" && (
+                <div className="space-y-2 border-t pt-4">
+                  <p className="text-sm font-medium">Fotos del vehículo (opcional)</p>
+                  <FotosVehiculo
+                    fotos={fotosPreop}
+                    onUpload={(lado, file) => subirFotoPreoperacional(dailyCheckId, lado, file)}
+                  />
+                </div>
               )}
               {viewerRole === "OVEM" ? (
                 <Button className="min-h-11" onClick={revisarChecklist} disabled={loading}>
