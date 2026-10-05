@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { SIN_FILTROS, filtrarEquipos, hayFiltros, valoresDistintos, type FiltrosEquipos } from "@/lib/equipos-filtros";
 import { checklistParaEquipo, type CatalogoChecklists } from "@/lib/biomedico-checklist";
+import { TIPOS_MANTENIMIENTO_BIOMEDICO } from "@/lib/biomedico-fechas";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -579,8 +580,19 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
                 <Input id="orden_numero" {...formMant.register("orden_numero")} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="tipo_mantenimiento">Tipo (preventivo/correctivo)</Label>
-                <Input id="tipo_mantenimiento" {...formMant.register("tipo_mantenimiento")} />
+                <Label htmlFor="tipo_mantenimiento">Tipo</Label>
+                <select
+                  id="tipo_mantenimiento"
+                  {...formMant.register("tipo_mantenimiento")}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Sin especificar</option>
+                  {TIPOS_MANTENIMIENTO_BIOMEDICO.map((t) => (
+                    <option key={t} value={t}>
+                      {t[0] + t.slice(1).toLowerCase()}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="codigo_institucional">Código institucional</Label>

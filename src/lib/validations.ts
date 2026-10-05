@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { esDia } from '@/lib/fechas';
 import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
+import { TIPOS_MANTENIMIENTO_BIOMEDICO } from '@/lib/biomedico-fechas';
 
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
@@ -798,7 +799,13 @@ export const biomedicalMaintenanceSchema = z.object({
   equipment_id: z.number().int().positive("Equipo requerido"),
   orden_numero: optStr,
   fecha_mantenimiento: z.string().trim().min(8, "Fecha requerida"),
-  tipo_mantenimiento: optStr,
+  // Lista cerrada desde el formulario; los 3 valores históricos con tilde/mayúscula distinta ("Calibración") se
+  // siguen leyendo igual (esCalibracion/esCorrectivo en src/lib/biomedico-fechas.ts no distinguen mayúsculas ni tildes).
+  tipo_mantenimiento: z
+    .enum(TIPOS_MANTENIMIENTO_BIOMEDICO)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v ? v : undefined)),
   codigo_institucional: optStr,
   ubicacion: optStr,
   sanidad: optStr,
