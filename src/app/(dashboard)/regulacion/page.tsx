@@ -11,6 +11,8 @@ import { MantenimientoCard, VencimientosCard } from "@/components/regulacion/ale
 import { BarraTablero } from "@/components/regulacion/barra-tablero";
 import { AvisosServicios } from "@/components/servicios/avisos-servicios";
 import { ProgramacionDiaria } from "@/components/regulacion/programacion-diaria";
+import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
+import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
 import { getProgramacionDelDia } from "@/app/api/actions/programacion";
 import { PreoperacionalHoyCard } from "@/components/regulacion/preoperacional-hoy";
 import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
@@ -36,7 +38,7 @@ export default async function RegulacionPage({
   }
 
   const diaPedido = Array.isArray(searchParams.dia) ? searchParams.dia[0] : searchParams.dia;
-  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion] = await Promise.all([
+  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto] = await Promise.all([
     getTableroRegulacion(),
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
@@ -44,6 +46,7 @@ export default async function RegulacionPage({
     getUsuariosPorRol("AUXILIAR_ENFERMERIA"),
     getPreoperacionalHoy(),
     getProgramacionDelDia(diaPedido ?? ""),
+    getSolicitudesNoAptoPendientes(),
   ]);
 
   const vehiculosOperativos = (fleet as { id: string; placa: string; estado_actual: string }[])
@@ -84,6 +87,8 @@ export default async function RegulacionPage({
           centros. Pide al administrador que te lo asigne en Administración → Usuarios.
         </div>
       )}
+
+      <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
 
       <ServiciosDelDia
         servicios={(tablero.servicios as ServicioDelDia[]).filter(

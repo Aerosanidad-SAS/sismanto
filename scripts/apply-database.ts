@@ -134,7 +134,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "109_revocar_rpc_filtracion_uuid.sql",            file: "scripts/migrations/109_revocar_rpc_filtracion_uuid.sql" },
   { name: "110_rls_patients_una_evaluacion.sql",            file: "scripts/migrations/110_rls_patients_una_evaluacion.sql" },
   { name: "111_fotos_vehiculo.sql",                         file: "scripts/migrations/111_fotos_vehiculo.sql" },
-  { name: "112_equipo_biomedico_foto_descripcion.sql",      file: "scripts/migrations/112_equipo_biomedico_foto_descripcion.sql" },
+  { name: "113_solicitudes_no_apto.sql",                    file: "scripts/migrations/113_solicitudes_no_apto.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

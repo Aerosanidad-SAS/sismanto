@@ -18,3 +18,10 @@ test("el aviso nombra la placa, el centro y los hallazgos, y escapa el HTML", ()
   assert.match(a.html, /&lt;urgente&gt;/);
   assert.match(a.html, /07:41/);
 });
+
+test("la solicitud dice que requiere aval y que hay bloqueo provisional", () => {
+  const a = armarAlertaNoApto({ placa: "JQS239", centro: "CRA Medellín", hallazgos: ["Choque lateral con lesionados"], reportadoPor: "Ana", cuando: "02/10/2026 07:41", tipo: "SOLICITUD" });
+  assert.match(a.asunto, /SOLICITUD DE NO APTO — JQS239/);
+  assert.match(a.html, /bloqueo provisional/);
+  assert.match(a.html, /avala o rechaza/);
+});
