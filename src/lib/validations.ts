@@ -789,6 +789,8 @@ export const biomedicalEquipmentSchema = z.object({
   proveedor_nombre: optStr,
   proveedor_contacto: optStr,
   operador: optStr,
+  descripcion: optText,
+  instrucciones_uso: optText,
 });
 export type BiomedicalEquipmentFormData = z.input<typeof biomedicalEquipmentSchema>;
 
