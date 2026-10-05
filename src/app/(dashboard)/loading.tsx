@@ -1,7 +1,5 @@
+import { PageSkeleton } from "@/components/layout/skeletons";
+
 export default function DashboardLoading() {
-  return (
-    <div className="flex items-center justify-center p-12">
-      <p className="text-muted-foreground">Cargando dashboard...</p>
-    </div>
-  );
+  return <PageSkeleton label="Cargando la pantalla" />;
 }
