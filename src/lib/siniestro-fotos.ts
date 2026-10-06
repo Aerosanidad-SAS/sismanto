@@ -1,4 +1,4 @@
-// Reglas puras de las fotos de un siniestro (bucket privado `siniestros`, migración 112): tipo, tamaño, recorte y rutas.
+// Reglas puras de las fotos de un siniestro (bucket privado `siniestros`, migración 116): tipo, tamaño, recorte y rutas.
 
 export const TIPOS_FOTO_SINIESTRO = ["HECHOS", "DOCUMENTOS"] as const;
 export type TipoFotoSiniestro = (typeof TIPOS_FOTO_SINIESTRO)[number];

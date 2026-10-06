@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { esDia } from '@/lib/fechas';
-import { normalizarCedula, normalizarPlaca, validarObligatoriosSiniestro } from '@/lib/siniestro-datos';
+import { validarObligatoriosSiniestro } from '@/lib/siniestro-datos';
 import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 import { TIPOS_MANTENIMIENTO_BIOMEDICO } from '@/lib/biomedico-fechas';
 
@@ -295,7 +295,7 @@ export const roadAccidentSchema = z
     if (row.hayLesionados && !row.lesionadosDetalle) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Describa los lesionados", path: ["lesionadosDetalle"] });
     }
-    // Obligatorios de todo siniestro nuevo (migración 112) y sus excepciones con explicación escrita.
+    // Obligatorios de todo siniestro nuevo (migración 116) y sus excepciones con explicación escrita.
     for (const e of validarObligatoriosSiniestro(row)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message, path: [e.path] });
     }
@@ -303,8 +303,6 @@ export const roadAccidentSchema = z
 
 export type RoadAccidentFormData = z.infer<typeof roadAccidentSchema>;
 
-/** Placa y cédula tal como se guardan (sin espacios, puntos ni guiones, en mayúsculas). */
-export { normalizarCedula, normalizarPlaca };
 
 export const updateKilometrajeOdometerSchema = z.object({
   userId: z.string().uuid("ID de usuario inválido"),

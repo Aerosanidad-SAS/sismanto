@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 112: siniestro vial — datos y fotos obligatorios para reclamaciones
+-- Migración 116: siniestro vial — datos y fotos obligatorios para reclamaciones
 --
 -- Requerimiento de Daniel (jefe de Mantenimiento, 2026-10-02): todo reporte de siniestro debe dejar placa del otro
 -- vehículo, nombre y cédula del implicado, fotos de los hechos, datos del abogado presente (nombre, teléfono, cédula,
@@ -63,7 +63,7 @@ DROP POLICY IF EXISTS road_accident_fotos_select ON road_accident_fotos;
 CREATE POLICY road_accident_fotos_select ON road_accident_fotos
   FOR SELECT TO authenticated
   USING (
-    get_user_role() IN ('ADMIN', 'ANALISTA', 'GERENCIAL', 'REGULACION', 'COORDINACION', 'MANTENIMIENTO')
+    (SELECT get_user_role())::text IN ('ADMIN', 'ANALISTA', 'GERENCIAL', 'REGULACION', 'COORDINACION', 'MANTENIMIENTO')
     OR subido_por = auth.uid()
   );
 
@@ -72,19 +72,20 @@ DROP POLICY IF EXISTS road_accident_fotos_insert ON road_accident_fotos;
 CREATE POLICY road_accident_fotos_insert ON road_accident_fotos
   FOR INSERT TO authenticated
   WITH CHECK (
-    get_user_role() IN ('ADMIN', 'ANALISTA', 'REGULACION')
+    (SELECT get_user_role())::text IN ('ADMIN', 'ANALISTA', 'REGULACION')
     OR (
-      get_user_role() = 'OVEM'
+      (SELECT get_user_role())::text = 'OVEM'
       AND subido_por = auth.uid()
       AND EXISTS (SELECT 1 FROM road_accidents r WHERE r.id = road_accident_fotos.accident_id AND r.reportado_por = auth.uid())
     )
   );
 
 -- ─── 3. Bucket privado `siniestros` ─────────────────────────────────────────────────────────────────────────────
--- Como la boleta de salida (057) y los adjuntos de tickets (065): privado, URLs firmadas, solo imágenes, 8 MB.
+-- Mismo patrón que vehiculos-fotos (111), servicios-boletas (057) y tickets-adjuntos (065): privado, URLs firmadas, solo imágenes, 8 MB.
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES ('siniestros', 'siniestros', false, 8388608, ARRAY['image/jpeg', 'image/png', 'image/webp'])
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE
+  SET public = false, file_size_limit = EXCLUDED.file_size_limit, allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 DROP POLICY IF EXISTS siniestros_select ON storage.objects;
 CREATE POLICY siniestros_select ON storage.objects
@@ -92,7 +93,7 @@ CREATE POLICY siniestros_select ON storage.objects
   USING (
     bucket_id = 'siniestros'
     AND (
-      get_user_role() IN ('ADMIN', 'ANALISTA', 'GERENCIAL', 'REGULACION', 'COORDINACION', 'MANTENIMIENTO')
+      (SELECT get_user_role())::text IN ('ADMIN', 'ANALISTA', 'GERENCIAL', 'REGULACION', 'COORDINACION', 'MANTENIMIENTO')
       OR EXISTS (
         SELECT 1 FROM road_accidents r
         WHERE r.id::text = (storage.foldername(name))[1] AND r.reportado_por = auth.uid()
@@ -107,9 +108,9 @@ CREATE POLICY siniestros_insert ON storage.objects
   WITH CHECK (
     bucket_id = 'siniestros'
     AND (
-      get_user_role() IN ('ADMIN', 'ANALISTA', 'REGULACION')
+      (SELECT get_user_role())::text IN ('ADMIN', 'ANALISTA', 'REGULACION')
       OR (
-        get_user_role() = 'OVEM'
+        (SELECT get_user_role())::text = 'OVEM'
         AND EXISTS (
           SELECT 1 FROM road_accidents r
           WHERE r.id::text = (storage.foldername(name))[1] AND r.reportado_por = auth.uid()

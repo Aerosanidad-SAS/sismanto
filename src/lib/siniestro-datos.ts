@@ -1,4 +1,4 @@
-// Datos obligatorios de un siniestro vial NUEVO (migración 112). Lógica pura: la usan el esquema del servidor y el formulario.
+// Datos obligatorios de un siniestro vial NUEVO (migración 116). Lógica pura: la usan el esquema del servidor y el formulario.
 // Decisión de Daniel (2026-10-02): «siempre debe obligar». Las excepciones solo existen con una explicación escrita.
 
 export const MIN_FOTOS_HECHOS = 2;
