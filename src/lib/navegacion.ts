@@ -71,6 +71,14 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         roles: ["ADMIN", "GERENCIAL"],
         hint: "Vista de alto nivel para Gerencia y Junta Directiva, por pestañas: vehículos y operación, servicios, equipos biomédicos y financiero.",
       },
+      {
+        // Sin cabecera de grupo propia: es el único ítem de trabajo del OVEM y debe verse primero.
+        name: "Portal OVEM",
+        href: "/ovem",
+        icon: ClipboardCheck,
+        roles: ["ADMIN", "OVEM"],
+        hint: "Preoperacional, checklist y kilometraje del conductor asignado.",
+      },
     ],
   },
   {
@@ -96,20 +104,6 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Route,
         roles: ["ADMIN", "REGULACION", "ANALISTA"],
         hint: "Cotiza un traslado con la ruta de Google Maps, en PDF o por correo.",
-      },
-      {
-        name: "Clientes",
-        href: "/clientes",
-        icon: Handshake,
-        roles: ["ADMIN", "REGULACION", "ANALISTA"],
-        hint: "Directorio de clientes y aseguradoras (consulta).",
-      },
-      {
-        name: "Proveedores",
-        href: "/proveedores",
-        icon: Building2,
-        roles: ["ADMIN", "REGULACION", "ANALISTA"],
-        hint: "Directorio de prestadores y proveedores de servicios de salud (consulta).",
       },
       {
         name: "Dotación e insumos",
@@ -275,18 +269,6 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     ],
   },
   {
-    label: "Portal OVEM",
-    items: [
-      {
-        name: "Portal OVEM",
-        href: "/ovem",
-        icon: ClipboardCheck,
-        roles: ["ADMIN", "OVEM"],
-        hint: "Preoperacional, checklist y kilometraje del conductor asignado.",
-      },
-    ],
-  },
-  {
     label: "Administración del sistema",
     items: [
       {
@@ -337,6 +319,20 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Plane,
         roles: ["ADMIN", "MEDICO", "ANALISTA", "VISTA"],
         hint: "Catálogo de aeropuertos para origen y destino de vuelo (origen SISRES).",
+      },
+      {
+        name: "Clientes",
+        href: "/clientes",
+        icon: Handshake,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Directorio de clientes y aseguradoras (consulta).",
+      },
+      {
+        name: "Proveedores",
+        href: "/proveedores",
+        icon: Building2,
+        roles: ["ADMIN", "REGULACION", "ANALISTA"],
+        hint: "Directorio de prestadores y proveedores de servicios de salud (consulta).",
       },
     ],
   },

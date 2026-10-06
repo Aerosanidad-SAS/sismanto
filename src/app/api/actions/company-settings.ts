@@ -4,8 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/app/api/actions/auth";
+import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 
-const TIPOS_PERMITIDOS = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
 const TAMANO_MAXIMO = 2 * 1024 * 1024; // 2MB — es un logo, no una foto
 
 export async function getCompanyBranding() {
@@ -14,23 +14,29 @@ export async function getCompanyBranding() {
   return { logo_url: data?.logo_url ?? null };
 }
 
+/**
+ * Logo en el bucket PÚBLICO `branding`: se valida por el contenido real del archivo, no por lo que declare el
+ * navegador — y a propósito ya no se acepta SVG (puede llevar <script>; auditoría 2026-10-01, hallazgo #5).
+ */
 export async function updateCompanyLogo(file: File) {
   const profile = await requireRole(["ADMIN"]);
 
-  if (!TIPOS_PERMITIDOS.includes(file.type)) {
-    return { error: "Formato no soportado — usa PNG, JPG, SVG o WEBP" };
-  }
   if (file.size > TAMANO_MAXIMO) {
     return { error: "La imagen no puede pesar más de 2MB" };
   }
+  const cabecera = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const tipo = tipoImagenPorContenido(cabecera);
+  if (!tipo) {
+    return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
+  }
 
   const supabase = createClient();
-  const extension = file.name.split(".").pop() || "png";
-  const ruta = `logo-${Date.now()}.${extension}`;
+  const ruta = `logo-${Date.now()}.${tipo.ext}`;
 
   const { error: uploadError } = await supabase.storage.from("branding").upload(ruta, file, {
     cacheControl: "3600",
     upsert: false,
+    contentType: tipo.mime, // el real, no el que declaró el navegador
   });
   if (uploadError) return { error: uploadError.message };
 

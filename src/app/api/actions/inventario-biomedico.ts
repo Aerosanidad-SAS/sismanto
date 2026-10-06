@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { diasEntre, hoyBogota, normalizarDia } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -8,9 +9,10 @@ import { createElement } from "react";
 import type { BiomedicalEquipmentFormData, BiomedicalMaintenanceFormData } from "@/lib/validations";
 import { biomedicalEquipmentSchema, biomedicalMaintenanceSchema } from "@/lib/validations";
 import { HojaVidaBiomedicaPdf } from "@/lib/pdf/hoja-vida-biomedica";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
+import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 import { completarFechasProximas, fechasTrasMantenimiento, type FechasEquipo } from "@/lib/biomedico-fechas";
 import {
   CHECKLIST_GENERAL,
@@ -175,6 +177,58 @@ export async function actualizarEquipoBiomedico(id: number, formData: Biomedical
   await auditar("MODIFICAR", "inventario", idParsed.data, "Equipo biomédico actualizado");
   revalidatePath("/equipos");
   return { success: true };
+}
+
+const ROLES_FOTO_EQUIPO = ["ADMIN", "MANTENIMIENTO", "ANALISTA"] as const;
+const BUCKET_FOTOS_EQUIPO = "equipos-fotos";
+const MAX_MB_FOTO_EQUIPO = 8;
+const MAX_BYTES_FOTO_EQUIPO = MAX_MB_FOTO_EQUIPO * 1024 * 1024;
+
+/** Foto representativa del equipo (migración 112): reemplaza la anterior y borra su archivo. */
+export async function subirFotoEquipoBiomedico(
+  equipmentId: number,
+  file: File
+): Promise<{ error: string; success?: undefined } | { error?: undefined; success: true; ruta: string }> {
+  await requireRole([...ROLES_FOTO_EQUIPO]);
+  const idParsed = z.number().int().positive().safeParse(equipmentId);
+  if (!idParsed.success) return { error: "ID inválido" };
+  if (file.size > MAX_BYTES_FOTO_EQUIPO) return { error: `La foto no puede pesar más de ${MAX_MB_FOTO_EQUIPO} MB` };
+  const cabecera = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const tipo = tipoImagenPorContenido(cabecera);
+  if (!tipo) return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
+
+  const supabase = createClient();
+  const ruta = `equipo-${idParsed.data}/${randomUUID()}.${tipo.ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET_FOTOS_EQUIPO)
+    .upload(ruta, file, { cacheControl: "3600", upsert: false, contentType: tipo.mime });
+  if (uploadError) return { error: uploadError.message };
+
+  const anterior = await supabase.from("biomedical_equipment").select("imagen_url").eq("id", idParsed.data).maybeSingle();
+  const { error } = await supabase
+    .from("biomedical_equipment")
+    .update({ imagen_url: ruta, updated_at: new Date().toISOString() } as never)
+    .eq("id", idParsed.data);
+  if (error) {
+    await supabase.storage.from(BUCKET_FOTOS_EQUIPO).remove([ruta]);
+    return { error: error.message };
+  }
+  const rutaAnterior = (anterior.data as { imagen_url: string | null } | null)?.imagen_url;
+  if (rutaAnterior) await supabase.storage.from(BUCKET_FOTOS_EQUIPO).remove([rutaAnterior]);
+
+  await auditar("MODIFICAR", "inventario", idParsed.data, "Foto del equipo actualizada");
+  revalidatePath("/equipos");
+  return { success: true as const, ruta };
+}
+
+/** Enlace temporal (1 hora) para mostrar la foto del equipo — el bucket es privado. */
+export async function getUrlFotoEquipoBiomedico(ruta: string): Promise<string | null> {
+  const parsed = z.string().trim().min(1).safeParse(ruta);
+  if (!parsed.success) return null;
+  const supabase = createClient();
+  const { data, error } = await supabase.storage.from(BUCKET_FOTOS_EQUIPO).createSignedUrl(parsed.data, 3600);
+  if (error || !data) return null;
+  return data.signedUrl;
 }
 
 export async function eliminarEquipoBiomedico(id: number) {
@@ -355,12 +409,25 @@ export async function generarHojaVidaPdf(equipmentId: number) {
 
   const profile = await getProfile();
 
+  // El bucket es privado: react-pdf no puede pedir la signed URL por su cuenta, así que se baja el archivo aquí
+  // (con la sesión del usuario, igual que cualquier otra lectura) y se pasa como data URI.
+  let fotoDataUri: string | null = null;
+  const rutaFoto = (hoja.equipo as { imagen_url?: string | null }).imagen_url;
+  if (rutaFoto) {
+    const { data: blob } = await createClient().storage.from(BUCKET_FOTOS_EQUIPO).download(rutaFoto);
+    if (blob) {
+      const buf = Buffer.from(await blob.arrayBuffer());
+      fotoDataUri = `data:${blob.type || "image/jpeg"};base64,${buf.toString("base64")}`;
+    }
+  }
+
   try {
     const buffer = await renderToBuffer(
       createElement(HojaVidaBiomedicaPdf, {
         equipo: hoja.equipo,
         mantenimientos: hoja.mantenimientos,
         generadoPor: profile?.nombre_completo || profile?.email || "Usuario Aeromanto",
+        fotoDataUri,
       })
     );
     return { success: true, data: buffer.toString("base64"), filename: `hoja-vida-${hoja.equipo.placa_equipo}.pdf` };

@@ -191,16 +191,17 @@ Cosas que, al revisarlas con la misma profundidad que los hallazgos de arriba, r
 
 ---
 
-## Priorización sugerida
+## Priorización sugerida — seguimiento al 2026-10-02
 
-| # | Hallazgo | Esfuerzo | Quién actúa |
+| # | Hallazgo | Esfuerzo | Estado |
 |---|---|---|---|
-| 2 | Cerrar registro público en Supabase Auth | Un clic en el panel | Daniel (fuera del repo) |
-| 1 | `REVOKE EXECUTE` de las 2 funciones RPC | Migración de una línea | PR normal |
-| 5 | Magic bytes en los 2 uploads que faltan + quitar SVG del logo | Pequeño, reutiliza código existente | PR normal |
-| 4 | Envolver `get_user_role()`/`es_rol_restringido()` en las políticas propias, empezando por `patients` | Mediano — tocar políticas de varias tablas | PR dedicado, con el mismo ensayo contra staging que ya se usa para toda migración |
-| 3 | Subir Next.js 14 → 15/16 | Grande, disruptivo | PR propio, fuera de cualquier feature |
-| — | Confirmar rotación de credenciales del 2026-09-25 | — | Daniel |
-| — | Decidir `024_ai_usage_log.sql` | — | Daniel |
+| 1 | Nombre/rol por UUID sin sesión | Cambia el cuerpo de `get_user_role` (no el GRANT — ver el PR, casi se arregla mal) + `REVOKE` en `ticket_nombre_usuario` | PR [#174](https://github.com/Aerosanidad-SAS/sismanto/pull/174) — ensayado en staging, pendiente de aprobación |
+| 2 | Registro público abierto en Supabase Auth | Un clic en el panel | **Pendiente — Daniel, fuera del repo.** No hay token de administración en este entorno para hacerlo por API |
+| 3 | Dependencias (Next.js 14.2.35, postcss, xlsx) | Grande, disruptivo | **Pendiente**, deliberadamente no incluido en esta tanda — la subida de Next.js toca `cookies()`/`headers()` en todo el repo (pasan a ser asíncronas en Next 15) y merece su propio PR revisado con calma, no apurado dentro de una ronda de arreglos de seguridad. `xlsx` sigue sin parche publicado |
+| 4 | RLS evaluada por fila (78 tablas) | Una migración por tabla, con ensayo completo cada vez | `patients` (la de más riesgo) en el PR [#178](https://github.com/Aerosanidad-SAS/sismanto/pull/178) — ensayada con paridad de acceso para 9 roles y `EXPLAIN` confirmando el cambio de plan. **Quedan 77 tablas.** Deliberadamente no se hizo de una sola vez: un arreglo genérico para las 78 es mucho más difícil de revisar y el más fácil de romper sin darse cuenta — de hecho casi pasó exactamente eso en el PR #174 (ver su descripción) |
+| 5 | Subida de archivos sin revisar bytes reales | Pequeño, reutiliza código existente | PR [#176](https://github.com/Aerosanidad-SAS/sismanto/pull/176) — ensayado, pendiente de aprobación |
+| — | `CRON_SECRET` sin comparación segura ante temporización | Pequeño | PR [#177](https://github.com/Aerosanidad-SAS/sismanto/pull/177) — pendiente de aprobación |
+| — | Confirmar rotación de credenciales del 2026-09-25 | — | **Pendiente — Daniel** |
+| — | Decidir `024_ai_usage_log.sql` | — | **Pendiente — Daniel** |
 
-Ningún hallazgo de este informe se corrigió en esta rama — es solo el diagnóstico, como se pidió.
+Los cuatro PRs de arreglo se ensayaron contra staging igual que cualquier migración (dos veces, `ROLLBACK`, paridad de acceso por rol antes/después) antes de abrirse. Ninguno se mergeó todavía — cada uno necesita el mismo visto bueno que cualquier PR del equipo (CI verde + revisión + una aprobación).

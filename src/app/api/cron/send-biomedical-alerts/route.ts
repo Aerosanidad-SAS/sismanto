@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAutorizado } from "@/lib/cron-auth";
 import { enviarCorreo } from "@/lib/notifications/email";
 import {
   alertasEquipoBiomedico,
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
   }
   const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${cronSecret}`) {
+  if (!cronAutorizado(auth, cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
