@@ -36,6 +36,7 @@ import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
 import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
 import { ciudadDelCentro, getFlotaDelDia } from "@/app/api/actions/coordinacion";
 import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
+import { getCierresDeTurnoHoy } from "@/app/api/actions/cierre-turno";
 import Link from "next/link";
 
 
@@ -301,12 +302,13 @@ export default async function DashboardPage({
   // costos, disponibilidad ni biomédicos del tablero ejecutivo.
   if ((await getProfile())?.role_codigo === "COORDINACION") {
     const hoy = hoyBogota();
-    const [resumen, flota, ciudadCentro, preoperacional, solicitudesNoApto] = await Promise.all([
+    const [resumen, flota, ciudadCentro, preoperacional, solicitudesNoApto, cierresTurno] = await Promise.all([
       getResumenOperativoDiario({ desde: hoy, hasta: hoy }),
       getFlotaDelDia(),
       ciudadDelCentro(),
       getPreoperacionalHoy(),
       getSolicitudesNoAptoPendientes(),
+      getCierresDeTurnoHoy(),
     ]);
     return (
       <div className="space-y-6">
@@ -315,7 +317,7 @@ export default async function DashboardPage({
           <p className="mt-2 text-muted-foreground">Operación del día de tu CRA</p>
         </div>
         <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver />
-        <CoordinacionInicio resumen={resumen} ciudad={ciudadCentro} flota={flota} preoperacional={preoperacional} />
+        <CoordinacionInicio resumen={resumen} ciudad={ciudadCentro} flota={flota} preoperacional={preoperacional} cierresTurno={cierresTurno} />
       </div>
     );
   }

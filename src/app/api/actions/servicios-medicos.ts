@@ -14,6 +14,7 @@ import { auditar } from "@/lib/auditoria";
 import { hoyBogota } from "@/lib/fechas";
 import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
+import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -339,6 +340,11 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   const { data: userData } = await supabase.auth.getUser();
   const profile = await getProfile();
   const fila = aFilaServicio(parsed.data);
+  // Bloqueo provisional (migración 113): no se despacha un servicio con un vehículo que tiene una solicitud de
+  // NO APTO pendiente de aval.
+  if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
+    return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
+  }
 
   const { data, error } = await supabase
     .from("medical_services")
@@ -366,6 +372,11 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
 
   const supabase = createClient();
   const fila = aFilaServicio(parsed.data);
+  // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
+  // asignado a un servicio — tampoco al editar uno que ya lo tenía.
+  if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
+    return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
+  }
   // Solo el vehículo redefine el centro al editar: sin vehículo se conserva
   // el que ya tenía, no el de quien edita.
   const centro = fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;

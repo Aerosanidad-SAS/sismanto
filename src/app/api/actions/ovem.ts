@@ -17,7 +17,7 @@ import { validarPreoperacional } from "@/lib/preoperacional";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
 import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
-import { crearSolicitudNoApto } from "./solicitudes-no-apto";
+import { crearSolicitudNoApto, tieneNoAptoPendiente } from "./solicitudes-no-apto";
 import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
 
 /** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
@@ -97,6 +97,13 @@ export async function submitDailyCheck(data: {
   const profile = await requireRole(["OVEM"]);
   if (profile.user_id !== row.userId) return { error: "No autorizado" };
 
+  // Bloqueo provisional (migración 113): mientras una solicitud de NO APTO espera aval, el OVEM no opera ese
+  // vehículo — ni siquiera para registrar el preoperacional del día. No hay vuelta circular: una solicitud de
+  // NO APTO solo nace de un siniestro (reportRoadAccident), nunca de este propio envío.
+  if (await tieneNoAptoPendiente(row.vehicleId)) {
+    return { error: "Este vehículo tiene una solicitud de NO APTO pendiente de aval — no se puede operar hasta que se resuelva." };
+  }
+
   // El día lo pone el servidor: un preoperacional es de hoy, no de la fecha que mande el navegador (migración 090).
   const fecha = hoyOvem();
 
@@ -105,6 +112,16 @@ export async function submitDailyCheck(data: {
   if (errorChecklist) return { error: errorChecklist };
 
   const supabase = createClient();
+
+  // Tras cerrar el turno el preoperacional de hoy queda como estaba: reenviarlo pisaría el km final del cierre.
+  const { data: cierreHoy } = await (supabase as any)
+    .from("ovem_cierres_turno")
+    .select("id")
+    .eq("user_id", profile.user_id)
+    .eq("vehicle_id", row.vehicleId)
+    .eq("fecha", fecha)
+    .maybeSingle();
+  if (cierreHoy) return { error: "Ya cerraste el turno de este vehículo hoy: el preoperacional de hoy no se puede modificar." };
 
   const { data: checkRow, error: checkError } = await supabase
     .from("daily_checks")
