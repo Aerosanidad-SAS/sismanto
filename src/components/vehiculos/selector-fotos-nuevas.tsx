@@ -7,9 +7,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LADOS_VEHICULO, MAX_BYTES_FOTO_VEHICULO, MAX_MB_FOTO_VEHICULO, type LadoVehiculo } from "@/lib/vehiculo-fotos";
 
 /**
- * Las 4 fotos del vehículo ANTES de enviar el preoperacional — mismo lugar que SISRES (dentro del formulario,
- * justo antes de "Registrar"), no un paso aparte después de enviar. Solo guarda el archivo elegido en memoria;
- * quien llama (`OvemPortal`) lo sube de verdad una vez el preoperacional ya existe (necesita su id).
+ * Las 4 fotos del vehículo ANTES de que exista la fila a la que se van a asociar (un preoperacional que aún no se
+ * envió, un vehículo que aún no se crea) — mismo lugar que SISRES (dentro del formulario, antes de "Registrar"),
+ * no un paso aparte después de enviar. Solo guarda el archivo elegido en memoria; quien llama (`OvemPortal`,
+ * `VehicleForm`) lo sube de verdad una vez esa fila ya existe (necesita su id).
  */
 export function SelectorFotosNuevas({
   valores,
