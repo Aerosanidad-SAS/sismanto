@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { ClientFormData } from "@/lib/validations";
+import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
+import { camposFaltantes, mensajeFaltantes } from "@/lib/campos-obligatorios";
 import { clientSchema } from "@/lib/validations";
 import { z } from "zod";
 
@@ -20,6 +22,9 @@ export async function getClientes() {
 export async function crearCliente(formData: ClientFormData) {
   const parsed = clientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  // Campos opcionales que el administrador volvió obligatorios (migración 101).
+  const faltan = mensajeFaltantes(camposFaltantes("clientes", parsed.data, await getCamposObligatoriosModulo("clientes")));
+  if (faltan) return { error: faltan };
 
   const supabase = createClient();
   const { data: existente } = await supabase
@@ -46,6 +51,9 @@ export async function actualizarCliente(id: number, formData: ClientFormData) {
 
   const parsed = clientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  // Campos opcionales que el administrador volvió obligatorios (migración 101).
+  const faltan = mensajeFaltantes(camposFaltantes("clientes", parsed.data, await getCamposObligatoriosModulo("clientes")));
+  if (faltan) return { error: faltan };
 
   const supabase = createClient();
   const { error } = await supabase

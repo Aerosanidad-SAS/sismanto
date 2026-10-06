@@ -174,7 +174,7 @@ export async function submitDailyCheck(data: {
   revalidatePath("/novedades");
   revalidatePath("/regulacion");
   revalidatePath("/vehiculos");
-  return { success: true, hallazgos };
+  return { success: true, hallazgos, dailyCheckId: checkRow.id as number };
 }
 
 export async function updateKilometrajeOdometer(
@@ -226,30 +226,28 @@ export async function updateKilometrajeOdometer(
   return { success: true };
 }
 
-export async function getDailyCheckForToday(userId: string, vehicleId: string) {
+/**
+ * Preoperacional de hoy de un vehículo. Sin `userId`: el de ADMIN/COORDINACION/REGULACION/ANALISTA/GERENCIAL
+ * supervisando (quién lo hizo no importa — la RLS de `daily_checks` ya les deja ver cualquier fila; si dos OVEM
+ * distintos registraron el mismo vehículo el mismo día, se toma el más reciente). Con `userId`: el del propio OVEM,
+ * exacto — así nunca ve por error el de otro si el vehículo cambió de conductor en el día.
+ */
+export async function getDailyCheckForToday(vehicleId: string, userId?: string) {
   const supabase = createClient();
   const hoy = hoyBogota();
-  const { data } = await supabase
-    .from("daily_checks")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("vehicle_id", vehicleId)
-    .eq("fecha", hoy)
-    .single();
+  let query = supabase.from("daily_checks").select("*").eq("vehicle_id", vehicleId).eq("fecha", hoy);
+  if (userId) query = query.eq("user_id", userId);
+  const { data } = await query.order("id", { ascending: false }).limit(1).maybeSingle();
   return data;
 }
 
-export async function getDailyCheckItemsForToday(userId: string, vehicleId: string) {
+export async function getDailyCheckItemsForToday(vehicleId: string, userId?: string) {
   const supabase = createClient();
   const hoy = hoyBogota();
 
-  const { data: check } = await supabase
-    .from("daily_checks")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("vehicle_id", vehicleId)
-    .eq("fecha", hoy)
-    .single();
+  let checkQuery = supabase.from("daily_checks").select("id").eq("vehicle_id", vehicleId).eq("fecha", hoy);
+  if (userId) checkQuery = checkQuery.eq("user_id", userId);
+  const { data: check } = await checkQuery.order("id", { ascending: false }).limit(1).maybeSingle();
 
   if (!check?.id) return [];
 

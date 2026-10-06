@@ -86,15 +86,22 @@ identificación), `f9fd84b` y `982f111` (bugs propios del PHP de SISRES), y la p
   (`POST /api/cron/send-biomedical-alerts` con `Authorization: Bearer $CRON_SECRET`). **Ojo:** escribe en
   `biomedical_alerts_log` y envía correos reales.
 
+**Resueltas desde la última revisión de esta tabla (2026-10-05):**
+- Tipos de servicio visibles por rol: ya estaba hecho desde el 2026-08-03 (`servicios-tabla.tsx`,
+  `TIPOS_SERVICIO_REGULACION`) — Regulador solo ve MD/TAB/TAM al **crear** un servicio, igual que
+  `registroServicios.php`; al editar, como en `editarServicio.php`, no se restringe. Esta tabla tenía la entrada
+  por error, sin haber revisado el código actual.
+- Equipo biomédico: foto, descripción e instrucciones de uso → PR #183 (migración 112).
+- Fotos del vehículo (Vehículos y Preoperacional) → PR #182 (migración 111); no estaba en esta tabla, venía de la
+  revisión de SISRES del 2026-10-05 (ver arriba).
+
 ### Brechas que quedan (no empezadas)
 
 | Brecha | En SISRES | Qué hace falta |
 |---|---|---|
 | **Campos obligatorios en los demás módulos** | `configurarCampos*.php`, 12 módulos en SISRES | Pacientes y clientes ya están. Faltan: servicios (50 campos; ojo, el formulario oculta secciones según el tipo de servicio y bloquea campos según el rol, así que solo se puede exigir lo que el formulario muestra), proveedores, acta de entrega (37), diagnóstico (33), baja (28), móviles (22), usuarios (17), valoraciones (17), préstamo (4) y aerolíneas (2). Receta para sumar un módulo: comentario al inicio de `src/lib/campos-obligatorios.ts`. |
-| **Tipos de servicio visibles por rol** | Permisos `tipo_ver_*` (registrar y editar): Regulador solo ve MD, TAB y TAM; los demás, todos | SISMANTO muestra los 10 tipos a todos los roles. Se puede hacer como configuración por rol, al estilo de #152. |
 | **Permisos finos por acción** | `adminPermisos.php`, `adminRoles.php` (permisos por cargo, con historial y revertir) | #152 resolvió la visibilidad de módulos. Permisos de ver/editar por acción y roles nuevos quedan fuera: tocarían las server actions y la RLS. Daniel decidió empezar solo por la visibilidad. |
 | **Mantenimiento biomédico incompleto** | Editar mantenimiento (`editarMantenimientoBiomedica.php`), tipo PREVENTIVO/CORRECTIVO/CALIBRACION como lista, evidencia PDF del proveedor externo, **orden de mantenimiento en PDF** (`OrdenMantenimientoRender.php`) e impresión por rango | SISMANTO solo registra (sin editar), el tipo es texto libre, y no hay evidencia ni orden PDF. |
-| Equipo biomédico: foto, descripción e instrucciones de uso | `inventario.imagen`, `descripcionEquipo`, `instruccionesUso`; la foto sale en la hoja de vida y en el PDF | `biomedical_equipment.imagen_url` existe pero ninguna pantalla lo usa; no hay columnas de descripción ni instrucciones. |
 | Catálogo de sedes del inventario | `configurarInventario.php` (sedes para el selector «Aeropuerto / Sede» del equipo) | Menor: en SISMANTO ese campo es texto libre. |
 | Títulos coloreados en el Excel de Servicios | `includes/xlsxWriter.php` (`07ae2f6`) | `xlsx` 0.18 (community) no escribe estilos. Solo vale la pena si se adopta otra librería. |
 

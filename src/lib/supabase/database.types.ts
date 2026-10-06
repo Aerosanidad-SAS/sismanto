@@ -216,6 +216,10 @@ export type Database = {
           /** Inicio operativo fuera de servicio (negocio); ver migración 009. */
           fds_desde: string | null
           onedrive_folder_id: string | null
+          foto_frente: string | null
+          foto_lateral_derecho: string | null
+          foto_trasera: string | null
+          foto_lateral_izquierdo: string | null
           created_at: string
           updated_at: string
         }
@@ -257,6 +261,10 @@ export type Database = {
           centro_operativo_id?: number | null
           fds_desde?: string | null
           onedrive_folder_id?: string | null
+          foto_frente?: string | null
+          foto_lateral_derecho?: string | null
+          foto_trasera?: string | null
+          foto_lateral_izquierdo?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -298,6 +306,10 @@ export type Database = {
           centro_operativo_id?: number | null
           fds_desde?: string | null
           onedrive_folder_id?: string | null
+          foto_frente?: string | null
+          foto_lateral_derecho?: string | null
+          foto_trasera?: string | null
+          foto_lateral_izquierdo?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -640,9 +652,9 @@ export type Database = {
         Relationships: []
       }
       daily_checks: {
-        Row: { id: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial: number | null; kilometraje_final: number | null; checklist_ok: boolean; observaciones: string | null; is_assignment: boolean; created_at: string }
-        Insert: { id?: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok: boolean; observaciones?: string | null; is_assignment?: boolean; created_at?: string }
-        Update: { id?: number; user_id?: string; vehicle_id?: string; fecha?: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok?: boolean; observaciones?: string | null; is_assignment?: boolean; created_at?: string }
+        Row: { id: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial: number | null; kilometraje_final: number | null; checklist_ok: boolean; observaciones: string | null; is_assignment: boolean; foto_frente: string | null; foto_lateral_derecho: string | null; foto_trasera: string | null; foto_lateral_izquierdo: string | null; created_at: string }
+        Insert: { id?: number; user_id: string; vehicle_id: string; fecha: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok: boolean; observaciones?: string | null; is_assignment?: boolean; foto_frente?: string | null; foto_lateral_derecho?: string | null; foto_trasera?: string | null; foto_lateral_izquierdo?: string | null; created_at?: string }
+        Update: { id?: number; user_id?: string; vehicle_id?: string; fecha?: string; kilometraje_inicial?: number | null; kilometraje_final?: number | null; checklist_ok?: boolean; observaciones?: string | null; is_assignment?: boolean; foto_frente?: string | null; foto_lateral_derecho?: string | null; foto_trasera?: string | null; foto_lateral_izquierdo?: string | null; created_at?: string }
         Relationships: []
       }
       maintenance_schedule: {
@@ -1261,9 +1273,9 @@ export type Database = {
         ]
       }
       biomedical_equipment: {
-        Row: { id: number; placa_equipo: string; equipo: string; marca: string | null; modelo: string | null; serie: string | null; registro_invima: string | null; riesgo: string | null; ultimo_mantenimiento: string | null; proximo_mantenimiento: string | null; ultima_calibracion: string | null; proxima_calibracion: string | null; frec_mantenimiento: string | null; frec_calibracion: string | null; ubicacion_interna: string | null; aeropuerto: string | null; departamento: string | null; ciudad: string | null; adquisicion: string | null; area: string | null; observaciones: string | null; imagen_url: string | null; voltaje: string | null; corriente: string | null; potencia: string | null; frecuencia: string | null; humedad: string | null; dimensiones: string | null; peso: string | null; temperatura: string | null; fecha_compra: string | null; proveedor_nombre: string | null; proveedor_contacto: string | null; operador: string | null; activo: boolean; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: number; placa_equipo: string; equipo: string; marca?: string | null; modelo?: string | null; serie?: string | null; registro_invima?: string | null; riesgo?: string | null; ultimo_mantenimiento?: string | null; proximo_mantenimiento?: string | null; ultima_calibracion?: string | null; proxima_calibracion?: string | null; frec_mantenimiento?: string | null; frec_calibracion?: string | null; ubicacion_interna?: string | null; aeropuerto?: string | null; departamento?: string | null; ciudad?: string | null; adquisicion?: string | null; area?: string | null; observaciones?: string | null; imagen_url?: string | null; voltaje?: string | null; corriente?: string | null; potencia?: string | null; frecuencia?: string | null; humedad?: string | null; dimensiones?: string | null; peso?: string | null; temperatura?: string | null; fecha_compra?: string | null; proveedor_nombre?: string | null; proveedor_contacto?: string | null; operador?: string | null; activo?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: number; placa_equipo?: string; equipo?: string; marca?: string | null; modelo?: string | null; serie?: string | null; registro_invima?: string | null; riesgo?: string | null; ultimo_mantenimiento?: string | null; proximo_mantenimiento?: string | null; ultima_calibracion?: string | null; proxima_calibracion?: string | null; frec_mantenimiento?: string | null; frec_calibracion?: string | null; ubicacion_interna?: string | null; aeropuerto?: string | null; departamento?: string | null; ciudad?: string | null; adquisicion?: string | null; area?: string | null; observaciones?: string | null; imagen_url?: string | null; voltaje?: string | null; corriente?: string | null; potencia?: string | null; frecuencia?: string | null; humedad?: string | null; dimensiones?: string | null; peso?: string | null; temperatura?: string | null; fecha_compra?: string | null; proveedor_nombre?: string | null; proveedor_contacto?: string | null; operador?: string | null; activo?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: number; placa_equipo: string; equipo: string; marca: string | null; modelo: string | null; serie: string | null; registro_invima: string | null; riesgo: string | null; ultimo_mantenimiento: string | null; proximo_mantenimiento: string | null; ultima_calibracion: string | null; proxima_calibracion: string | null; frec_mantenimiento: string | null; frec_calibracion: string | null; ubicacion_interna: string | null; aeropuerto: string | null; departamento: string | null; ciudad: string | null; adquisicion: string | null; area: string | null; observaciones: string | null; imagen_url: string | null; voltaje: string | null; corriente: string | null; potencia: string | null; frecuencia: string | null; humedad: string | null; dimensiones: string | null; peso: string | null; temperatura: string | null; fecha_compra: string | null; proveedor_nombre: string | null; proveedor_contacto: string | null; operador: string | null; descripcion: string | null; instrucciones_uso: string | null; activo: boolean; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; placa_equipo: string; equipo: string; marca?: string | null; modelo?: string | null; serie?: string | null; registro_invima?: string | null; riesgo?: string | null; ultimo_mantenimiento?: string | null; proximo_mantenimiento?: string | null; ultima_calibracion?: string | null; proxima_calibracion?: string | null; frec_mantenimiento?: string | null; frec_calibracion?: string | null; ubicacion_interna?: string | null; aeropuerto?: string | null; departamento?: string | null; ciudad?: string | null; adquisicion?: string | null; area?: string | null; observaciones?: string | null; imagen_url?: string | null; voltaje?: string | null; corriente?: string | null; potencia?: string | null; frecuencia?: string | null; humedad?: string | null; dimensiones?: string | null; peso?: string | null; temperatura?: string | null; fecha_compra?: string | null; proveedor_nombre?: string | null; proveedor_contacto?: string | null; operador?: string | null; descripcion?: string | null; instrucciones_uso?: string | null; activo?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; placa_equipo?: string; equipo?: string; marca?: string | null; modelo?: string | null; serie?: string | null; registro_invima?: string | null; riesgo?: string | null; ultimo_mantenimiento?: string | null; proximo_mantenimiento?: string | null; ultima_calibracion?: string | null; proxima_calibracion?: string | null; frec_mantenimiento?: string | null; frec_calibracion?: string | null; ubicacion_interna?: string | null; aeropuerto?: string | null; departamento?: string | null; ciudad?: string | null; adquisicion?: string | null; area?: string | null; observaciones?: string | null; imagen_url?: string | null; voltaje?: string | null; corriente?: string | null; potencia?: string | null; frecuencia?: string | null; humedad?: string | null; dimensiones?: string | null; peso?: string | null; temperatura?: string | null; fecha_compra?: string | null; proveedor_nombre?: string | null; proveedor_contacto?: string | null; operador?: string | null; descripcion?: string | null; instrucciones_uso?: string | null; activo?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       biomedical_maintenance: {

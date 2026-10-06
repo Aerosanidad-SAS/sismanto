@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitDailyCheck, getDailyCheckForToday, getDailyCheckItemsForToday } from "@/app/api/actions/ovem";
+import { subirFotoPreoperacional } from "@/app/api/actions/vehiculo-fotos";
+import { FotosVehiculo } from "@/components/vehiculos/fotos-vehiculo";
+import { SelectorFotosNuevas } from "@/components/vehiculos/selector-fotos-nuevas";
+import { columnaDeLado, type FotosVehiculo as FotosVehiculoType, type LadoVehiculo } from "@/lib/vehiculo-fotos";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -167,6 +171,11 @@ export function OvemPortal({
   /** Ya se intentó enviar con ítems sin responder: se resaltan. */
   const [resaltarPendientes, setResaltarPendientes] = useState(false);
   const [mostrarResumen, setMostrarResumen] = useState(false);
+  /** Preoperacional de hoy ya enviado: habilita el paso opcional de las 4 fotos del vehículo. */
+  const [dailyCheckId, setDailyCheckId] = useState<number | null>(null);
+  const [fotosPreop, setFotosPreop] = useState<FotosVehiculoType>({});
+  /** Fotos elegidas en el formulario antes de enviar (mismo lugar que SISRES); se suben al confirmar el envío. */
+  const [fotosSeleccionadas, setFotosSeleccionadas] = useState<Partial<Record<LadoVehiculo, File>>>({});
   const [confirmarSalida, setConfirmarSalida] = useState(false);
   /** `${vehicleId}|${hoy}` del borrador ya cargado; evita guardar el estado de un vehículo bajo la clave de otro. */
   const [cargadoPara, setCargadoPara] = useState<string | null>(null);
@@ -245,6 +254,9 @@ export function OvemPortal({
   useEffect(() => {
     if (!vehicleId || flow !== "preoperacional") {
       setDailyCheckDone(false);
+      setDailyCheckId(null);
+      setFotosPreop({});
+      setFotosSeleccionadas({});
       setCargadoPara(null);
       baselineRef.current = null;
       return;
@@ -252,9 +264,12 @@ export function OvemPortal({
     let cancelado = false;
     setCargadoPara(null);
     (async () => {
+      // El propio OVEM: exacto a su nombre. Quien solo supervisa (ADMIN, "Ver como" aparte): el del vehículo hoy,
+      // sea quien sea que lo haya registrado — la RLS de daily_checks ya le deja ver cualquier fila.
+      const propio = viewerRole === "OVEM" ? userId : undefined;
       const [dc, items] = await Promise.all([
-        getDailyCheckForToday(userId, vehicleId),
-        getDailyCheckItemsForToday(userId, vehicleId),
+        getDailyCheckForToday(vehicleId, propio),
+        getDailyCheckItemsForToday(vehicleId, propio),
       ]);
       if (cancelado) return;
       const map: RespuestasChecklist = {};
@@ -268,6 +283,8 @@ export function OvemPortal({
       const kmServidor = dc?.kilometraje_inicial ? String(dc.kilometraje_inicial) : "";
       const obsServidor = dc?.observaciones || "";
       setDailyCheckDone(Boolean(dc));
+      setDailyCheckId((dc as { id?: number } | null)?.id ?? null);
+      setFotosPreop((dc as FotosVehiculoType | null) ?? {});
       baselineRef.current = serializarBorrador({ km: kmServidor, observaciones: obsServidor, items: map });
       // Un borrador sin enviar de este vehículo y día gana sobre lo ya guardado en el servidor.
       const borrador = leerBorrador(leerSession(claveBorrador(vehicleId, hoy)));
@@ -279,7 +296,7 @@ export function OvemPortal({
     return () => {
       cancelado = true;
     };
-  }, [vehicleId, userId, flow, hoy]);
+  }, [vehicleId, userId, flow, hoy, viewerRole]);
 
   // Al cambiar de flujo se limpian los campos propios de cada uno; el vehículo se conserva.
   useEffect(() => {
@@ -396,6 +413,27 @@ export function OvemPortal({
         if (avisoServidor && (result?.hallazgos?.criticos ?? 0) > 0) setError(`Checklist guardado. ${avisoServidor}`);
         else setSuccess(avisoServidor ? `Checklist guardado. ${avisoServidor}` : "Checklist completado correctamente");
         setDailyCheckDone(true);
+        const dcId = result?.dailyCheckId ?? null;
+        setDailyCheckId(dcId);
+        // Las fotos elegidas en el formulario se suben ahora: el preoperacional recién existe, hace falta su id.
+        if (dcId && Object.keys(fotosSeleccionadas).length > 0) {
+          const subidas = await Promise.all(
+            (Object.entries(fotosSeleccionadas) as [LadoVehiculo, File][]).map(
+              async ([lado, file]) => [lado, await subirFotoPreoperacional(dcId, lado, file)] as const
+            )
+          );
+          const nuevasFotos: FotosVehiculoType = {};
+          let fallos = 0;
+          for (const [lado, r] of subidas) {
+            if ("ruta" in r) nuevasFotos[columnaDeLado(lado)] = r.ruta;
+            else fallos++;
+          }
+          setFotosPreop((prev) => ({ ...prev, ...nuevasFotos }));
+          setFotosSeleccionadas({});
+          if (fallos > 0) {
+            setError(`El checklist se guardó, pero ${fallos} foto${fallos === 1 ? "" : "s"} no se pudo subir. Vuelve a intentarlo abajo.`);
+          }
+        }
         // Lo enviado pasa a ser la base: ya no hay cambios pendientes ni borrador.
         baselineRef.current = serializarBorrador({ km, observaciones, items: checkItemsState });
         escribirSession(claveBorrador(vehicleId, hoy), null);
@@ -756,6 +794,34 @@ export function OvemPortal({
                   {success}
                 </p>
               )}
+              {!dailyCheckId && viewerRole === "OVEM" ? (
+                // Mismo lugar que SISRES: las 4 fotos van en el formulario, antes de enviar — no un paso aparte
+                // después. Solo quedan elegidas aquí; se suben de verdad al confirmar el envío (abajo).
+                <div className="space-y-2 border-t pt-4">
+                  <p className="text-sm font-medium">Fotos del vehículo (opcional)</p>
+                  <SelectorFotosNuevas
+                    valores={fotosSeleccionadas}
+                    onChange={(lado, file) =>
+                      setFotosSeleccionadas((prev) => {
+                        const next = { ...prev };
+                        if (file) next[lado] = file;
+                        else delete next[lado];
+                        return next;
+                      })
+                    }
+                  />
+                </div>
+              ) : dailyCheckId ? (
+                // Ya enviado hoy: reemplazar una foto (el propio OVEM) o solo verlas (quien supervisa).
+                <div className="space-y-2 border-t pt-4">
+                  <p className="text-sm font-medium">Fotos del vehículo{viewerRole === "OVEM" ? " (opcional)" : ""}</p>
+                  <FotosVehiculo
+                    fotos={fotosPreop}
+                    onUpload={(lado, file) => subirFotoPreoperacional(dailyCheckId, lado, file)}
+                    deshabilitado={viewerRole !== "OVEM"}
+                  />
+                </div>
+              ) : null}
               {viewerRole === "OVEM" ? (
                 <Button className="min-h-11" onClick={revisarChecklist} disabled={loading}>
                   {loading ? "Guardando..." : dailyCheckDone ? "Revisar y actualizar" : "Revisar y enviar"}
