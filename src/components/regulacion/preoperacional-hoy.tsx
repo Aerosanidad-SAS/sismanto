@@ -66,7 +66,10 @@ export function PreoperacionalHoyCard({ datos }: { datos: PreoperacionalHoy }) {
             <ul className="space-y-1">
               {conFalla.map((v) => (
                 <li key={v.placa} className="flex items-center justify-between gap-2 rounded-md border border-warning/50 px-3 py-1.5 text-sm">
-                  <span className="font-medium">{v.placa}</span>
+                  <span className="flex items-center gap-2 font-medium">
+                    {v.placa}
+                    {v.fueraDeServicio && <Badge variant="destructive">Fuera de servicio</Badge>}
+                  </span>
                   <span className="truncate text-muted-foreground">{v.ovem ?? "—"}</span>
                 </li>
               ))}
