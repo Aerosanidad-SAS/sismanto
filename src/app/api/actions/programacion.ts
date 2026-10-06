@@ -6,12 +6,26 @@ import { esDia, hoyBogota, sumarDias, type Dia } from "@/lib/fechas";
 import { centroVisible } from "@/lib/auth-utils";
 import { createClient } from "@/lib/supabase/server";
 import { resumenPorVehiculo, validarConductores, type FilaOperacion, type ResumenVehiculoDia, type TitularVigente } from "@/lib/programacion-diaria";
+import {
+  etiquetaRazon,
+  filasDeCambio,
+  planificarCambioDelDia,
+  RAZONES_CON_NOVEDAD,
+  validarFiltroCambios,
+  validarRazon,
+  vehiculosDeOrigen,
+  type CambioVehiculo,
+  type FiltroCambios,
+  type RazonCambio,
+  type RazonCodigo,
+} from "@/lib/cambio-vehiculo";
 import { getProfile, requireRole } from "./auth";
 import { getUsuariosPorRol } from "./regulacion";
 
 // Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este repo (ver CLAUDE.md).
 type Fila = Record<string, any>;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES_PROGRAMACION = ["ADMIN", "REGULACION"] as const;
 const ROLES_LECTURA = ["ADMIN", "REGULACION", "ANALISTA", "COORDINACION", "GERENCIAL", "MANTENIMIENTO"] as const;
 
@@ -106,12 +120,22 @@ export async function setTitulares(vehicleId: string, userIds: string[]) {
   return { success: true };
 }
 
+export interface TrasladoServicios {
+  origenId: string;
+  destinoId: string;
+}
+
 /**
  * Cambio del día: reemplaza lo registrado para ese vehículo en esa fecha (hoy o futuro). Los titulares no se tocan:
  * al día siguiente vuelven solos. Para HOY también deja a esos conductores como la tripulación OVEM vigente, que es
  * lo que usan «Mis servicios» y el preoperacional.
+ *
+ * Razón obligatoria (Daniel, 2026-10-02): si el cambio retira o reemplaza a un conductor ya programado ese día, o
+ * trae a uno que operaba en otro vehículo, hay que decir por qué (`cambio`). Queda en `vehicle_operador_cambios`
+ * (114), enlazable a una novedad. Traer a un conductor de otro vehículo es un MOVIMIENTO: sale del vehículo de origen.
+ * Devuelve los traslados (origen → destino) para ofrecer mover los servicios sin iniciar.
  */
-export async function cambiarOperadoresDelDia(vehicleId: string, fecha: string, userIds: string[], nota?: string) {
+export async function cambiarOperadoresDelDia(vehicleId: string, fecha: string, userIds: string[], nota?: string, cambio?: RazonCambio) {
   const profile = await requireRole([...ROLES_PROGRAMACION]);
   const malo = validarConductores(userIds);
   if (malo) return { error: malo };
@@ -119,28 +143,170 @@ export async function cambiarOperadoresDelDia(vehicleId: string, fecha: string, 
   if (!esDia(fecha) || fecha < hoy) return { error: "Solo se puede ajustar hoy o un día futuro; el pasado es historial." };
 
   const supabase = createClient() as any;
+  const { data: prev } = await supabase.from("vehicle_operacion_diaria").select("user_id").eq("vehicle_id", vehicleId).eq("fecha", fecha);
+  const previos = ((prev ?? []) as Fila[]).map((f) => f.user_id as string);
+
+  const llegan = userIds.filter((id) => !previos.includes(id));
+  const enOtroVehiculo = new Map<string, string>();
+  if (llegan.length > 0) {
+    const { data: otros } = await supabase.from("vehicle_operacion_diaria").select("user_id, vehicle_id").eq("fecha", fecha).in("user_id", llegan).neq("vehicle_id", vehicleId);
+    for (const o of (otros ?? []) as Fila[]) if (!enOtroVehiculo.has(o.user_id)) enOtroVehiculo.set(o.user_id, o.vehicle_id);
+  }
+  const plan = planificarCambioDelDia(previos, userIds, enOtroVehiculo);
+
+  let filasCambio: Fila[] = [];
+  if (plan.requiereRazon) {
+    const sinRazon = validarRazon(cambio);
+    if (sinRazon) return { error: sinRazon };
+    const razonCodigo = cambio!.razonCodigo as string;
+    const razonTexto = (cambio!.razonTexto ?? "").trim();
+    let incidentId: number | null = null;
+    let vehiculoDeLaNovedad: string | null = null;
+    if (cambio!.incidentId != null) {
+      if (!Number.isInteger(cambio!.incidentId) || !RAZONES_CON_NOVEDAD.includes(razonCodigo as RazonCodigo)) return { error: "La novedad enlazada no es válida para esta razón." };
+      const { data: inc } = await supabase.from("incidents").select("id, vehicle_id, estado").eq("id", cambio!.incidentId).maybeSingle();
+      if (!inc || !["ABIERTO", "EN_PROCESO"].includes(inc.estado) || !vehiculosDeOrigen(vehicleId, plan).includes(inc.vehicle_id)) {
+        return { error: "La novedad debe estar abierta y ser de un vehículo del que sale el conductor." };
+      }
+      incidentId = inc.id;
+      vehiculoDeLaNovedad = inc.vehicle_id;
+    }
+    const { data: creadas, error: eCambio } = await supabase
+      .from("vehicle_operador_cambios")
+      .insert(
+        filasDeCambio(vehicleId, plan).map((f) => ({
+          ...f,
+          fecha,
+          razon_codigo: razonCodigo,
+          razon_texto: razonTexto,
+          incident_id: incidentId !== null && f.vehicle_origen === vehiculoDeLaNovedad ? incidentId : null,
+          registrado_por: profile.user_id,
+        })),
+      )
+      .select("id");
+    if (eCambio) return { error: eCambio.message };
+    filasCambio = (creadas ?? []) as Fila[];
+  }
+  // Si algo falla después, no debe quedar la razón de un cambio que no ocurrió.
+  const deshacerRazon = async () => {
+    if (filasCambio.length > 0) await supabase.from("vehicle_operador_cambios").delete().in("id", filasCambio.map((f) => f.id));
+  };
+
   const { data: tit } = await supabase.from("vehicle_titulares").select("user_id").eq("vehicle_id", vehicleId).lte("desde", fecha).or("hasta.is.null,hasta.gte." + fecha);
   const titulares = new Set(((tit ?? []) as Fila[]).map((t) => t.user_id as string));
+  const notaFinal = nota?.trim() || (plan.requiereRazon ? (cambio!.razonTexto ?? "").trim() : "") || null;
 
   const { error: eDel } = await supabase.from("vehicle_operacion_diaria").delete().eq("vehicle_id", vehicleId).eq("fecha", fecha);
-  if (eDel) return { error: eDel.message };
+  if (eDel) { await deshacerRazon(); return { error: eDel.message }; }
   const { error } = await supabase.from("vehicle_operacion_diaria").insert(
     userIds.map((user_id) => ({
       fecha,
       vehicle_id: vehicleId,
       user_id,
       origen: titulares.has(user_id) ? "TITULAR" : "CAMBIO_DEL_DIA",
-      nota: nota?.trim() || null,
+      nota: notaFinal,
       registrado_por: profile.user_id,
     })),
   );
-  if (error) return { error: error.message };
+  if (error) { await deshacerRazon(); return { error: error.message }; }
 
-  if (fecha === hoy) await sincronizarTripulacionOVEM(vehicleId, userIds, hoy, profile.user_id);
+  // Quien viene de otro vehículo sale de él (es un movimiento, no un doble puesto).
+  const origenes = new Set<string>();
+  for (const l of plan.llegadas) {
+    if (!l.vehiculoOrigen) continue;
+    origenes.add(l.vehiculoOrigen);
+    await supabase.from("vehicle_operacion_diaria").delete().eq("fecha", fecha).eq("vehicle_id", l.vehiculoOrigen).eq("user_id", l.userId);
+  }
 
-  await auditar("MODIFICAR", "regulacion", vehicleId, "Operadores del " + fecha + " (" + userIds.length + ")");
+  if (fecha === hoy) {
+    await sincronizarTripulacionOVEM(vehicleId, userIds, hoy, profile.user_id);
+    for (const origenId of Array.from(origenes)) {
+      const { data: quedan } = await supabase.from("vehicle_operacion_diaria").select("user_id").eq("vehicle_id", origenId).eq("fecha", fecha);
+      await sincronizarTripulacionOVEM(origenId, ((quedan ?? []) as Fila[]).map((f) => f.user_id as string), hoy, profile.user_id);
+    }
+  }
+
+  await auditar(
+    "MODIFICAR",
+    "regulacion",
+    vehicleId,
+    "Operadores del " + fecha + " (" + userIds.length + ")" + (plan.requiereRazon ? ", razón " + cambio!.razonCodigo : ""),
+  );
   revalidatePath("/regulacion");
-  return { success: true };
+  const traslados: TrasladoServicios[] = Array.from(origenes).map((origenId) => ({ origenId, destinoId: vehicleId }));
+  return { success: true as const, traslados };
+}
+
+export interface NovedadAbierta {
+  id: number;
+  vehicleId: string;
+  placa: string;
+  descripcion: string;
+  estado: string;
+  fechaReporte: string | null;
+}
+
+/** Novedades abiertas (o en proceso) de los vehículos de origen, para enlazar la razón del cambio. */
+export async function getNovedadesAbiertas(vehicleIds: string[]): Promise<NovedadAbierta[]> {
+  await requireRole([...ROLES_PROGRAMACION]);
+  const ids = vehicleIds.filter((id) => UUID.test(id)).slice(0, 10);
+  if (ids.length === 0) return [];
+  const supabase = createClient() as any;
+  const { data } = await supabase
+    .from("incidents")
+    .select("id, vehicle_id, descripcion, estado, fecha_reporte, vehicles(placa)")
+    .in("vehicle_id", ids)
+    .in("estado", ["ABIERTO", "EN_PROCESO"])
+    .order("fecha_reporte", { ascending: false })
+    .limit(50);
+  return ((data ?? []) as Fila[]).map((n) => ({
+    id: n.id,
+    vehicleId: n.vehicle_id,
+    placa: n.vehicles?.placa ?? "",
+    descripcion: String(n.descripcion ?? "").slice(0, 140),
+    estado: n.estado,
+    fechaReporte: n.fecha_reporte ?? null,
+  }));
+}
+
+/** Historial de cambios de vehículo (con su razón) por vehículo (origen o destino) o por conductor, en un rango. */
+export async function getCambiosDeVehiculo(filtro: FiltroCambios): Promise<CambioVehiculo[]> {
+  await requireRole([...ROLES_LECTURA]);
+  if (validarFiltroCambios(filtro)) return [];
+  const supabase = createClient() as any;
+  let q = supabase
+    .from("vehicle_operador_cambios")
+    .select("id, fecha, user_id, vehicle_origen, vehicle_destino, razon_codigo, razon_texto, incident_id, registrado_por")
+    .gte("fecha", filtro.desde)
+    .lte("fecha", filtro.hasta)
+    .order("fecha", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(2000);
+  if (filtro.vehicleId) q = q.or("vehicle_origen.eq." + filtro.vehicleId + ",vehicle_destino.eq." + filtro.vehicleId);
+  if (filtro.userId) q = q.eq("user_id", filtro.userId);
+  const { data } = await q;
+  const filas = (data ?? []) as Fila[];
+  // Usuarios y placas se resuelven aparte: las FK apuntan a auth.users y a vehicles por dos columnas distintas.
+  const personas = Array.from(new Set(filas.flatMap((f) => [f.user_id as string, f.registrado_por as string]).filter(Boolean)));
+  const vehiculos = Array.from(new Set(filas.flatMap((f) => [f.vehicle_origen as string, f.vehicle_destino as string]).filter(Boolean)));
+  const [{ data: perfiles }, { data: placas }] = await Promise.all([
+    personas.length > 0 ? supabase.from("user_profiles").select("user_id, nombre_completo, email").in("user_id", personas) : { data: [] },
+    vehiculos.length > 0 ? supabase.from("vehicles").select("id, placa").in("id", vehiculos) : { data: [] },
+  ]);
+  const nombre = new Map(((perfiles ?? []) as Fila[]).map((p) => [p.user_id as string, (p.nombre_completo || p.email || "") as string]));
+  const placa = new Map(((placas ?? []) as Fila[]).map((v) => [v.id as string, v.placa as string]));
+  return filas.map((f) => ({
+    id: f.id,
+    fecha: f.fecha,
+    conductor: nombre.get(f.user_id) ?? "",
+    placaOrigen: f.vehicle_origen ? placa.get(f.vehicle_origen) ?? null : null,
+    placaDestino: f.vehicle_destino ? placa.get(f.vehicle_destino) ?? null : null,
+    razonCodigo: f.razon_codigo,
+    razonEtiqueta: etiquetaRazon(f.razon_codigo),
+    razonTexto: f.razon_texto,
+    incidentId: f.incident_id ?? null,
+    registradoPor: nombre.get(f.registrado_por) ?? "",
+  }));
 }
 
 /** Deja como OVEM vigentes del vehículo exactamente a quienes operan hoy (lo que leen «Mis servicios» y el preoperacional). */
