@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { SIN_FILTROS, filtrarEquipos, hayFiltros, valoresDistintos, type FiltrosEquipos } from "@/lib/equipos-filtros";
 import { checklistParaEquipo, type CatalogoChecklists } from "@/lib/biomedico-checklist";
+import { TIPOS_MANTENIMIENTO_BIOMEDICO } from "@/lib/biomedico-fechas";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -26,6 +27,7 @@ import {
 import { formatDateShort } from "@/lib/utils";
 import { DateField } from "@/components/forms/date-field";
 import { DocumentosEquipo } from "@/components/equipos/documentos-equipo";
+import { FotoEquipo } from "@/components/equipos/foto-equipo";
 import {
   biomedicalEquipmentSchema,
   biomedicalMaintenanceSchema,
@@ -61,6 +63,9 @@ export interface EquipoRow {
   aeropuerto: string | null;
   ciudad: string | null;
   area: string | null;
+  imagen_url: string | null;
+  descripcion: string | null;
+  instrucciones_uso: string | null;
   [key: string]: unknown;
 }
 
@@ -179,6 +184,8 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
     const valores: Record<string, unknown> = { placa_equipo: e.placa_equipo, equipo: e.equipo };
     for (const campo of CAMPOS_EQUIPO) valores[campo.name] = e[campo.name] ?? "";
     valores.observaciones = e.observaciones ?? "";
+    valores.descripcion = e.descripcion ?? "";
+    valores.instrucciones_uso = e.instrucciones_uso ?? "";
     formEquipo.reset(valores as BiomedicalEquipmentFormData);
     setDialogEquipo(true);
   };
@@ -404,6 +411,7 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
                 <DocumentosEquipo equipmentId={hojaDeVida.id} />
               </TabsContent>
               <TabsContent value="ficha">
+                <FotoEquipo equipmentId={hojaDeVida.id} ruta={hojaDeVida.imagen_url} />
                 <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                   {[
                     ["Marca", hojaDeVida.marca],
@@ -433,6 +441,22 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
                     </div>
                   ))}
                 </dl>
+                {(hojaDeVida.descripcion || hojaDeVida.instrucciones_uso) && (
+                  <div className="mt-4 space-y-3 border-t pt-4">
+                    {hojaDeVida.descripcion && (
+                      <div>
+                        <dt className="text-xs font-medium text-muted-foreground">Descripción</dt>
+                        <dd className="whitespace-pre-wrap text-sm">{hojaDeVida.descripcion}</dd>
+                      </div>
+                    )}
+                    {hojaDeVida.instrucciones_uso && (
+                      <div>
+                        <dt className="text-xs font-medium text-muted-foreground">Instrucciones de uso</dt>
+                        <dd className="whitespace-pre-wrap text-sm">{hojaDeVida.instrucciones_uso}</dd>
+                      </div>
+                    )}
+                  </div>
+                )}
               </TabsContent>
               <TabsContent value="historial">
                 {historialEquipo.length === 0 ? (
@@ -501,6 +525,14 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
               <Label htmlFor="observaciones">Observaciones</Label>
               <Textarea id="observaciones" rows={2} {...formEquipo.register("observaciones")} />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Textarea id="descripcion" rows={2} {...formEquipo.register("descripcion")} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="instrucciones_uso">Instrucciones de uso</Label>
+              <Textarea id="instrucciones_uso" rows={3} {...formEquipo.register("instrucciones_uso")} />
+            </div>
 
             {(error || Object.values(formEquipo.formState.errors)[0]?.message) && (
               <p className="text-sm text-destructive">
@@ -548,8 +580,19 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists 
                 <Input id="orden_numero" {...formMant.register("orden_numero")} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="tipo_mantenimiento">Tipo (preventivo/correctivo)</Label>
-                <Input id="tipo_mantenimiento" {...formMant.register("tipo_mantenimiento")} />
+                <Label htmlFor="tipo_mantenimiento">Tipo</Label>
+                <select
+                  id="tipo_mantenimiento"
+                  {...formMant.register("tipo_mantenimiento")}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Sin especificar</option>
+                  {TIPOS_MANTENIMIENTO_BIOMEDICO.map((t) => (
+                    <option key={t} value={t}>
+                      {t[0] + t.slice(1).toLowerCase()}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="codigo_institucional">Código institucional</Label>

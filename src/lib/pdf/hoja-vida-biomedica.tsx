@@ -1,5 +1,5 @@
 import { diaEnBogota, esDia, formatoDia, hoyBogota } from "@/lib/fechas";
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer";
 
 const styles = StyleSheet.create({
   page: { padding: 32, fontSize: 9, fontFamily: "Helvetica" },
@@ -19,6 +19,8 @@ const styles = StyleSheet.create({
   tCol4: { width: "12%" },
   tCol5: { width: "40%" },
   footer: { position: "absolute", bottom: 20, left: 32, right: 32, fontSize: 7, color: "#9C9B99", textAlign: "center" },
+  foto: { width: 110, height: 110, objectFit: "cover", marginBottom: 10, border: "1 solid #E5E5E5" },
+  texto: { fontSize: 9, marginBottom: 10, lineHeight: 1.4 },
 });
 
 export interface HojaVidaEquipo {
@@ -41,6 +43,8 @@ export interface HojaVidaEquipo {
   vencimiento_parche_pediatrico: string | null;
   proveedor_nombre: string | null;
   operador: string | null;
+  descripcion: string | null;
+  instrucciones_uso: string | null;
 }
 
 export interface HojaVidaMantenimiento {
@@ -74,10 +78,13 @@ export function HojaVidaBiomedicaPdf({
   equipo,
   mantenimientos,
   generadoPor,
+  fotoDataUri,
 }: {
   equipo: HojaVidaEquipo;
   mantenimientos: HojaVidaMantenimiento[];
   generadoPor: string;
+  /** Foto ya resuelta a data URI (el bucket es privado; react-pdf no puede pedir una signed URL por sí solo). */
+  fotoDataUri?: string | null;
 }) {
   return (
     <Document>
@@ -86,6 +93,8 @@ export function HojaVidaBiomedicaPdf({
         <Text style={styles.subtitle}>
           {equipo.equipo} · Placa {equipo.placa_equipo}
         </Text>
+        {/* eslint-disable-next-line jsx-a11y/alt-text -- el <Image> de react-pdf no es un <img> HTML y no admite alt */}
+        {fotoDataUri && <Image src={fotoDataUri} style={styles.foto} />}
 
         <Text style={styles.sectionTitle}>Ficha técnica</Text>
         <View style={styles.grid}>
@@ -110,6 +119,14 @@ export function HojaVidaBiomedicaPdf({
           <Campo label="Vencimiento parche adulto" valor={fmtFecha(equipo.vencimiento_parche_adulto)} />
           <Campo label="Vencimiento parche pediátrico" valor={fmtFecha(equipo.vencimiento_parche_pediatrico)} />
         </View>
+
+        {(equipo.descripcion || equipo.instrucciones_uso) && (
+          <>
+            <Text style={styles.sectionTitle}>Descripción e instrucciones de uso</Text>
+            {equipo.descripcion && <Text style={styles.texto}>{equipo.descripcion}</Text>}
+            {equipo.instrucciones_uso && <Text style={styles.texto}>{equipo.instrucciones_uso}</Text>}
+          </>
+        )}
 
         <Text style={styles.sectionTitle}>Historial de mantenimientos ({mantenimientos.length})</Text>
         <View style={styles.table}>

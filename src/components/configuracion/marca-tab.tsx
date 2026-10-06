@@ -55,7 +55,7 @@ export function MarcaTab({ logoUrl, puedeEditar }: MarcaTabProps) {
         <CardTitle>Marca</CardTitle>
         <CardDescription>
           Logo que se muestra en el menú lateral, la pantalla de inicio de sesión y la pantalla de
-          cuenta pendiente. Recomendado: PNG o SVG con fondo transparente, horizontal.
+          cuenta pendiente. Recomendado: PNG con fondo transparente, horizontal.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -74,7 +74,7 @@ export function MarcaTab({ logoUrl, puedeEditar }: MarcaTabProps) {
             <input
               ref={inputRef}
               type="file"
-              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              accept="image/png,image/jpeg,image/webp"
               onChange={elegirArchivo}
               className="text-sm"
             />

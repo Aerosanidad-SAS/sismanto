@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { VehicleForm } from "@/components/forms/vehicle-form";
 import { eliminarVehiculo } from "@/app/api/actions/vehiculos";
+import { subirFotoVehiculo } from "@/app/api/actions/vehiculo-fotos";
+import { FotosVehiculo } from "@/components/vehiculos/fotos-vehiculo";
 import { Button } from "@/components/ui/button";
 import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
 import {
@@ -174,6 +176,10 @@ export function VehiculosTab({ vehicles, centros }: VehiculosTabProps) {
                             onSuccess={handleSuccess}
                             onCancel={() => setOpenDialog(null)}
                           />
+                          <div className="mt-6 space-y-2 border-t pt-4">
+                            <p className="text-sm font-medium">Fotos del vehículo</p>
+                            <FotosVehiculo fotos={v} onUpload={(lado, file) => subirFotoVehiculo(v.id, lado, file)} />
+                          </div>
                         </DialogContent>
                       </Dialog>
                       {/* Eliminar */}

@@ -1,4 +1,4 @@
-// Reglas puras de las solicitudes de NO APTO con aval (migración 109): sin base de datos, para poder probarlas.
+// Reglas puras de las solicitudes de NO APTO con aval (migración 113): sin base de datos, para poder probarlas.
 
 export type OrigenSolicitud = "SINIESTRO" | "REPORTE_OVEM";
 export type EstadoSolicitud = "PENDIENTE" | "AVALADA" | "RECHAZADA";
