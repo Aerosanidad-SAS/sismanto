@@ -16,7 +16,7 @@ import type { RoadAccidentFormData } from "@/lib/validations";
 import { validarPreoperacional } from "@/lib/preoperacional";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
-import { crearSolicitudNoApto } from "./solicitudes-no-apto";
+import { crearSolicitudNoApto, tieneNoAptoPendiente } from "./solicitudes-no-apto";
 import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
 
 /** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
@@ -95,6 +95,13 @@ export async function submitDailyCheck(data: {
   // Solo el OVEM registra su propio preoperacional (la política insert_daily_checks tampoco deja a otro rol).
   const profile = await requireRole(["OVEM"]);
   if (profile.user_id !== row.userId) return { error: "No autorizado" };
+
+  // Bloqueo provisional (migración 113): mientras una solicitud de NO APTO espera aval, el OVEM no opera ese
+  // vehículo — ni siquiera para registrar el preoperacional del día. No hay vuelta circular: una solicitud de
+  // NO APTO solo nace de un siniestro (reportRoadAccident), nunca de este propio envío.
+  if (await tieneNoAptoPendiente(row.vehicleId)) {
+    return { error: "Este vehículo tiene una solicitud de NO APTO pendiente de aval — no se puede operar hasta que se resuelva." };
+  }
 
   // El día lo pone el servidor: un preoperacional es de hoy, no de la fecha que mande el navegador (migración 090).
   const fecha = hoyOvem();
