@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { esDia } from '@/lib/fechas';
+import { normalizarCedula, normalizarPlaca, validarObligatoriosSiniestro } from '@/lib/siniestro-datos';
 import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 
 // Schema de validación para mantenimiento
@@ -269,6 +270,17 @@ export const roadAccidentSchema = z
     terceroNombre: z.string().trim().max(200).optional(),
     terceroTelefono: z.string().trim().max(30).optional(),
     terceroAseguradora: z.string().trim().max(120).optional(),
+    terceroCedula: z.string().trim().max(20).optional(),
+    sinTerceroMotivo: z.string().trim().max(500).optional(),
+    abogadoNombre: z.string().trim().max(200).optional(),
+    abogadoTelefono: z.string().trim().max(30).optional(),
+    abogadoCedula: z.string().trim().max(20).optional(),
+    abogadoCorreo: z.string().trim().max(200).optional(),
+    sinAbogadoMotivo: z.string().trim().max(500).optional(),
+    sinDocumentosMotivo: z.string().trim().max(500).optional(),
+    /** Cuántas fotos va a subir el cliente tras crear el reporte (la subida es posterior: necesita el id del siniestro). */
+    fotosHechos: z.number().int().min(0).max(50),
+    fotosDocumentos: z.number().int().min(0).max(50),
     intervinoAutoridad: z.boolean(),
     numeroIpat: z.string().trim().max(40).optional(),
     vehiculoOperativo: z.boolean(),
@@ -282,12 +294,16 @@ export const roadAccidentSchema = z
     if (row.hayLesionados && !row.lesionadosDetalle) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Describa los lesionados", path: ["lesionadosDetalle"] });
     }
-    if (row.hayTerceros && !row.terceroPlaca && !row.terceroNombre) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Indique al menos placa o nombre del tercero", path: ["terceroPlaca"] });
+    // Obligatorios de todo siniestro nuevo (migración 112) y sus excepciones con explicación escrita.
+    for (const e of validarObligatoriosSiniestro(row)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message, path: [e.path] });
     }
   });
 
 export type RoadAccidentFormData = z.infer<typeof roadAccidentSchema>;
+
+/** Placa y cédula tal como se guardan (sin espacios, puntos ni guiones, en mayúsculas). */
+export { normalizarCedula, normalizarPlaca };
 
 export const updateKilometrajeOdometerSchema = z.object({
   userId: z.string().uuid("ID de usuario inválido"),
