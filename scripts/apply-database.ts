@@ -132,6 +132,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "107_rol_modulo_oculto.sql",                     file: "scripts/migrations/107_rol_modulo_oculto.sql" },
   { name: "108_programacion_diaria_operadores.sql",        file: "scripts/migrations/108_programacion_diaria_operadores.sql" },
   { name: "109_solicitudes_no_apto.sql",                  file: "scripts/migrations/109_solicitudes_no_apto.sql" },
+  { name: "111_cierres_turno_ovem.sql",                   file: "scripts/migrations/111_cierres_turno_ovem.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

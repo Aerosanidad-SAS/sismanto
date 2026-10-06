@@ -105,6 +105,16 @@ export async function submitDailyCheck(data: {
 
   const supabase = createClient();
 
+  // Tras cerrar el turno el preoperacional de hoy queda como estaba: reenviarlo pisaría el km final del cierre.
+  const { data: cierreHoy } = await (supabase as any)
+    .from("ovem_cierres_turno")
+    .select("id")
+    .eq("user_id", profile.user_id)
+    .eq("vehicle_id", row.vehicleId)
+    .eq("fecha", fecha)
+    .maybeSingle();
+  if (cierreHoy) return { error: "Ya cerraste el turno de este vehículo hoy: el preoperacional de hoy no se puede modificar." };
+
   const { data: checkRow, error: checkError } = await supabase
     .from("daily_checks")
     .upsert(
