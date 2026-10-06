@@ -8,6 +8,7 @@ import { centroVisible } from "@/lib/auth-utils";
 import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
 import { revalidatePath } from "next/cache";
 import { toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
+import { tieneNoAptoPendiente } from "./solicitudes-no-apto";
 import { z } from "zod";
 
 export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERATIVO" | "FUERA_DE_SERVICIO") {
@@ -112,6 +113,11 @@ export async function asignarTripulacion(
     fechaFin: parseFin ?? null,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  // Bloqueo provisional (migración 113): mientras una solicitud de NO APTO espera aval, nadie —ni el propio
+  // OVEM autoasignándose— pone tripulación en ese vehículo.
+  if (await tieneNoAptoPendiente(parsed.data.vehicleId)) {
+    return { error: "Este vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar tripulación." };
+  }
 
   const supabase = createClient();
   const fin = parsed.data.fechaFin?.trim() || null;
