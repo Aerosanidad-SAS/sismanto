@@ -56,7 +56,10 @@ export default async function NovedadesPage() {
         </p>
       </div>
 
-      <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile?.role_codigo === "ADMIN" || profile?.role_codigo === "COORDINACION"} />
+      <SolicitudesNoApto
+        solicitudes={solicitudesNoApto}
+        puedeResolver={["ADMIN", "COORDINACION", "MANTENIMIENTO"].includes(profile?.role_codigo ?? "")}
+      />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

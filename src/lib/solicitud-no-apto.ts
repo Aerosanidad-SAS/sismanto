@@ -23,11 +23,14 @@ export function validarDecision(decision: DecisionNoApto, nota: string | undefin
 }
 
 /**
- * ¿Puede este rol resolver una solicitud de este vehículo? Coordinación solo la de su centro; el administrador, todas.
- * (La RLS de la base permite a los dos roles: la restricción por centro se aplica aquí, como en el resto del sistema.)
+ * ¿Puede este rol resolver una solicitud de este vehículo? Coordinación solo la de su centro; ADMIN y Mantenimiento
+ * (migración 117 — el texto que ve el OVEM siempre dijo "Coordinación o Mantenimiento"), todas: Mantenimiento no
+ * está acotado por centro en ningún otro lugar del sistema.
+ * (La RLS de la base permite a los tres roles: la restricción por centro de Coordinación se aplica aquí, como en
+ * el resto del sistema.)
  */
 export function puedeResolver(rol: string, centroDelRevisor: string | null, centroDelVehiculo: string | null): boolean {
-  if (rol === "ADMIN") return true;
+  if (rol === "ADMIN" || rol === "MANTENIMIENTO") return true;
   if (rol === "COORDINACION") return Boolean(centroDelRevisor) && centroDelRevisor === centroDelVehiculo;
   return false;
 }
