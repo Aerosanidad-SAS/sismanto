@@ -1,5 +1,7 @@
 # FEATURE_MATRIX — Aeromanto vs SISRES
 
+> ⚠️ **Desactualizada (julio 2026).** Hoy SISMANTO ya tiene casi todos los módulos de SISRES. Las brechas vigentes y los PRs que las portan están en `ESTADO_INTEGRACION.md`, sección «Cierre de brechas funcionales» (2026-09-30).
+
 **Fecha:** 2026-07-16
 **Fuente:** `aeromanto/AUDIT_aeromanto.md` + `sisres/AUDIT_sisres.md`
 **Propósito:** evitar duplicación de trabajo antes de diseñar la integración. No implica ninguna decisión de arquitectura — eso está en `RECOMENDACION_STACK.md`.

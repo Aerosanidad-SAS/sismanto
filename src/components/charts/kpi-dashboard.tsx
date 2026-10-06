@@ -14,13 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   AreaChart,
   Area,
   XAxis,
@@ -28,9 +23,12 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
+import { describeSeries, splitPercent } from "@/lib/chart-summary";
+import { ChartFigure } from "@/components/charts/chart-figure";
 import type {
   UptimeKPI,
   TCOKPI,
@@ -61,6 +59,8 @@ interface KPIDashboardProps {
     vehiculosAnalizados: number;
   };
 }
+
+const UPTIME_GOAL = 95;
 
 const COLORS = [
   "hsl(var(--chart-1))",
@@ -137,11 +137,15 @@ export function KPIDashboard({
   const tcoFiltrosActivos = !!(tcoCentroIdInicial || tcoPlacaInicial || tcoTipoInicial !== "AMBOS");
   const dispFiltroActivo = !!dispCentroIdInicial;
   // Preparar datos para gráficos
-  const uptimeChartData = uptimeData.map((item) => ({
-    placa: item.placa,
-    centro: item.centroOperativo,
-    disponibilidad: Number(item.porcentajeDisponibilidad.toFixed(2)),
-  }));
+  // Worst vehicles first, so the ones under the goal are at the top.
+  const uptimeChartData = uptimeData
+    .map((item) => ({
+      placa: item.placa,
+      centro: item.centroOperativo,
+      disponibilidad: Number(item.porcentajeDisponibilidad.toFixed(2)),
+    }))
+    .sort((a, b) => a.disponibilidad - b.disponibilidad);
+  const uptimeChartHeight = Math.max(240, 56 + uptimeChartData.length * 26);
 
   const tcoChartData = tcoData.map((item) => ({
     nombre: item.placa || item.centroOperativo || "Total",
@@ -152,10 +156,7 @@ export function KPIDashboard({
     total: item.costoTotal,
   }));
 
-  const ratioPieData = [
-    { name: "Preventivo", value: ratioPC.costoPreventivo },
-    { name: "Correctivo", value: ratioPC.costoCorrectivo },
-  ];
+  const ratioShare = splitPercent(ratioPC.costoPreventivo, ratioPC.costoCorrectivo);
 
   const resolucionAreaData = resolucionData.map((item) => ({
     severidad: item.severidad,
@@ -268,26 +269,27 @@ export function KPIDashboard({
               {ratioPC.cantidadPreventivo} preventivos /{" "}
               {ratioPC.cantidadCorrectivo} correctivos
             </p>
-            <div className="h-24">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={ratioPieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={22}
-                    outerRadius={36}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {ratioPieData.map((_, index) => (
-                      <Cell key={`ratio-mini-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            {ratioShare ? (
+              <div className="space-y-1.5">
+                <div
+                  role="img"
+                  aria-label={`Costo preventivo ${ratioShare.a} %, correctivo ${ratioShare.b} %`}
+                  className="flex h-3 w-full overflow-hidden rounded-full"
+                >
+                  <div style={{ width: `${ratioShare.a}%`, backgroundColor: COLORS[1] }} />
+                  <div style={{ width: `${ratioShare.b}%`, backgroundColor: COLORS[2] }} />
+                </div>
+                <p className="text-xs">
+                  <span className="mr-1 inline-block h-2 w-2 rounded-sm align-middle" style={{ backgroundColor: COLORS[1] }} aria-hidden="true" />
+                  {ratioShare.a} % preventivo
+                  <span className="mx-1.5 text-muted-foreground" aria-hidden="true">·</span>
+                  <span className="mr-1 inline-block h-2 w-2 rounded-sm align-middle" style={{ backgroundColor: COLORS[2] }} aria-hidden="true" />
+                  {ratioShare.b} % correctivo
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Sin costos en el período.</p>
+            )}
           </CardContent>
         </Card>
 
@@ -322,27 +324,42 @@ export function KPIDashboard({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={uptimeChartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="placa"
-                angle={-38}
-                textAnchor="end"
-                height={78}
-                interval={0}
-                tick={{ fontSize: 10 }}
-                tickFormatter={(p: string) => (p.length > 9 ? `${p.slice(0, 8)}…` : p)}
-              />
-              <YAxis tickFormatter={(v) => `${v}%`} />
-              <Tooltip
-                formatter={(value: number) => [`${value}%`, "Disponibilidad"]}
-                labelFormatter={(label) => `Placa: ${label}`}
-              />
-              <Legend />
-              <Bar dataKey="disponibilidad" fill={COLORS[0]} radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartFigure
+            label={`${describeSeries({
+              title: "Disponibilidad por vehículo",
+              rows: uptimeChartData,
+              labelKey: "placa",
+              valueKey: "disponibilidad",
+              format: (v) => `${v.toFixed(1)} %`,
+              noun: ["vehículo", "vehículos"],
+              labelPrefix: "placa",
+            })} Meta ${UPTIME_GOAL} %.`}
+            columns={[
+              { key: "placa", header: "Placa" },
+              { key: "centro", header: "Centro operativo" },
+              { key: "disponibilidad", header: "Disponibilidad", format: (v) => `${v} %` },
+            ]}
+            rows={uptimeChartData}
+          >
+            <ResponsiveContainer width="100%" height={uptimeChartHeight}>
+              <BarChart data={uptimeChartData} layout="vertical" margin={{ left: 8, right: 24, top: 20 }} accessibilityLayer>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="placa" width={84} interval={0} tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(value: number) => [`${value}%`, "Disponibilidad"]}
+                  labelFormatter={(label) => `Placa: ${label}`}
+                />
+                <ReferenceLine
+                  x={UPTIME_GOAL}
+                  stroke="hsl(var(--foreground))"
+                  strokeDasharray="6 4"
+                  label={{ value: `Meta ${UPTIME_GOAL} %`, position: "top", fontSize: 12, fill: "hsl(var(--foreground))" }}
+                />
+                <Bar dataKey="disponibilidad" name="Disponibilidad" fill={COLORS[0]} radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFigure>
         </CardContent>
       </Card>
 
@@ -410,19 +427,39 @@ export function KPIDashboard({
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={tcoChartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="nombre" />
-              <YAxis />
-              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Legend />
-              <Bar dataKey="preventivo" stackId="a" fill={COLORS[1]} radius={[6, 6, 0, 0]} />
-              <Bar dataKey="correctivo" stackId="a" fill={COLORS[2]} radius={[6, 6, 0, 0]} />
-              <Bar dataKey="combustible" stackId="a" fill={COLORS[3]} radius={[6, 6, 0, 0]} />
-              <Bar dataKey="fijos" stackId="a" fill={COLORS[4]} radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartFigure
+            label={`${describeSeries({
+              title: "Costo total de operación por vehículo o centro",
+              rows: tcoChartData,
+              labelKey: "nombre",
+              valueKey: "total",
+              format: (v) => formatCurrency(v),
+              noun: ["barra", "barras"],
+            })} Desglose: preventivo, correctivo, combustible y costos fijos.`}
+            columns={[
+              { key: "nombre", header: "Vehículo / centro" },
+              { key: "preventivo", header: "Preventivo", format: (v) => formatCurrency(Number(v)) },
+              { key: "correctivo", header: "Correctivo", format: (v) => formatCurrency(Number(v)) },
+              { key: "combustible", header: "Combustible", format: (v) => formatCurrency(Number(v)) },
+              { key: "fijos", header: "Fijos", format: (v) => formatCurrency(Number(v)) },
+              { key: "total", header: "Total", format: (v) => formatCurrency(Number(v)) },
+            ]}
+            rows={tcoChartData}
+          >
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={tcoChartData} accessibilityLayer>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="nombre" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                <Legend />
+                <Bar dataKey="preventivo" name="Preventivo" stackId="a" fill={COLORS[1]} stroke="hsl(var(--background))" />
+                <Bar dataKey="correctivo" name="Correctivo" stackId="a" fill={COLORS[2]} stroke="hsl(var(--background))" />
+                <Bar dataKey="combustible" name="Combustible" stackId="a" fill={COLORS[3]} stroke="hsl(var(--background))" />
+                <Bar dataKey="fijos" name="Fijos" stackId="a" fill={COLORS[4]} stroke="hsl(var(--background))" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFigure>
         </CardContent>
       </Card>
 
@@ -469,21 +506,41 @@ export function KPIDashboard({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={resolucionAreaData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="severidad" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="promedioHoras"
-                  stroke={COLORS[3]}
-                  fill={COLORS[3]}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <ChartFigure
+              label={describeSeries({
+                title: "Tiempo de resolución por severidad",
+                rows: resolucionAreaData,
+                labelKey: "severidad",
+                valueKey: "promedioHoras",
+                format: (v) => `${v.toFixed(1)} h`,
+                noun: ["severidad", "severidades"],
+              })}
+              columns={[
+                { key: "severidad", header: "Severidad" },
+                { key: "promedioHoras", header: "Promedio (h)" },
+                { key: "cerradas", header: "Cerradas" },
+                { key: "abiertas", header: "Abiertas" },
+              ]}
+              rows={resolucionAreaData}
+            >
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={resolucionAreaData} accessibilityLayer>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="severidad" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Area
+                    type="monotone"
+                    dataKey="promedioHoras"
+                    name="Promedio (horas)"
+                    stroke={COLORS[3]}
+                    fill={COLORS[3]}
+                    fillOpacity={0.35}
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartFigure>
           </CardContent>
         </Card>
       </div>

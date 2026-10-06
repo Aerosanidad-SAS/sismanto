@@ -10,11 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
   const [identificador, setIdentificador] = useState("");
   const [password, setPassword] = useState("");
+  const [verPassword, setVerPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export default function LoginPage() {
         if (!profile) {
           router.push("/pending");
         } else {
-          router.push(getDefaultRoute(profile.role_codigo));
+          router.push(profile.debe_cambiar_password ? "/cambiar-password" : getDefaultRoute(profile.role_codigo));
         }
         router.refresh();
       }
@@ -65,8 +67,8 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <CardTitle className="text-2xl">SISMANTO</CardTitle>
-            <CardDescription>Inicie sesión con su cédula y contraseña</CardDescription>
+            <CardTitle as="h1" className="text-2xl">SISMANTO</CardTitle>
+            <CardDescription>Inicia sesión con tu cédula y contraseña</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
@@ -76,33 +78,59 @@ export default function LoginPage() {
               <Input
                 id="identificador"
                 type="text"
+                inputMode="text"
+                enterKeyHint="next"
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={identificador}
                 onChange={(e) => setIdentificador(e.target.value)}
-                placeholder="Número de cédula"
+                placeholder="Cédula o correo"
                 className="mt-1"
                 required
               />
             </div>
             <div>
               <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-1"
-                required
-              />
+              <div className="relative mt-1">
+                <Input
+                  id="password"
+                  type={verPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  enterKeyHint="go"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-16"
+                  required
+                />
+                <button
+                  type="button"
+                  aria-pressed={verPassword}
+                  aria-controls="password"
+                  className="absolute inset-y-0 right-0 min-w-14 px-3 text-sm font-medium text-primary underline"
+                  onClick={() => setVerPassword((v) => !v)}
+                >
+                  {verPassword ? "Ocultar" : "Ver"}
+                </button>
+              </div>
             </div>
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+              <div role="alert" className="p-3 bg-destructive/10 border border-destructive/40 rounded text-sm text-destructive">
                 {error}
               </div>
             )}
             <Button type="submit" className="w-full min-h-11 touch-manipulation" disabled={loading}>
               {loading ? "Iniciando sesión..." : "Iniciar sesión"}
             </Button>
+            <p className="text-center text-sm">
+              <Link href="/recuperar" className="text-muted-foreground underline">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </p>
           </form>
         </CardContent>
       </Card>

@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatNumber } from "@/lib/utils";
 
-type Fila = Record<string, string | number | null>;
+type Fila = Record<string, string | number | boolean | null>;
 const TODOS = "__todos__";
 const MAX_FILAS = 300;
 
@@ -16,11 +16,14 @@ export function DirectorioTabla({
   columnas,
   filtros = [],
   vacio,
+  accion,
 }: {
   filas: Fila[];
   columnas: { campo: string; titulo: string }[];
   filtros?: { campo: string; titulo: string }[];
   vacio: string;
+  /** Contenido de una última columna por fila (p. ej. «Editar»), para quien puede modificar. */
+  accion?: (fila: Fila) => ReactNode;
 }) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<Record<string, string>>({});
@@ -88,12 +91,13 @@ export function DirectorioTabla({
               {columnas.map((c) => (
                 <TableHead key={c.campo}>{c.titulo}</TableHead>
               ))}
+              {accion && <TableHead className="w-0" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {visibles.length === 0 && (
               <TableRow>
-                <TableCell colSpan={columnas.length} className="text-center text-muted-foreground">
+                <TableCell colSpan={columnas.length + (accion ? 1 : 0)} className="text-center text-muted-foreground">
                   {filas.length === 0 ? vacio : "Sin resultados para esta búsqueda"}
                 </TableCell>
               </TableRow>
@@ -102,9 +106,10 @@ export function DirectorioTabla({
               <TableRow key={String(r.id ?? i)}>
                 {columnas.map((c) => (
                   <TableCell key={c.campo} className={c.campo === "nombre" ? "font-medium" : undefined}>
-                    {r[c.campo] ?? "—"}
+                    {r[c.campo] === null || r[c.campo] === undefined ? "—" : String(r[c.campo])}
                   </TableCell>
                 ))}
+                {accion && <TableCell className="text-right">{accion(r)}</TableCell>}
               </TableRow>
             ))}
           </TableBody>

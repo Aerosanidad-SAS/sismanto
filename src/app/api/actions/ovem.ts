@@ -13,9 +13,14 @@ import {
   updateKilometrajeOdometerSchema,
 } from "@/lib/validations";
 import type { RoadAccidentFormData } from "@/lib/validations";
+import { validarPreoperacional } from "@/lib/preoperacional";
+import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
+import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
+import { crearSolicitudNoApto } from "./solicitudes-no-apto";
+import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
 
-/** Misma convención que daily_checks: fecha UTC, que es la que usa CURRENT_DATE en las políticas RLS. */
-function hoyUtc() {
+/** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
+function hoyOvem() {
   return hoyBogota();
 }
 
@@ -23,7 +28,7 @@ export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACI
   const supabase = createClient();
   const { data, error } = await supabase
     .from("checklist_items")
-    .select("id, categoria, descripcion, cantidad_esperada, orden, activo")
+    .select("id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo")
     .eq("activo", true)
     .eq("lista", lista)
     .order("orden", { ascending: true });
@@ -76,7 +81,6 @@ export async function submitDailyCheck(data: {
   kilometrajeInicial: number;
   kilometrajeFinal?: number;
   observaciones?: string;
-  isAssignment?: boolean;
   items?: Array<{
     checklistItemId: number;
     estado: "OK" | "FALLA" | "NO_APLICA";
@@ -88,10 +92,16 @@ export async function submitDailyCheck(data: {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const row = parsed.data;
 
-  const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
-  if (profile.role_codigo === "OVEM" && profile.user_id !== row.userId) {
-    return { error: "No autorizado" };
-  }
+  // Solo el OVEM registra su propio preoperacional (la política insert_daily_checks tampoco deja a otro rol).
+  const profile = await requireRole(["OVEM"]);
+  if (profile.user_id !== row.userId) return { error: "No autorizado" };
+
+  // El día lo pone el servidor: un preoperacional es de hoy, no de la fecha que mande el navegador (migración 090).
+  const fecha = hoyOvem();
+
+  const catalogo = await getChecklistItemsActivos("PREOPERACIONAL");
+  const errorChecklist = validarPreoperacional(catalogo, row.items ?? []);
+  if (errorChecklist) return { error: errorChecklist };
 
   const supabase = createClient();
 
@@ -99,14 +109,13 @@ export async function submitDailyCheck(data: {
     .from("daily_checks")
     .upsert(
       {
-        user_id: row.userId,
+        user_id: profile.user_id,
         vehicle_id: row.vehicleId,
-        fecha: row.fecha,
+        fecha,
         kilometraje_inicial: row.kilometrajeInicial,
         kilometraje_final: row.kilometrajeFinal ?? null,
         checklist_ok: false,
         observaciones: row.observaciones ?? null,
-        is_assignment: row.isAssignment,
       },
       { onConflict: "user_id,vehicle_id,fecha" }
     )
@@ -115,43 +124,47 @@ export async function submitDailyCheck(data: {
 
   if (checkError) return { error: checkError.message };
 
-  const dailyCheckId = checkRow?.id;
-  if (dailyCheckId && row.items && row.items.length > 0) {
-    // Upsert por item. Si cantidadOk < cantidad esperada, UI ya manda estado=FALLA.
-    const payload = row.items.map((it) => ({
-      daily_check_id: dailyCheckId,
-      checklist_item_id: it.checklistItemId,
-      estado: it.estado,
-      cantidad_ok: it.cantidadOk ?? null,
-      observacion: it.observacion?.trim() || null,
-    }));
+  // checklist_ok lo recalcula el trigger trg_actualizar_checklist_ok (migración 005) al escribir los ítems.
+  const payload = (row.items ?? []).map((it) => ({
+    daily_check_id: checkRow.id,
+    checklist_item_id: it.checklistItemId,
+    estado: it.estado,
+    cantidad_ok: it.cantidadOk ?? null,
+    observacion: it.observacion?.trim() || null,
+  }));
+  const { error: itemsErr } = await supabase
+    .from("daily_check_items")
+    .upsert(payload, { onConflict: "daily_check_id,checklist_item_id" });
+  if (itemsErr) return { error: itemsErr.message };
 
-    const { error: itemsErr } = await supabase
-      .from("daily_check_items")
-      .upsert(payload, { onConflict: "daily_check_id,checklist_item_id" });
-    if (itemsErr) return { error: itemsErr.message };
-  }
-
-  // Si el OVEM marcó asignación, crear vehicle_assignment para hoy
-  if (row.isAssignment) {
-    const { error: assignError } = await supabase
-      .from("vehicle_assignments")
-      .upsert(
-        {
-          user_id: row.userId,
-          vehicle_id: row.vehicleId,
-          fecha_inicio: row.fecha,
-          fecha_fin: row.fecha,
-          activo: true,
-          asignado_por: row.userId,
-        },
-        { onConflict: "user_id,vehicle_id,fecha_inicio" }
-      );
-    if (assignError) return { error: assignError.message };
+  // Motor de alertas: las fallas y los documentos vencidos se vuelven novedades; las críticas sacan el vehículo de
+  // servicio. Un fallo aquí no debe perder el preoperacional que ya quedó guardado.
+  const porId = new Map((catalogo as any[]).map((c) => [c.id as number, c]));
+  let hallazgos: Awaited<ReturnType<typeof registrarHallazgosPreoperacional>> | null = null;
+  try {
+    hallazgos = await registrarHallazgosPreoperacional(supabase, {
+      vehicleId: row.vehicleId,
+      reportadoPor: profile.nombre_completo || profile.email || "OVEM",
+      hoy: fecha,
+      items: (row.items ?? []).map((it) => {
+        const c = porId.get(it.checklistItemId);
+        return {
+          descripcion: c?.descripcion ?? `Ítem ${it.checklistItemId}`,
+          estado: it.estado,
+          observacion: it.observacion,
+          severidadFalla: (c?.severidad_falla as SeveridadFalla | undefined) ?? null,
+        };
+      }),
+    });
+  } catch (e) {
+    console.error("[preoperacional] no se pudieron registrar los hallazgos:", e instanceof Error ? e.message : e);
   }
 
   revalidatePath("/ovem");
-  return { success: true };
+  revalidatePath("/novedades");
+  revalidatePath("/regulacion");
+  revalidatePath("/vehiculos");
+  return { success: true, hallazgos, dailyCheckId: checkRow.id as number };
 }
 
 export async function updateKilometrajeOdometer(
@@ -203,30 +216,28 @@ export async function updateKilometrajeOdometer(
   return { success: true };
 }
 
-export async function getDailyCheckForToday(userId: string, vehicleId: string) {
+/**
+ * Preoperacional de hoy de un vehículo. Sin `userId`: el de ADMIN/COORDINACION/REGULACION/ANALISTA/GERENCIAL
+ * supervisando (quién lo hizo no importa — la RLS de `daily_checks` ya les deja ver cualquier fila; si dos OVEM
+ * distintos registraron el mismo vehículo el mismo día, se toma el más reciente). Con `userId`: el del propio OVEM,
+ * exacto — así nunca ve por error el de otro si el vehículo cambió de conductor en el día.
+ */
+export async function getDailyCheckForToday(vehicleId: string, userId?: string) {
   const supabase = createClient();
   const hoy = hoyBogota();
-  const { data } = await supabase
-    .from("daily_checks")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("vehicle_id", vehicleId)
-    .eq("fecha", hoy)
-    .single();
+  let query = supabase.from("daily_checks").select("*").eq("vehicle_id", vehicleId).eq("fecha", hoy);
+  if (userId) query = query.eq("user_id", userId);
+  const { data } = await query.order("id", { ascending: false }).limit(1).maybeSingle();
   return data;
 }
 
-export async function getDailyCheckItemsForToday(userId: string, vehicleId: string) {
+export async function getDailyCheckItemsForToday(vehicleId: string, userId?: string) {
   const supabase = createClient();
   const hoy = hoyBogota();
 
-  const { data: check } = await supabase
-    .from("daily_checks")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("vehicle_id", vehicleId)
-    .eq("fecha", hoy)
-    .single();
+  let checkQuery = supabase.from("daily_checks").select("id").eq("vehicle_id", vehicleId).eq("fecha", hoy);
+  if (userId) checkQuery = checkQuery.eq("user_id", userId);
+  const { data: check } = await checkQuery.order("id", { ascending: false }).limit(1).maybeSingle();
 
   if (!check?.id) return [];
 
@@ -251,7 +262,7 @@ export async function getSupplyCheckForToday(vehicleId: string) {
     .select("id, observaciones")
     .eq("user_id", profile.user_id)
     .eq("vehicle_id", vehicleId)
-    .eq("fecha", hoyUtc())
+    .eq("fecha", hoyOvem())
     .maybeSingle();
   if (!check) return null;
 
@@ -286,7 +297,7 @@ export async function submitSupplyCheck(data: {
       {
         user_id: profile.user_id,
         vehicle_id: row.vehicleId,
-        fecha: hoyUtc(),
+        fecha: hoyOvem(),
         completo: faltantes === 0,
         observaciones: row.observaciones?.trim() || null,
         updated_at: new Date().toISOString(),
@@ -326,7 +337,7 @@ export async function submitOvemFuelLog(data: {
   const parsed = ovemFuelLogSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const row = parsed.data;
-  if (row.fecha > hoyUtc()) return { error: "La fecha del tanqueo no puede ser futura" };
+  if (row.fecha > hoyOvem()) return { error: "La fecha del tanqueo no puede ser futura" };
 
   const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
   const supabase = createClient();
@@ -379,7 +390,8 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
       descripcion: resumen,
       severidad: row.hayLesionados || !row.vehiculoOperativo ? "ALTA" : "MEDIA",
       reportado_por: profile.nombre_completo || profile.email || "OVEM",
-      afecta_operatividad: !row.vehiculoOperativo,
+      // El OVEM no saca el vehículo de servicio a criterio: pide el NO APTO y lo avala Coordinación o el administrador.
+      afecta_operatividad: profile.role_codigo === "OVEM" ? false : !row.vehiculoOperativo,
       estado: "ABIERTO",
     })
     .select("id")
@@ -411,8 +423,20 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
     return { error: `La novedad #${incident.id} quedó creada, pero el detalle del siniestro no se guardó: ${error.message}` };
   }
 
+  // Siniestro con lesionados o con el vehículo no operativo: solicitud de NO APTO con aval (bloqueo provisional).
+  let solicitudNoApto = false;
+  if (profile.role_codigo === "OVEM" && siniestroPideNoApto(row)) {
+    const sol = await crearSolicitudNoApto({
+      vehicleId: row.vehicleId,
+      motivo: "Siniestro vial en " + row.lugar + ". " + (row.hayLesionados ? "Con lesionados. " : "") + (!row.vehiculoOperativo ? "El vehículo no está operativo. " : "") + row.descripcion,
+      origen: "SINIESTRO",
+      incidentId: incident.id as number,
+    });
+    solicitudNoApto = !("error" in sol && sol.error);
+  }
+
   revalidatePath("/ovem");
   revalidatePath("/novedades");
   revalidatePath("/regulacion");
-  return { success: true, incidentId: incident.id as number };
+  return { success: true, incidentId: incident.id as number, solicitudNoApto };
 }

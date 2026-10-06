@@ -47,6 +47,7 @@ import {
   SEXO_OPCIONES,
   RH_OPCIONES,
 } from "@/lib/validations";
+import { conAsterisco } from "@/lib/campos-obligatorios";
 import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { crearPaciente, actualizarPaciente, eliminarPaciente } from "@/app/api/actions/pacientes";
 
@@ -113,9 +114,12 @@ interface PacientesTablaProps {
   epsOptions: string[];
   /** Texto de la búsqueda actual (parámetro `q` de la URL); la búsqueda se hace en el servidor. */
   busqueda: string;
+  /** Campos opcionales que el administrador volvió obligatorios (migración 101): se marcan con *. */
+  obligatorios?: string[];
 }
 
-export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }: PacientesTablaProps) {
+export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda, obligatorios = [] }: PacientesTablaProps) {
+  const etq = (etiqueta: string, campo: string) => conAsterisco(etiqueta, campo, obligatorios);
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<PacienteRow | null>(null);
@@ -294,7 +298,7 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }:
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="fecha_nacimiento_primero">Fecha de nacimiento</Label>
+                <Label htmlFor="fecha_nacimiento_primero">{etq("Fecha de nacimiento", "fecha_nacimiento")}</Label>
                 <DateField
                   id="fecha_nacimiento_primero"
                   value={watch("fecha_nacimiento") ?? ""}
@@ -339,7 +343,7 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }:
                 <Input id="apellido1" {...register("apellido1")} />
               </div>
               <div className="space-y-1">
-                <Label>Sexo</Label>
+                <Label>{etq("Sexo", "sexo")}</Label>
                 <Select
                   value={sexoSeleccionado ?? ""}
                   onValueChange={(v) => setValue("sexo", v)}
@@ -357,7 +361,7 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }:
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>RH</Label>
+                <Label>{etq("RH", "rh")}</Label>
                 <Select
                   value={rhSeleccionado ?? ""}
                   onValueChange={(v) => setValue("rh", v)}
@@ -375,7 +379,7 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }:
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="estatura">Estatura</Label>
+                <Label htmlFor="estatura">{etq("Estatura", "estatura")}</Label>
                 <div className="relative">
                   <Input id="estatura" placeholder="Ej: 168" className="pr-12" {...register("estatura")} />
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
@@ -384,7 +388,7 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }:
                 </div>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="departamento">Departamento</Label>
+                <Label htmlFor="departamento">{etq("Departamento", "departamento")}</Label>
                 <CatalogCombobox
                   id="departamento"
                   options={[...DEPARTAMENTOS_COLOMBIA]}
@@ -395,7 +399,7 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }:
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ciudad">Ciudad</Label>
+                <Label htmlFor="ciudad">{etq("Ciudad", "ciudad")}</Label>
                 <CatalogCombobox
                   id="ciudad"
                   options={ciudadesDisponibles as string[]}
@@ -407,7 +411,7 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }:
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="eps">EPS</Label>
+                <Label htmlFor="eps">{etq("EPS", "eps")}</Label>
                 <CatalogCombobox
                   id="eps"
                   options={epsOptions}
@@ -419,7 +423,7 @@ export function PacientesTabla({ pacientes, puedeEditar, epsOptions, busqueda }:
               </div>
               {CAMPOS_OPCIONALES.map((campo) => (
                 <div key={campo.name} className="space-y-1">
-                  <Label htmlFor={campo.name}>{campo.label}</Label>
+                  <Label htmlFor={campo.name}>{etq(campo.label, campo.name)}</Label>
                   <Input id={campo.name} type={campo.type ?? "text"} {...register(campo.name)} />
                 </div>
               ))}

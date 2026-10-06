@@ -209,11 +209,15 @@ export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string;
           </div>
 
           {!vehiculoOperativo && (
-            <p className="text-sm text-amber-700">
+            <p role="status" className="rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground">
               La ambulancia quedará fuera de servicio hasta que Mantenimiento cierre la novedad.
             </p>
           )}
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           <Button type="submit" disabled={loading} className="h-11 w-full sm:w-auto">
             {loading ? "Enviando…" : "Reportar siniestro"}
           </Button>

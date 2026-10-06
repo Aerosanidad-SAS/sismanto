@@ -20,6 +20,7 @@ export const ENTIDADES_AUDITORIA = [
   "captacion",
   "configuracion",
   "vehiculos",
+  "costos_anuales",
   "regulacion",
   "mantenimientos",
   "novedades",
@@ -27,6 +28,8 @@ export const ENTIDADES_AUDITORIA = [
   "proveedores",
   "capacitaciones",
   "carga_masiva",
+  "cotizaciones",
+  "role_switch", // «Ver como» del ADMIN (role-switcher.ts)
 ] as const;
 
 export const AUDITORIA_POR_PAGINA = 50;

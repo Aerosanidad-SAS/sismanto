@@ -3,6 +3,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getProfile } from "@/app/api/actions/auth";
 import { isAdminLike } from "@/lib/auth-utils";
 import { NovedadesTabla } from "@/components/novedades/novedades-tabla";
+import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
+import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
+
+export const metadata = { title: "Novedades" };
 
 const ROLES_CIERRE = ["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"];
 // Quiénes pueden crear un mantenimiento nuevo desde el cierre de una
@@ -29,7 +33,11 @@ async function getNovedades() {
 }
 
 export default async function NovedadesPage() {
-  const [profile, novedades] = await Promise.all([getProfile(), getNovedades()]);
+  const [profile, novedades, solicitudesNoApto] = await Promise.all([
+    getProfile(),
+    getNovedades(),
+    getSolicitudesNoAptoPendientes().catch(() => []),
+  ]);
   const isAdmin = profile ? isAdminLike(profile.role_codigo) : false;
   const puedeCerrar = ROLES_CIERRE.includes(profile?.role_codigo ?? "");
   const puedeCrearMantenimiento = ROLES_CREAN_MANTENIMIENTO.includes(profile?.role_codigo ?? "");
@@ -47,6 +55,8 @@ export default async function NovedadesPage() {
           aplicar la migración 006 en la base de datos.
         </p>
       </div>
+
+      <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile?.role_codigo === "ADMIN" || profile?.role_codigo === "COORDINACION"} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

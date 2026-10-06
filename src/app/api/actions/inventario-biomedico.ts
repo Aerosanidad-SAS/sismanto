@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { diasEntre, hoyBogota, normalizarDia } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -8,9 +9,20 @@ import { createElement } from "react";
 import type { BiomedicalEquipmentFormData, BiomedicalMaintenanceFormData } from "@/lib/validations";
 import { biomedicalEquipmentSchema, biomedicalMaintenanceSchema } from "@/lib/validations";
 import { HojaVidaBiomedicaPdf } from "@/lib/pdf/hoja-vida-biomedica";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
+import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
+import { completarFechasProximas, fechasTrasMantenimiento, type FechasEquipo } from "@/lib/biomedico-fechas";
+import {
+  CHECKLIST_GENERAL,
+  MAX_ITEMS_CHECKLIST,
+  MAX_LARGO_ITEM,
+  armarChecklist,
+  limpiarItems,
+  normalizarEquipo,
+  type CatalogoChecklists,
+} from "@/lib/biomedico-checklist";
 
 function fechasNulas(d: Record<string, unknown>, campos: string[]) {
   const out: Record<string, unknown> = { ...d };
@@ -134,7 +146,7 @@ export async function crearEquipoBiomedico(formData: BiomedicalEquipmentFormData
   const { data, error } = await supabase
     .from("biomedical_equipment")
     .insert({
-      ...(fechasNulas(parsed.data, CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
+      ...(fechasNulas(completarFechasProximas(parsed.data), CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
       created_by: userData.user?.id ?? null,
       activo: true,
     })
@@ -157,7 +169,7 @@ export async function actualizarEquipoBiomedico(id: number, formData: Biomedical
   const { error } = await supabase
     .from("biomedical_equipment")
     .update({
-      ...(fechasNulas(parsed.data, CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
+      ...(fechasNulas(completarFechasProximas(parsed.data), CAMPOS_FECHA_EQUIPO) as typeof parsed.data),
       updated_at: new Date().toISOString(),
     })
     .eq("id", idParsed.data);
@@ -165,6 +177,58 @@ export async function actualizarEquipoBiomedico(id: number, formData: Biomedical
   await auditar("MODIFICAR", "inventario", idParsed.data, "Equipo biomédico actualizado");
   revalidatePath("/equipos");
   return { success: true };
+}
+
+const ROLES_FOTO_EQUIPO = ["ADMIN", "MANTENIMIENTO", "ANALISTA"] as const;
+const BUCKET_FOTOS_EQUIPO = "equipos-fotos";
+const MAX_MB_FOTO_EQUIPO = 8;
+const MAX_BYTES_FOTO_EQUIPO = MAX_MB_FOTO_EQUIPO * 1024 * 1024;
+
+/** Foto representativa del equipo (migración 112): reemplaza la anterior y borra su archivo. */
+export async function subirFotoEquipoBiomedico(
+  equipmentId: number,
+  file: File
+): Promise<{ error: string; success?: undefined } | { error?: undefined; success: true; ruta: string }> {
+  await requireRole([...ROLES_FOTO_EQUIPO]);
+  const idParsed = z.number().int().positive().safeParse(equipmentId);
+  if (!idParsed.success) return { error: "ID inválido" };
+  if (file.size > MAX_BYTES_FOTO_EQUIPO) return { error: `La foto no puede pesar más de ${MAX_MB_FOTO_EQUIPO} MB` };
+  const cabecera = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const tipo = tipoImagenPorContenido(cabecera);
+  if (!tipo) return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
+
+  const supabase = createClient();
+  const ruta = `equipo-${idParsed.data}/${randomUUID()}.${tipo.ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET_FOTOS_EQUIPO)
+    .upload(ruta, file, { cacheControl: "3600", upsert: false, contentType: tipo.mime });
+  if (uploadError) return { error: uploadError.message };
+
+  const anterior = await supabase.from("biomedical_equipment").select("imagen_url").eq("id", idParsed.data).maybeSingle();
+  const { error } = await supabase
+    .from("biomedical_equipment")
+    .update({ imagen_url: ruta, updated_at: new Date().toISOString() } as never)
+    .eq("id", idParsed.data);
+  if (error) {
+    await supabase.storage.from(BUCKET_FOTOS_EQUIPO).remove([ruta]);
+    return { error: error.message };
+  }
+  const rutaAnterior = (anterior.data as { imagen_url: string | null } | null)?.imagen_url;
+  if (rutaAnterior) await supabase.storage.from(BUCKET_FOTOS_EQUIPO).remove([rutaAnterior]);
+
+  await auditar("MODIFICAR", "inventario", idParsed.data, "Foto del equipo actualizada");
+  revalidatePath("/equipos");
+  return { success: true as const, ruta };
+}
+
+/** Enlace temporal (1 hora) para mostrar la foto del equipo — el bucket es privado. */
+export async function getUrlFotoEquipoBiomedico(ruta: string): Promise<string | null> {
+  const parsed = z.string().trim().min(1).safeParse(ruta);
+  if (!parsed.success) return null;
+  const supabase = createClient();
+  const { data, error } = await supabase.storage.from(BUCKET_FOTOS_EQUIPO).createSignedUrl(parsed.data, 3600);
+  if (error || !data) return null;
+  return data.signedUrl;
 }
 
 export async function eliminarEquipoBiomedico(id: number) {
@@ -197,9 +261,26 @@ export async function getMantenimientosBiomedicos(equipmentId?: number) {
   return data || [];
 }
 
-export async function crearMantenimientoBiomedico(formData: BiomedicalMaintenanceFormData) {
+const checklistEnviadoSchema = z
+  .object({
+    todos: z.array(z.string().max(MAX_LARGO_ITEM)).max(MAX_ITEMS_CHECKLIST),
+    marcados: z.array(z.string().max(MAX_LARGO_ITEM)).max(MAX_ITEMS_CHECKLIST),
+  })
+  .optional();
+
+/**
+ * `checklist`: todos los ítems que se mostraron y los que se marcaron como «cumple» (migración 097). Si no viene
+ * o está vacío, el mantenimiento se guarda sin checklist, como antes.
+ */
+export async function crearMantenimientoBiomedico(
+  formData: BiomedicalMaintenanceFormData,
+  checklist?: { todos: string[]; marcados: string[] }
+) {
   const parsed = biomedicalMaintenanceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const chkParsed = checklistEnviadoSchema.safeParse(checklist);
+  if (!chkParsed.success) return { error: "Lista de chequeo inválida" };
+  const chk = chkParsed.data ? armarChecklist(chkParsed.data.todos, chkParsed.data.marcados) : null;
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -208,22 +289,94 @@ export async function crearMantenimientoBiomedico(formData: BiomedicalMaintenanc
     .insert({
       ...parsed.data,
       cantidad: parsed.data.cantidad ?? null,
+      chk_items: chk?.chk_items ?? null,
+      chk_total: chk?.chk_total ?? null,
+      chk_marcados: chk?.chk_marcados ?? null,
       created_by: userData.user?.id ?? null,
-    })
+    } as never)
     .select()
     .single();
   if (error) return { error: error.message };
 
-  // Igual que SISRES: registrar mantenimiento actualiza la fecha de último
-  // mantenimiento del equipo (la hoja de vida se arma con este historial)
-  await supabase
+  // Registrar un mantenimiento mueve el «último» del equipo y recalcula el «próximo» (o la calibración, según el
+  // tipo). Antes solo se movía el último y el equipo seguía «Vencido» y avisando por correo todos los días.
+  const { data: equipo } = await supabase
     .from("biomedical_equipment")
-    .update({ ultimo_mantenimiento: parsed.data.fecha_mantenimiento, updated_at: new Date().toISOString() })
-    .eq("id", parsed.data.equipment_id);
+    .select("ultimo_mantenimiento, ultima_calibracion, frec_mantenimiento, frec_calibracion")
+    .eq("id", parsed.data.equipment_id)
+    .maybeSingle();
+  const cambios = fechasTrasMantenimiento(
+    (equipo ?? {}) as FechasEquipo,
+    normalizarDia(parsed.data.fecha_mantenimiento),
+    parsed.data.tipo_mantenimiento
+  );
+  if (Object.keys(cambios).length > 0) {
+    await supabase
+      .from("biomedical_equipment")
+      .update({ ...cambios, updated_at: new Date().toISOString() } as never)
+      .eq("id", parsed.data.equipment_id);
+  }
 
   await auditar("INSERTAR", "inventario", parsed.data.equipment_id, "Mantenimiento biomédico registrado");
   revalidatePath("/equipos");
   return { success: true, data };
+}
+
+// ── Listas de chequeo (migración 097) ────────────────────────
+
+const ROLES_LEER_CHECKLIST = ["ADMIN", "MANTENIMIENTO", "COORDINACION", "GERENCIAL", "ANALISTA", "VISTA"];
+const ROLES_EDITAR_CHECKLIST = ["ADMIN", "MANTENIMIENTO"];
+
+/** Todas las listas, por clave de equipo. Vacío si el rol no puede leerlas o la tabla aún no existe. */
+export async function getChecklistsBiomedicos(): Promise<CatalogoChecklists> {
+  const profile = await getProfile();
+  if (!profile || !ROLES_LEER_CHECKLIST.includes(profile.role_codigo)) return {};
+  const { data, error } = await createClient().from("biomedical_checklists").select("equipo, items").order("equipo");
+  if (error) return {};
+  const catalogo: CatalogoChecklists = {};
+  for (const f of (data ?? []) as unknown as { equipo: string; items: unknown }[]) {
+    if (Array.isArray(f.items)) catalogo[f.equipo] = limpiarItems(f.items);
+  }
+  return catalogo;
+}
+
+/** Crea o reemplaza la lista de un tipo de equipo (el nombre se normaliza a la clave). Solo ADMIN y MANTENIMIENTO. */
+export async function guardarChecklistBiomedico(equipo: string, items: string[]) {
+  const profile = await getProfile();
+  if (!profile || !ROLES_EDITAR_CHECKLIST.includes(profile.role_codigo)) return { error: "Sin permisos para editar listas de chequeo" };
+  const clave = normalizarEquipo(z.string().max(150).catch("").parse(equipo));
+  if (!clave) return { error: "Escribe el tipo de equipo" };
+  const lista = z.array(z.string().max(MAX_LARGO_ITEM, `Cada ítem puede tener hasta ${MAX_LARGO_ITEM} caracteres`)).max(MAX_ITEMS_CHECKLIST).safeParse(items);
+  if (!lista.success) return { error: lista.error.issues[0]?.message ?? "Ítems inválidos" };
+  const limpios = limpiarItems(lista.data);
+  if (limpios.length === 0) return { error: "Agrega al menos un ítem" };
+
+  const { error } = await createClient()
+    .from("biomedical_checklists")
+    .upsert({ equipo: clave, items: limpios, updated_at: new Date().toISOString(), updated_by: profile.user_id } as never, {
+      onConflict: "equipo",
+    });
+  if (error) return { error: error.message };
+  await auditar("MODIFICAR", "inventario", clave, `Lista de chequeo ${clave}: ${limpios.length} ítems`);
+  revalidatePath("/equipos");
+  revalidatePath("/equipos/checklists");
+  return { success: true as const, equipo: clave, items: limpios };
+}
+
+/** Elimina la lista de un tipo de equipo (sus equipos pasan a usar la GENERAL). La GENERAL no se elimina. */
+export async function eliminarChecklistBiomedico(equipo: string) {
+  const profile = await getProfile();
+  if (!profile || !ROLES_EDITAR_CHECKLIST.includes(profile.role_codigo)) return { error: "Sin permisos para editar listas de chequeo" };
+  const clave = normalizarEquipo(z.string().max(150).catch("").parse(equipo));
+  if (!clave) return { error: "Lista inválida" };
+  if (clave === CHECKLIST_GENERAL) return { error: "La lista GENERAL no se elimina: es la que usan los equipos sin lista propia" };
+  const { data, error } = await createClient().from("biomedical_checklists").delete().eq("equipo", clave).select("equipo");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "La lista no existe" };
+  await auditar("ELIMINAR", "inventario", clave, `Lista de chequeo ${clave} eliminada`);
+  revalidatePath("/equipos");
+  revalidatePath("/equipos/checklists");
+  return { success: true as const };
 }
 
 /** Hoja de vida: ficha del equipo + historial completo de mantenimientos. */
@@ -256,12 +409,25 @@ export async function generarHojaVidaPdf(equipmentId: number) {
 
   const profile = await getProfile();
 
+  // El bucket es privado: react-pdf no puede pedir la signed URL por su cuenta, así que se baja el archivo aquí
+  // (con la sesión del usuario, igual que cualquier otra lectura) y se pasa como data URI.
+  let fotoDataUri: string | null = null;
+  const rutaFoto = (hoja.equipo as { imagen_url?: string | null }).imagen_url;
+  if (rutaFoto) {
+    const { data: blob } = await createClient().storage.from(BUCKET_FOTOS_EQUIPO).download(rutaFoto);
+    if (blob) {
+      const buf = Buffer.from(await blob.arrayBuffer());
+      fotoDataUri = `data:${blob.type || "image/jpeg"};base64,${buf.toString("base64")}`;
+    }
+  }
+
   try {
     const buffer = await renderToBuffer(
       createElement(HojaVidaBiomedicaPdf, {
         equipo: hoja.equipo,
         mantenimientos: hoja.mantenimientos,
         generadoPor: profile?.nombre_completo || profile?.email || "Usuario Aeromanto",
+        fotoDataUri,
       })
     );
     return { success: true, data: buffer.toString("base64"), filename: `hoja-vida-${hoja.equipo.placa_equipo}.pdf` };

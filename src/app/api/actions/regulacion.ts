@@ -1,6 +1,6 @@
 "use server";
 
-import { hoyBogota } from "@/lib/fechas";
+import { hoyBogota, sumarDias } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
@@ -142,6 +142,36 @@ export async function asignarTripulacion(
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
   return { success: true };
+}
+
+/**
+ * Tripulación que tenía el vehículo ayer, por rol (para "Repetir tripulación de ayer").
+ * Solo lee: el regulador revisa los campos y confirma con "Guardar tripulación".
+ * Por rol toma la asignación más reciente que ya había empezado ayer y no había terminado.
+ */
+export async function getTripulacionDeAyer(vehicleId: string) {
+  await requireRole(["ADMIN", "ANALISTA", "REGULACION"]);
+  const idParsed = z.string().uuid().safeParse(vehicleId);
+  if (!idParsed.success) return { error: "Vehículo inválido" };
+
+  const ayer = sumarDias(hoyBogota(), -1);
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("vehicle_assignments")
+    .select("user_id, rol_en_turno, fecha_inicio, id")
+    .eq("vehicle_id", idParsed.data)
+    .lte("fecha_inicio", ayer)
+    .or(`fecha_fin.is.null,fecha_fin.gte.${ayer}`)
+    .order("fecha_inicio", { ascending: false })
+    .order("id", { ascending: false });
+  if (error) return { error: error.message };
+
+  const porRol: Partial<Record<"OVEM" | "MEDICO" | "AUXILIAR_ENFERMERIA", string>> = {};
+  for (const a of (data ?? []) as any[]) {
+    const rol = a.rol_en_turno as keyof typeof CAMPO_TRIPULACION;
+    if (rol in CAMPO_TRIPULACION && !porRol[rol]) porRol[rol] = a.user_id;
+  }
+  return { success: true as const, tripulacion: porRol };
 }
 
 export async function unassignVehicle(assignmentId: number) {

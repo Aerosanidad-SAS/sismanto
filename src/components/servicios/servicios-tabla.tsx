@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowRightLeft, Clock, Lock, MapPin, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,6 +12,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -26,6 +40,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fechaHora24, horasEstancado } from "@/lib/servicios-lista";
+import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
@@ -37,16 +52,9 @@ import {
   medicalServiceSchema,
   type MedicalServiceFormData,
   type EtapaServicio,
-  TURNO_OPCIONES,
-  AISLAMIENTO_OPCIONES,
-  FINALIDAD_TRASLADO_OPCIONES,
-  METODO_PAGO_OPCIONES,
-  PERIMETRO_OPCIONES,
   PERFIL_FORMULARIO_SERVICIO,
   perfilFormularioServicio,
   ETAPAS_SERVICIO,
-  MOTIVO_EXTERNO_OPCIONES,
-  MOTIVO_INTERNO_OPCIONES,
   ESTADO_SERVICIO_OPCIONES,
 } from "@/lib/validations";
 import {
@@ -59,8 +67,30 @@ import {
   getUrlBoletaSalida,
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
+import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
+// Casi todos los servicios nacen programados: las demás etapas solo se eligen al registrar uno que ya ocurrió.
+const ETAPA_DEFECTO = "PROGRAMADO";
+
+// Nombre legible de los campos validados, para el resumen de errores (no se muestran nombres técnicos).
+const ETIQUETA_CAMPO: Record<string, string> = {
+  nombre_completo: "Nombre completo del paciente",
+  tipo_servicio: "Tipo de servicio",
+  valor_servicio: "Valor del servicio",
+};
+
+const ITEM_MENU_MOVIL =
+  "flex min-h-10 w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none disabled:opacity-50";
+
+function ErrorCampo({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="text-sm text-destructive">
+      {message}
+    </p>
+  );
+}
 
 export interface ServicioRow {
   id: number;
@@ -190,9 +220,19 @@ interface ServiciosTablaProps {
   >;
   /** Ciudad del usuario logueado — default de "ciudad origen" en un servicio nuevo. */
   ciudadDefault?: string | null;
+  /** Ciudad de registro por defecto (la del CRA de quien registra): BOGOTA D.C. o MEDELLÍN. */
+  ciudadRegistroDefault?: string;
   /** Rol de quien ve la tabla — determina si los campos de logística quedan bloqueados al editar. */
   viewerRole?: string | null;
+  /** Conteo y paginación: van a la izquierda de la barra, en la misma fila que «+ Registrar». */
+  barra?: ReactNode;
+  /** Acciones (p. ej. Exportar) que van junto a «+ Registrar». */
+  acciones?: ReactNode;
+  /** Opciones vigentes de los 7 selects administrables (migración 091); sin ellas, las de fábrica. */
+  opciones?: OpcionesServicio;
 }
+
+const OPCIONES_FABRICA = opcionesDeFabrica();
 
 const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p?.email || null;
 
@@ -222,8 +262,12 @@ export function ServiciosTabla({
   reguladoresDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
+  ciudadRegistroDefault,
   viewerRole,
   viewerNombreCompleto,
+  barra,
+  acciones,
+  opciones = OPCIONES_FABRICA,
 }: ServiciosTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -238,7 +282,15 @@ export function ServiciosTabla({
   // tabla). Se maneja fuera del schema de react-hook-form/zod a propósito:
   // así nunca se cuela en el payload de actualizarServicioMedico y pisa la
   // etapa real de un servicio ya existente.
-  const [etapaInicial, setEtapaInicial] = useState<string>("");
+  const [etapaInicial, setEtapaInicial] = useState<string>(ETAPA_DEFECTO);
+  const [yaOcurrido, setYaOcurrido] = useState(false);
+  const [creadoMsg, setCreadoMsg] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<{ titulo: string; mensaje: string } | null>(null);
+  const [porEliminar, setPorEliminar] = useState<ServicioRow | null>(null);
+  const [menuId, setMenuId] = useState<number | null>(null);
+  const inicioFormRef = useRef<HTMLDivElement>(null);
+  // Umbral de servicios estancados configurado por el ADMIN (migración 103).
+  const umbralesEstancado = useUmbralesEstancado();
 
   const { register, handleSubmit, reset, setValue, watch, formState } =
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
@@ -340,16 +392,18 @@ export function ServiciosTabla({
   const seleccionarPaciente = (paciente: PacienteTypeahead) => {
     setError(null);
     setValue("patient_id", paciente.id);
-    setValue("nombre_completo", nombreCompletoDe(paciente));
+    setValue("nombre_completo", nombreCompletoDe(paciente), { shouldValidate: formState.isSubmitted });
     setCedulaBusqueda(`${paciente.cedula} — ${nombreCompletoDe(paciente)}`);
   };
 
-  const abrirNuevo = () => {
+  const prepararNuevo = () => {
     setEditando(null);
     setError(null);
+    setCreadoMsg(null);
     setCedulaBusqueda("");
     setCieLabel("");
-    setEtapaInicial("");
+    setEtapaInicial(ETAPA_DEFECTO);
+    setYaOcurrido(false);
     // Ciudad de origen por defecto = ciudad del usuario logueado (Fase D).
     // Ahora que ciudad depende de un departamento elegido, hace falta
     // encontrar a qué departamento pertenece esa ciudad para dejar los dos
@@ -360,6 +414,7 @@ export function ServiciosTabla({
       tipo_servicio: "",
       departamento_origen: ubicacionDefault?.departamento ?? "",
       ciudad_origen: ubicacionDefault?.ciudad ?? "",
+      ciudad_registro: ciudadRegistroDefault ?? "",
       // SISRES precarga "Recibe" con la sesión y preselecciona "Despacha"
       // al mismo usuario cuando es Regulador (registroServicios.php,
       // $esRegulador) — y fuerza método de pago a N/A porque el Regulador
@@ -372,15 +427,39 @@ export function ServiciosTabla({
           }
         : {}),
     } as MedicalServiceFormData);
+  };
+
+  const abrirNuevo = () => {
+    prepararNuevo();
     setDialogOpen(true);
   };
+
+  // «Nuevo servicio» desde otras pantallas llega como /servicios?nuevo=1: abre el formulario y limpia el parámetro.
+  const searchParams = useSearchParams();
+  const nuevoDesdeUrl = useRef(false);
+  useEffect(() => {
+    if (searchParams.get("nuevo") !== "1") {
+      nuevoDesdeUrl.current = false;
+      return;
+    }
+    if (nuevoDesdeUrl.current) return;
+    nuevoDesdeUrl.current = true;
+    if (puedeEditar) abrirNuevo();
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("nuevo");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const abrirEdicion = (s: ServicioRow) => {
     setEditando(s);
     setError(null);
     setCedulaBusqueda(s.patients?.cedula ? `${s.patients.cedula} — ${s.nombre_completo}` : "");
     setCieLabel("");
-    setEtapaInicial("");
+    setEtapaInicial(ETAPA_DEFECTO);
+    setYaOcurrido(false);
+    setCreadoMsg(null);
     const str = (k: string) => (s[k] ? String(s[k]) : "");
     // La base guarda en UTC: el formulario se precarga en hora de Colombia.
     const fecha = (k: string) => aTextoLocalColombia(s[k] as string | null);
@@ -436,24 +515,25 @@ export function ServiciosTabla({
     setDialogOpen(true);
   };
 
-  // Sin esto, un campo inválido deja el botón "Guardar" sin efecto visible:
-  // el usuario cree que el sistema no responde.
-  const onInvalid = (errores: Record<string, { message?: string }>) => {
-    const primero = Object.entries(errores)[0];
-    setError(
-      primero
-        ? `Revisa el formulario: ${primero[1]?.message ?? "campo inválido"} (${primero[0].replaceAll("_", " ")})`
-        : "Revisa el formulario: hay campos sin completar."
-    );
+  const enfocarCampo = (name: string) => {
+    const el = document.getElementById(name);
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    el.focus();
   };
 
-  const onSubmit = async (values: MedicalServiceFormData) => {
-    if (!editando && !etapaInicial) {
-      setError("Debes seleccionar la etapa del servicio");
-      return;
-    }
+  // RHF enfoca solo los campos registrados; el resto (combobox) se enfoca a mano por su id.
+  const onInvalid = (errores: Record<string, unknown>) => {
+    setError(null);
+    setCreadoMsg(null);
+    const primero = Object.keys(errores)[0];
+    if (primero) enfocarCampo(primero);
+  };
+
+  const onSubmit = async (values: MedicalServiceFormData, crearOtro = false) => {
     setGuardando(true);
     setError(null);
+    setCreadoMsg(null);
     const res = editando
       ? await actualizarServicioMedico(editando.id, values)
       : await crearServicioMedico(values, etapaInicial);
@@ -462,15 +542,29 @@ export function ServiciosTabla({
       setError(res.error);
       return;
     }
-    setDialogOpen(false);
     router.refresh();
+    if (crearOtro && !editando) {
+      const paciente = values.nombre_completo;
+      prepararNuevo();
+      setCreadoMsg(`Servicio de ${paciente} guardado. El formulario está listo para el siguiente.`);
+      inicioFormRef.current?.scrollIntoView({ block: "start" });
+      return;
+    }
+    setDialogOpen(false);
   };
+
+  const listaErrores = Object.entries(formState.errors).map(([name, e]) => ({
+    name,
+    etiqueta: ETIQUETA_CAMPO[name] ?? name.replaceAll("_", " "),
+    message: typeof e?.message === "string" ? e.message : "Campo inválido",
+  }));
+  const mensajeError = (name: string) => listaErrores.find((e) => e.name === name)?.message;
 
   const handleEtapa = async (servicio: ServicioRow, etapaNueva: string) => {
     setBusyId(servicio.id);
     const res = await cambiarEtapaServicio(servicio.id, servicio.etapa, etapaNueva);
     setBusyId(null);
-    if (res.error) alert(res.error);
+    if (res.error) setAviso({ titulo: "No se pudo cambiar la etapa", mensaje: res.error });
     else router.refresh();
   };
 
@@ -481,11 +575,10 @@ export function ServiciosTabla({
   // rechazar.
   const puedeEliminar = viewerRole === "ADMIN";
   const handleEliminar = async (servicio: ServicioRow) => {
-    if (!confirm(`¿Está seguro que desea eliminar el registro con id ${servicio.id}?`)) return;
     setBusyId(servicio.id);
     const res = await eliminarServicioMedico(servicio.id);
     setBusyId(null);
-    if (res.error) alert(res.error);
+    if (res.error) setAviso({ titulo: "No se pudo eliminar el servicio", mensaje: res.error });
     else router.refresh();
   };
 
@@ -499,7 +592,7 @@ export function ServiciosTabla({
     const res = await subirBoletaSalida(editando.id, file);
     setSubiendoBoleta(false);
     if (res.error) {
-      alert(res.error);
+      setAviso({ titulo: "No se pudo subir la boleta", mensaje: res.error });
       return;
     }
     setEditando({ ...editando, imagen_boleta_salida: res.ruta ?? null });
@@ -509,30 +602,173 @@ export function ServiciosTabla({
     if (!editando?.imagen_boleta_salida) return;
     const url = await getUrlBoletaSalida(editando.imagen_boleta_salida);
     if (url) window.open(url, "_blank");
-    else alert("No se pudo generar el enlace de la imagen");
+    else setAviso({ titulo: "No se pudo abrir la imagen", mensaje: "No se pudo generar el enlace de la imagen. Intenta de nuevo." });
   };
 
-  return (
-    <div className="space-y-4">
-      {puedeEditar && (
-        <div className="flex justify-end">
-          <Button onClick={abrirNuevo}>+ Registrar</Button>
-        </div>
-      )}
+  const estancadoDe = (s: ServicioRow) =>
+    horasEstancado(
+      { etapa: s.etapa, fecha_hora_programacion: (s.fecha_hora_programacion as string | null) ?? null },
+      Date.now(),
+      umbralesEstancado
+    );
 
-      <div className="overflow-x-auto">
-        <Table>
+  const insigniasEtapa = (s: ServicioRow) => {
+    const estancado = estancadoDe(s);
+    return (
+      <>
+        <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"} className="shrink-0 whitespace-nowrap px-1.5 py-0 text-xs leading-5">
+          {s.etapa}
+        </Badge>
+        {estancado !== null && (
+          <Badge
+            variant="outline"
+            className="shrink-0 whitespace-nowrap border-transparent bg-foreground px-1.5 py-0 text-xs leading-5 text-background"
+          >
+            <Clock className="mr-1 h-3 w-3" aria-hidden="true" />
+            {estancado} h sin avanzar
+          </Badge>
+        )}
+      </>
+    );
+  };
+
+  const movilDe = (s: ServicioRow) =>
+    s.vehicles?.placa && (s.etapa === "PROGRAMADO" || s.etapa === "CURSO") ? (
+      <Link href={`/servicios/${s.id}/seguimiento`} className="inline-flex items-center gap-1 underline">
+        <MapPin className="h-3 w-3" aria-hidden="true" />
+        <span className="sr-only">Ver en el mapa (GPS) la ambulancia </span>
+        {s.vehicles.placa}
+      </Link>
+    ) : (
+      (s.vehicles?.placa ?? s.movil_placa ?? "—")
+    );
+
+  const cedulaDe = (s: ServicioRow) => s.patients?.cedula ?? (s.cedula_paciente as string | null) ?? "sin enlace";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">{barra}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {acciones}
+          {puedeEditar && <Button onClick={abrirNuevo}>Nuevo servicio</Button>}
+        </div>
+      </div>
+
+      {/* Móvil (bajo md): tarjetas con placa, paciente y estado; las acciones van en un menú. */}
+      <ul className="space-y-2 md:hidden" aria-label="Servicios registrados">
+        {filtrados.length === 0 && (
+          <li className="rounded-md border p-4 text-center text-sm text-muted-foreground">Sin servicios registrados</li>
+        )}
+        {filtrados.map((s) => (
+          <li key={s.id} className="rounded-md border bg-card p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs tabular-nums text-muted-foreground">#{s.id}</span>
+                  {insigniasEtapa(s)}
+                </div>
+                <p className="text-sm leading-tight">
+                  <span className="font-medium">{s.nombre_completo}</span>{" "}
+                  <span className="text-xs text-muted-foreground">{cedulaDe(s)}</span>
+                </p>
+              </div>
+              {puedeEditar && (
+                <Popover open={menuId === s.id} onOpenChange={(abierto) => setMenuId(abierto ? s.id : null)}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label={`Acciones del servicio ${s.id}`}>
+                      <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56 p-1">
+                    {puedeEditarServicio(s) ? (
+                      <button
+                        type="button"
+                        className={ITEM_MENU_MOVIL}
+                        onClick={() => {
+                          setMenuId(null);
+                          abrirEdicion(s);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden="true" /> Editar
+                      </button>
+                    ) : (
+                      <p className="flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground">
+                        <Lock className="h-4 w-4" aria-hidden="true" /> Finalizado: bloqueado
+                      </p>
+                    )}
+                    {puedeCambiarEtapaLibre && (
+                      <>
+                        <p className="px-2 pt-2 text-xs text-muted-foreground">Cambiar etapa a</p>
+                        {ETAPAS_DESTINO(s.etapa).map((etapa) => (
+                          <button
+                            key={etapa}
+                            type="button"
+                            className={ITEM_MENU_MOVIL}
+                            disabled={busyId === s.id}
+                            onClick={() => {
+                              setMenuId(null);
+                              handleEtapa(s, etapa);
+                            }}
+                          >
+                            <ArrowRightLeft className="h-4 w-4" aria-hidden="true" /> {etapa}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {puedeEliminar && (
+                      <button
+                        type="button"
+                        className={`${ITEM_MENU_MOVIL} text-destructive`}
+                        disabled={busyId === s.id}
+                        onClick={() => {
+                          setMenuId(null);
+                          setPorEliminar(s);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" /> Eliminar
+                      </button>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+            <div className="mt-2 space-y-0.5 text-sm leading-tight">
+              <p>
+                <span className="text-muted-foreground">Programado: </span>
+                {fechaHora24(s.fecha_hora_programacion as string | null) || "—"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Tipo: </span>
+                {s.tipo_servicio}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Móvil: </span>
+                {movilDe(s)}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Ruta: </span>
+                {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Escritorio (md en adelante): tabla. */}
+      <div className="hidden overflow-x-auto md:block">
+        <Table className="[&_td]:px-3 [&_td]:py-1.5 [&_th]:h-9 [&_th]:px-3">
           <TableHeader>
             <TableRow>
               <TableHead>ID</TableHead>
               <TableHead>Etapa</TableHead>
               <TableHead>Paciente</TableHead>
-              <TableHead>Registro</TableHead>
-              <TableHead>Programado</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Móvil</TableHead>
+              <TableHead>
+                Programado
+                <span className="block text-xs font-normal">y fecha de registro</span>
+              </TableHead>
+              <TableHead>Tipo / móvil</TableHead>
               <TableHead>Origen → Destino</TableHead>
-              {puedeCambiarEtapaLibre && <TableHead>Cambiar etapa</TableHead>}
               {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
@@ -540,100 +776,129 @@ export function ServiciosTabla({
             {filtrados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={8 + (puedeCambiarEtapaLibre ? 1 : 0) + (puedeEditar ? 1 : 0)}
+                  colSpan={6 + (puedeEditar ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin servicios registrados
                 </TableCell>
               </TableRow>
             )}
-            {filtrados.map((s) => {
-              const estancado = horasEstancado({
-                etapa: s.etapa,
-                fecha_hora_programacion: (s.fecha_hora_programacion as string | null) ?? null,
-              });
-              return (
+            {filtrados.map((s) => (
               <TableRow key={s.id}>
-                <TableCell className="tabular-nums text-muted-foreground">{s.id}</TableCell>
+                <TableCell className="w-12 !px-2 text-xs tabular-nums text-muted-foreground">{s.id}</TableCell>
                 <TableCell>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"}>{s.etapa}</Badge>
-                    {estancado !== null && (
-                      <Badge
-                        variant="outline"
-                        className="border-transparent bg-foreground text-background"
-                        title={`Lleva ${estancado} h en ${s.etapa} sin avanzar`}
-                      >
-                        ⏰ {estancado}h
-                      </Badge>
-                    )}
+                  <div className="flex flex-nowrap items-center gap-1">{insigniasEtapa(s)}</div>
+                </TableCell>
+                <TableCell className="min-w-[10.5rem]">
+                  <div className="text-sm leading-tight">
+                    <span className="font-medium">{s.nombre_completo}</span>{" "}
+                    <span className="text-xs text-muted-foreground">{cedulaDe(s)}</span>
                   </div>
                 </TableCell>
-                <TableCell>
-                  <div className="font-medium">{s.nombre_completo}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {s.patients?.cedula ?? (s.cedula_paciente as string | null) ?? "sin enlace"}
-                  </div>
-                </TableCell>
-                <TableCell className="whitespace-nowrap tabular-nums">{fechaHora24(s.fecha_hora_registro)}</TableCell>
                 <TableCell className="whitespace-nowrap tabular-nums">
-                  {fechaHora24(s.fecha_hora_programacion as string | null) || "—"}
+                  <div className="text-sm leading-tight">{fechaHora24(s.fecha_hora_programacion as string | null) || "—"}</div>
+                  <div className="text-xs leading-tight text-muted-foreground">
+                    Registro {fechaHora24(s.fecha_hora_registro)}
+                  </div>
                 </TableCell>
-                <TableCell className="max-w-40">
-                  <p className="truncate text-sm">{s.tipo_servicio}</p>
+                <TableCell className="max-w-44">
+                  <p className="break-words text-sm leading-tight">{s.tipo_servicio}</p>
+                  <p className="text-xs leading-tight text-muted-foreground">Móvil {movilDe(s)}</p>
                 </TableCell>
-                <TableCell>{s.vehicles?.placa ?? s.movil_placa ?? "—"}</TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="text-sm leading-tight">
                   {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
                 </TableCell>
-                {puedeCambiarEtapaLibre && (
-                  <TableCell className="min-w-[10rem]">
-                    <Select
-                      disabled={busyId === s.id}
-                      onValueChange={(v) => handleEtapa(s, v)}
-                      value=""
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={busyId === s.id ? "Guardando…" : "Mover a…"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ETAPAS_DESTINO(s.etapa).map((etapa) => (
-                          <SelectItem key={etapa} value={etapa}>
-                            {etapa}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                )}
                 {puedeEditar && (
-                  <TableCell className="text-right space-x-2">
-                    {puedeEditarServicio(s) ? (
-                      <Button variant="outline" size="sm" onClick={() => abrirEdicion(s)}>
-                        Editar
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Finalizado — bloqueado</span>
-                    )}
-                    {puedeEliminar && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        disabled={busyId === s.id}
-                        onClick={() => handleEliminar(s)}
-                      >
-                        Eliminar
-                      </Button>
-                    )}
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-2">
+                      {puedeCambiarEtapaLibre && (
+                        <Select
+                          disabled={busyId === s.id}
+                          onValueChange={(v) => handleEtapa(s, v)}
+                          value=""
+                        >
+                          <SelectTrigger
+                            className="h-9 w-9 justify-center p-0 [&>svg:last-child]:hidden"
+                            title="Cambiar etapa"
+                            aria-label="Cambiar etapa"
+                          >
+                            <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ETAPAS_DESTINO(s.etapa).map((etapa) => (
+                              <SelectItem key={etapa} value={etapa}>
+                                {etapa}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {puedeEditarServicio(s) ? (
+                        <Button variant="outline" size="icon" className="h-9 w-9" title="Editar" aria-label="Editar servicio" onClick={() => abrirEdicion(s)}>
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      ) : (
+                        <span className="inline-flex h-9 w-9 items-center justify-center text-muted-foreground">
+                          <Lock className="h-4 w-4" aria-hidden="true" />
+                          <span className="sr-only">Finalizado: bloqueado</span>
+                        </span>
+                      )}
+                      {puedeEliminar && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 text-destructive hover:text-destructive"
+                          title="Eliminar"
+                          aria-label="Eliminar servicio"
+                          disabled={busyId === s.id}
+                          onClick={() => setPorEliminar(s)}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 )}
               </TableRow>
-              );
-            })}
+            ))}
           </TableBody>
         </Table>
       </div>
+
+      <AlertDialog open={porEliminar !== null} onOpenChange={(abierto) => !abierto && setPorEliminar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar el servicio #{porEliminar?.id}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borra el registro de {porEliminar?.nombre_completo} y no se puede recuperar. ¿Quieres continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const objetivo = porEliminar;
+                setPorEliminar(null);
+                if (objetivo) handleEliminar(objetivo);
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={aviso !== null} onOpenChange={(abierto) => !abierto && setAviso(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{aviso?.titulo}</AlertDialogTitle>
+            <AlertDialogDescription>{aviso?.mensaje}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setAviso(null)}>Entendido</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
@@ -643,7 +908,7 @@ export function ServiciosTabla({
               Los tiempos (oportunidad, origen, intermedia, destino y total) se calculan
               automáticamente a partir de las fechas de llegada/salida.
               {editando?.etapa === "FINALIZADO" && (
-                <span className="mt-1 block font-medium text-amber-700">
+                <span className="mt-1 block rounded-md bg-warning-soft px-2 py-1 font-medium text-warning-foreground">
                   Este servicio ya está FINALIZADO — cualquier cambio que guardes queda registrado
                   en el log de auditoría (quién, cuándo, qué valores tenía antes y después).
                 </span>
@@ -651,10 +916,35 @@ export function ServiciosTabla({
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
+          <form onSubmit={handleSubmit((v) => onSubmit(v), onInvalid)} className="space-y-6" noValidate>
+            <div ref={inicioFormRef} className="space-y-3">
+              {creadoMsg && (
+                <p role="status" className="rounded-md bg-success-soft px-3 py-2 text-sm font-medium text-success">
+                  {creadoMsg}
+                </p>
+              )}
+              {listaErrores.length > 0 && (
+                <div role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                  <p className="font-medium">
+                    {listaErrores.length === 1 ? "Corrige este campo para guardar:" : `Corrige estos ${listaErrores.length} campos para guardar:`}
+                  </p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                    {listaErrores.map((e) => (
+                      <li key={e.name}>
+                        <button type="button" className="text-left underline" onClick={() => enfocarCampo(e.name)}>
+                          {e.etiqueta}
+                        </button>
+                        : {e.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
             <section className="space-y-1 rounded-md border bg-muted/30 p-3">
-              <Label>Tipo de servicio *</Label>
+              <Label htmlFor="tipo_servicio">Tipo de servicio *</Label>
               <CatalogCombobox
+                id="tipo_servicio"
                 options={tiposServicioDisponibles}
                 value={tipoSeleccionado ?? ""}
                 onChange={(v) => setValue("tipo_servicio", v, { shouldValidate: true })}
@@ -662,30 +952,50 @@ export function ServiciosTabla({
                 allowCustom={false}
                 disabled={campoBloqueado("tipo_servicio")}
               />
+              <ErrorCampo id="tipo_servicio-error" message={mensajeError("tipo_servicio")} />
               <p className="text-xs text-muted-foreground">
                 Lo primero que hay que elegir: define qué campos siguen abajo.
               </p>
             </section>
 
             {!editando && (
-              <section className="space-y-1">
-                <Label>Etapa del servicio *</Label>
-                <Select value={etapaInicial} onValueChange={setEtapaInicial}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ETAPAS_SERVICIO.map((e) => (
-                      <SelectItem key={e} value={e}>
-                        {e}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Permite registrar directamente un servicio que ya sucedió (ej. FALLIDO, NO
-                  EFECTIVO) sin tener que pasarlo primero por PROGRAMADO.
-                </p>
+              <section className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="ya_ocurrido"
+                    checked={yaOcurrido}
+                    onCheckedChange={(marcado) => {
+                      setYaOcurrido(marcado);
+                      if (!marcado) setEtapaInicial(ETAPA_DEFECTO);
+                    }}
+                  />
+                  <Label htmlFor="ya_ocurrido" className="font-normal">
+                    Registrar un servicio que ya ocurrió
+                  </Label>
+                </div>
+                {yaOcurrido ? (
+                  <div className="space-y-1">
+                    <Label htmlFor="etapa_inicial">Etapa del servicio *</Label>
+                    <Select value={etapaInicial} onValueChange={setEtapaInicial}>
+                      <SelectTrigger id="etapa_inicial">
+                        <SelectValue placeholder="Selecciona…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ETAPAS_SERVICIO.map((e) => (
+                          <SelectItem key={e} value={e}>
+                            {e}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Registra directamente un servicio que ya sucedió (por ejemplo FALLIDO o NO EFECTIVO) sin
+                      pasarlo primero por PROGRAMADO.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">El servicio se registra en etapa {ETAPA_DEFECTO}.</p>
+                )}
               </section>
             )}
 
@@ -693,12 +1003,14 @@ export function ServiciosTabla({
               <h3 className="text-sm font-semibold text-muted-foreground">Paciente</h3>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1 sm:col-span-1">
-                  <Label>Buscar paciente</Label>
-                  <PatientSearchCombobox
-                    valueLabel={cedulaBusqueda || undefined}
-                    onSelect={seleccionarPaciente}
-                    disabled={soloLecturaLogistica}
-                  />
+                  <Label id="buscar_paciente_label">Buscar paciente</Label>
+                  <div role="group" aria-labelledby="buscar_paciente_label">
+                    <PatientSearchCombobox
+                      valueLabel={cedulaBusqueda || undefined}
+                      onSelect={seleccionarPaciente}
+                      disabled={soloLecturaLogistica}
+                    />
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Por cédula o nombre — si no aparece, es un paciente nuevo: escribe el nombre a la derecha.
                   </p>
@@ -709,8 +1021,11 @@ export function ServiciosTabla({
                     id="nombre_completo"
                     placeholder="Nombre completo del paciente"
                     disabled={soloLecturaLogistica}
+                    aria-invalid={mensajeError("nombre_completo") ? "true" : undefined}
+                    aria-describedby={mensajeError("nombre_completo") ? "nombre_completo-error" : undefined}
                     {...register("nombre_completo")}
                   />
+                  <ErrorCampo id="nombre_completo-error" message={mensajeError("nombre_completo")} />
                 </div>
               </div>
             </section>
@@ -720,9 +1035,9 @@ export function ServiciosTabla({
               <div className="grid gap-4 sm:grid-cols-2">
                 {perfil !== "TELEMEDICINA" && (
                   <div className="space-y-1">
-                    <Label>Móvil (ambulancia){perfil === "MEDICINA_DOMICILIARIA" ? " — opcional" : ""}</Label>
+                    <Label htmlFor="vehicle_id">Móvil (ambulancia){perfil === "MEDICINA_DOMICILIARIA" ? " — opcional" : ""}</Label>
                     <Select value={vehiculoSeleccionado ?? ""} onValueChange={handleVehiculo} disabled={campoBloqueado("vehicle_id")}>
-                      <SelectTrigger>
+                      <SelectTrigger id="vehicle_id">
                         <SelectValue placeholder="Sin asignar" />
                       </SelectTrigger>
                       <SelectContent>
@@ -747,13 +1062,13 @@ export function ServiciosTabla({
                 )}
                 {requiereMedicoIndependiente && (
                   <div className="space-y-1">
-                    <Label>Médico{perfil === "TELEMEDICINA" ? " *" : " (prestador, opcional si va en la ambulancia)"}</Label>
+                    <Label htmlFor="medico_user_id">Médico{perfil === "TELEMEDICINA" ? " *" : " (prestador, opcional si va en la ambulancia)"}</Label>
                     <Select
                       value={medicoIndependienteSeleccionado ?? ""}
                       onValueChange={(v) => setValue("medico_user_id", v === "__none__" ? "" : v)}
                       disabled={campoBloqueado("medico_user_id")}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="medico_user_id">
                         <SelectValue placeholder="Selecciona…" />
                       </SelectTrigger>
                       <SelectContent>
@@ -777,19 +1092,19 @@ export function ServiciosTabla({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Turno</Label>
+                  <Label htmlFor="turno_programacion">Turno</Label>
                   <Select
                     value={turnoSeleccionado ?? ""}
                     onValueChange={(v) => setValue("turno_programacion", v)}
                     disabled={campoBloqueado("turno_programacion")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="turno_programacion">
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {TURNO_OPCIONES.map((t) => (
+                      {opcionesConValorActual(opciones.turno_programacion, turnoSeleccionado).map((t) => (
                         <SelectItem key={t} value={t}>
-                          {t === "DIA" ? "Diurno" : "Nocturno"}
+                          {t === "DIA" ? "Diurno" : t === "NOCHE" ? "Nocturno" : t}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -809,8 +1124,9 @@ export function ServiciosTabla({
                 ))}
                 {perfil === "TRASLADO" && (
                   <div className="space-y-1">
-                    <Label>Prestador</Label>
+                    <Label htmlFor="prestador">Prestador</Label>
                     <CatalogCombobox
+                      id="prestador"
                       options={PRESTADORES_SISRES as string[]}
                       value={prestadorSeleccionado ?? ""}
                       onChange={(v) => setValue("prestador", v)}
@@ -822,8 +1138,9 @@ export function ServiciosTabla({
                 )}
                 {perfil !== "TELEMEDICINA" && (
                   <div className="space-y-1">
-                    <Label>Código CIE-10</Label>
+                    <Label htmlFor="cie_codigo">Código CIE-10</Label>
                     <AsyncCombobox
+                      id="cie_codigo"
                       value={cieSeleccionado ?? ""}
                       valueLabel={cieLabel || undefined}
                       onChange={(v, label) => {
@@ -838,16 +1155,16 @@ export function ServiciosTabla({
                 {perfil === "TRASLADO" && (
                   <>
                     <div className="space-y-1">
-                      <Label>Requiere aislamiento</Label>
+                      <Label htmlFor="requiere_aislamiento">Requiere aislamiento</Label>
                       <Select
                         value={aislamientoSeleccionado ?? ""}
                         onValueChange={(v) => setValue("requiere_aislamiento", v)}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger id="requiere_aislamiento">
                           <SelectValue placeholder="Selecciona…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {AISLAMIENTO_OPCIONES.map((a) => (
+                          {opcionesConValorActual(opciones.requiere_aislamiento, aislamientoSeleccionado).map((a) => (
                             <SelectItem key={a} value={a}>
                               {a}
                             </SelectItem>
@@ -856,16 +1173,16 @@ export function ServiciosTabla({
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label>Finalidad del traslado</Label>
+                      <Label htmlFor="finalidad_traslado">Finalidad del traslado</Label>
                       <Select
                         value={finalidadSeleccionada ?? ""}
                         onValueChange={(v) => setValue("finalidad_traslado", v)}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger id="finalidad_traslado">
                           <SelectValue placeholder="Selecciona…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {FINALIDAD_TRASLADO_OPCIONES.map((f) => (
+                          {opcionesConValorActual(opciones.finalidad_traslado, finalidadSeleccionada).map((f) => (
                             <SelectItem key={f} value={f}>
                               {f}
                             </SelectItem>
@@ -874,8 +1191,9 @@ export function ServiciosTabla({
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label>Persona que recibe en IPS</Label>
+                      <Label htmlFor="acepta_ips">Persona que recibe en IPS</Label>
                       <CatalogCombobox
+                        id="acepta_ips"
                         options={[ENTREGA_DOMICILIO]}
                         value={aceptaIpsSeleccionado ?? ""}
                         onChange={(v) => setValue("acepta_ips", v)}
@@ -896,8 +1214,9 @@ export function ServiciosTabla({
                 <h3 className="text-sm font-semibold text-muted-foreground">Ruta y tiempos</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label>Departamento origen</Label>
+                    <Label htmlFor="departamento_origen">Departamento origen</Label>
                     <CatalogCombobox
+                      id="departamento_origen"
                       options={[...DEPARTAMENTOS_COLOMBIA]}
                       value={departamentoOrigenSeleccionado ?? ""}
                       onChange={handleDepartamentoOrigen}
@@ -907,8 +1226,9 @@ export function ServiciosTabla({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label>Ciudad origen</Label>
+                    <Label htmlFor="ciudad_origen">Ciudad origen</Label>
                     <CatalogCombobox
+                      id="ciudad_origen"
                       options={ciudadesOrigen as string[]}
                       value={ciudadOrigenSeleccionada ?? ""}
                       onChange={(v) => setValue("ciudad_origen", v)}
@@ -918,8 +1238,9 @@ export function ServiciosTabla({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label>Departamento destino</Label>
+                    <Label htmlFor="departamento_destino">Departamento destino</Label>
                     <CatalogCombobox
+                      id="departamento_destino"
                       options={[...DEPARTAMENTOS_COLOMBIA]}
                       value={departamentoDestinoSeleccionado ?? ""}
                       onChange={handleDepartamentoDestino}
@@ -929,8 +1250,9 @@ export function ServiciosTabla({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label>Ciudad destino</Label>
+                    <Label htmlFor="ciudad_destino">Ciudad destino</Label>
                     <CatalogCombobox
+                      id="ciudad_destino"
                       options={ciudadesDestino as string[]}
                       value={ciudadDestinoSeleccionada ?? ""}
                       onChange={(v) => setValue("ciudad_destino", v)}
@@ -965,17 +1287,17 @@ export function ServiciosTabla({
                   )}
                   {perfil === "TRASLADO" && (
                     <div className="space-y-1">
-                      <Label>Perímetro</Label>
+                      <Label htmlFor="perimetro">Perímetro</Label>
                       <Select
                         value={perimetroSeleccionado ?? ""}
                         onValueChange={(v) => setValue("perimetro", v)}
                         disabled={campoBloqueado("perimetro")}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger id="perimetro">
                           <SelectValue placeholder="Selecciona…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {PERIMETRO_OPCIONES.map((p) => (
+                          {opcionesConValorActual(opciones.perimetro, perimetroSeleccionado).map((p) => (
                             <SelectItem key={p} value={p}>
                               {p}
                             </SelectItem>
@@ -998,27 +1320,30 @@ export function ServiciosTabla({
                     type="number"
                     step="0.01"
                     placeholder="0"
+                    aria-invalid={mensajeError("valor_servicio") ? "true" : undefined}
+                    aria-describedby={mensajeError("valor_servicio") ? "valor_servicio-error" : undefined}
                     disabled={campoBloqueado("valor_servicio")}
                     {...register("valor_servicio", {
                       setValueAs: (v) => (v === "" || v === null || Number.isNaN(Number(v)) ? undefined : Number(v)),
                     })}
                   />
+                  <ErrorCampo id="valor_servicio-error" message={mensajeError("valor_servicio")} />
                 </div>
                 {/* SISRES fija método de pago en "N/A" (oculto) para el Regulador al
                     registrar — no lo decide en este punto del flujo. */}
                 {!(esRegulador && !editando) && (
                   <div className="space-y-1">
-                    <Label>Método de pago</Label>
+                    <Label htmlFor="metodo_pago">Método de pago</Label>
                     <Select
                       value={metodoPagoSeleccionado ?? ""}
                       onValueChange={(v) => setValue("metodo_pago", v)}
                       disabled={campoBloqueado("metodo_pago")}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="metodo_pago">
                         <SelectValue placeholder="Selecciona…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {METODO_PAGO_OPCIONES.map((m) => (
+                        {opcionesConValorActual(opciones.metodo_pago, metodoPagoSeleccionado).map((m) => (
                           <SelectItem key={m} value={m}>
                             {m}
                           </SelectItem>
@@ -1028,8 +1353,9 @@ export function ServiciosTabla({
                   </div>
                 )}
                 <div className="space-y-1">
-                  <Label>Cliente / aseguradora</Label>
+                  <Label htmlFor="cliente">Cliente / aseguradora</Label>
                   <CatalogCombobox
+                    id="cliente"
                     options={clientes}
                     value={clienteSeleccionado ?? ""}
                     onChange={(v) => setValue("cliente", v)}
@@ -1039,8 +1365,9 @@ export function ServiciosTabla({
                 </div>
                 {perfil === "TRASLADO" && (
                   <div className="space-y-1">
-                    <Label>Proveedor</Label>
+                    <Label htmlFor="proveedor">Proveedor</Label>
                     <CatalogCombobox
+                      id="proveedor"
                       options={PRESTADORES_SISRES as string[]}
                       value={proveedorSeleccionado ?? ""}
                       onChange={(v) => setValue("proveedor", v)}
@@ -1063,13 +1390,13 @@ export function ServiciosTabla({
                   </div>
                 ))}
                 <div className="space-y-1">
-                  <Label>Usuario que recibe</Label>
+                  <Label htmlFor="usuario_recibe">Usuario que recibe</Label>
                   <Select
                     value={usuarioRecibeSeleccionado ?? ""}
                     onValueChange={(v) => setValue("usuario_recibe", v)}
                     disabled={campoBloqueado("usuario_recibe")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="usuario_recibe">
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1082,13 +1409,13 @@ export function ServiciosTabla({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Usuario que despacha</Label>
+                  <Label htmlFor="usuario_despacha">Usuario que despacha</Label>
                   <Select
                     value={usuarioDespachaSeleccionado ?? ""}
                     onValueChange={(v) => setValue("usuario_despacha", v)}
                     disabled={campoBloqueado("usuario_despacha")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="usuario_despacha">
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1101,17 +1428,17 @@ export function ServiciosTabla({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Motivo externo</Label>
+                  <Label htmlFor="motivo_externo">Motivo externo</Label>
                   <Select
                     value={motivoExternoSeleccionado ?? ""}
                     onValueChange={(v) => setValue("motivo_externo", v)}
                     disabled={campoBloqueado("motivo_externo")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="motivo_externo">
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MOTIVO_EXTERNO_OPCIONES.map((m) => (
+                      {opcionesConValorActual(opciones.motivo_externo, motivoExternoSeleccionado).map((m) => (
                         <SelectItem key={m} value={m}>
                           {m}
                         </SelectItem>
@@ -1120,17 +1447,17 @@ export function ServiciosTabla({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Motivo interno</Label>
+                  <Label htmlFor="motivo_interno">Motivo interno</Label>
                   <Select
                     value={motivoInternoSeleccionado ?? ""}
                     onValueChange={(v) => setValue("motivo_interno", v)}
                     disabled={campoBloqueado("motivo_interno")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="motivo_interno">
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MOTIVO_INTERNO_OPCIONES.map((m) => (
+                      {opcionesConValorActual(opciones.motivo_interno, motivoInternoSeleccionado).map((m) => (
                         <SelectItem key={m} value={m}>
                           {m}
                         </SelectItem>
@@ -1139,13 +1466,13 @@ export function ServiciosTabla({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Estado del servicio</Label>
+                  <Label htmlFor="estado_servicio">Estado del servicio</Label>
                   <Select
                     value={estadoServicioSeleccionado ?? ""}
                     onValueChange={(v) => setValue("estado_servicio", v)}
                     disabled={campoBloqueado("estado_servicio")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="estado_servicio">
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1189,7 +1516,11 @@ export function ServiciosTabla({
               <section className="space-y-2">
                 <h3 className="text-sm font-semibold text-muted-foreground">Boleta de salida</h3>
                 <div className="flex flex-wrap items-center gap-3">
+                  <Label htmlFor="boleta_salida" className="sr-only">
+                    Imagen de la boleta de salida
+                  </Label>
                   <Input
+                    id="boleta_salida"
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     disabled={subiendoBoleta}
@@ -1213,16 +1544,26 @@ export function ServiciosTabla({
               </section>
             )}
 
-            {(error || Object.values(formState.errors)[0]?.message) && (
-              <p className="text-sm text-destructive">
-                {error ?? String(Object.values(formState.errors)[0]?.message)}
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
               </p>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
+              {!editando && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={guardando}
+                  onClick={handleSubmit((v) => onSubmit(v, true), onInvalid)}
+                >
+                  Guardar y crear otro
+                </Button>
+              )}
               <Button type="submit" disabled={guardando}>
                 {guardando ? "Guardando…" : "Guardar"}
               </Button>

@@ -19,6 +19,7 @@ import * as fs from "fs";
 import * as path from "path";
 import XLSX from "xlsx";
 import pg from "pg";
+import { leerVentas, localizarEncabezados, notasDeVenta } from "../src/lib/combustible-proveedor";
 
 // ── Env ──────────────────────────────────────────────────────────────────────
 
@@ -40,38 +41,6 @@ function loadEnv() {
   loadEnvFile(path.join(root, ".env"));
   loadEnvFile(path.join(root, ".env.local"));
 }
-
-// ── Number parser (formato colombiano: "62.648,00" → 62648) ──────────────────
-
-function parseCOP(val: string | number | undefined): number {
-  if (val === undefined || val === null || val === "") return 0;
-  if (typeof val === "number") return val;
-  // "62.648,00" → remove dots (thousands) → replace comma decimal → parseFloat
-  return parseFloat(String(val).replace(/\./g, "").replace(",", ".")) || 0;
-}
-
-// ── Date converter (número serial de Excel → "YYYY-MM-DD") ──────────────────
-
-function excelDateToISO(serial: number): string {
-  // XLSX.SSF.parse_date_code devuelve { y, m, d }
-  const d = XLSX.SSF.parse_date_code(serial);
-  const mm = String(d.m).padStart(2, "0");
-  const dd = String(d.d).padStart(2, "0");
-  return `${d.y}-${mm}-${dd}`;
-}
-
-// ── Índices de columnas del proveedor (0-based) ───────────────────────────────
-
-const COL = {
-  numero_venta:  3,   // No. Venta
-  fecha:         4,   // Fecha (serial Excel)
-  estacion:      5,   // Estación
-  placa:         8,   // Placa
-  combustible:   10,  // Combustible (Diesel / Gasolina Corriente / Gasolina Extra)
-  cantidad:      11,  // Cantidad (galones UGL)
-  total_venta:   14,  // Total Venta (COP)
-  kilometraje:   15,  // Kilometraje
-} as const;
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -96,13 +65,20 @@ Uso:
     process.exit(1);
   }
 
-  console.log(`\n📂 Leyendo: ${resolvedPath}`);
+  console.log(`\nLeyendo: ${resolvedPath}`);
   const wb = XLSX.readFile(resolvedPath);
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const allRows = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1 });
-  const dataRows = allRows.slice(1).filter((r) => r.length > 0 && r[COL.placa]);
+  const nombreHoja = wb.SheetNames.find((n) => /combustible/i.test(n)) ?? wb.SheetNames[0];
+  const hoja = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nombreHoja], { header: 1, defval: "", raw: true });
 
-  console.log(`   ${dataRows.length} filas de datos encontradas`);
+  // Misma lectura que la web (Configuracion > Carga masiva > Combustible): columnas por NOMBRE, una sola implementacion.
+  const enc = localizarEncabezados(hoja);
+  if ("error" in enc) {
+    console.error(`Error: ${enc.error}`);
+    process.exit(1);
+  }
+  const { ventas, errores } = leerVentas(hoja, enc);
+  console.log(`   ${ventas.length} filas validas, ${errores.length} con error`);
+  for (const e of errores.slice(0, 20)) console.log(`   fila ${e.fila} ${e.placa}: ${e.mensaje}`);
 
   // ── Conectar BD ───────────────────────────────────────────────────────────
 
@@ -151,31 +127,21 @@ Uso:
   const skippedPlates = new Set<string>();
   const skippedPlateCount: Record<string, number> = {};
 
-  for (const row of dataRows) {
-    const placa = String(row[COL.placa] ?? "").trim().toUpperCase();
-    const vehicleId = placaMap.get(placa);
-
+  for (const v of ventas) {
+    const vehicleId = placaMap.get(v.placa);
     if (!vehicleId) {
-      skippedPlates.add(placa);
-      skippedPlateCount[placa] = (skippedPlateCount[placa] ?? 0) + 1;
+      skippedPlates.add(v.placa);
+      skippedPlateCount[v.placa] = (skippedPlateCount[v.placa] ?? 0) + 1;
       continue;
     }
-
-    const numeroVenta = String(row[COL.numero_venta] ?? "").trim() || null;
-    const fechaRaw = row[COL.fecha];
-    const fecha =
-      typeof fechaRaw === "number"
-        ? excelDateToISO(fechaRaw)
-        : String(fechaRaw ?? "").slice(0, 10);
-
     validRows.push({
       vehicleId,
-      fecha,
-      galones:    parseCOP(row[COL.cantidad] as string | number),
-      costo:      parseCOP(row[COL.total_venta] as string | number),
-      kilometraje: Math.round(parseCOP(row[COL.kilometraje] as string | number)),
-      notas:      [String(row[COL.combustible] ?? "").trim(), String(row[COL.estacion] ?? "").trim()].filter(Boolean).join(" · ") || null,
-      numeroVenta,
+      fecha: v.dia,
+      galones: v.galones,
+      costo: v.costo,
+      kilometraje: v.km,
+      notas: notasDeVenta(v),
+      numeroVenta: v.numeroVenta,
     });
   }
 

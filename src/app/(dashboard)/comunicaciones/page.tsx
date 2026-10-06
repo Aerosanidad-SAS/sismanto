@@ -3,6 +3,8 @@ import { getCampanas } from "@/app/api/actions/campanas";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { CampanasPanel } from "@/components/comunicaciones/campanas-panel";
 
+export const metadata = { title: "Comunicaciones" };
+
 const ROLES_EDICION = ["ADMIN", "COORDINACION", "ANALISTA"];
 
 // procesarLoteCampana pausa 2 s entre envíos reales: un lote tarda ~10 s,

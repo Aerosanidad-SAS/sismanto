@@ -4,11 +4,47 @@
  * Sin dependencias de servidor: lo usan la página, las acciones y el cliente.
  */
 
+import { sumarMeses } from "@/lib/fechas";
+
 export const SERVICIOS_POR_PAGINA = 100;
 /** Tope de exportación, igual que EXPORT_MAX_FILAS en export/exportExcel.php. */
 export const EXPORT_MAX_FILAS = 50000;
 
+/**
+ * Ciudades de la Junta (Bogotá y Medellín). La ciudad de un servicio es la de su REGISTRO (`ciudad_registro`): la del CRA
+ * al que está asignado el usuario de Regulación que recibió la solicitud. Un servicio de Medellín a Chocó recibido por el
+ * CRA Medellín cuenta como Medellín, sin importar su origen ni su destino. Como no hay catálogo cerrado, se agrupa por el
+ * texto que empiece con el prefijo (sin acentos, sin importar mayúsculas).
+ */
+export const CIUDADES_SERVICIO = [
+  { clave: "bogota", nombre: "Bogotá", prefijo: "bogot" },
+  { clave: "medellin", nombre: "Medellín", prefijo: "medell" },
+] as const;
+export type CiudadServicio = (typeof CIUDADES_SERVICIO)[number]["clave"];
+
+/** Prefijo de `ciudad_registro` para la clave elegida; null si es "ambas" o un valor desconocido. */
+export function prefijoCiudad(clave: string | undefined | null): string | null {
+  return CIUDADES_SERVICIO.find((c) => c.clave === clave)?.prefijo ?? null;
+}
+
+/** Cómo quedó escrita la ciudad de registro en los servicios importados de SISRES (30 mil de Bogotá, 11 mil de Medellín). */
+const CIUDAD_REGISTRO_CANONICA = { bogota: "BOGOTA D.C.", medellin: "MEDELLÍN" } as const;
+const CENTRO_A_CIUDAD: Record<string, CiudadServicio> = { CRA_BOGOTA: "bogota", CRA_MEDELLIN: "medellin" };
+
+/**
+ * Ciudad de registro que corresponde a quien crea el servicio: primero por su centro operativo (CRA Bogotá / CRA Medellín)
+ * y, si no tiene, por la ciudad de su perfil. Vacío si no se puede saber (p. ej. un ADMIN sin centro).
+ */
+export function ciudadRegistroDePerfil(perfil: { centro_codigo: string | null; ciudad: string | null } | null | undefined): string {
+  const porCentro = perfil?.centro_codigo ? CENTRO_A_CIUDAD[perfil.centro_codigo] : undefined;
+  const ciudad = (perfil?.ciudad ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const clave = porCentro ?? CIUDADES_SERVICIO.find((c) => ciudad.startsWith(c.prefijo))?.clave;
+  return clave ? CIUDAD_REGISTRO_CANONICA[clave] : "";
+}
+
 export interface FiltrosServicios {
+  /** "bogota" | "medellin": ciudad de registro del servicio (la del CRA que lo recibió). Vacío = ambas. */
+  ciudad?: string;
   /** Rango sobre fecha_hora_programacion (YYYY-MM-DD); SISRES exige ambos extremos. */
   desde?: string;
   hasta?: string;
@@ -18,9 +54,14 @@ export interface FiltrosServicios {
   origen?: string;
   destino?: string;
   cedula?: string;
+  /** «Sin gestionar»: servicios en PROGRAMADO/CURSO cuya hora programada pasó hace más de esta cantidad de `sinGestionarUnidad`. */
+  sinGestionar?: string;
+  sinGestionarUnidad?: string;
 }
 
-const CLAVES: (keyof FiltrosServicios)[] = ["desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula"];
+const CLAVES: (keyof FiltrosServicios)[] = [
+  "ciudad", "desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula", "sinGestionar", "sinGestionarUnidad",
+];
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Lee filtros y página de los searchParams de la URL, descartando valores inválidos. */
@@ -34,6 +75,9 @@ export function leerFiltros(params: Record<string, string | string[] | undefined
     const s = (Array.isArray(v) ? v[0] : v)?.trim();
     if (!s) continue;
     if ((k === "desde" || k === "hasta") && !FECHA.test(s)) continue;
+    if (k === "ciudad" && !prefijoCiudad(s)) continue;
+    if (k === "sinGestionar" && !/^[1-9]\d{0,3}$/.test(s)) continue;
+    if (k === "sinGestionarUnidad" && !esUnidadSinGestionar(s)) continue;
     filtros[k] = s.slice(0, 120);
   }
   const p = Number(Array.isArray(params.pagina) ? params.pagina[0] : params.pagina);
@@ -49,22 +93,53 @@ export function filtrosAQuery(filtros: FiltrosServicios, pagina = 1): string {
 }
 
 // ── Servicios estancados (includes/alertaEstancadoConfig.php) ──────────────
-// Horas desde la hora programada sin salir de la etapa. En SISRES son
-// configurables (configuracion_sistema); acá quedan fijas hasta que
-// Regulación confirme los valores de producción.
+// Horas desde la hora programada sin salir de la etapa. Configurables por el ADMIN (migración 103, Configuración →
+// Servicios); estos son los valores por defecto mientras no se configure.
 export const UMBRAL_ESTANCADO_HORAS: Record<string, number> = { PROGRAMADO: 4, CURSO: 4 };
 
-/** Horas enteras de atraso si el servicio cruzó el umbral de su etapa; si no, null. */
+/** Umbrales vigentes por etapa, o null si el aviso de estancados está desactivado. */
+export type UmbralesEstancado = Record<string, number> | null;
+
+/** Horas enteras de atraso si el servicio cruzó el umbral de su etapa; si no (o si el aviso está apagado), null. */
 export function horasEstancado(
   s: { etapa: string; fecha_hora_programacion?: string | null },
-  ahora: number = Date.now()
+  ahora: number = Date.now(),
+  umbrales: UmbralesEstancado = UMBRAL_ESTANCADO_HORAS
 ): number | null {
-  const umbral = UMBRAL_ESTANCADO_HORAS[s.etapa];
+  if (!umbrales) return null;
+  const umbral = umbrales[s.etapa];
   if (!umbral || !s.fecha_hora_programacion) return null;
   const prog = Date.parse(s.fecha_hora_programacion);
   if (Number.isNaN(prog) || prog > ahora) return null;
   const horas = (ahora - prog) / 3_600_000;
   return horas >= umbral ? Math.floor(horas) : null;
+}
+
+// ── Servicios sin gestionar (filtro de mostrarServicios.php) ───────────────
+// Mismo criterio que los estancados: sigue en PROGRAMADO/CURSO y ya pasó el tiempo elegido desde la hora programada.
+
+export const UNIDADES_SIN_GESTIONAR = [
+  { clave: "dia", nombre: "Días" },
+  { clave: "mes", nombre: "Meses" },
+  { clave: "anio", nombre: "Años" },
+] as const;
+export type UnidadSinGestionar = (typeof UNIDADES_SIN_GESTIONAR)[number]["clave"];
+export const ETAPAS_SIN_GESTIONAR = ["PROGRAMADO", "CURSO"] as const;
+
+export function esUnidadSinGestionar(v: string | undefined | null): v is UnidadSinGestionar {
+  return UNIDADES_SIN_GESTIONAR.some((u) => u.clave === v);
+}
+
+/**
+ * Instante límite del filtro «sin gestionar»: `ahora` menos `cantidad` días, meses o años (el `NOW() - INTERVAL` de
+ * SISRES). Meses y años se restan en el calendario de Colombia (UTC-5 todo el año) conservando la hora; si el día no
+ * existe en el mes de llegada (31 de marzo − 1 mes), queda en el último día de ese mes.
+ */
+export function limiteSinGestionar(cantidad: number, unidad: UnidadSinGestionar, ahora: number = Date.now()): string {
+  if (unidad === "dia") return new Date(ahora - cantidad * 86_400_000).toISOString();
+  const local = new Date(ahora - 5 * 3_600_000).toISOString(); // reloj de Colombia escrito como si fuera UTC
+  const dia = sumarMeses(local.slice(0, 10), -(unidad === "mes" ? cantidad : cantidad * 12));
+  return new Date(`${dia}T${local.slice(11, 23)}-05:00`).toISOString();
 }
 
 /** Avisos antes de la hora programada, en minutos (verificarAlertasProximas). */

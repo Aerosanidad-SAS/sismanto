@@ -1,7 +1,7 @@
 "use client";
 
 import { hoyBogota, sumarDias } from "@/lib/fechas";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { SIN_FILTROS, filtrarEquipos, hayFiltros, valoresDistintos, type FiltrosEquipos } from "@/lib/equipos-filtros";
+import { checklistParaEquipo, type CatalogoChecklists } from "@/lib/biomedico-checklist";
+import { TIPOS_MANTENIMIENTO_BIOMEDICO } from "@/lib/biomedico-fechas";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -24,6 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatDateShort } from "@/lib/utils";
 import { DateField } from "@/components/forms/date-field";
+import { DocumentosEquipo } from "@/components/equipos/documentos-equipo";
+import { FotoEquipo } from "@/components/equipos/foto-equipo";
 import {
   biomedicalEquipmentSchema,
   biomedicalMaintenanceSchema,
@@ -36,6 +40,9 @@ import {
   crearMantenimientoBiomedico,
   generarHojaVidaPdf,
 } from "@/app/api/actions/inventario-biomedico";
+import { getPlantillasBiomedicas } from "@/app/api/actions/biomedico-plantillas";
+import { plantillasDelCampo, type PlantillaTexto } from "@/lib/biomedico-plantillas";
+import { SelectorPlantilla } from "@/components/equipos/selector-plantilla";
 
 export interface EquipoRow {
   id: number;
@@ -56,6 +63,9 @@ export interface EquipoRow {
   aeropuerto: string | null;
   ciudad: string | null;
   area: string | null;
+  imagen_url: string | null;
+  descripcion: string | null;
+  instrucciones_uso: string | null;
   [key: string]: unknown;
 }
 
@@ -113,9 +123,11 @@ interface EquiposTablaProps {
   equipos: EquipoRow[];
   mantenimientos: MantenimientoBioRow[];
   puedeEditar: boolean;
+  /** Listas de chequeo por tipo de equipo (migración 097); vacío = el mantenimiento se registra sin checklist. */
+  checklists?: CatalogoChecklists;
 }
 
-export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTablaProps) {
+export function EquiposTabla({ equipos, mantenimientos, puedeEditar, checklists = {} }: EquiposTablaProps) {
   const router = useRouter();
   const [filtros, setFiltros] = useState<FiltrosEquipos>(SIN_FILTROS);
   const [dialogEquipo, setDialogEquipo] = useState(false);
@@ -125,6 +137,9 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
+  // Checklist del mantenimiento que se está registrando: la lista del tipo de equipo y los ítems que «cumplen».
+  const [checklistMant, setChecklistMant] = useState<ReturnType<typeof checklistParaEquipo>>(null);
+  const [chkCumple, setChkCumple] = useState<Set<string>>(new Set());
 
   const formEquipo = useForm<BiomedicalEquipmentFormData>({
     resolver: zodResolver(biomedicalEquipmentSchema),
@@ -132,6 +147,18 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
   const formMant = useForm<BiomedicalMaintenanceFormData>({
     resolver: zodResolver(biomedicalMaintenanceSchema),
   });
+
+  // Plantillas de texto del mantenimiento (migración 098): se leen la primera vez que se abre el registro.
+  const [plantillas, setPlantillas] = useState<{ plantillas: PlantillaTexto[]; puedeEditar: boolean }>({
+    plantillas: [],
+    puedeEditar: false,
+  });
+  const [plantillasCargadas, setPlantillasCargadas] = useState(false);
+  useEffect(() => {
+    if (!dialogMantenimiento || plantillasCargadas) return;
+    setPlantillasCargadas(true);
+    getPlantillasBiomedicas().then(setPlantillas);
+  }, [dialogMantenimiento, plantillasCargadas]);
 
   const filtrados = useMemo(() => filtrarEquipos(equipos, filtros), [equipos, filtros]);
   const areas = useMemo(() => valoresDistintos(equipos, (e) => e.area), [equipos]);
@@ -157,6 +184,8 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
     const valores: Record<string, unknown> = { placa_equipo: e.placa_equipo, equipo: e.equipo };
     for (const campo of CAMPOS_EQUIPO) valores[campo.name] = e[campo.name] ?? "";
     valores.observaciones = e.observaciones ?? "";
+    valores.descripcion = e.descripcion ?? "";
+    valores.instrucciones_uso = e.instrucciones_uso ?? "";
     formEquipo.reset(valores as BiomedicalEquipmentFormData);
     setDialogEquipo(true);
   };
@@ -172,6 +201,10 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
       obs_baja: false,
       obs_partes: true,
     } as BiomedicalMaintenanceFormData);
+    // Como SISRES: todos los ítems arrancan en «Cumple»; se desmarca lo que no cumple.
+    const lista = checklistParaEquipo(e.equipo, checklists);
+    setChecklistMant(lista);
+    setChkCumple(new Set(lista?.items ?? []));
     setDialogMantenimiento(true);
   };
 
@@ -193,7 +226,10 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
   const onSubmitMantenimiento = async (values: BiomedicalMaintenanceFormData) => {
     setGuardando(true);
     setError(null);
-    const res = await crearMantenimientoBiomedico(values);
+    const res = await crearMantenimientoBiomedico(
+      values,
+      checklistMant ? { todos: checklistMant.items, marcados: Array.from(chkCumple) } : undefined
+    );
     setGuardando(false);
     if (res.error) {
       setError(res.error);
@@ -369,8 +405,13 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
                 <TabsTrigger value="historial">
                   Mantenimientos ({historialEquipo.length})
                 </TabsTrigger>
+                <TabsTrigger value="documentos">Documentos</TabsTrigger>
               </TabsList>
+              <TabsContent value="documentos">
+                <DocumentosEquipo equipmentId={hojaDeVida.id} />
+              </TabsContent>
               <TabsContent value="ficha">
+                <FotoEquipo equipmentId={hojaDeVida.id} ruta={hojaDeVida.imagen_url} />
                 <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                   {[
                     ["Marca", hojaDeVida.marca],
@@ -400,6 +441,22 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
                     </div>
                   ))}
                 </dl>
+                {(hojaDeVida.descripcion || hojaDeVida.instrucciones_uso) && (
+                  <div className="mt-4 space-y-3 border-t pt-4">
+                    {hojaDeVida.descripcion && (
+                      <div>
+                        <dt className="text-xs font-medium text-muted-foreground">Descripción</dt>
+                        <dd className="whitespace-pre-wrap text-sm">{hojaDeVida.descripcion}</dd>
+                      </div>
+                    )}
+                    {hojaDeVida.instrucciones_uso && (
+                      <div>
+                        <dt className="text-xs font-medium text-muted-foreground">Instrucciones de uso</dt>
+                        <dd className="whitespace-pre-wrap text-sm">{hojaDeVida.instrucciones_uso}</dd>
+                      </div>
+                    )}
+                  </div>
+                )}
               </TabsContent>
               <TabsContent value="historial">
                 {historialEquipo.length === 0 ? (
@@ -468,6 +525,14 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
               <Label htmlFor="observaciones">Observaciones</Label>
               <Textarea id="observaciones" rows={2} {...formEquipo.register("observaciones")} />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Textarea id="descripcion" rows={2} {...formEquipo.register("descripcion")} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="instrucciones_uso">Instrucciones de uso</Label>
+              <Textarea id="instrucciones_uso" rows={3} {...formEquipo.register("instrucciones_uso")} />
+            </div>
 
             {(error || Object.values(formEquipo.formState.errors)[0]?.message) && (
               <p className="text-sm text-destructive">
@@ -496,6 +561,10 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
               Al guardar, la fecha de último mantenimiento del equipo se actualiza automáticamente.
             </DialogDescription>
           </DialogHeader>
+          {/* Documentos del equipo (INVIMA, manuales…): se guardan al subirlos, aparte del mantenimiento. */}
+          {dialogMantenimiento && formMant.getValues("equipment_id") ? (
+            <DocumentosEquipo equipmentId={formMant.getValues("equipment_id")} />
+          ) : null}
           <form onSubmit={formMant.handleSubmit(onSubmitMantenimiento)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
@@ -511,8 +580,19 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
                 <Input id="orden_numero" {...formMant.register("orden_numero")} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="tipo_mantenimiento">Tipo (preventivo/correctivo)</Label>
-                <Input id="tipo_mantenimiento" {...formMant.register("tipo_mantenimiento")} />
+                <Label htmlFor="tipo_mantenimiento">Tipo</Label>
+                <select
+                  id="tipo_mantenimiento"
+                  {...formMant.register("tipo_mantenimiento")}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Sin especificar</option>
+                  {TIPOS_MANTENIMIENTO_BIOMEDICO.map((t) => (
+                    <option key={t} value={t}>
+                      {t[0] + t.slice(1).toLowerCase()}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="codigo_institucional">Código institucional</Label>
@@ -552,6 +632,35 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
               </div>
             </div>
 
+            {checklistMant && (
+              <fieldset className="space-y-2 rounded-md border border-border p-3">
+                <legend className="px-1 text-sm font-medium">
+                  Lista de chequeo{checklistMant.esGeneral ? " (general)" : ""} — {chkCumple.size} de{" "}
+                  {checklistMant.items.length} cumplen
+                </legend>
+                <p className="text-xs text-muted-foreground">Desmarca los ítems que no cumplen.</p>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {checklistMant.items.map((item) => (
+                    <label key={item} className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={chkCumple.has(item)}
+                        onCheckedChange={(v) =>
+                          setChkCumple((prev) => {
+                            const next = new Set(prev);
+                            if (v === true) next.add(item);
+                            else next.delete(item);
+                            return next;
+                          })
+                        }
+                      />
+                      {item}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
             <div className="grid gap-2 sm:grid-cols-3">
               {(
                 [
@@ -572,14 +681,24 @@ export function EquiposTabla({ equipos, mantenimientos, puedeEditar }: EquiposTa
               ))}
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="descripcion_falla">Descripción de la falla</Label>
-              <Textarea id="descripcion_falla" rows={2} {...formMant.register("descripcion_falla")} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="observaciones_mant">Observaciones</Label>
-              <Textarea id="observaciones_mant" rows={2} {...formMant.register("observaciones")} />
-            </div>
+            {(
+              [
+                ["descripcion_falla", "descripcion_falla", "Descripción de la falla / actividad realizada"],
+                ["observaciones", "observaciones_mant", "Observaciones"],
+                ["obs_reparaciones", "obs_reparaciones", "Observaciones de reparación"],
+              ] as const
+            ).map(([campo, id, etiqueta]) => (
+              <div key={campo} className="space-y-1">
+                <Label htmlFor={id}>{etiqueta}</Label>
+                <SelectorPlantilla
+                  plantillas={plantillasDelCampo(plantillas.plantillas, campo)}
+                  puedeEditar={plantillas.puedeEditar}
+                  valorActual={formMant.watch(campo)}
+                  onAplicar={(texto) => formMant.setValue(campo, texto, { shouldDirty: true })}
+                />
+                <Textarea id={id} rows={2} {...formMant.register(campo)} />
+              </div>
+            ))}
 
             {(error || Object.values(formMant.formState.errors)[0]?.message) && (
               <p className="text-sm text-destructive">
