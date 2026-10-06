@@ -137,6 +137,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "112_equipo_biomedico_foto_descripcion.sql",      file: "scripts/migrations/112_equipo_biomedico_foto_descripcion.sql" },
   { name: "113_solicitudes_no_apto.sql",                    file: "scripts/migrations/113_solicitudes_no_apto.sql" },
   { name: "114_cambios_vehiculo_operador.sql",            file: "scripts/migrations/114_cambios_vehiculo_operador.sql" },
+  { name: "115_cierres_turno_ovem.sql",                   file: "scripts/migrations/115_cierres_turno_ovem.sql" },
   { name: "116_siniestro_datos_fotos.sql",                 file: "scripts/migrations/116_siniestro_datos_fotos.sql" },
 ];
 
