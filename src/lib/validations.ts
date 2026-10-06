@@ -214,7 +214,11 @@ export const dailyCheckSchema = z.object({
   userId: z.string().uuid("ID de usuario inválido"),
   vehicleId: z.string().uuid("ID de vehículo inválido"),
   fecha: z.string().min(1, "Fecha requerida"),
-  kilometrajeInicial: z.number().int().positive("El kilometraje actual es obligatorio y debe ser mayor a cero"),
+  kilometrajeInicial: z
+    .number()
+    .int()
+    .positive("El kilometraje actual es obligatorio y debe ser mayor a cero")
+    .max(2_000_000, "El kilometraje es demasiado alto: revisa el número del tablero."),
   kilometrajeFinal: z.number().int().nonnegative().optional(),
   /** Mantiene compatibilidad, pero se recalcula por daily_check_items (trigger DB). */
   checklistOk: z.boolean().optional(),
