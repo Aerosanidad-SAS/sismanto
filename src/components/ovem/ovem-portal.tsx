@@ -35,6 +35,7 @@ import {
   ArrowLeft,
   Ambulance,
   Fuel,
+  LogOut,
   RefreshCw,
   Siren,
   X,
@@ -55,6 +56,7 @@ import {
   textoResumen,
   type RespuestasChecklist,
 } from "@/lib/ovem-portal";
+import { CierreTurnoForm } from "./cierre-turno-form";
 import { CombustibleForm } from "./combustible-form";
 import { SiniestroForm } from "./siniestro-form";
 import { DocumentosVehiculo } from "./documentos-vehiculo";
@@ -86,7 +88,7 @@ interface OvemPortalProps {
   ultimoKmPorVehiculo?: Record<string, number>;
 }
 
-type Flow = null | "preoperacional" | "combustible" | "novedad" | "siniestro" | "servicios";
+type Flow = null | "preoperacional" | "combustible" | "novedad" | "siniestro" | "servicios" | "cierre";
 
 const FLOW_LABEL: Record<Exclude<Flow, null>, string> = {
   preoperacional: "Preoperacional",
@@ -94,6 +96,7 @@ const FLOW_LABEL: Record<Exclude<Flow, null>, string> = {
   novedad: "Reporte de novedad",
   siniestro: "Siniestro vial",
   servicios: "Mis servicios",
+  cierre: "Cerrar turno",
 };
 
 /** Referencia estable: un `[]` por defecto se recrearía en cada render y dispararía los efectos que dependen de él. */
@@ -478,6 +481,9 @@ export function OvemPortal({
     { flow: "combustible", icon: Fuel, titulo: "Registrar tanqueo", detalle: "Galones, kilometraje y recibo" },
     { flow: "novedad", icon: AlertCircle, titulo: "Reportar novedad", detalle: "Falla o daño del vehículo" },
     { flow: "siniestro", icon: Siren, titulo: "Reportar siniestro", detalle: "Choque o accidente de tránsito" },
+    ...(viewerRole === "OVEM"
+      ? [{ flow: "cierre" as const, icon: LogOut, titulo: "Cerrar turno", detalle: "Km final, novedades y entrega del vehículo" }]
+      : []),
   ];
 
   /** Hora de la última actualización, aviso de servicio nuevo y botón manual (solo para el OVEM, en el menú y «Mis servicios»). */
@@ -530,8 +536,8 @@ export function OvemPortal({
                 key={f}
                 className={cn(
                   "h-auto min-h-24 flex-col gap-2 px-2 py-4",
-                  // Con cinco acciones, siniestro ocupa la fila completa en el celular.
-                  f === "siniestro" && "col-span-2 border-red-200 lg:col-span-1"
+                  // Siniestro se distingue por el borde y el ícono además del texto (nada solo por color).
+                  f === "siniestro" && "border-red-200"
                 )}
                 variant="outline"
                 onClick={() => abrir(f)}
@@ -645,6 +651,19 @@ export function OvemPortal({
           onDone={() => {
             setFlow(null);
             setAviso(`Tanqueo de ${selectedVehicle.placa} registrado.`);
+          }}
+        />
+      )}
+
+      {vehicleId && selectedVehicle && flow === "cierre" && viewerRole === "OVEM" && (
+        <CierreTurnoForm
+          vehicleId={vehicleId}
+          placa={selectedVehicle.placa}
+          onDone={(hora, novedadCreada) => {
+            // El turno terminó: el borrador del preoperacional de hoy ya no sirve.
+            escribirSession(claveBorrador(vehicleId, hoy), null);
+            setFlow(null);
+            setAviso(`Turno cerrado a las ${hora}.${novedadCreada ? " Se abrió una novedad con lo que contaste." : ""}`);
           }}
         />
       )}

@@ -1,5 +1,5 @@
 /**
- * Reglas puras del cierre de turno del OVEM (migración 111): validación de lo que digita, bloqueos y quién falta por
+ * Reglas puras del cierre de turno del OVEM (migración 115): validación de lo que digita, bloqueos y quién falta por
  * cerrar. Sin base de datos ni navegador, para poder probarlas. El día y la hora NUNCA entran aquí desde el cliente:
  * los pone el servidor (`hoyBogota()` y `cerrado_at` de la base).
  */

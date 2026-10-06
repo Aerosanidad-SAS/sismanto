@@ -16,6 +16,8 @@ import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no
 import { getProgramacionDelDia } from "@/app/api/actions/programacion";
 import { PreoperacionalHoyCard } from "@/components/regulacion/preoperacional-hoy";
 import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
+import { CierresTurnoHoyCard } from "@/components/regulacion/cierres-turno-hoy";
+import { getCierresDeTurnoHoy } from "@/app/api/actions/cierre-turno";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
@@ -38,7 +40,7 @@ export default async function RegulacionPage({
   }
 
   const diaPedido = Array.isArray(searchParams.dia) ? searchParams.dia[0] : searchParams.dia;
-  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto] = await Promise.all([
+  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto, cierresTurno] = await Promise.all([
     getTableroRegulacion(),
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
@@ -47,6 +49,7 @@ export default async function RegulacionPage({
     getPreoperacionalHoy(),
     getProgramacionDelDia(diaPedido ?? ""),
     getSolicitudesNoAptoPendientes(),
+    getCierresDeTurnoHoy(),
   ]);
 
   const vehiculosOperativos = (fleet as { id: string; placa: string; estado_actual: string }[])
@@ -97,6 +100,8 @@ export default async function RegulacionPage({
       />
 
       <PreoperacionalHoyCard datos={preoperacional} />
+
+      <CierresTurnoHoyCard datos={cierresTurno} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <VencimientosCard vencimientos={tablero.vencimientos} />

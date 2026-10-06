@@ -43,6 +43,8 @@ export interface ContextoCierre {
   bloqueo: string | null;
   /** Conductores programados mañana en este vehículo (para entregarle el vehículo). */
   siguientes: ConductorSiguiente[];
+  /** Instante actual del servidor (ISO): el portal muestra la hora a partir de él, no del reloj del teléfono. */
+  ahora: string;
 }
 
 const idSchema = z.string().uuid("Vehículo inválido");
@@ -62,6 +64,7 @@ export async function getContextoCierre(vehicleId: string): Promise<ContextoCier
     cerradoAt: estado.cerradoAt,
     bloqueo: estado.cerradoAt ? null : bloqueoCierre(estado.bloqueoEstado),
     siguientes: await siguientesConductores(id.data, profile.user_id, hoy),
+    ahora: new Date().toISOString(),
   };
 }
 
