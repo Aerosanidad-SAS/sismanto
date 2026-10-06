@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatDateShort } from "@/lib/utils";
+import { esNovedadSiniestro } from "@/lib/siniestro-datos";
 import {
   updateIncidentPrioridad,
   closeIncident,
@@ -202,6 +203,11 @@ export function NovedadesTabla({ novedades, isAdmin, puedeCerrar, puedeCrearMant
             </TableCell>
             <TableCell className="max-w-md">
               <p className="truncate">{novedad.descripcion}</p>
+              {esNovedadSiniestro(novedad.descripcion) && (
+                <Link href={`/novedades/${novedad.id}/siniestro`} className="text-sm text-primary hover:underline">
+                  Ver datos y fotos del siniestro
+                </Link>
+              )}
             </TableCell>
             <TableCell>
               <Badge variant={getSeverityBadgeVariant(novedad.severidad)}>{novedad.severidad}</Badge>

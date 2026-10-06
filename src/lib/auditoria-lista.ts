@@ -24,6 +24,7 @@ export const ENTIDADES_AUDITORIA = [
   "regulacion",
   "mantenimientos",
   "novedades",
+  "siniestros",
   "clientes",
   "proveedores",
   "capacitaciones",

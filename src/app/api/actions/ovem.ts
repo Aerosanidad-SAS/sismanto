@@ -15,6 +15,7 @@ import {
 import type { RoadAccidentFormData } from "@/lib/validations";
 import { validarPreoperacional } from "@/lib/preoperacional";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
+import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
 import { crearSolicitudNoApto, tieneNoAptoPendiente } from "./solicitudes-no-apto";
 import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
@@ -417,7 +418,8 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
   // Se registra en cuanto la novedad existe: si el detalle del siniestro falla más abajo, la novedad ya creada no queda sin rastro.
   await auditar("INSERTAR", "novedades", incident.id as number, "Siniestro vial reportado");
 
-  const { error } = await supabase.from("road_accidents").insert({
+  const sinAbogado = !abogadoDeclarado(row);
+  const { data: accident, error } = await supabase.from("road_accidents").insert({
     vehicle_id: row.vehicleId,
     reportado_por: profile.user_id,
     fecha_hora: new Date(row.fechaHora).toISOString(),
@@ -427,17 +429,25 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
     hay_lesionados: row.hayLesionados,
     lesionados_detalle: row.hayLesionados ? row.lesionadosDetalle || null : null,
     hay_terceros: row.hayTerceros,
-    tercero_placa: row.hayTerceros ? row.terceroPlaca?.toUpperCase() || null : null,
+    tercero_placa: row.hayTerceros ? normalizarPlaca(row.terceroPlaca) : null,
     tercero_nombre: row.hayTerceros ? row.terceroNombre || null : null,
     tercero_telefono: row.hayTerceros ? row.terceroTelefono || null : null,
     tercero_aseguradora: row.hayTerceros ? row.terceroAseguradora || null : null,
+    tercero_cedula: row.hayTerceros ? normalizarCedula(row.terceroCedula) : null,
+    sin_tercero_motivo: row.hayTerceros ? null : row.sinTerceroMotivo || null,
+    abogado_nombre: sinAbogado ? null : row.abogadoNombre || null,
+    abogado_telefono: sinAbogado ? null : row.abogadoTelefono || null,
+    abogado_cedula: sinAbogado ? null : normalizarCedula(row.abogadoCedula),
+    abogado_correo: sinAbogado ? null : row.abogadoCorreo?.toLowerCase() || null,
+    sin_abogado_motivo: sinAbogado ? row.sinAbogadoMotivo || null : null,
+    sin_documentos_motivo: row.fotosDocumentos < MIN_FOTOS_DOCUMENTOS ? row.sinDocumentosMotivo || null : null,
     intervino_autoridad: row.intervinoAutoridad,
     numero_ipat: row.intervinoAutoridad ? row.numeroIpat || null : null,
     vehiculo_operativo: row.vehiculoOperativo,
     incident_id: incident.id,
-  });
-  if (error) {
-    return { error: `La novedad #${incident.id} quedó creada, pero el detalle del siniestro no se guardó: ${error.message}` };
+  }).select("id").single();
+  if (error || !accident) {
+    return { error: `La novedad #${incident.id} quedó creada, pero el detalle del siniestro no se guardó: ${error?.message ?? "sin respuesta"}` };
   }
 
   // Siniestro con lesionados o con el vehículo no operativo: solicitud de NO APTO con aval (bloqueo provisional).
@@ -455,5 +465,5 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
   revalidatePath("/ovem");
   revalidatePath("/novedades");
   revalidatePath("/regulacion");
-  return { success: true, incidentId: incident.id as number, solicitudNoApto };
+  return { success: true, incidentId: incident.id as number, accidentId: (accident as { id: number }).id, solicitudNoApto };
 }
