@@ -13,3 +13,10 @@ export function aplicaAlTipo(tiposDelItem: readonly string[] | null | undefined,
   if (!tipoVehiculo) return true;
   return tiposDelItem.includes(tipoVehiculo);
 }
+
+/**
+ * Columnas del catálogo que lee `getChecklistItemsActivos`. `severidad_falla` es obligatoria: el motor de alertas la usa
+ * para decidir si una falla saca el vehículo de servicio (CRITICA) o solo abre una novedad. Sin ella todas las fallas
+ * entran como MEDIA y un freno dañado no dispara el aviso de NO APTO.
+ */
+export const COLUMNAS_CHECKLIST_ACTIVO = "id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo, severidad_falla";

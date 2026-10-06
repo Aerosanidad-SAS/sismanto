@@ -22,3 +22,9 @@ test("vehículo sin tipo responde la lista completa", () => {
   assert.equal(aplicaAlTipo(SOLO_AMBULANCIA, null), true);
   assert.equal(aplicaAlTipo(SOLO_AMBULANCIA, undefined), true);
 });
+
+test("el catálogo del preoperacional se lee con severidad_falla (sin ella un freno dañado entra como MEDIA)", async () => {
+  const { COLUMNAS_CHECKLIST_ACTIVO } = await import("./checklist-tipo");
+  const columnas = COLUMNAS_CHECKLIST_ACTIVO.split(",").map((c) => c.trim());
+  for (const c of ["id", "descripcion", "tipos_vehiculo", "severidad_falla"]) assert.ok(columnas.includes(c), c);
+});

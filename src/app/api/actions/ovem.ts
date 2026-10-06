@@ -19,6 +19,7 @@ import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPla
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
 import { crearSolicitudNoApto, tieneNoAptoPendiente } from "./solicitudes-no-apto";
 import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
+import { COLUMNAS_CHECKLIST_ACTIVO } from "@/lib/checklist-tipo";
 
 /** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
 function hoyOvem() {
@@ -29,7 +30,7 @@ export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACI
   const supabase = createClient();
   const { data, error } = await supabase
     .from("checklist_items")
-    .select("id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo")
+    .select(COLUMNAS_CHECKLIST_ACTIVO)
     .eq("activo", true)
     .eq("lista", lista)
     .order("orden", { ascending: true });
