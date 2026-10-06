@@ -33,18 +33,30 @@ export interface FechasEquipo {
   frec_calibracion?: string | null;
 }
 
-/** ¿Es un mantenimiento de calibración? (el tipo se escribe libre: «CALIBRACION», «Calibración»…). */
+/** Los 3 tipos de mantenimiento biomédico: ahora el formulario ofrece una lista, no texto libre (sin migración —
+ * la columna sigue siendo texto; datos históricos como «Calibración»/«CALIBRACION» se siguen leyendo igual). */
+export const TIPOS_MANTENIMIENTO_BIOMEDICO = ["PREVENTIVO", "CORRECTIVO", "CALIBRACION"] as const;
+export type TipoMantenimientoBiomedico = (typeof TIPOS_MANTENIMIENTO_BIOMEDICO)[number];
+
+/** ¿Es un mantenimiento de calibración? (datos históricos lo escribieron libre: «CALIBRACION», «Calibración»…). */
 export function esCalibracion(tipo: string | null | undefined): boolean {
   return /calibr/i.test(tipo ?? "");
 }
 
+/** ¿Es un mantenimiento correctivo? No es parte del cronograma preventivo — no mueve ninguna fecha del equipo. */
+export function esCorrectivo(tipo: string | null | undefined): boolean {
+  return /correctiv/i.test(tipo ?? "");
+}
+
 /**
- * Cambios en el equipo al registrar un mantenimiento del día `fecha`: el último (mantenimiento o calibración, según el
- * tipo) pasa a esa fecha y el próximo se recalcula desde ella. Si el equipo ya tiene un «último» más reciente
- * (se está cargando un mantenimiento viejo), no se toca nada.
+ * Cambios en el equipo al registrar un mantenimiento del día `fecha`. SISRES (3061acc, 2026-10-01):
+ * PREVENTIVO mueve último/próximo mantenimiento; CALIBRACION mueve última/próxima calibración; CORRECTIVO no
+ * mueve ninguna fecha — arreglar una falla puntual no es una revisión programada. Si el equipo ya tiene una fecha
+ * más reciente que `fecha` (se está cargando un mantenimiento viejo/atrasado), tampoco se toca nada.
  */
 export function fechasTrasMantenimiento(equipo: FechasEquipo, fecha: string, tipo: string | null | undefined): Partial<FechasEquipo> {
   if (!esDia(fecha)) return {};
+  if (esCorrectivo(tipo)) return {};
   if (esCalibracion(tipo)) {
     if (esDia(equipo.ultima_calibracion) && equipo.ultima_calibracion > fecha) return {};
     return {

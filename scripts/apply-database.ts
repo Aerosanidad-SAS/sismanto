@@ -131,7 +131,11 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "106_cotizaciones_ruta.sql",                   file: "scripts/migrations/106_cotizaciones_ruta.sql" },
   { name: "107_rol_modulo_oculto.sql",                     file: "scripts/migrations/107_rol_modulo_oculto.sql" },
   { name: "108_programacion_diaria_operadores.sql",        file: "scripts/migrations/108_programacion_diaria_operadores.sql" },
-  { name: "109_solicitudes_no_apto.sql",                  file: "scripts/migrations/109_solicitudes_no_apto.sql" },
+  { name: "109_revocar_rpc_filtracion_uuid.sql",            file: "scripts/migrations/109_revocar_rpc_filtracion_uuid.sql" },
+  { name: "110_rls_patients_una_evaluacion.sql",            file: "scripts/migrations/110_rls_patients_una_evaluacion.sql" },
+  { name: "111_fotos_vehiculo.sql",                         file: "scripts/migrations/111_fotos_vehiculo.sql" },
+  { name: "112_equipo_biomedico_foto_descripcion.sql",      file: "scripts/migrations/112_equipo_biomedico_foto_descripcion.sql" },
+  { name: "113_solicitudes_no_apto.sql",                    file: "scripts/migrations/113_solicitudes_no_apto.sql" },
   { name: "116_siniestro_datos_fotos.sql",                 file: "scripts/migrations/116_siniestro_datos_fotos.sql" },
 ];
 

@@ -1,6 +1,7 @@
 import { hoyBogota } from "@/lib/fechas";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAutorizado } from "@/lib/cron-auth";
 import { downloadFile, moveAndRenameFile, getReviewFolderId } from "@/lib/graph/client";
 import { extractInvoice, buildFileName } from "@/lib/invoice/extractor";
 
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
   }
   const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${cronSecret}`) {
+  if (!cronAutorizado(auth, cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

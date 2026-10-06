@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { clientSchema, type ClientFormData } from "@/lib/validations";
 import { crearCliente, actualizarCliente, eliminarCliente } from "@/app/api/actions/clientes";
+import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
+import { conAsterisco } from "@/lib/campos-obligatorios";
 
 export interface ClienteRow {
   id: number;
@@ -61,6 +63,13 @@ export function ClientesTab({ clientes }: ClientesTabProps) {
   const { register, handleSubmit, reset, formState } = useForm<ClientFormData>({
     resolver: zodResolver(clientSchema),
   });
+
+  // Campos opcionales que el administrador volvió obligatorios (migración 101): se marcan con *.
+  const [obligatorios, setObligatorios] = useState<string[]>([]);
+  useEffect(() => {
+    getCamposObligatoriosModulo("clientes").then(setObligatorios);
+  }, []);
+  const etq = (etiqueta: string, campo: string) => conAsterisco(etiqueta, campo, obligatorios);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -197,7 +206,7 @@ export function ClientesTab({ clientes }: ClientesTabProps) {
                 <Input id="numero" {...register("numero")} disabled={Boolean(editando)} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="digito_verificacion">Dígito de verificación</Label>
+                <Label htmlFor="digito_verificacion">{etq("Dígito de verificación", "digito_verificacion")}</Label>
                 <Input id="digito_verificacion" {...register("digito_verificacion")} />
               </div>
               <div className="space-y-1">
@@ -206,7 +215,7 @@ export function ClientesTab({ clientes }: ClientesTabProps) {
               </div>
               {CAMPOS.map((campo) => (
                 <div key={campo.name} className="space-y-1">
-                  <Label htmlFor={campo.name}>{campo.label}</Label>
+                  <Label htmlFor={campo.name}>{etq(campo.label, campo.name)}</Label>
                   <Input id={campo.name} type={campo.type ?? "text"} {...register(campo.name)} />
                 </div>
               ))}
