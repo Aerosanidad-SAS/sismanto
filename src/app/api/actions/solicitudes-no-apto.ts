@@ -110,7 +110,7 @@ export async function getSolicitudesNoAptoPendientes(): Promise<SolicitudNoApto[
  * Regulación); rechazar lo deja como estaba y exige una nota. Coordinación solo resuelve las de su centro.
  */
 export async function resolverSolicitudNoApto(id: number, decision: DecisionNoApto, nota?: string) {
-  const profile = await requireRole(["ADMIN", "COORDINACION"]);
+  const profile = await requireRole(["ADMIN", "COORDINACION", "MANTENIMIENTO"]);
   const malo = validarDecision(decision, nota);
   if (malo) return { error: malo };
 
