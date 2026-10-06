@@ -18,6 +18,8 @@ import { TableroVehiculosCard } from "@/components/regulacion/tablero-vehiculos"
 import { getTableroVehiculos } from "@/app/api/actions/tablero-vehiculos";
 import { PreoperacionalHoyCard } from "@/components/regulacion/preoperacional-hoy";
 import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
+import { CierresTurnoHoyCard } from "@/components/regulacion/cierres-turno-hoy";
+import { getCierresDeTurnoHoy } from "@/app/api/actions/cierre-turno";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
@@ -40,7 +42,7 @@ export default async function RegulacionPage({
   }
 
   const diaPedido = Array.isArray(searchParams.dia) ? searchParams.dia[0] : searchParams.dia;
-  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto] = await Promise.all([
+  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto, cierresTurno] = await Promise.all([
     getTableroRegulacion(),
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
@@ -49,6 +51,7 @@ export default async function RegulacionPage({
     getPreoperacionalHoy(),
     getProgramacionDelDia(diaPedido ?? ""),
     getSolicitudesNoAptoPendientes(),
+    getCierresDeTurnoHoy(),
   ]);
 
   // Después del Promise.all: getProgramacionDelDia materializa la programación de hoy y el tablero la lee.
@@ -104,6 +107,8 @@ export default async function RegulacionPage({
       />
 
       <PreoperacionalHoyCard datos={preoperacional} />
+
+      <CierresTurnoHoyCard datos={cierresTurno} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <VencimientosCard vencimientos={tablero.vencimientos} />
