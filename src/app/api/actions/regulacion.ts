@@ -1,13 +1,14 @@
 "use server";
 
-import { hoyBogota, sumarDias } from "@/lib/fechas";
+import { esDia, hoyBogota, sumarDias } from "@/lib/fechas";
+import { camposTripulacionDestino, serviciosMovibles, tripulacionVigente } from "@/lib/cambio-vehiculo";
 import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
 import { centroVisible } from "@/lib/auth-utils";
 import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
 import { revalidatePath } from "next/cache";
-import { toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
+import { perfilFormularioServicio, toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
 import { z } from "zod";
 
 export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERATIVO" | "FUERA_DE_SERVICIO") {
@@ -197,6 +198,124 @@ export async function unassignVehicle(assignmentId: number) {
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
   return { success: true };
+}
+
+const UUID_VEHICULO = z.string().uuid("Vehículo inválido");
+
+export interface ServicioMovibleResumen {
+  id: number;
+  tipo_servicio: string;
+  fecha_hora_programacion: string | null;
+}
+
+/**
+ * Servicios de un vehículo que todavía se pueden mover a otro: PROGRAMADO y sin desplazamiento iniciado. Con `fecha`
+ * solo los programados ese día (y los que no tienen hora de programación). Alimenta el «¿mover los N servicios?».
+ */
+export async function getServiciosMovibles(vehicleId: string, fecha?: string): Promise<ServicioMovibleResumen[]> {
+  await requireRole(["ADMIN", "REGULACION"]);
+  if (!UUID_VEHICULO.safeParse(vehicleId).success) return [];
+  const supabase = createClient() as any;
+  let q = supabase
+    .from("medical_services")
+    .select("id, tipo_servicio, fecha_hora_programacion, vehicle_id, etapa, fecha_hora_inicio_desplazamiento")
+    .eq("vehicle_id", vehicleId)
+    .eq("etapa", "PROGRAMADO")
+    .is("fecha_hora_inicio_desplazamiento", null)
+    .order("fecha_hora_programacion", { ascending: true, nullsFirst: false })
+    .limit(500);
+  if (fecha && esDia(fecha)) {
+    q = q.or(`and(fecha_hora_programacion.gte.${fecha}T00:00:00-05:00,fecha_hora_programacion.lt.${sumarDias(fecha, 1)}T00:00:00-05:00),fecha_hora_programacion.is.null`);
+  }
+  const { data } = await q;
+  const filas = (data ?? []) as any[];
+  const movibles = new Set(serviciosMovibles(filas, vehicleId));
+  return filas
+    .filter((s) => movibles.has(s.id))
+    .map((s) => ({ id: s.id, tipo_servicio: s.tipo_servicio, fecha_hora_programacion: s.fecha_hora_programacion }));
+}
+
+/**
+ * Reasigna a otro vehículo los servicios del origen que NO han iniciado desplazamiento (Daniel, 2026-10-02: el
+ * servicio pertenece al VEHÍCULO, no a la persona; Regulación lo reasigna para adaptarse a la operación). Los
+ * iniciados nunca se mueven. La tripulación del servicio se recalcula con la vigente del destino (el médico solo en
+ * los servicios de traslado, igual que el formulario). El destino debe estar OPERATIVO. Con `servicioIds` solo se
+ * mueven esos (los que no cumplan se ignoran).
+ */
+export async function reasignarServiciosAVehiculo(vehicleOrigenId: string, vehicleDestinoId: string, servicioIds?: number[]) {
+  await requireRole(["ADMIN", "REGULACION"]);
+  const o = UUID_VEHICULO.safeParse(vehicleOrigenId);
+  const d = UUID_VEHICULO.safeParse(vehicleDestinoId);
+  if (!o.success || !d.success) return { error: "Vehículo inválido" };
+  if (vehicleOrigenId === vehicleDestinoId) return { error: "El vehículo de origen y el de destino son el mismo." };
+  const ids = servicioIds === undefined ? undefined : z.array(z.number().int().positive()).max(500).safeParse(servicioIds);
+  if (ids && !ids.success) return { error: "Servicios inválidos" };
+
+  const supabase = createClient() as any;
+  const centro = centroVisible(await getProfile());
+  const { data: vehiculos } = await supabase.from("vehicles").select("id, placa, estado_actual, centro_operativo").in("id", [vehicleOrigenId, vehicleDestinoId]);
+  const origen = (vehiculos ?? []).find((v: any) => v.id === vehicleOrigenId);
+  const destino = (vehiculos ?? []).find((v: any) => v.id === vehicleDestinoId);
+  if (!origen || !destino) return { error: "No se encontró alguno de los vehículos." };
+  if (destino.estado_actual !== "OPERATIVO") return { error: `La ${destino.placa} no está operativa: elige otro vehículo de destino.` };
+  if (centro && (origen.centro_operativo !== centro.codigo || destino.centro_operativo !== centro.codigo)) {
+    return { error: "Solo puedes mover servicios entre vehículos de tu centro." };
+  }
+
+  const { data: servicios } = await supabase
+    .from("medical_services")
+    .select("id, vehicle_id, etapa, fecha_hora_inicio_desplazamiento, tipo_servicio")
+    .eq("vehicle_id", vehicleOrigenId)
+    .eq("etapa", "PROGRAMADO")
+    .is("fecha_hora_inicio_desplazamiento", null)
+    .limit(1000);
+  const aMover = serviciosMovibles((servicios ?? []) as any[], vehicleOrigenId, ids?.data);
+  if (aMover.length === 0) return { success: true as const, movidos: 0 };
+
+  const hoy = hoyBogota();
+  const { data: asignaciones } = await supabase
+    .from("vehicle_assignments")
+    .select("id, user_id, rol_en_turno, fecha_inicio")
+    .eq("vehicle_id", vehicleDestinoId)
+    .eq("activo", true)
+    .lte("fecha_inicio", hoy)
+    .or(`fecha_fin.is.null,fecha_fin.gte.${hoy}`);
+  const tripulacion = tripulacionVigente((asignaciones ?? []) as any[]);
+
+  let operationalCenterId: number | null = null;
+  if (destino.centro_operativo) {
+    const { data: c } = await supabase.from("operational_centers").select("id").eq("codigo", destino.centro_operativo).maybeSingle();
+    operationalCenterId = c?.id ?? null;
+  }
+
+  const porTipo = new Map<number, string>(((servicios ?? []) as any[]).map((s) => [s.id, s.tipo_servicio]));
+  const conMedico = aMover.filter((id) => perfilFormularioServicio(porTipo.get(id) ?? "") === "TRASLADO");
+  const sinMedico = aMover.filter((id) => !conMedico.includes(id));
+  let movidos = 0;
+  for (const [grupo, medicoDelVehiculo] of [[conMedico, true], [sinMedico, false]] as const) {
+    if (grupo.length === 0) continue;
+    // Las guardas van en el WHERE: si un servicio arrancó entre la lectura y la escritura, no se mueve.
+    const { data: hechos, error } = await supabase
+      .from("medical_services")
+      .update({
+        vehicle_id: vehicleDestinoId,
+        ...camposTripulacionDestino(tripulacion, medicoDelVehiculo),
+        ...(operationalCenterId !== null ? { operational_center_id: operationalCenterId } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", grupo)
+      .eq("vehicle_id", vehicleOrigenId)
+      .eq("etapa", "PROGRAMADO")
+      .is("fecha_hora_inicio_desplazamiento", null)
+      .select("id");
+    if (error) return { error: error.message, movidos };
+    movidos += (hechos ?? []).length;
+  }
+
+  await auditar("MODIFICAR", "servicios", vehicleOrigenId, `Reasignados ${movidos} servicios sin iniciar de ${origen.placa} a ${destino.placa}`);
+  revalidatePath("/regulacion");
+  revalidatePath("/servicios");
+  return { success: true as const, movidos };
 }
 
 export async function getFleetWithAssignments() {

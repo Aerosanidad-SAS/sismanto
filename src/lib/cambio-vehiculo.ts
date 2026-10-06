@@ -1,4 +1,4 @@
-// Reglas puras del cambio de vehículo del OVEM y de la reasignación de servicios (migración 110): sin base de datos,
+// Reglas puras del cambio de vehículo del OVEM y de la reasignación de servicios (migración 114): sin base de datos,
 // para poder probarlas. Regla de negocio (Daniel, 2026-10-02): el servicio pertenece al VEHÍCULO, no a la persona.
 
 import { diasEntre, esDia } from "./fechas";
@@ -17,7 +17,7 @@ export type RazonCodigo = (typeof RAZONES_CAMBIO)[number]["codigo"];
 /** Razones que suelen tener una novedad detrás: ahí se ofrece enlazarla. */
 export const RAZONES_CON_NOVEDAD: readonly RazonCodigo[] = ["REPARACION", "MANTENIMIENTO", "FALLA", "SINIESTRO"];
 
-/** Mismo mínimo que el CHECK de la migración 110. */
+/** Mismo mínimo que el CHECK de la migración 114. */
 export const MIN_CARACTERES_RAZON = 5;
 
 export function esRazonCodigo(valor: unknown): valor is RazonCodigo {
