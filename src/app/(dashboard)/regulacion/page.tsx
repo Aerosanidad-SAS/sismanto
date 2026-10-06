@@ -14,6 +14,8 @@ import { ProgramacionDiaria } from "@/components/regulacion/programacion-diaria"
 import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
 import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
 import { getProgramacionDelDia } from "@/app/api/actions/programacion";
+import { TableroVehiculosCard } from "@/components/regulacion/tablero-vehiculos";
+import { getTableroVehiculos } from "@/app/api/actions/tablero-vehiculos";
 import { PreoperacionalHoyCard } from "@/components/regulacion/preoperacional-hoy";
 import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
 import { HelpTrigger } from "@/components/ui/help-trigger";
@@ -48,6 +50,9 @@ export default async function RegulacionPage({
     getProgramacionDelDia(diaPedido ?? ""),
     getSolicitudesNoAptoPendientes(),
   ]);
+
+  // Después del Promise.all: getProgramacionDelDia materializa la programación de hoy y el tablero la lee.
+  const tableroVehiculos = await getTableroVehiculos();
 
   const vehiculosOperativos = (fleet as { id: string; placa: string; estado_actual: string }[])
     .filter((v) => v.estado_actual === "OPERATIVO")
@@ -89,6 +94,8 @@ export default async function RegulacionPage({
       )}
 
       <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
+
+      <TableroVehiculosCard tablero={tableroVehiculos} />
 
       <ServiciosDelDia
         servicios={(tablero.servicios as ServicioDelDia[]).filter(
