@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { submitDailyCheck, getDailyCheckForToday, getDailyCheckItemsForToday } from "@/app/api/actions/ovem";
 import { subirFotoPreoperacional } from "@/app/api/actions/vehiculo-fotos";
 import { FotosVehiculo } from "@/components/vehiculos/fotos-vehiculo";
-import { SelectorFotosNuevas } from "@/components/ovem/selector-fotos-nuevas";
+import { SelectorFotosNuevas } from "@/components/vehiculos/selector-fotos-nuevas";
 import { columnaDeLado, type FotosVehiculo as FotosVehiculoType, type LadoVehiculo } from "@/lib/vehiculo-fotos";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
