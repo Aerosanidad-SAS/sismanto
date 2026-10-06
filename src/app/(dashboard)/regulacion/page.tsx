@@ -95,6 +95,8 @@ export default async function RegulacionPage({
 
       <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
 
+      <TableroVehiculosCard tablero={tableroVehiculos} />
+
       <ServiciosDelDia
         servicios={(tablero.servicios as ServicioDelDia[]).filter(
           (s) => !prefijoDeCiudad || (s.ciudad_registro ?? "").toLowerCase().startsWith(prefijoDeCiudad)
