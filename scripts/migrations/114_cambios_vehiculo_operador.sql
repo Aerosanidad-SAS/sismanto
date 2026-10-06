@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS vehicle_operador_cambios (
                  CHECK (razon_codigo IN ('REPARACION', 'MANTENIMIENTO', 'SINIESTRO', 'FALLA', 'AJUSTE_OPERATIVO', 'OTRA')),
   razon_texto    TEXT NOT NULL CHECK (char_length(btrim(razon_texto)) >= 5),
   incident_id    INTEGER REFERENCES incidents(id) ON DELETE SET NULL,
-  registrado_por UUID REFERENCES auth.users(id),
+  registrado_por UUID REFERENCES auth.users(id) ON DELETE RESTRICT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- Un cambio mueve de algún lado a algún lado, y no de un vehículo a sí mismo.
   CHECK (vehicle_origen IS NOT NULL OR vehicle_destino IS NOT NULL),
