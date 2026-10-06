@@ -17,10 +17,11 @@ test("el motivo y la nota de rechazo son obligatorios", () => {
   assert.equal(validarDecision("RECHAZAR", "Daño menor, se revisó en sitio"), null);
 });
 
-test("Coordinación solo resuelve las de su centro; el administrador, todas; los demás, ninguna", () => {
+test("Coordinación solo resuelve las de su centro; Admin y Mantenimiento, todas; los demás, ninguna", () => {
   assert.equal(puedeResolver("COORDINACION", "CRA_BOGOTA", "CRA_BOGOTA"), true);
   assert.equal(puedeResolver("COORDINACION", "CRA_BOGOTA", "CRA_MEDELLIN"), false);
   assert.equal(puedeResolver("COORDINACION", null, "CRA_BOGOTA"), false);
   assert.equal(puedeResolver("ADMIN", null, "CRA_MEDELLIN"), true);
-  for (const r of ["OVEM", "REGULACION", "MANTENIMIENTO", "ANALISTA"]) assert.equal(puedeResolver(r, "CRA_BOGOTA", "CRA_BOGOTA"), false);
+  assert.equal(puedeResolver("MANTENIMIENTO", null, "CRA_MEDELLIN"), true);
+  for (const r of ["OVEM", "REGULACION", "ANALISTA"]) assert.equal(puedeResolver(r, "CRA_BOGOTA", "CRA_BOGOTA"), false);
 });
