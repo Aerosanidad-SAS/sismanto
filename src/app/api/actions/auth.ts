@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { auditar } from "@/lib/auditoria";
 import { enmascararIdentificador } from "@/lib/auditoria-lista";
 import { validarClaveNueva } from "@/lib/usuarios-carga";
+import { generarClaveTemporal } from "@/lib/clave-temporal";
 import { revalidatePath } from "next/cache";
 import { type UserRole, getDefaultRoute } from "@/lib/auth-utils";
 import {
@@ -358,4 +359,43 @@ export async function toggleUserActive(userId: string, activo: boolean) {
   await auditar(parsed.data.activo ? "MODIFICAR" : "ELIMINAR", "usuarios", parsed.data.userId, parsed.data.activo ? "Usuario activado" : "Usuario desactivado");
   revalidatePath("/admin/usuarios");
   return { success: true };
+}
+
+/**
+ * Restablece la clave de otra persona: genera una clave temporal, la fija en Auth y marca que debe cambiarla al
+ * entrar. Es la salida para quien olvidó la clave y no tiene un correo real al que llegue el código de «¿Olvidaste tu
+ * contraseña?» (los conductores de la carga masiva sin correo). La clave se devuelve una sola vez, para que quien
+ * restablece se la entregue por un canal privado; nunca se guarda en claro.
+ */
+export async function restablecerClaveUsuario(userId: string) {
+  const caller = await requireRole(["ADMIN", "ANALISTA"]);
+  const parsed = toggleUserActiveSchema.shape.userId.safeParse(userId);
+  if (!parsed.success) return { error: "ID de usuario inválido" };
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return { error: "SUPABASE_SERVICE_ROLE_KEY no configurado." };
+
+  const admin = createAdminClient() as any;
+  const { data: perfil } = await admin
+    .from("user_profiles")
+    .select("user_id, nombre_completo, roles!inner(codigo)")
+    .eq("user_id", parsed.data)
+    .maybeSingle();
+  if (!perfil) return { error: "Usuario no encontrado" };
+  // Misma regla que al crear o editar: un no-ADMIN no toca a un ADMIN (quedaría con su clave en la mano).
+  if (caller.role_codigo !== "ADMIN" && perfil.roles?.codigo === "ADMIN") {
+    return { error: "Solo un Administrador puede restablecer la clave de otro Administrador" };
+  }
+
+  const claveTemporal = generarClaveTemporal();
+  // Primero la marca y después la clave: si la segunda falla, lo peor es que la persona deba cambiar su clave actual.
+  const { error: errMarca } = await admin
+    .from("user_profiles")
+    .update({ debe_cambiar_password: true, updated_at: new Date().toISOString() })
+    .eq("user_id", parsed.data);
+  if (errMarca) return { error: errMarca.message };
+  const { error: errClave } = await admin.auth.admin.updateUserById(parsed.data, { password: claveTemporal });
+  if (errClave) return { error: errClave.message };
+
+  await auditar("MODIFICAR", "usuarios", parsed.data, "Clave restablecida por administración (clave temporal; debe cambiarla al entrar)");
+  revalidatePath("/admin/usuarios");
+  return { success: true as const, claveTemporal };
 }

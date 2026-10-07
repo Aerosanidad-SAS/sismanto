@@ -9,6 +9,11 @@ import { fechaBogota } from "@/lib/vencimientos";
 
 export const metadata = { title: "Portal OVEM" };
 
+// El envío del preoperacional (portal del OVEM) se ejecuta como acción de servidor bajo la configuración de esta página: guarda ~100 ítems,
+// abre las novedades y puede mandar el correo de NO APTO (token de Microsoft + envío). El tope por defecto de una función en
+// Vercel es corto para eso en hora pico; 60 s es el máximo del plan Hobby y no cuesta nada si no se usa.
+export const maxDuration = 60;
+
 export default async function OvemPage() {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
