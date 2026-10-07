@@ -2,7 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive } from "@/app/api/actions/auth";
+import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive, restablecerClaveUsuario } from "@/app/api/actions/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -245,6 +246,26 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
     setLoading(false);
   };
 
+  /** Usuario al que se le va a restablecer la clave (pide confirmación) y, ya hecho, la clave temporal que se muestra una vez. */
+  const [porRestablecer, setPorRestablecer] = useState<Usuario | null>(null);
+  const [claveNueva, setClaveNueva] = useState<{ nombre: string; clave: string } | null>(null);
+
+  const handleRestablecer = async () => {
+    if (!porRestablecer) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await restablecerClaveUsuario(porRestablecer.user_id);
+      if ("error" in r && r.error) setError(r.error);
+      else if (r.claveTemporal) setClaveNueva({ nombre: porRestablecer.nombre_completo ?? porRestablecer.email ?? "el usuario", clave: r.claveTemporal });
+    } catch {
+      setError("No se pudo restablecer la clave. Revisa la conexión e inténtalo de nuevo.");
+    } finally {
+      setPorRestablecer(null);
+      setLoading(false);
+    }
+  };
+
   const handleToggleActive = async (userId: string, activo: boolean) => {
     setLoading(true);
     setError(null);
@@ -435,6 +456,15 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => setPorRestablecer(u)}
+                        disabled={loading || editando !== null}
+                        className="px-2"
+                      >
+                        Restablecer clave
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleToggleActive(u.user_id, !u.activo)}
                         disabled={loading}
                         className={cn("px-2", u.activo ? "text-red-600" : "text-green-600")}
@@ -449,6 +479,41 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={porRestablecer !== null} onOpenChange={(abierto) => !abierto && setPorRestablecer(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restablecer clave</DialogTitle>
+            <DialogDescription>
+              {porRestablecer?.nombre_completo ?? porRestablecer?.email}: se genera una clave temporal que verás una sola vez. Al entrar, la persona
+              tendrá que elegir una clave propia. La clave actual deja de servir.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPorRestablecer(null)} disabled={loading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleRestablecer} disabled={loading}>
+              {loading ? "Restableciendo..." : "Restablecer clave"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={claveNueva !== null} onOpenChange={(abierto) => !abierto && setClaveNueva(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clave temporal de {claveNueva?.nombre}</DialogTitle>
+            <DialogDescription>
+              Entrégasela en persona o por teléfono. No se vuelve a mostrar ni queda guardada; si la pierdes, restablece la clave otra vez.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="select-all rounded-md border bg-muted p-4 text-center font-mono text-2xl font-semibold tracking-widest">{claveNueva?.clave}</p>
+          <div className="flex justify-end">
+            <Button onClick={() => setClaveNueva(null)}>Listo</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
