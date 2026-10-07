@@ -19,7 +19,6 @@ import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos
 import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
 import { crearSolicitudNoApto, tieneNoAptoPendiente } from "./solicitudes-no-apto";
-import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
 
 /** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
 function hoyOvem() {
@@ -28,13 +27,25 @@ function hoyOvem() {
 
 export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACION" = "PREOPERACIONAL") {
   const supabase = createClient();
+  // `severidad_falla` (094) decide qué falla es CRÍTICA y saca el vehículo de servicio: si no se pide aquí, el motor de
+  // alertas la recibe vacía y toda falla queda como MEDIA.
   const { data, error } = await supabase
+    .from("checklist_items")
+    .select("id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo, severidad_falla")
+    .eq("activo", true)
+    .eq("lista", lista)
+    .order("orden", { ascending: true });
+  if (!error) return data || [];
+
+  // Sin la migración 096 no existe `tipos_vehiculo` o sin la 094 `severidad_falla`: se intenta sin ellas.
+  console.error("[checklist] consulta completa falló, se reintenta con menos columnas:", error.message);
+  const { data: sinSeveridad, error: errorSinSeveridad } = await supabase
     .from("checklist_items")
     .select("id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo")
     .eq("activo", true)
     .eq("lista", lista)
     .order("orden", { ascending: true });
-  if (!error) return data || [];
+  if (!errorSinSeveridad) return sinSeveridad || [];
 
   // Sin la migración 060 no existe `lista`: el preoperacional sigue funcionando
   // con el catálogo completo (antes de 060 todo era preoperacional).
@@ -164,22 +175,16 @@ export async function submitDailyCheck(data: {
 
   // Motor de alertas: las fallas y los documentos vencidos se vuelven novedades; las críticas sacan el vehículo de
   // servicio. Un fallo aquí no debe perder el preoperacional que ya quedó guardado.
-  const porId = new Map((catalogo as any[]).map((c) => [c.id as number, c]));
+  if (catalogoSinSeveridad(catalogo as ItemCatalogo[])) {
+    console.error("[preoperacional] el catálogo no trae severidad_falla: ninguna falla se tratará como crítica");
+  }
   let hallazgos: Awaited<ReturnType<typeof registrarHallazgosPreoperacional>> | null = null;
   try {
     hallazgos = await registrarHallazgosPreoperacional(supabase, {
       vehicleId: row.vehicleId,
       reportadoPor: profile.nombre_completo || profile.email || "OVEM",
       hoy: fecha,
-      items: (row.items ?? []).map((it) => {
-        const c = porId.get(it.checklistItemId);
-        return {
-          descripcion: c?.descripcion ?? `Ítem ${it.checklistItemId}`,
-          estado: it.estado,
-          observacion: it.observacion,
-          severidadFalla: (c?.severidad_falla as SeveridadFalla | undefined) ?? null,
-        };
-      }),
+      items: itemsEvaluados(catalogo as ItemCatalogo[], row.items ?? []),
     });
   } catch (e) {
     console.error("[preoperacional] no se pudieron registrar los hallazgos:", e instanceof Error ? e.message : e);

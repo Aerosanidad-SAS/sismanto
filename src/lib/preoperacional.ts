@@ -6,6 +6,8 @@
  * Antes solo se guardaban los ítems que el OVEM tocaba: un preoperacional con 1 de 96 ítems quedaba como "OK".
  */
 
+import type { ItemEvaluado, SeveridadFalla } from "@/lib/preoperacional-alertas";
+
 export type EstadoItemPreoperacional = "OK" | "FALLA" | "NO_APLICA";
 
 export interface ResultadoItemPreoperacional {
@@ -17,6 +19,8 @@ export interface ResultadoItemPreoperacional {
 export interface ItemCatalogo {
   id: number;
   descripcion: string;
+  /** Gravedad si el ítem falla (checklist_items.severidad_falla). Sin ella toda falla cuenta como MEDIA. */
+  severidad_falla?: SeveridadFalla | null;
 }
 
 /** Devuelve el primer problema del registro, o null si está completo. */
@@ -49,4 +53,27 @@ export function validarPreoperacional(
   }
 
   return null;
+}
+
+/**
+ * Une cada resultado con su ítem del catálogo para el motor de alertas. La severidad sale del catálogo: si la consulta
+ * del catálogo no trae `severidad_falla`, ninguna falla llega a CRÍTICA y el vehículo nunca pasa a NO APTO (bug que
+ * existió: la consulta no pedía la columna). Por eso `catalogoSinSeveridad` permite avisar de ese caso en el servidor.
+ */
+export function itemsEvaluados(catalogo: ItemCatalogo[], resultados: ResultadoItemPreoperacional[]): ItemEvaluado[] {
+  const porId = new Map(catalogo.map((c) => [c.id, c]));
+  return resultados.map((r) => {
+    const c = porId.get(r.checklistItemId);
+    return {
+      descripcion: c?.descripcion ?? `Ítem ${r.checklistItemId}`,
+      estado: r.estado,
+      observacion: r.observacion,
+      severidadFalla: c?.severidad_falla ?? null,
+    };
+  });
+}
+
+/** True si el catálogo no trae la columna de severidad en ningún ítem (consulta sin la columna o migración 094 sin aplicar). */
+export function catalogoSinSeveridad(catalogo: ItemCatalogo[]): boolean {
+  return catalogo.length > 0 && catalogo.every((c) => c.severidad_falla === undefined);
 }

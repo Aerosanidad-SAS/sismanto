@@ -48,6 +48,22 @@ export interface ErrorUsuario {
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Mayúsculas sin tildes y con «_» en lugar de espacios o guiones: «Coordinación» y «CRA Medellín» valen como COORDINACION y CRA_MEDELLIN. */
+export function claveDeLista(v: unknown): string | null {
+  const t = texto(v);
+  if (!t) return null;
+  return t.normalize("NFD").replace(/\p{M}/gu, "").toUpperCase().replace(/[\s-]+/g, "_");
+}
+
+/**
+ * Filas de la plantilla que no son de datos: la guía de la fila 2 y la marca «↓ datos desde aquí» de la fila 3. Se
+ * reconocen por su contenido (no por la posición) para que, si alguien borra una de ellas, no se pierdan filas reales.
+ */
+export function esFilaDeGuia(celdas: readonly unknown[]): boolean {
+  const primera = texto(celdas[0]);
+  return primera !== null && (primera.startsWith("↓") || primera.startsWith("Solo números"));
+}
+
 export function soloDigitos(v: unknown): string | null {
   const t = texto(v);
   if (!t) return null;
@@ -70,11 +86,11 @@ export function validarUsuario(d: Record<string, unknown>, centrosValidos: Reado
   const nombre = texto(d.nombre_completo);
   if (!nombre || nombre.length < 2) falla("nombre_completo", "Falta el nombre completo.");
 
-  const rolCrudo = texto(d.rol)?.toUpperCase().replace(/\s+/g, "_") ?? null;
+  const rolCrudo = claveDeLista(d.rol);
   const rol = rolCrudo && (ROLES_CARGA as readonly string[]).includes(rolCrudo) ? (rolCrudo as RolCarga) : null;
   if (!rol) falla("rol", rolCrudo ? `«${texto(d.rol)}» no es un rol válido (${ROLES_CARGA.join(", ")}).` : "Falta el rol.");
 
-  const centroCrudo = texto(d.centro_operativo)?.toUpperCase().replace(/\s+/g, "_") ?? null;
+  const centroCrudo = claveDeLista(d.centro_operativo);
   if (centroCrudo && !centrosValidos.has(centroCrudo)) falla("centro_operativo", `«${texto(d.centro_operativo)}» no es un centro válido (${Array.from(centrosValidos).join(", ")}).`);
   if (rol && (ROLES_CON_CENTRO as readonly string[]).includes(rol) && !centroCrudo) {
     falla("centro_operativo", `El rol ${rol} necesita centro operativo: define qué vehículos y servicios ve.`);
