@@ -140,7 +140,11 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "115_cierres_turno_ovem.sql",                   file: "scripts/migrations/115_cierres_turno_ovem.sql" },
   { name: "116_siniestro_datos_fotos.sql",                 file: "scripts/migrations/116_siniestro_datos_fotos.sql" },
   { name: "117_no_apto_mantenimiento_resuelve.sql",         file: "scripts/migrations/117_no_apto_mantenimiento_resuelve.sql" },
+  { name: "118_user_profiles_sin_autoescalada.sql",          file: "scripts/migrations/118_user_profiles_sin_autoescalada.sql" },
+  { name: "119_rpc_sin_anon.sql",                            file: "scripts/migrations/119_rpc_sin_anon.sql" },
+  { name: "120_fotos_vehiculo_storage_por_dueno.sql",        file: "scripts/migrations/120_fotos_vehiculo_storage_por_dueno.sql" },
   { name: "121_capacitaciones_sin_trampa.sql",             file: "scripts/migrations/121_capacitaciones_sin_trampa.sql" },
+  { name: "122_lectura_referencias_con_perfil.sql",          file: "scripts/migrations/122_lectura_referencias_con_perfil.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
