@@ -9,6 +9,7 @@ import { ExportarPacientes } from "@/components/pacientes/exportar-pacientes";
 import { PacientesPaginacion } from "@/components/pacientes/pacientes-paginacion";
 import { ROLES_EXPORTAR_PACIENTES } from "@/lib/pacientes-export";
 import { leerBusquedaPacientes } from "@/lib/pacientes-lista";
+import { puedeDesactivarPaciente } from "@/lib/pacientes-reglas";
 
 export const metadata = { title: "Pacientes" };
 
@@ -91,6 +92,7 @@ export default async function PacientesPage({
           <PacientesTabla
             pacientes={pacientes}
             puedeEditar={puedeEditar}
+            puedeDesactivar={puedeDesactivarPaciente(profile?.role_codigo)}
             epsOptions={epsOptions}
             busqueda={q}
             obligatorios={obligatorios}
