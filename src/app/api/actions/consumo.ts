@@ -2,6 +2,7 @@
 
 import { mesesDelRango } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
+import { auditar } from "@/lib/auditoria";
 import { fuelLogSchema, metricasConsumoParamsSchema } from "@/lib/validations";
 import { isReferenceSparkCombustionPlaca, normalizePlaca } from "@/lib/fleet-reference-plates";
 
@@ -301,5 +302,6 @@ export async function registrarCombustible(data: {
     notas: row.notas ?? null,
   });
   if (error) return { error: error.message };
+  await auditar("INSERTAR", "vehiculos", row.vehicleId, `Combustible registrado: ${row.galones} gal (${row.fecha})`);
   return { success: true };
 }
