@@ -68,6 +68,8 @@ export async function crearSolicitudNoApto(args: { vehicleId: string; motivo: st
  * propio OVEM, al auto-asignarse, normalmente no podría).
  */
 export async function tieneNoAptoPendiente(vehicleId: string): Promise<boolean> {
+  // Es una acción de servidor expuesta (y usa la clave de servicio): sin sesión no responde. Todos los llamadores reales tienen sesión.
+  if (!(await getProfile())) return false;
   const { data } = await createAdminClient()
     .from("vehicle_no_apto_solicitudes")
     .select("id")
