@@ -146,6 +146,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "121_capacitaciones_sin_trampa.sql",             file: "scripts/migrations/121_capacitaciones_sin_trampa.sql" },
   { name: "122_lectura_referencias_con_perfil.sql",          file: "scripts/migrations/122_lectura_referencias_con_perfil.sql" },
   { name: "123_regulacion_clientes_y_prestadores.sql",          file: "scripts/migrations/123_regulacion_clientes_y_prestadores.sql" },
+  { name: "123_servicios_cierre_automatico.sql",           file: "scripts/migrations/123_servicios_cierre_automatico.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
