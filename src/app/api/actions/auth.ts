@@ -159,11 +159,11 @@ export async function signIn(identificador: string, password: string) {
     }
     // Mismo mensaje para cédula inexistente y clave errada, para no revelar
     // qué cédulas tienen cuenta. Solo el bloqueo por intentos se distingue.
-    if (error.status === 429) return { error: "Demasiados intentos. Espere unos minutos e intente de nuevo." };
+    if (error.status === 429) return { error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo." };
     // Sin status (fallo de red) o 5xx: Auth no respondió. No es una clave
     // errada, y decirlo así haría pasar una caída por un problema del usuario.
     if (!error.status || error.status >= 500) {
-      return { error: "No se pudo conectar con el servicio de autenticación. Intente de nuevo en unos minutos." };
+      return { error: "No se pudo conectar con el servicio de autenticación. Inténtalo de nuevo en unos minutos." };
     }
     return { error: CREDENCIALES_INVALIDAS };
   }
@@ -222,7 +222,10 @@ export async function cambiarClaveInicial(nueva: string, confirmacion: string) {
   if (problema) return { error: problema };
 
   const { error } = await admin.auth.admin.updateUserById(user.id, { password: nueva });
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[auth] no se pudo cambiar la clave inicial:", error.message);
+    return { error: "No se pudo guardar la clave. Prueba con otra más larga o con letras y números; si sigue fallando, avisa a un administrador." };
+  }
   await admin.from("user_profiles").update({ debe_cambiar_password: false, updated_at: new Date().toISOString() }).eq("user_id", user.id);
   await auditar("MODIFICAR", "usuarios", user.id, "El usuario cambió su clave inicial");
   revalidatePath("/");

@@ -7,6 +7,11 @@ export const MINUTOS_VIGENCIA_CODIGO = 15;
 export const MAX_INTENTOS_CODIGO = 5;
 export const LARGO_MINIMO_CONTRASENA = 8; // mismo mínimo que al crear usuarios (validations.ts)
 
+/** Correo inventado por la carga masiva para quien no tiene uno (usuario.<cédula>@sismanto.invalid): no recibe nada. */
+export function esCorreoInterno(email: string): boolean {
+  return /@sismanto\.(invalid|test)$/i.test(email.trim());
+}
+
 /** Código de 6 dígitos con un generador criptográfico (incluye ceros a la izquierda). */
 export function generarCodigo(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");

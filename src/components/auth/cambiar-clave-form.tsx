@@ -22,14 +22,20 @@ export function CambiarClaveForm({ nombre, destino }: { nombre: string; destino:
     e.preventDefault();
     setError(null);
     setCargando(true);
-    const r = await cambiarClaveInicial(nueva, confirmacion);
-    setCargando(false);
-    if ("error" in r && r.error) {
-      setError(r.error);
-      return;
+    try {
+      const r = await cambiarClaveInicial(nueva, confirmacion);
+      if ("error" in r && r.error) {
+        setError(r.error);
+        return;
+      }
+      router.push(destino);
+      router.refresh();
+    } catch {
+      // Sin señal: antes el botón se quedaba en «Guardando…» para siempre.
+      setError("No se pudo guardar la clave. Revisa tu señal e inténtalo de nuevo.");
+    } finally {
+      setCargando(false);
     }
-    router.push(destino);
-    router.refresh();
   };
 
   return (
@@ -56,7 +62,7 @@ export function CambiarClaveForm({ nombre, destino }: { nombre: string; destino:
               {error}
             </p>
           )}
-          <Button type="submit" className="w-full" disabled={cargando}>
+          <Button type="submit" className="min-h-11 w-full" disabled={cargando}>
             {cargando ? "Guardando…" : "Guardar y entrar"}
           </Button>
         </form>
