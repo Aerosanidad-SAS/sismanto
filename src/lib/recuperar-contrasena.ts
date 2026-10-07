@@ -34,6 +34,14 @@ export function estadoCodigo(c: { expira_en: string; usado: boolean; intentos: n
   return "valido";
 }
 
+/**
+ * Cómo se reclama un intento sobre un código ya leído: la actualización solo vale si `intentos` sigue siendo
+ * `esperado` (compare-and-swap). Quien la pierde no compara el código. Ver `restablecerContrasena`.
+ */
+export function reclamoDeIntento(fila: { id: number; intentos: number }): { id: number; esperado: number; nuevo: number } {
+  return { id: fila.id, esperado: fila.intentos, nuevo: fila.intentos + 1 };
+}
+
 /** Cédula normalizada (sin puntos ni espacios) o null si no parece una cédula; mismo criterio que el login. */
 export function normalizarCedula(valor: string): string | null {
   const cedula = valor.replace(/[\s.]/g, "");
