@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -48,13 +49,18 @@ const CAMPOS: { name: keyof ClientFormData; label: string; type?: string }[] = [
   { name: "correo", label: "Correo", type: "email" },
 ];
 
+const TODAS = "__todas__";
+
 interface ClientesTabProps {
   clientes: ClienteRow[];
+  /** Desactivar clientes es solo de ADMIN (en SISRES el Regulador no puede; ver clientes-reglas.ts). */
+  puedeEliminar: boolean;
 }
 
-export function ClientesTab({ clientes }: ClientesTabProps) {
+export function ClientesTab({ clientes, puedeEliminar }: ClientesTabProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
+  const [ciudad, setCiudad] = useState(TODAS);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<ClienteRow | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,13 +77,19 @@ export function ClientesTab({ clientes }: ClientesTabProps) {
   }, []);
   const etq = (etiqueta: string, campo: string) => conAsterisco(etiqueta, campo, obligatorios);
 
+  const ciudades = useMemo(
+    () => Array.from(new Set(clientes.map((c) => c.ciudad).filter((c): c is string => Boolean(c)))).sort((a, b) => a.localeCompare(b, "es")),
+    [clientes]
+  );
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return clientes;
     return clientes.filter(
-      (c) => c.nombre.toLowerCase().includes(q) || c.numero.toLowerCase().includes(q)
+      (c) =>
+        (ciudad === TODAS || c.ciudad === ciudad) &&
+        (!q || c.nombre.toLowerCase().includes(q) || c.numero.toLowerCase().includes(q))
     );
-  }, [clientes, busqueda]);
+  }, [clientes, busqueda, ciudad]);
 
   const abrirNuevo = () => {
     setEditando(null);
@@ -129,12 +141,30 @@ export function ClientesTab({ clientes }: ClientesTabProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          placeholder="Buscar por nombre o NIT…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="sm:max-w-sm"
-        />
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          <Input
+            placeholder="Buscar por nombre o NIT…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            aria-label="Buscar clientes"
+            className="sm:max-w-sm"
+          />
+          {ciudades.length > 1 && (
+            <Select value={ciudad} onValueChange={setCiudad}>
+              <SelectTrigger aria-label="Ciudad" className="w-48">
+                <SelectValue placeholder="Ciudad" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODAS}>Ciudad: todas</SelectItem>
+                {ciudades.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         <Button onClick={abrirNuevo}>Nuevo cliente</Button>
       </div>
 
@@ -175,9 +205,11 @@ export function ClientesTab({ clientes }: ClientesTabProps) {
                     <Button variant="outline" size="sm" onClick={() => abrirEdicion(c)}>
                       Editar
                     </Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleEliminar(c)}>
-                      Eliminar
-                    </Button>
+                    {puedeEliminar && (
+                      <Button variant="destructive" size="sm" onClick={() => handleEliminar(c)}>
+                        Eliminar
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

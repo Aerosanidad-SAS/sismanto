@@ -6,8 +6,8 @@ import { z } from "zod";
 /** Áreas del select de registroProveedores.php (no tienen tabla propia en SISRES). */
 export const AREAS_PRESTADOR = ["BIOMEDICA", "SISTEMAS", "TALENTO HUMANO", "CRA MEDELLIN", "CRA BOGOTA", "MANTENIMIENTO"] as const;
 
-/** Quiénes crean y editan (RLS de la 058: INSERT/UPDATE a ADMIN y ANALISTA). */
-export const ROLES_EDITAR_PRESTADORES = ["ADMIN", "ANALISTA"] as const;
+/** Quiénes crean y editan (RLS: 058 para ADMIN y ANALISTA; la 123 suma a REGULACION, como en SISRES). Borrar sigue siendo solo de ADMIN. */
+export const ROLES_EDITAR_PRESTADORES = ["ADMIN", "ANALISTA", "REGULACION"] as const;
 
 export function puedeEditarPrestadores(rol: string | null | undefined): boolean {
   return (ROLES_EDITAR_PRESTADORES as readonly string[]).includes(rol ?? "");
