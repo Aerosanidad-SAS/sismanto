@@ -3,13 +3,13 @@
  * Requiere SUPABASE_SERVICE_ROLE_KEY y NEXT_PUBLIC_SUPABASE_URL en .env.local
  *
  * Uso (desde la raíz del repo):
- *   npx tsx scripts/set-auth-passwords.ts aero123
+ *   npx tsx scripts/set-auth-passwords.ts '<contraseña>'
  *
  * Solo los correos QA de scripts/qa-test-users.sql:
- *   npx tsx scripts/set-auth-passwords.ts aero123
+ *   npx tsx scripts/set-auth-passwords.ts '<contraseña>'
  *
  * Todos los usuarios del proyecto (¡cuidado en producción!):
- *   npx tsx scripts/set-auth-passwords.ts aero123 --all
+ *   npx tsx scripts/set-auth-passwords.ts '<contraseña>' --all
  */
 import * as fs from "fs";
 import * as path from "path";
