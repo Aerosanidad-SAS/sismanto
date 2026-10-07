@@ -15,6 +15,7 @@ import { hoyBogota } from "@/lib/fechas";
 import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
 import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
+import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import {
   EXPORT_MAX_FILAS,
@@ -501,7 +502,14 @@ export async function marcarPasoServicio(
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   if (nueva) await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
-  await auditar("MODIFICAR", "servicios", data[0].id, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`);
+  // Si lo marca el ADMIN (no la tripulación), el detalle lo dice: el actor de la bitácora ya es él.
+  const rol = (await getProfile())?.role_codigo;
+  await auditar(
+    "MODIFICAR",
+    "servicios",
+    data[0].id,
+    detalleConAtribucion(rol, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`)
+  );
   revalidatePath("/servicios");
   revalidatePath("/ovem");
   return { success: true };

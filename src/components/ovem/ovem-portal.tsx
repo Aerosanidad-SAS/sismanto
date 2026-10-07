@@ -59,6 +59,7 @@ import {
   type RespuestasChecklist,
 } from "@/lib/ovem-portal";
 import { CierreTurnoForm } from "./cierre-turno-form";
+import { CierresTurnoConsulta } from "./cierres-turno-consulta";
 import { CombustibleForm } from "./combustible-form";
 import { SiniestroForm } from "./siniestro-form";
 import { DocumentosVehiculo } from "./documentos-vehiculo";
@@ -99,6 +100,12 @@ const FLOW_LABEL: Record<Exclude<Flow, null>, string> = {
   siniestro: "Siniestro vial",
   servicios: "Mis servicios",
   cierre: "Cerrar turno",
+};
+
+/** El Administrador no «tiene» servicios ni cierra turnos: los consulta. */
+const FLOW_LABEL_ADMIN: Partial<Record<Exclude<Flow, null>, string>> = {
+  servicios: "Servicios programados y en curso",
+  cierre: "Cierres de turno (consulta)",
 };
 
 /** Referencia estable: un `[]` por defecto se recrearía en cada render y dispararía los efectos que dependen de él. */
@@ -514,14 +521,21 @@ export function OvemPortal({
                 : "Servicios asignados por Regulación",
           },
         ]
-      : []),
+      : [
+          {
+            flow: "servicios" as const,
+            icon: Ambulance,
+            titulo: FLOW_LABEL_ADMIN.servicios as string,
+            detalle: `${serviciosActivos.length} programado${serviciosActivos.length === 1 ? "" : "s"} o en curso`,
+          },
+        ]),
     { flow: "preoperacional", icon: ClipboardCheck, titulo: "Iniciar preoperacional", detalle: "Checklist diario, kilometraje y documentos" },
     { flow: "combustible", icon: Fuel, titulo: "Registrar tanqueo", detalle: "Galones, kilometraje y recibo" },
     { flow: "novedad", icon: AlertCircle, titulo: "Reportar novedad", detalle: "Falla o daño del vehículo" },
     { flow: "siniestro", icon: Siren, titulo: "Reportar siniestro", detalle: "Choque o accidente de tránsito" },
     ...(viewerRole === "OVEM"
       ? [{ flow: "cierre" as const, icon: LogOut, titulo: "Cerrar turno", detalle: "Km final, novedades y entrega del vehículo" }]
-      : []),
+      : [{ flow: "cierre" as const, icon: LogOut, titulo: FLOW_LABEL_ADMIN.cierre as string, detalle: "Quién cerró hoy y qué vehículos faltan" }]),
   ];
 
   /** Hora de la última actualización, aviso de servicio nuevo y botón manual (solo para el OVEM, en el menú y «Mis servicios»). */
@@ -625,24 +639,26 @@ export function OvemPortal({
           <ArrowLeft className="h-4 w-4" />
           Volver
         </Button>
-        <p className="text-sm text-muted-foreground">{FLOW_LABEL[flow]}</p>
+        <p className="text-sm text-muted-foreground">{(viewerRole !== "OVEM" && FLOW_LABEL_ADMIN[flow]) || FLOW_LABEL[flow]}</p>
       </div>
 
       {flow === "servicios" && (
         <>
           {barraActualizacion}
-          <MisServicios servicios={servicios as any} />
+          <MisServicios servicios={servicios as any} modoAdmin={viewerRole !== "OVEM"} />
         </>
       )}
 
-      {flow !== "servicios" && vehicles.length === 1 && selectedVehicle && (
+      {flow === "cierre" && viewerRole !== "OVEM" && <CierresTurnoConsulta />}
+
+      {flow !== "servicios" && !(flow === "cierre" && viewerRole !== "OVEM") && vehicles.length === 1 && selectedVehicle && (
         <p className="text-sm text-foreground">
           Vehículo: <span className="font-semibold">{selectedVehicle.placa}</span>
           {selectedVehicle.marca ? ` — ${selectedVehicle.marca}` : ""}
         </p>
       )}
 
-      {flow !== "servicios" && vehicles.length !== 1 && (
+      {flow !== "servicios" && !(flow === "cierre" && viewerRole !== "OVEM") && vehicles.length !== 1 && (
         <Card>
           <CardHeader>
             <CardTitle>Vehículo</CardTitle>
