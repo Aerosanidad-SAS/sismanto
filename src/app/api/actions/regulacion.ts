@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { perfilFormularioServicio, toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
 import { tieneNoAptoPendiente } from "./solicitudes-no-apto";
 import { z } from "zod";
+import { inicioVentanaAbiertos } from "@/lib/servicios-abiertos";
 
 export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERATIVO" | "FUERA_DE_SERVICIO") {
   const profile = await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
@@ -410,15 +411,25 @@ export async function getTableroRegulacion() {
   const centro = centroVisible(await getProfile());
   const hoy = fechaBogota(new Date());
 
-  // Servicios: los abiertos de cualquier día más los cerrados de hoy.
+  // Servicios: los abiertos de hoy y de los últimos días, más los cerrados de hoy. Los abiertos más antiguos no entran
+  // (ver `servicios-abiertos.ts`): se cuentan aparte en `antiguosSinCerrar`.
+  const desde = inicioVentanaAbiertos(hoy);
   let serviciosQuery = supabase
     .from("medical_services")
     .select("*, vehicles(placa)")
-    .or(`etapa.in.(PROGRAMADO,CURSO),fecha_hora_programacion.gte.${hoy}T00:00:00-05:00,fecha_hora_registro.gte.${hoy}T00:00:00-05:00`)
+    .or(`and(etapa.in.(PROGRAMADO,CURSO),fecha_hora_programacion.gte.${desde}T00:00:00-05:00),fecha_hora_programacion.gte.${hoy}T00:00:00-05:00,fecha_hora_registro.gte.${hoy}T00:00:00-05:00`)
     .order("fecha_hora_programacion", { ascending: true, nullsFirst: false })
     .limit(300);
   if (centro) serviciosQuery = serviciosQuery.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
   const { data: servicios } = await serviciosQuery;
+
+  let antiguosQuery = supabase
+    .from("medical_services")
+    .select("id", { count: "exact", head: true })
+    .in("etapa", ["PROGRAMADO", "CURSO"])
+    .lt("fecha_hora_programacion", `${desde}T00:00:00-05:00`);
+  if (centro) antiguosQuery = antiguosQuery.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+  const { count: antiguosSinCerrar } = await antiguosQuery;
 
   const ids = new Set<string>();
   for (const s of (servicios ?? []) as any[]) {
@@ -473,5 +484,5 @@ export async function getTableroRegulacion() {
     dias_restantes: a.dias_restantes,
   }));
 
-  return { hoy, servicios: serviciosDelDia, vencimientos, mantenimiento };
+  return { hoy, servicios: serviciosDelDia, antiguosSinCerrar: antiguosSinCerrar ?? 0, vencimientos, mantenimiento };
 }

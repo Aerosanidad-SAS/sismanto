@@ -105,6 +105,7 @@ export default async function RegulacionPage({
       <TableroVehiculosCard tablero={tableroVehiculos} />
 
       <ServiciosDelDia
+        antiguosSinCerrar={tablero.antiguosSinCerrar}
         servicios={(tablero.servicios as ServicioDelDia[]).filter(
           (s) => !prefijoDeCiudad || (s.ciudad_registro ?? "").toLowerCase().startsWith(prefijoDeCiudad)
         )}
