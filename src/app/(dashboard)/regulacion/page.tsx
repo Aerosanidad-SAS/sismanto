@@ -29,6 +29,10 @@ export const metadata = { title: "Sala de control" };
 
 const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];
 
+// La sala de control lee ~15 consultas por carga y desde aquí se programan titulares y se traspasan servicios (acciones de servidor):
+// se sube el tope por defecto de la función (60 s es el máximo de Hobby).
+export const maxDuration = 60;
+
 export default async function RegulacionPage({
   searchParams,
 }: {
