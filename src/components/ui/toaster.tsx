@@ -71,8 +71,12 @@ function ToastCard({ item }: { item: ToastItem }) {
  * assertive (`role="alert"`) for errors. Use `toast.success("Guardado")`, `toast.error(...)`,
  * or `toast({ title, action: { label: "Deshacer", onClick } })`.
  */
+// Stable reference: an inline `() => []` returns a new array on every call and makes React warn about an infinite loop.
+const EMPTY_TOASTS: ToastItem[] = [];
+const getServerSnapshot = () => EMPTY_TOASTS;
+
 export function Toaster() {
-  const items = React.useSyncExternalStore(toastStore.subscribe, toastStore.getSnapshot, () => []);
+  const items = React.useSyncExternalStore(toastStore.subscribe, toastStore.getSnapshot, getServerSnapshot);
   const polite = items.filter((t) => t.tone !== "error");
   const assertive = items.filter((t) => t.tone === "error");
 
