@@ -1,16 +1,17 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatNumber } from "@/lib/utils";
+import { paginarLista } from "@/lib/paginacion-lista";
 
 type Fila = Record<string, string | number | boolean | null>;
 const TODOS = "__todos__";
-const MAX_FILAS = 300;
 
-/** Directorio de solo lectura con búsqueda libre y filtros por columna (p. ej. ciudad, área). */
+/** Directorio con búsqueda libre, filtros por columna (p. ej. ciudad, área) y paginador arriba y abajo (100 por página). */
 export function DirectorioTabla({
   filas,
   columnas,
@@ -27,6 +28,7 @@ export function DirectorioTabla({
 }) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<Record<string, string>>({});
+  const [pagina, setPagina] = useState(1);
 
   const opciones = useMemo(
     () =>
@@ -48,13 +50,41 @@ export function DirectorioTabla({
     );
   }, [filas, columnas, q, sel]);
 
+  const vista = paginarLista(visibles, pagina);
+
+  const paginador = vista.paginas > 1 && (
+    <nav aria-label="Paginación" className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm text-muted-foreground">
+        Mostrando {formatNumber(vista.desde)}–{formatNumber(vista.hasta)} de {formatNumber(vista.total)} · Página {vista.pagina} de{" "}
+        {vista.paginas}
+      </p>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" size="sm" disabled={vista.pagina <= 1} onClick={() => setPagina(vista.pagina - 1)}>
+          Anterior
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={vista.pagina >= vista.paginas}
+          onClick={() => setPagina(vista.pagina + 1)}
+        >
+          Siguiente
+        </Button>
+      </div>
+    </nav>
+  );
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Input
           placeholder="Buscar por nombre, documento, teléfono…"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPagina(1);
+          }}
           className="sm:col-span-2"
           aria-label="Buscar"
         />
@@ -62,7 +92,10 @@ export function DirectorioTabla({
           <Select
             key={f.campo}
             value={sel[f.campo] || TODOS}
-            onValueChange={(v) => setSel((prev) => ({ ...prev, [f.campo]: v === TODOS ? "" : v }))}
+            onValueChange={(v) => {
+              setSel((prev) => ({ ...prev, [f.campo]: v === TODOS ? "" : v }));
+              setPagina(1);
+            }}
           >
             <SelectTrigger aria-label={f.titulo}>
               <SelectValue placeholder={f.titulo} />
@@ -81,8 +114,9 @@ export function DirectorioTabla({
 
       <p className="text-sm text-muted-foreground">
         {formatNumber(visibles.length)} de {formatNumber(filas.length)} registros
-        {visibles.length > MAX_FILAS && ` · se muestran los primeros ${MAX_FILAS}; afina la búsqueda`}
       </p>
+
+      {paginador}
 
       <div className="overflow-x-auto">
         <Table>
@@ -102,7 +136,7 @@ export function DirectorioTabla({
                 </TableCell>
               </TableRow>
             )}
-            {visibles.slice(0, MAX_FILAS).map((r, i) => (
+            {vista.filas.map((r, i) => (
               <TableRow key={String(r.id ?? i)}>
                 {columnas.map((c) => (
                   <TableCell key={c.campo} className={c.campo === "nombre" ? "font-medium" : undefined}>
@@ -115,6 +149,8 @@ export function DirectorioTabla({
           </TableBody>
         </Table>
       </div>
+
+      {paginador}
     </div>
   );
 }

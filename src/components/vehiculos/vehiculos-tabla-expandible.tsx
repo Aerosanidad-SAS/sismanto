@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Table,
@@ -11,6 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { coincideVehiculo } from "@/lib/vehiculos-busqueda";
 import { formatDateShort } from "@/lib/utils";
 import { VehicleKilometrajeForm } from "@/components/vehiculos/vehicle-kilometraje-form";
 import type { Vehicle } from "@/types";
@@ -19,7 +21,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function VehiculosTablaExpandible({
-  vehicles,
+  vehicles: todos,
   puedeEditarEstado = false,
 }: {
   vehicles: Vehicle[];
@@ -27,6 +29,8 @@ export function VehiculosTablaExpandible({
   puedeEditarEstado?: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const vehicles = useMemo(() => todos.filter((v) => coincideVehiculo(v, busqueda)), [todos, busqueda]);
   const toggle = (id: string) => setOpenId((x) => (x === id ? null : id));
 
   const renderDetail = (vehicle: Vehicle) => (
@@ -48,6 +52,24 @@ export function VehiculosTablaExpandible({
 
   return (
     <>
+      <div className="mb-4 space-y-1">
+        <Input
+          type="search"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar por placa, tipo, marca, modelo o ciudad…"
+          aria-label="Buscar vehículos"
+          className="sm:max-w-sm"
+        />
+        <p className="text-sm text-muted-foreground" role="status">
+          {vehicles.length} de {todos.length} vehículos
+        </p>
+      </div>
+
+      {vehicles.length === 0 && (
+        <p className="rounded-md border p-4 text-center text-sm text-muted-foreground">Ningún vehículo coincide con la búsqueda.</p>
+      )}
+
       {/* Móvil: lista de tarjetas con los datos clave y las acciones a la vista */}
       <ul className="space-y-3 md:hidden">
         {vehicles.map((vehicle) => {
