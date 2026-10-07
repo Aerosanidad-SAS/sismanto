@@ -69,7 +69,7 @@ export function ConfiguracionTabs({
       </TabsContent>
 
       <TabsContent value="clientes">
-        <ClientesTab clientes={clientes} />
+        <ClientesTab clientes={clientes} puedeEliminar={esAdmin} />
       </TabsContent>
 
       <TabsContent value="servicios">

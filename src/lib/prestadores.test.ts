@@ -20,10 +20,12 @@ describe("prestadorSchema", () => {
 });
 
 describe("puedeEditarPrestadores", () => {
-  it("solo ADMIN y ANALISTA (igual que la RLS de la 058)", () => {
+  it("ADMIN, ANALISTA y REGULACION (igual que la RLS de la 058 y la 123)", () => {
     assert.equal(puedeEditarPrestadores("ADMIN"), true);
     assert.equal(puedeEditarPrestadores("ANALISTA"), true);
-    assert.equal(puedeEditarPrestadores("REGULACION"), false);
+    assert.equal(puedeEditarPrestadores("REGULACION"), true);
+    assert.equal(puedeEditarPrestadores("MEDICO"), false);
+    assert.equal(puedeEditarPrestadores("VISTA"), false);
     assert.equal(puedeEditarPrestadores(null), false);
   });
 });

@@ -325,7 +325,7 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         href: "/clientes",
         icon: Handshake,
         roles: ["ADMIN", "REGULACION", "ANALISTA"],
-        hint: "Directorio de clientes y aseguradoras (consulta).",
+        hint: "Clientes y aseguradoras: consulta, registro y edición.",
       },
       {
         name: "Proveedores",
