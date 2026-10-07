@@ -3,6 +3,7 @@ import {
   hallazgosPreoperacional,
   novedadesDeHallazgos,
   resumirHallazgos,
+  type EstadoAviso,
   type ItemEvaluado,
   type ResumenHallazgos,
 } from "@/lib/preoperacional-alertas";
@@ -33,7 +34,7 @@ export async function registrarHallazgosPreoperacional(
     .maybeSingle();
 
   const hallazgos = hallazgosPreoperacional(args.items, vehiculo ?? {}, args.hoy);
-  const resumen = resumirHallazgos(hallazgos);
+  let resumen = resumirHallazgos(hallazgos);
   const novedades = novedadesDeHallazgos(hallazgos, args.hoy);
   if (novedades.length === 0) return { ...resumen, novedadesCreadas: 0 };
 
@@ -72,6 +73,12 @@ export async function registrarHallazgosPreoperacional(
     );
   }
   // Aviso inmediato solo por los críticos que se abren ahora: un crítico que sigue abierto no repite el correo cada día.
-  if (criticosNuevos.length > 0) await avisarVehiculoNoApto(supabase, { vehicleId: args.vehicleId, hallazgos: criticosNuevos, reportadoPor: args.reportadoPor });
+  let aviso: EstadoAviso = "YA_REPORTADO";
+  if (criticosNuevos.length > 0) {
+    const r = await avisarVehiculoNoApto(supabase, { vehicleId: args.vehicleId, hallazgos: criticosNuevos, reportadoPor: args.reportadoPor });
+    // Sin destinatarios o sin correo configurado el aviso no salió: el conductor debe saberlo para llamar.
+    aviso = r.enviado && r.destinatarios > 0 ? "ENVIADO" : "FALLO";
+  }
+  resumen = resumirHallazgos(hallazgos, aviso);
   return { ...resumen, novedadesCreadas: creadas };
 }

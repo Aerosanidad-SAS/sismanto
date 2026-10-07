@@ -1,5 +1,5 @@
 import { armarAlertaNoApto } from "@/lib/hallazgos-criticos";
-import { enviarCorreo } from "@/lib/notifications/email";
+import { emailConfigurado, enviarCorreo } from "@/lib/notifications/email";
 
 // Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este repo (ver CLAUDE.md).
 type Cliente = any;
@@ -48,6 +48,12 @@ export async function avisarVehiculoNoApto(
     if (correos.size === 0) {
       console.warn("[no-apto] " + v.placa + ": sin destinatarios (revisa los correos del CRA y ALERTA_NO_APTO_CORREOS)");
       return { destinatarios: 0, enviado: false };
+    }
+
+    if (!emailConfigurado()) {
+      // enviarCorreo responde «ok» sin enviar cuando Azure no está configurado: aquí no se puede dar por avisado.
+      console.error("[no-apto] " + v.placa + ": el correo no está configurado (Azure/NOTIFICATIONS_MAIL_FROM); nadie fue avisado");
+      return { destinatarios: correos.size, enviado: false };
     }
 
     const cuando = new Intl.DateTimeFormat("es-CO", { timeZone: ZONA, dateStyle: "short", timeStyle: "short", hour12: false }).format(new Date());
