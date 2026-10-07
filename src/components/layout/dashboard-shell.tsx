@@ -24,6 +24,7 @@ import { signOut, type UserProfile, type UserRole } from "@/app/api/actions/auth
 import { getCompanyBranding } from "@/app/api/actions/company-settings";
 import { Button } from "@/components/ui/button";
 import { RoleSwitcher, RoleSwitchBanner } from "@/components/dev/role-switcher";
+import { CampanaAlertas } from "@/components/layout/campana-alertas";
 import { NAV_GROUPS } from "@/lib/navegacion";
 import { moduloVisible } from "@/lib/permisos";
 import { getRedirectFor } from "./role-redirects";
@@ -412,6 +413,7 @@ export function DashboardShell({
             showCollapsedChrome && "lg:p-2"
           )}
         >
+          <CampanaAlertas colapsado={showCollapsedChrome} onNavegar={() => setMobileNavOpen(false)} />
           <RoleSwitcher collapsed={showCollapsedChrome} />
           <form action={signOut}>
             <button
