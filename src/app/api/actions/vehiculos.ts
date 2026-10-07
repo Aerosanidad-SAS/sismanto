@@ -56,6 +56,7 @@ export async function registrarKilometrajeVehiculo(input: z.infer<typeof registr
   );
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", vid, `Kilometraje registrado: ${kmVal} km (${fechaVal})`);
   revalidatePath("/vehiculos");
   revalidatePath(`/vehiculos/${vid}`);
   revalidatePath("/");
@@ -284,6 +285,7 @@ export async function eliminarVehiculo(id: string) {
 
   const { error } = await supabase.from("vehicles").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "vehiculos", idParsed.data, "Vehículo eliminado");
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   return { success: true };
