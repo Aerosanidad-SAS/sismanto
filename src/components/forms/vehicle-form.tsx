@@ -23,6 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { crearVehiculo, actualizarVehiculo } from "@/app/api/actions/vehiculos";
+import { subirFotoVehiculo } from "@/app/api/actions/vehiculo-fotos";
+import { SelectorFotosNuevas } from "@/components/vehiculos/selector-fotos-nuevas";
+import type { LadoVehiculo } from "@/lib/vehiculo-fotos";
 import type { OperationalCenter, Vehicle } from "@/types";
 
 interface VehicleFormProps {
@@ -35,6 +38,8 @@ interface VehicleFormProps {
 export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Fotos elegidas al crear (el vehículo todavía no tiene id para subirlas); se suben justo después de crearlo. */
+  const [fotosSeleccionadas, setFotosSeleccionadas] = useState<Partial<Record<LadoVehiculo, File>>>({});
   const isEditing = !!vehicle;
 
   const {
@@ -114,9 +119,23 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
         : await crearVehiculo(data);
       if (result.error) {
         setError(result.error);
-      } else {
-        onSuccess?.();
+        return;
       }
+      // Las fotos elegidas se suben ahora: el vehículo recién existe, hace falta su id.
+      const nuevoId = !isEditing ? (result as { vehicleId?: string | null }).vehicleId : null;
+      if (nuevoId && Object.keys(fotosSeleccionadas).length > 0) {
+        const subidas = await Promise.all(
+          (Object.entries(fotosSeleccionadas) as [LadoVehiculo, File][]).map(
+            async ([lado, file]) => [lado, await subirFotoVehiculo(nuevoId, lado, file)] as const
+          )
+        );
+        const fallos = subidas.filter(([, r]) => !("ruta" in r)).length;
+        if (fallos > 0) {
+          setError(`El vehículo se creó, pero ${fallos} foto${fallos === 1 ? "" : "s"} no se pudo subir. Edítalo para volver a intentarlo.`);
+          return;
+        }
+      }
+      onSuccess?.();
     } catch {
       setError("Error al guardar el vehículo. Intente nuevamente.");
     } finally {
@@ -437,6 +456,25 @@ export function VehicleForm({ centros, vehicle, onSuccess, onCancel }: VehicleFo
           placeholder="Observaciones generales del vehículo..."
         />
       </div>
+
+      {!isEditing && (
+        <div>
+          <Label>Fotos del vehículo (opcional)</Label>
+          <div className="mt-1">
+            <SelectorFotosNuevas
+              valores={fotosSeleccionadas}
+              onChange={(lado, file) =>
+                setFotosSeleccionadas((prev) => {
+                  const next = { ...prev };
+                  if (file) next[lado] = file;
+                  else delete next[lado];
+                  return next;
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end gap-3 pt-2">
         {onCancel && (

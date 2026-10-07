@@ -7,6 +7,7 @@ import { hoyBogota } from "@/lib/fechas";
 import { avisarVehiculoNoApto } from "@/lib/notifications/alerta-no-apto";
 import { puedeResolver, validarDecision, validarMotivo, type DecisionNoApto, type OrigenSolicitud } from "@/lib/solicitud-no-apto";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getProfile, requireRole } from "./auth";
 
 // Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este repo (ver CLAUDE.md).
@@ -59,6 +60,25 @@ export async function crearSolicitudNoApto(args: { vehicleId: string; motivo: st
   return { success: true, id: data.id as number, yaPendiente: false };
 }
 
+/**
+ * ¿Tiene este vehículo una solicitud de NO APTO pendiente? Para bloquear asignarle tripulación o un servicio
+ * mientras se resuelve — "el OVEM no decide a criterio sacar un vehículo de servicio" solo es cierto si algo más
+ * que la pantalla de Solicitudes NO APTO lo hace cumplir. Con la clave de servicio: la pregunta es un hecho del
+ * vehículo, no un dato sobre la solicitud, así que no debe depender de si quien pregunta puede leer esa tabla (el
+ * propio OVEM, al auto-asignarse, normalmente no podría).
+ */
+export async function tieneNoAptoPendiente(vehicleId: string): Promise<boolean> {
+  // Es una acción de servidor expuesta (y usa la clave de servicio): sin sesión no responde. Todos los llamadores reales tienen sesión.
+  if (!(await getProfile())) return false;
+  const { data } = await createAdminClient()
+    .from("vehicle_no_apto_solicitudes")
+    .select("id")
+    .eq("vehicle_id", vehicleId)
+    .eq("estado", "PENDIENTE")
+    .maybeSingle();
+  return Boolean(data);
+}
+
 /** Solicitudes pendientes visibles para quien consulta (Coordinación: solo las de su centro). */
 export async function getSolicitudesNoAptoPendientes(): Promise<SolicitudNoApto[]> {
   await requireRole(["ADMIN", "ANALISTA", "GERENCIAL", "REGULACION", "COORDINACION", "MANTENIMIENTO"]);
@@ -92,7 +112,7 @@ export async function getSolicitudesNoAptoPendientes(): Promise<SolicitudNoApto[
  * Regulación); rechazar lo deja como estaba y exige una nota. Coordinación solo resuelve las de su centro.
  */
 export async function resolverSolicitudNoApto(id: number, decision: DecisionNoApto, nota?: string) {
-  const profile = await requireRole(["ADMIN", "COORDINACION"]);
+  const profile = await requireRole(["ADMIN", "COORDINACION", "MANTENIMIENTO"]);
   const malo = validarDecision(decision, nota);
   if (malo) return { error: malo };
 

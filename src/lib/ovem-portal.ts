@@ -95,9 +95,20 @@ export interface BorradorPreoperacional {
   items: RespuestasChecklist;
 }
 
-export function claveBorrador(vehicleId: string, hoy: string): string {
-  return `sismanto_ovem_borrador_${vehicleId}_${hoy}`;
+const PREFIJO_BORRADOR = "sismanto_ovem_borrador_";
+
+/** Un borrador es de UNA persona, un vehículo y un día: en un teléfono compartido no se mezclan conductores. */
+export function claveBorrador(userId: string, vehicleId: string, hoy: string): string {
+  return `${PREFIJO_BORRADOR}${userId}_${vehicleId}_${hoy}`;
 }
+
+/** Claves de borradores de días anteriores (de cualquiera): se borran para que el teléfono no acumule basura. */
+export function borradoresVencidos(claves: string[], hoy: string): string[] {
+  return claves.filter((k) => k.startsWith(PREFIJO_BORRADOR) && !k.endsWith(`_${hoy}`));
+}
+
+/** Kilometraje máximo creíble para un vehículo de la flota; más que esto es un error de digitación (y no cabe en la columna). */
+export const KM_MAXIMO = 2_000_000;
 
 export function serializarBorrador(b: BorradorPreoperacional): string {
   // Orden de claves estable: sirve para comparar «¿cambió algo?» como texto.

@@ -2,6 +2,58 @@
 
 Lo genera `npm run release` a partir de los archivos de `changelog/unreleased/`. No se edita a mano (ver `changelog/README.md`).
 
+## v0.5.0 — 2026-10-07
+
+Migraciones incluidas: 109, 111, 112, 114, 115, 116, 117, 118, 119, 120, 121, 122.
+
+### Funcionalidades
+
+- **clientes** — El administrador también puede volver obligatorios campos opcionales del formulario de clientes (sector, dirección, ciudad, teléfonos, correo y otros) desde «Campos obligatorios». _Roles: ADMIN._
+- **equipos** — El equipo biomédico puede tener una foto, descripción e instrucciones de uso. Salen en la hoja de vida y en su PDF. _Roles: ADMIN, MANTENIMIENTO, ANALISTA, COORDINACION, GERENCIAL, VISTA. Migración: 112._
+- **flota** — Se pueden agregar 4 fotos del vehículo (frente, lateral derecho, trasera, lateral izquierdo), opcionales, al editar un vehículo y en cada preoperacional. _Roles: ADMIN, ANALISTA, REGULACION, OVEM, MANTENIMIENTO, GERENCIAL, COORDINACION. Migración: 111._
+- **ovem** — El OVEM cierra su turno desde el portal (km final, novedades, combustible, limpieza y a quién entrega el vehículo) con la hora de Colombia puesta por el sistema; Regulación y Coordinación ven quién ya cerró y qué vehículos programados faltan. _Roles: OVEM, REGULACION, COORDINACION, ADMIN. Migración: 115._
+- **ovem** — Reportar un siniestro vial ahora exige dejar respaldo para reclamaciones: placa, nombre y cédula del implicado, datos del abogado presente (nombre, teléfono, cédula y correo), mínimo 2 fotos de los hechos y 1 de los documentos generados. Las excepciones («sin tercero», «no hubo abogado», «no se generaron documentos») solo valen con una explicación escrita. Las fotos se comprimen en el teléfono; si alguna falla, el reporte no se pierde y puedes reintentar. Desde Novedades se abre el detalle del siniestro con sus fotos. _Roles: OVEM, ADMIN, ANALISTA, REGULACION, COORDINACION, MANTENIMIENTO. Migración: 116._
+- **preoperacional** — Cuando el OVEM reporta un siniestro vial con lesionados (o con el vehículo no operativo) o un problema grave, envía una solicitud de NO APTO que debe avalar Coordinación de su CRA o el administrador. Mientras espera, el vehículo queda en bloqueo provisional (Regulación no le asigna servicios y el OVEM no opera). Con el aval pasa a Fuera de servicio; si se rechaza, vuelve a como estaba y se explica por qué. Todo queda registrado: quién pidió, quién revisó, cuándo y con qué nota. _Roles: OVEM, COORDINACION, REGULACION, ADMIN. Migración: 109._
+- **regulacion** — Cambiar al conductor (OVEM) de vehículo durante el día ahora exige una razón (reparación, mantenimiento, siniestro, falla, ajuste de la operación u otra) con un detalle de mínimo 5 caracteres, y se puede enlazar a una novedad abierta del vehículo de origen. Queda en un historial consultable por vehículo o conductor. Tras guardar, Regulación puede mover a otro vehículo los servicios sin iniciar (también desde el botón «Reasignar servicios» de cada vehículo): los servicios pertenecen al vehículo y toman la tripulación vigente del destino; los que ya iniciaron desplazamiento nunca se mueven. _Roles: ADMIN, REGULACION. Migración: 114._
+- **regulacion** — La sala de control de Regulación tiene un tablero de vehículos que muestra los vehículos programados hoy en tu centro, si están aptos para operar y si están libres o en servicio, con el último hito, cuánto llevan y su próximo servicio. _Roles: ADMIN, REGULACION, ANALISTA._
+- **usuarios** — Administración → Usuarios tiene el botón «Restablecer clave»: genera una clave temporal para quien la olvidó (por ejemplo un conductor sin correo, al que no le llega el código de recuperación) y el sistema le pide elegir una nueva al entrar. _Roles: ADMIN, ANALISTA._
+
+### Correcciones
+
+- **capacitaciones** — Quien rinde una evaluación ya no recibe las respuestas correctas ni puede ponerse una calificación por su cuenta; la califican el sistema, Coordinación o el Administrador. _Roles: OVEM, COORDINACION, ADMIN. Migración: 121._
+- **equipos** — El tipo de mantenimiento biomédico se elige de una lista (Preventivo, Correctivo, Calibración) en vez de escribirse libre, y un correctivo ya no adelanta la fecha del próximo mantenimiento programado. _Roles: ADMIN, MANTENIMIENTO, ANALISTA._
+- **flota** — ADMIN (y los demás roles que supervisan, no solo el OVEM) ahora ve el checklist, el kilometraje, las observaciones y las fotos del preoperacional de hoy al abrir un vehículo — antes no veía nada de eso. _Roles: ADMIN._
+- **flota** — Las fotos del vehículo en el preoperacional (y al registrar o editar un vehículo) se reducen en el celular antes de subirlas: ya no fallan por pesar más de 4,5 MB y suben rápido aunque la señal sea mala. _Roles: OVEM, REGULACION, ADMIN._
+- **flota** — Las 4 fotos del vehículo en el preoperacional se eligen dentro del mismo formulario, antes de enviar — igual que en SISRES — en vez de aparecer como un paso aparte después de enviar el checklist. _Roles: OVEM._
+- **flota** — Al registrar un vehículo nuevo ya se pueden elegir sus 4 fotos en el mismo formulario, antes de guardar — igual que en SISRES. _Roles: ADMIN, ANALISTA._
+- **flota** — Un vehículo con una solicitud de NO APTO pendiente de aval ya no se le puede asignar tripulación ni un servicio, ni el OVEM puede operarlo — antes la solicitud quedaba pendiente, pero nada lo impedía de verdad. _Roles: ADMIN, REGULACION, ANALISTA, OVEM._
+- **flota** — Mantenimiento ya puede avalar o rechazar una solicitud de NO APTO — el texto que veían OVEM y Regulación siempre dijo "Coordinación o Mantenimiento", pero el botón no aparecía ni lo permitía la base de datos. _Roles: MANTENIMIENTO, ADMIN, COORDINACION. Migración: 117._
+- **flota** — El portal del OVEM y la sala de control de Regulación tienen más tiempo para responder en la hora pico de la mañana, para que enviar el preoperacional o programar titulares no se corte a mitad. _Roles: OVEM, REGULACION._
+- **infra** — Sin cambios visibles: se registró en `apply-database.ts` la migración 115 (cierre de turno del OVEM), cuya línea se había perdido en un merge posterior aunque ya estaba aplicada en la base, y se borró un archivo de migración huérfano (109) que había quedado duplicado de la 113 tras una renumeración. _Roles: ADMIN._
+- **infra** — Se vuelve a registrar la migración 109 (cierre de la fuga de nombre y rol por UUID sin sesión), que ya estaba aplicada pero se había perdido del registro. _Roles: ADMIN._
+- **infra** — Se vuelve a registrar la migración 114 (cambio de vehículo del OVEM con razón obligatoria), que ya estaba aplicada pero se había perdido del registro. _Roles: ADMIN._
+- **infra** — Se vuelven a registrar las migraciones 118, 119, 120 y 122 (cierres de seguridad de perfiles, RPC, fotos de vehículos y tablas de referencia), que ya estaban aplicadas pero se habían perdido del registro. _Roles: ADMIN._
+- **infra** — La migración 112 (foto/descripción del equipo biomédico) vuelve a estar registrada para que se aplique en producción y en bases nuevas. Sin cambios visibles en la app. _Roles: ADMIN._
+- **infra** — Se registra la migración del cambio de vehículo con razón (114), que no se estaba aplicando. _Roles: ninguno._
+- **infra** — Se registra la migración del cierre de turno del OVEM (115), que no se estaba aplicando, y se quita un archivo de migración duplicado que quedó de un merge. _Roles: ninguno._
+- **login** — El inicio de sesión, la recuperación de contraseña y el cambio de la clave inicial hablan de «tú», no se quedan colgados si no hay señal, y avisan a quien no tiene correo registrado que debe pedirle a un administrador que le restablezca la clave. _Roles: todos._
+- **navegacion** — El menú aparece al instante sin pantalla de «Cargando…», cada pantalla muestra un esqueleto mientras carga y un mensaje con botón «Reintentar» si algo falla, las pestañas de Configuración y Dashboard se pueden enlazar, y OVEM y Regulación ven un menú sin secciones plegables. _Roles: todos._
+- **ovem** — Si el aviso por correo de un hallazgo crítico no pudo salir, el conductor lo ve claro en pantalla y se le pide llamar a Regulación, en vez de decirle que ya se avisó. _Roles: OVEM._
+- **ovem** — El preoperacional guarda lo que llenas aunque el celular cierre el navegador o no haya señal al abrirlo, ya no ofrece reportar dos veces la misma falla, y los errores al guardar ahora se explican en palabras sencillas. _Roles: OVEM._
+- **ovem** — Una falla crítica en el preoperacional (frenos, dirección, cinturón, fugas, SOAT o técnico-mecánica) ahora sí deja el vehículo NO APTO y avisa a Regulación, Coordinación y Mantenimiento; antes toda falla se registraba como moderada. _Roles: OVEM, REGULACION, COORDINACION, MANTENIMIENTO._
+- **regulacion** — La tarjeta «Preoperacional de hoy» ya no esconde el vehículo que quedó fuera de servicio por una falla crítica (aparece «con falla» y marcado), y los pendientes muestran el conductor de la programación del día. _Roles: REGULACION, COORDINACION, ADMIN, ANALISTA._
+- **seguridad** — Cierre de dos detalles de seguridad internos: una consulta de NO APTO que respondía sin sesión y una contraseña de ejemplo en la documentación de un script. _Roles: ninguno._
+- **seguridad** — Un conductor ya no puede borrar ni reemplazar las fotos del preoperacional de otro conductor ni las fotos registradas de un vehículo; solo maneja las de su propio preoperacional de hoy. _Roles: OVEM. Migración: 120._
+- **seguridad** — Las tablas de referencia (prestadores, plan de mantenimiento, catálogos) solo las puede leer quien tiene un perfil activo en el sistema. _Roles: todos. Migración: 122._
+- **seguridad** — Recuperar la contraseña con código ahora limita de verdad a 5 intentos por código, aunque alguien intente muchos al mismo tiempo. _Roles: todos._
+- **seguridad** — Las funciones internas de la base ya no se pueden llamar sin iniciar sesión, y nadie puede consultar el centro operativo de otra persona. _Roles: todos. Migración: 119._
+- **seguridad** — Ningún usuario puede ya cambiarse a sí mismo el rol, el centro o el estado de su perfil, y un Analista no puede otorgarse ni otorgar el rol de Administrador. _Roles: todos. Migración: 118._
+- **usuarios** — La carga masiva de usuarios ahora acepta roles y centros escritos con tildes («Coordinación», «CRA Medellín»), no pierde filas si se borra la guía de la plantilla, no confunde una cédula repetida con una ya registrada y, si la conexión se corta a mitad de la carga, dice cuántos se crearon y cómo continuar. _Roles: ADMIN, ANALISTA._
+
+### Mantenimiento
+
+- **proceso** — Proceso del equipo: antes de abrir un PR se pasa una revisión independiente (code-reviewer y, si toca datos sensibles, security-reviewer) y se deja constancia en la descripción del PR. _Roles: ninguno._
+
 ## v0.4.0 — 2026-10-02
 
 Migraciones incluidas: 087, 089, 090, 091, 092, 093, 094, 095, 096, 097, 098, 099, 100, 101, 102, 103, 104, 105, 106, 107, 108, 110.

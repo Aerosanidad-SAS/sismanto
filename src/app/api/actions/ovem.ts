@@ -14,10 +14,11 @@ import {
 } from "@/lib/validations";
 import type { RoadAccidentFormData } from "@/lib/validations";
 import { validarPreoperacional } from "@/lib/preoperacional";
+import { mensajeErrorGuardado } from "@/lib/errores-guardado";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
+import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
-import { crearSolicitudNoApto } from "./solicitudes-no-apto";
-import type { SeveridadFalla } from "@/lib/preoperacional-alertas";
+import { crearSolicitudNoApto, tieneNoAptoPendiente } from "./solicitudes-no-apto";
 
 /** Día de Colombia, igual que daily_checks y supply_checks. Las políticas RLS lo comparan con `hoy_bogota()` (migración 088), no con CURRENT_DATE (UTC). */
 function hoyOvem() {
@@ -26,13 +27,25 @@ function hoyOvem() {
 
 export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACION" = "PREOPERACIONAL") {
   const supabase = createClient();
+  // `severidad_falla` (094) decide qué falla es CRÍTICA y saca el vehículo de servicio: si no se pide aquí, el motor de
+  // alertas la recibe vacía y toda falla queda como MEDIA.
   const { data, error } = await supabase
+    .from("checklist_items")
+    .select("id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo, severidad_falla")
+    .eq("activo", true)
+    .eq("lista", lista)
+    .order("orden", { ascending: true });
+  if (!error) return data || [];
+
+  // Sin la migración 096 no existe `tipos_vehiculo` o sin la 094 `severidad_falla`: se intenta sin ellas.
+  console.error("[checklist] consulta completa falló, se reintenta con menos columnas:", error.message);
+  const { data: sinSeveridad, error: errorSinSeveridad } = await supabase
     .from("checklist_items")
     .select("id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo")
     .eq("activo", true)
     .eq("lista", lista)
     .order("orden", { ascending: true });
-  if (!error) return data || [];
+  if (!errorSinSeveridad) return sinSeveridad || [];
 
   // Sin la migración 060 no existe `lista`: el preoperacional sigue funcionando
   // con el catálogo completo (antes de 060 todo era preoperacional).
@@ -96,6 +109,13 @@ export async function submitDailyCheck(data: {
   const profile = await requireRole(["OVEM"]);
   if (profile.user_id !== row.userId) return { error: "No autorizado" };
 
+  // Bloqueo provisional (migración 113): mientras una solicitud de NO APTO espera aval, el OVEM no opera ese
+  // vehículo — ni siquiera para registrar el preoperacional del día. No hay vuelta circular: una solicitud de
+  // NO APTO solo nace de un siniestro (reportRoadAccident), nunca de este propio envío.
+  if (await tieneNoAptoPendiente(row.vehicleId)) {
+    return { error: "Este vehículo tiene una solicitud de NO APTO pendiente de aval — no se puede operar hasta que se resuelva." };
+  }
+
   // El día lo pone el servidor: un preoperacional es de hoy, no de la fecha que mande el navegador (migración 090).
   const fecha = hoyOvem();
 
@@ -104,6 +124,16 @@ export async function submitDailyCheck(data: {
   if (errorChecklist) return { error: errorChecklist };
 
   const supabase = createClient();
+
+  // Tras cerrar el turno el preoperacional de hoy queda como estaba: reenviarlo pisaría el km final del cierre.
+  const { data: cierreHoy } = await (supabase as any)
+    .from("ovem_cierres_turno")
+    .select("id")
+    .eq("user_id", profile.user_id)
+    .eq("vehicle_id", row.vehicleId)
+    .eq("fecha", fecha)
+    .maybeSingle();
+  if (cierreHoy) return { error: "Ya cerraste el turno de este vehículo hoy: el preoperacional de hoy no se puede modificar." };
 
   const { data: checkRow, error: checkError } = await supabase
     .from("daily_checks")
@@ -122,7 +152,10 @@ export async function submitDailyCheck(data: {
     .select("id")
     .single();
 
-  if (checkError) return { error: checkError.message };
+  if (checkError) {
+    console.error("[preoperacional] no se pudo guardar el encabezado:", checkError.code, checkError.message);
+    return { error: mensajeErrorGuardado(checkError, "el preoperacional") };
+  }
 
   // checklist_ok lo recalcula el trigger trg_actualizar_checklist_ok (migración 005) al escribir los ítems.
   const payload = (row.items ?? []).map((it) => ({
@@ -135,26 +168,23 @@ export async function submitDailyCheck(data: {
   const { error: itemsErr } = await supabase
     .from("daily_check_items")
     .upsert(payload, { onConflict: "daily_check_id,checklist_item_id" });
-  if (itemsErr) return { error: itemsErr.message };
+  if (itemsErr) {
+    console.error("[preoperacional] no se pudieron guardar los ítems:", itemsErr.code, itemsErr.message);
+    return { error: mensajeErrorGuardado(itemsErr, "el preoperacional") };
+  }
 
   // Motor de alertas: las fallas y los documentos vencidos se vuelven novedades; las críticas sacan el vehículo de
   // servicio. Un fallo aquí no debe perder el preoperacional que ya quedó guardado.
-  const porId = new Map((catalogo as any[]).map((c) => [c.id as number, c]));
+  if (catalogoSinSeveridad(catalogo as ItemCatalogo[])) {
+    console.error("[preoperacional] el catálogo no trae severidad_falla: ninguna falla se tratará como crítica");
+  }
   let hallazgos: Awaited<ReturnType<typeof registrarHallazgosPreoperacional>> | null = null;
   try {
     hallazgos = await registrarHallazgosPreoperacional(supabase, {
       vehicleId: row.vehicleId,
       reportadoPor: profile.nombre_completo || profile.email || "OVEM",
       hoy: fecha,
-      items: (row.items ?? []).map((it) => {
-        const c = porId.get(it.checklistItemId);
-        return {
-          descripcion: c?.descripcion ?? `Ítem ${it.checklistItemId}`,
-          estado: it.estado,
-          observacion: it.observacion,
-          severidadFalla: (c?.severidad_falla as SeveridadFalla | undefined) ?? null,
-        };
-      }),
+      items: itemsEvaluados(catalogo as ItemCatalogo[], row.items ?? []),
     });
   } catch (e) {
     console.error("[preoperacional] no se pudieron registrar los hallazgos:", e instanceof Error ? e.message : e);
@@ -350,7 +380,10 @@ export async function submitOvemFuelLog(data: {
     numero_venta: row.numeroVenta || null,
     registrado_por: profile.user_id,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[combustible] no se pudo guardar el tanqueo:", error.code, error.message);
+    return { error: mensajeErrorGuardado(error, "el tanqueo") };
+  }
 
   revalidatePath("/ovem");
   revalidatePath("/combustible");
@@ -400,7 +433,8 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
   // Se registra en cuanto la novedad existe: si el detalle del siniestro falla más abajo, la novedad ya creada no queda sin rastro.
   await auditar("INSERTAR", "novedades", incident.id as number, "Siniestro vial reportado");
 
-  const { error } = await supabase.from("road_accidents").insert({
+  const sinAbogado = !abogadoDeclarado(row);
+  const { data: accident, error } = await supabase.from("road_accidents").insert({
     vehicle_id: row.vehicleId,
     reportado_por: profile.user_id,
     fecha_hora: new Date(row.fechaHora).toISOString(),
@@ -410,17 +444,25 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
     hay_lesionados: row.hayLesionados,
     lesionados_detalle: row.hayLesionados ? row.lesionadosDetalle || null : null,
     hay_terceros: row.hayTerceros,
-    tercero_placa: row.hayTerceros ? row.terceroPlaca?.toUpperCase() || null : null,
+    tercero_placa: row.hayTerceros ? normalizarPlaca(row.terceroPlaca) : null,
     tercero_nombre: row.hayTerceros ? row.terceroNombre || null : null,
     tercero_telefono: row.hayTerceros ? row.terceroTelefono || null : null,
     tercero_aseguradora: row.hayTerceros ? row.terceroAseguradora || null : null,
+    tercero_cedula: row.hayTerceros ? normalizarCedula(row.terceroCedula) : null,
+    sin_tercero_motivo: row.hayTerceros ? null : row.sinTerceroMotivo || null,
+    abogado_nombre: sinAbogado ? null : row.abogadoNombre || null,
+    abogado_telefono: sinAbogado ? null : row.abogadoTelefono || null,
+    abogado_cedula: sinAbogado ? null : normalizarCedula(row.abogadoCedula),
+    abogado_correo: sinAbogado ? null : row.abogadoCorreo?.toLowerCase() || null,
+    sin_abogado_motivo: sinAbogado ? row.sinAbogadoMotivo || null : null,
+    sin_documentos_motivo: row.fotosDocumentos < MIN_FOTOS_DOCUMENTOS ? row.sinDocumentosMotivo || null : null,
     intervino_autoridad: row.intervinoAutoridad,
     numero_ipat: row.intervinoAutoridad ? row.numeroIpat || null : null,
     vehiculo_operativo: row.vehiculoOperativo,
     incident_id: incident.id,
-  });
-  if (error) {
-    return { error: `La novedad #${incident.id} quedó creada, pero el detalle del siniestro no se guardó: ${error.message}` };
+  }).select("id").single();
+  if (error || !accident) {
+    return { error: `La novedad #${incident.id} quedó creada, pero el detalle del siniestro no se guardó: ${error?.message ?? "sin respuesta"}` };
   }
 
   // Siniestro con lesionados o con el vehículo no operativo: solicitud de NO APTO con aval (bloqueo provisional).
@@ -438,5 +480,5 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
   revalidatePath("/ovem");
   revalidatePath("/novedades");
   revalidatePath("/regulacion");
-  return { success: true, incidentId: incident.id as number, solicitudNoApto };
+  return { success: true, incidentId: incident.id as number, accidentId: (accident as { id: number }).id, solicitudNoApto };
 }

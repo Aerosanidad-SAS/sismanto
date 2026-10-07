@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { codigoCoincide, estadoCodigo, generarCodigo, hashCodigo, normalizarCedula } from "./recuperar-contrasena";
+import { codigoCoincide, esCorreoInterno, estadoCodigo, generarCodigo, hashCodigo, normalizarCedula } from "./recuperar-contrasena";
 
 describe("generarCodigo", () => {
   it("siempre 6 dígitos", () => {
@@ -38,5 +38,13 @@ describe("normalizarCedula", () => {
     assert.equal(normalizarCedula("1.020.458 300"), "1020458300");
     assert.equal(normalizarCedula("abc"), null);
     assert.equal(normalizarCedula("123"), null);
+  });
+});
+
+describe("esCorreoInterno", () => {
+  it("reconoce el correo inventado por la carga masiva y no a un correo real", () => {
+    assert.equal(esCorreoInterno("usuario.1020458300@sismanto.invalid"), true);
+    assert.equal(esCorreoInterno(" Prueba@SISMANTO.test "), true);
+    assert.equal(esCorreoInterno("conductor@aerosanidad.com"), false);
   });
 });

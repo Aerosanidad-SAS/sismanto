@@ -14,8 +14,12 @@ import { ProgramacionDiaria } from "@/components/regulacion/programacion-diaria"
 import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
 import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
 import { getProgramacionDelDia } from "@/app/api/actions/programacion";
+import { TableroVehiculosCard } from "@/components/regulacion/tablero-vehiculos";
+import { getTableroVehiculos } from "@/app/api/actions/tablero-vehiculos";
 import { PreoperacionalHoyCard } from "@/components/regulacion/preoperacional-hoy";
 import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente";
+import { CierresTurnoHoyCard } from "@/components/regulacion/cierres-turno-hoy";
+import { getCierresDeTurnoHoy } from "@/app/api/actions/cierre-turno";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
@@ -24,6 +28,10 @@ import { prefijoCiudad } from "@/lib/servicios-lista";
 export const metadata = { title: "Sala de control" };
 
 const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];
+
+// La sala de control lee ~15 consultas por carga y desde aquí se programan titulares y se traspasan servicios (acciones de servidor):
+// se sube el tope por defecto de la función (60 s es el máximo de Hobby).
+export const maxDuration = 60;
 
 export default async function RegulacionPage({
   searchParams,
@@ -38,7 +46,7 @@ export default async function RegulacionPage({
   }
 
   const diaPedido = Array.isArray(searchParams.dia) ? searchParams.dia[0] : searchParams.dia;
-  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto] = await Promise.all([
+  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto, cierresTurno] = await Promise.all([
     getTableroRegulacion(),
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
@@ -47,7 +55,11 @@ export default async function RegulacionPage({
     getPreoperacionalHoy(),
     getProgramacionDelDia(diaPedido ?? ""),
     getSolicitudesNoAptoPendientes(),
+    getCierresDeTurnoHoy(),
   ]);
+
+  // Después del Promise.all: getProgramacionDelDia materializa la programación de hoy y el tablero la lee.
+  const tableroVehiculos = await getTableroVehiculos();
 
   const vehiculosOperativos = (fleet as { id: string; placa: string; estado_actual: string }[])
     .filter((v) => v.estado_actual === "OPERATIVO")
@@ -90,6 +102,8 @@ export default async function RegulacionPage({
 
       <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
 
+      <TableroVehiculosCard tablero={tableroVehiculos} />
+
       <ServiciosDelDia
         servicios={(tablero.servicios as ServicioDelDia[]).filter(
           (s) => !prefijoDeCiudad || (s.ciudad_registro ?? "").toLowerCase().startsWith(prefijoDeCiudad)
@@ -97,6 +111,8 @@ export default async function RegulacionPage({
       />
 
       <PreoperacionalHoyCard datos={preoperacional} />
+
+      <CierresTurnoHoyCard datos={cierresTurno} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <VencimientosCard vencimientos={tablero.vencimientos} />

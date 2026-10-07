@@ -105,12 +105,20 @@ export interface ResumenHallazgos {
   mensaje: string | null;
 }
 
-export function resumirHallazgos(hallazgos: Hallazgo[]): ResumenHallazgos {
+/** Qué pasó con el aviso inmediato por correo de los críticos: salió, no pudo salir, o no hubo uno nuevo (ya estaba reportado). */
+export type EstadoAviso = "ENVIADO" | "FALLO" | "YA_REPORTADO";
+
+export function resumirHallazgos(hallazgos: Hallazgo[], aviso: EstadoAviso = "ENVIADO"): ResumenHallazgos {
   const criticos = hallazgos.filter((h) => h.severidad === "CRITICA").length;
   const otros = hallazgos.length - criticos;
   if (hallazgos.length === 0) return { criticos, otros, mensaje: null };
   const partes: string[] = [];
-  if (criticos > 0) partes.push(`${criticos} hallazgo${criticos === 1 ? "" : "s"} crítico${criticos === 1 ? "" : "s"}: el vehículo queda FUERA DE SERVICIO y se avisó a Regulación y Mantenimiento`);
+  if (criticos > 0) {
+    const n = `${criticos} hallazgo${criticos === 1 ? "" : "s"} crítico${criticos === 1 ? "" : "s"}`;
+    if (aviso === "FALLO") partes.push(`${n}: el vehículo queda FUERA DE SERVICIO. El aviso por correo NO se pudo enviar: llama ya a Regulación y no operes el vehículo`);
+    else if (aviso === "YA_REPORTADO") partes.push(`${n}: el vehículo sigue FUERA DE SERVICIO (ya estaba reportado). No lo operes`);
+    else partes.push(`${n}: el vehículo queda FUERA DE SERVICIO y se avisó a Regulación y Mantenimiento`);
+  }
   if (otros > 0) partes.push(`${otros} hallazgo${otros === 1 ? "" : "s"} reportado${otros === 1 ? "" : "s"} como novedad`);
   return { criticos, otros, mensaje: partes.join(". ") + "." };
 }
