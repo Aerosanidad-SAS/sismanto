@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { correoInterno, generarCodigo, validarClaveNueva, validarUsuario } from "./usuarios-carga";
+import { correoInterno, esFilaDeGuia, generarCodigo, validarClaveNueva, validarUsuario } from "./usuarios-carga";
 
 const CENTROS = new Set(["CRA_MEDELLIN", "CRA_BOGOTA", "AIRPLAN", "CTG", "ADO"]);
 
@@ -67,4 +67,31 @@ test("clave nueva: mínimo, confirmación, distinta de cédula y código, no tri
 
 test("correo interno con dominio .invalid", () => {
   assert.equal(correoInterno("1020458300"), "usuario.1020458300@sismanto.invalid");
+});
+
+test("rol y centro escritos con tildes, espacios o guiones valen igual que el código", () => {
+  const r = validarUsuario({ cedula: "1020458300", nombre_completo: "Ana Pérez", rol: "Coordinación", centro_operativo: "CRA Medellín" }, CENTROS);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.equal(r.valor.rol, "COORDINACION");
+  assert.equal(r.valor.centro, "CRA_MEDELLIN");
+  const guion = validarUsuario({ cedula: "1020458300", nombre_completo: "Ana Pérez", rol: "auxiliar-enfermería", centro_operativo: "cra-bogota" }, CENTROS);
+  assert.ok(guion.ok);
+  if (guion.ok) assert.equal(guion.valor.rol, "AUXILIAR_ENFERMERIA");
+});
+
+test("cédula con puntos, espacios o guiones se normaliza; con letras se rechaza con el valor escrito", () => {
+  const ok = validarUsuario({ cedula: " 1.020.458-300 ", nombre_completo: "Ana Pérez", rol: "VISTA" }, CENTROS);
+  assert.ok(ok.ok);
+  if (ok.ok) assert.equal(ok.valor.cedula, "1020458300");
+  const mal = validarUsuario({ cedula: "C.C. 1020458300", nombre_completo: "Ana Pérez", rol: "VISTA" }, CENTROS);
+  assert.ok(!mal.ok);
+  if (!mal.ok) assert.ok(mal.errores[0].mensaje.includes("C.C. 1020458300"));
+});
+
+test("las filas de guía de la plantilla se reconocen por su contenido, no por su posición", () => {
+  assert.ok(esFilaDeGuia(["Solo números. Ej: 1020458300", "Nombres y apellidos"]));
+  assert.ok(esFilaDeGuia(["↓ datos desde aquí (filas 1–2 son encabezado y guía; no borrar)", null]));
+  assert.ok(!esFilaDeGuia(["1020458300", "Ana Pérez"]));
+  assert.ok(!esFilaDeGuia(["", ""]));
 });

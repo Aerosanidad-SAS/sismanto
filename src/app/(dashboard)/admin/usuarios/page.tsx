@@ -5,6 +5,10 @@ import { isAdminLike } from "@/lib/auth-utils";
 import { AdminUsuarios } from "@/components/admin/admin-usuarios";
 import { UsuariosCargaMasiva } from "@/components/admin/usuarios-carga-masiva";
 
+// La carga masiva crea los usuarios por lotes desde esta página (acciones de servidor): sin un tope propio, el límite por
+// defecto de la función es corto y un lote lento se cortaría a medias.
+export const maxDuration = 60;
+
 export default async function AdminUsuariosPage() {
   const profile = await getProfile();
   if (!profile || !isAdminLike(profile.role_codigo)) redirect("/");

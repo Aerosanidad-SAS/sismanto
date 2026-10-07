@@ -20,7 +20,10 @@ import {
 // Es público (sin sesión): todo pasa por la clave de servicio y las respuestas no revelan si una cédula tiene cuenta.
 
 const MENSAJE_ENVIO =
-  "Si la cédula corresponde a un usuario activo con correo registrado, en unos segundos le llegará un código de 6 dígitos. Revise también la carpeta de spam.";
+  "Si la cédula corresponde a un usuario activo con correo registrado, en unos segundos le llegará un código de 6 dígitos. Revise también la carpeta de spam. Si no tiene correo registrado, pídale a su coordinador o a un administrador que le restablezca la clave.";
+
+/** Correos internos que crea la carga masiva (.invalid, RFC 2606): nunca llegan a una persona, no se gasta un código en ellos. */
+const CORREO_INTERNO = /@(sismanto|sisres)\.invalid$/i;
 const CODIGO_INVALIDO = "Código inválido o vencido. Solicite uno nuevo si ya pasaron 15 minutos o se agotaron los intentos.";
 
 function ip(): string {
@@ -41,7 +44,7 @@ async function usuarioPorCedula(cedula: string): Promise<{ userId: string; email
   if (!perfil) return null;
   const { data } = await admin.auth.admin.getUserById(perfil.user_id);
   const email = data.user?.email;
-  return email ? { userId: perfil.user_id, email } : null;
+  return email && !CORREO_INTERNO.test(email) ? { userId: perfil.user_id, email } : null;
 }
 
 /** Paso 1: envía un código al correo del usuario con esa cédula. Siempre responde lo mismo. */

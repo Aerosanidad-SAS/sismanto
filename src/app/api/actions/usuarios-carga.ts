@@ -64,7 +64,7 @@ export async function cargarUsuarios(filas: FilaUsuarioCruda[], confirmar: boole
     if (!r.ok) { r.errores.forEach((e) => error(fila, e.columna, e.mensaje)); continue; }
     const u = r.valor;
     if (u.rol === "ADMIN" && caller.role_codigo !== "ADMIN") { error(fila, "rol", "Solo un Administrador puede crear otro Administrador."); continue; }
-    if (cedulas.has(u.cedula)) { error(fila, "cedula", `La cédula ${u.cedula} ya está en la fila ${cedulas.get(u.cedula)}.`); continue; }
+    if (cedulas.has(u.cedula)) { error(fila, "cedula", `La cédula ${u.cedula} ya está en la fila ${cedulas.get(u.cedula)}: una persona va en una sola fila y con un solo centro. Esta fila se omite; si el centro correcto es este, borra la otra fila.`); continue; }
     if (u.email && correos.has(u.email)) { error(fila, "email", `El correo ${u.email} ya está en la fila ${correos.get(u.email)}.`); continue; }
     if (u.codigo && codigos.has(u.codigo)) { error(fila, "codigo_acceso", `El código ${u.codigo} ya está en la fila ${codigos.get(u.codigo)}.`); continue; }
     cedulas.set(u.cedula, fila);
@@ -104,7 +104,8 @@ export async function cargarUsuarios(filas: FilaUsuarioCruda[], confirmar: boole
       email_confirm: true,
     });
     if (errAuth || !auth?.user) {
-      error(fila, errAuth?.message?.toLowerCase().includes("already") ? "email" : undefined, errAuth?.message?.toLowerCase().includes("already") ? "Ese correo ya tiene una cuenta." : (errAuth?.message ?? "No se pudo crear la cuenta."));
+      const yaExiste = errAuth?.message?.toLowerCase().includes("already");
+      error(fila, yaExiste && u.email ? "email" : undefined, yaExiste ? (u.email ? "Ese correo ya tiene una cuenta." : "Ya existe una cuenta interna de esta cédula sin perfil (una carga anterior quedó a medias): pide a soporte técnico que la limpie.") : (errAuth?.message ?? "No se pudo crear la cuenta."));
       continue;
     }
     const { error: errPerfil } = await admin.from("user_profiles").insert({
