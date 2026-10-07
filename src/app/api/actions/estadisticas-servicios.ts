@@ -34,7 +34,8 @@ export async function getEstadisticasServicios(ciudad?: string): Promise<Estadis
       .select(
         "etapa, tipo_servicio, fecha_hora_registro, ciudad_origen, oportunidad_atencion, tiempo_total_origen, tiempo_espera_destino, tiempo_total"
       )
-      .gte("fecha_hora_registro", desdeIso);
+      .gte("fecha_hora_registro", desdeIso)
+      .is("cierre_automatico_at", null); // cierres de limpieza: horas asignadas, fuera de las estadísticas
     return (prefijo ? base.ilike("ciudad_registro", `${prefijo}%`) : base).order("id").range(d, h);
   });
 
@@ -124,6 +125,7 @@ export async function getEstadisticasServiciosPorCiudad(params?: {
       .select("etapa, fecha_hora_registro, ciudad_registro, tiempo_total")
       .gte("fecha_hora_registro", desdeIso)
       .lt("fecha_hora_registro", hastaExclusivoIso)
+      .is("cierre_automatico_at", null)
       .not("ciudad_registro", "is", null)
       .order("id")
       .range(d, h),
@@ -284,7 +286,8 @@ export async function getResumenOperativoDiario(params: {
       .from("medical_services")
       .select("etapa, tipo_servicio, ciudad_registro")
       .gte("fecha_hora_registro", desdeIso)
-      .lt("fecha_hora_registro", hastaExclusivoIso);
+      .lt("fecha_hora_registro", hastaExclusivoIso)
+      .is("cierre_automatico_at", null);
     if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
     return query.order("id").range(d, h);
   });
