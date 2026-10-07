@@ -13,7 +13,8 @@ import {
   updateKilometrajeOdometerSchema,
 } from "@/lib/validations";
 import type { RoadAccidentFormData } from "@/lib/validations";
-import { catalogoSinSeveridad, itemsEvaluados, validarPreoperacional, type ItemCatalogo } from "@/lib/preoperacional";
+import { validarPreoperacional } from "@/lib/preoperacional";
+import { mensajeErrorGuardado } from "@/lib/errores-guardado";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
 import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
@@ -151,7 +152,10 @@ export async function submitDailyCheck(data: {
     .select("id")
     .single();
 
-  if (checkError) return { error: checkError.message };
+  if (checkError) {
+    console.error("[preoperacional] no se pudo guardar el encabezado:", checkError.code, checkError.message);
+    return { error: mensajeErrorGuardado(checkError, "el preoperacional") };
+  }
 
   // checklist_ok lo recalcula el trigger trg_actualizar_checklist_ok (migración 005) al escribir los ítems.
   const payload = (row.items ?? []).map((it) => ({
@@ -164,7 +168,10 @@ export async function submitDailyCheck(data: {
   const { error: itemsErr } = await supabase
     .from("daily_check_items")
     .upsert(payload, { onConflict: "daily_check_id,checklist_item_id" });
-  if (itemsErr) return { error: itemsErr.message };
+  if (itemsErr) {
+    console.error("[preoperacional] no se pudieron guardar los ítems:", itemsErr.code, itemsErr.message);
+    return { error: mensajeErrorGuardado(itemsErr, "el preoperacional") };
+  }
 
   // Motor de alertas: las fallas y los documentos vencidos se vuelven novedades; las críticas sacan el vehículo de
   // servicio. Un fallo aquí no debe perder el preoperacional que ya quedó guardado.
@@ -373,7 +380,10 @@ export async function submitOvemFuelLog(data: {
     numero_venta: row.numeroVenta || null,
     registrado_por: profile.user_id,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[combustible] no se pudo guardar el tanqueo:", error.code, error.message);
+    return { error: mensajeErrorGuardado(error, "el tanqueo") };
+  }
 
   revalidatePath("/ovem");
   revalidatePath("/combustible");

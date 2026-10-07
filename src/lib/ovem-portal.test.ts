@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  borradoresVencidos,
   claveBorrador,
   evaluarKilometraje,
   idsNuevos,
@@ -68,7 +69,7 @@ test("borrador: ida y vuelta y clave por vehículo y día", () => {
   assert.equal(leido.observaciones, "ok");
   assert.equal(leido.items[7].observacion, "luz");
   assert.equal(leido.items[2].estado, "OK");
-  assert.equal(claveBorrador("v1", "2026-10-02"), "sismanto_ovem_borrador_v1_2026-10-02");
+  assert.equal(claveBorrador("u1", "v1", "2026-10-02"), "sismanto_ovem_borrador_u1_v1_2026-10-02");
 });
 
 test("serializarBorrador es estable sin importar el orden de inserción", () => {
@@ -89,4 +90,18 @@ test("idsNuevos: la primera carga no genera avisos", () => {
   assert.deepEqual(idsNuevos([1, 2], [1, 2]), []);
   assert.deepEqual(idsNuevos([1], [1, 2, 3]), [2, 3]);
   assert.deepEqual(idsNuevos([1, 2], [2]), []);
+});
+
+test("claveBorrador separa a dos conductores en el mismo teléfono y vehículo", () => {
+  assert.notEqual(claveBorrador("u1", "v1", "2026-10-12"), claveBorrador("u2", "v1", "2026-10-12"));
+});
+
+test("borradoresVencidos devuelve solo borradores de otros días", () => {
+  const claves = [
+    claveBorrador("u1", "v1", "2026-10-11"),
+    claveBorrador("u1", "v1", "2026-10-12"),
+    "sismanto_ovem_ultimo_vehiculo_u1",
+    "otra_cosa",
+  ];
+  assert.deepEqual(borradoresVencidos(claves, "2026-10-12"), [claveBorrador("u1", "v1", "2026-10-11")]);
 });
