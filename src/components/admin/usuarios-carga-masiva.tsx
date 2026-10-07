@@ -7,10 +7,10 @@ import { AlertTriangle, CheckCircle2, Users } from "lucide-react";
 import { cargarUsuarios, type ReporteUsuarios, type UsuarioCreado } from "@/app/api/actions/usuarios-carga";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FILAS_POR_LOTE_USUARIOS, type FilaUsuarioCruda } from "@/lib/usuarios-carga";
+import { esFilaDeGuia, FILAS_POR_LOTE_USUARIOS, type FilaUsuarioCruda } from "@/lib/usuarios-carga";
 
-/** Las filas 1 a 3 de la hoja son encabezado, guía y marca de inicio: los datos empiezan en la fila 4. */
-const PRIMERA_FILA_DATOS = 4;
+/** La fila 1 es el encabezado; la guía (fila 2) y la marca «↓ datos desde aquí» (fila 3) se reconocen por su contenido, no por su posición. */
+const PRIMERA_FILA_DATOS = 2;
 
 function descargarCsv(nombre: string, filas: string[][]) {
   const csv = filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
@@ -31,6 +31,7 @@ function leerFilas(wb: XLSX.WorkBook): FilaUsuarioCruda[] | null {
   for (let i = PRIMERA_FILA_DATOS - 1; i < filas.length; i++) {
     const celdas = filas[i] ?? [];
     if (celdas.every((c) => String(c ?? "").trim() === "")) continue;
+    if (esFilaDeGuia(celdas)) continue;
     const datos: Record<string, unknown> = {};
     encabezados.forEach((h, j) => {
       if (h) datos[h] = celdas[j];
@@ -72,28 +73,44 @@ export function UsuariosCargaMasiva() {
     if (!filas) return;
     setCargando(true);
     setAviso(null);
-    const r = await cargarUsuarios(filas, false);
-    setCargando(false);
-    if ("error" in r) setAviso(r.error);
-    else setReporte(r);
+    try {
+      const r = await cargarUsuarios(filas, false);
+      if ("error" in r) setAviso(r.error);
+      else setReporte(r);
+    } catch {
+      setAviso("No se pudo revisar el archivo. Revisa tu conexión y que tu sesión siga abierta, y vuelve a intentarlo.");
+    } finally {
+      setCargando(false);
+    }
   };
 
   const confirmar = async () => {
-    if (!filas) return;
+    if (!filas || !reporte) return;
     setCargando(true);
     setAviso(null);
-    const total: ReporteUsuarios = { aplicado: true, nuevos: 0, existentes: [], errores: [], creados: [] };
-    for (let i = 0; i < filas.length; i += FILAS_POR_LOTE_USUARIOS) {
-      setProgreso(`Creando usuarios… ${Math.min(i + FILAS_POR_LOTE_USUARIOS, filas.length)} de ${filas.length}`);
-      const r = await cargarUsuarios(filas.slice(i, i + FILAS_POR_LOTE_USUARIOS), true);
-      if ("error" in r) {
-        setAviso(r.error);
-        break;
+    // La vista previa ya validó TODO el archivo (cédulas repetidas, ya existentes, rol, centro): solo se envían las filas
+    // buenas. Validar por lotes de 12 no ve los repetidos que caen en lotes distintos y los daría por «ya existían».
+    const omitidas = new Set([...reporte.errores.map((e) => e.fila), ...reporte.existentes.map((e) => e.fila)]);
+    const porCrear = filas.filter((f) => !omitidas.has(f.fila));
+    const total: ReporteUsuarios = { aplicado: true, nuevos: 0, existentes: [...reporte.existentes], errores: [...reporte.errores], creados: [] };
+    try {
+      for (let i = 0; i < porCrear.length; i += FILAS_POR_LOTE_USUARIOS) {
+        setProgreso(`Creando usuarios… ${Math.min(i + FILAS_POR_LOTE_USUARIOS, porCrear.length)} de ${porCrear.length}`);
+        const r = await cargarUsuarios(porCrear.slice(i, i + FILAS_POR_LOTE_USUARIOS), true);
+        if ("error" in r) {
+          setAviso(r.error);
+          break;
+        }
+        total.nuevos += r.nuevos;
+        total.existentes.push(...r.existentes);
+        total.errores.push(...r.errores);
+        total.creados.push(...r.creados);
       }
-      total.nuevos += r.nuevos;
-      total.existentes.push(...r.existentes);
-      total.errores.push(...r.errores);
-      total.creados.push(...r.creados);
+    } catch {
+      // Un lote que se corta (red, sesión vencida, tiempo): lo ya creado queda guardado; se muestra y se descarga.
+      setAviso(
+        `La carga se interrumpió después de crear ${total.creados.length} de ${porCrear.length} usuarios. Revisa tu conexión y vuelve a subir el mismo archivo: quienes ya se crearon aparecen como «ya existían» y no se tocan.`
+      );
     }
     setProgreso("");
     setCargando(false);
@@ -158,6 +175,13 @@ export function UsuariosCargaMasiva() {
                 </div>
               ))}
             </div>
+
+            {!reporte.aplicado && reporte.nuevos > 0 && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                Quien no tenga `password_inicial` en la plantilla entra con su cédula como clave. Hasta su primer ingreso, cualquiera que conozca esa
+                cédula podría entrar por él: entrega el acceso el mismo día de la carga y pide que cada persona entre y elija su clave de inmediato.
+              </p>
+            )}
 
             {reporte.aplicado && reporte.creados.length > 0 && (
               <div className="space-y-1">
