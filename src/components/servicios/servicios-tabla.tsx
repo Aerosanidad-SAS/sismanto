@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRightLeft, Clock, Lock, MapPin, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ArrowRightLeft, Clock, FileCheck, Lock, MapPin, MoreHorizontal, Pencil, Play, Trash2, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -45,6 +45,7 @@ import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { AsyncCombobox } from "@/components/forms/async-combobox";
 import { PatientSearchCombobox, nombreCompletoDe } from "@/components/forms/patient-search-combobox";
+import { PacienteFormDialog } from "@/components/pacientes/paciente-form-dialog";
 import { DateTimeField } from "@/components/forms/date-time-field";
 import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { PRESTADORES_SISRES } from "@/lib/catalogos-sisres";
@@ -230,6 +231,9 @@ interface ServiciosTablaProps {
   acciones?: ReactNode;
   /** Opciones vigentes de los 7 selects administrables (migración 091); sin ellas, las de fábrica. */
   opciones?: OpcionesServicio;
+  /** Para crear un paciente nuevo sin salir del formulario: catálogo de EPS y campos que el ADMIN volvió obligatorios. */
+  epsOptions?: string[];
+  camposPacienteObligatorios?: string[];
 }
 
 const OPCIONES_FABRICA = opcionesDeFabrica();
@@ -268,6 +272,8 @@ export function ServiciosTabla({
   barra,
   acciones,
   opciones = OPCIONES_FABRICA,
+  epsOptions = [],
+  camposPacienteObligatorios = [],
 }: ServiciosTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -276,6 +282,7 @@ export function ServiciosTabla({
   const [guardando, setGuardando] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [cedulaBusqueda, setCedulaBusqueda] = useState("");
+  const [pacienteNuevoAbierto, setPacienteNuevoAbierto] = useState(false);
   // Etapa inicial — solo aplica al crear (SISRES: registroServicios.php la
   // pide como select obligatorio; editarServicio.php es otro flujo, la
   // etapa de un servicio existente se cambia desde "Cambiar etapa" en la
@@ -697,6 +704,19 @@ export function ServiciosTabla({
                         <Lock className="h-4 w-4" aria-hidden="true" /> Finalizado: bloqueado
                       </p>
                     )}
+                    {puedeCambiarEtapaLibre && s.etapa === "PROGRAMADO" && (
+                      <button
+                        type="button"
+                        className={ITEM_MENU_MOVIL}
+                        disabled={busyId === s.id}
+                        onClick={() => {
+                          setMenuId(null);
+                          handleEtapa(s, "CURSO");
+                        }}
+                      >
+                        <Play className="h-4 w-4" aria-hidden="true" /> Marcar en curso
+                      </button>
+                    )}
                     {puedeCambiarEtapaLibre && (
                       <>
                         <p className="px-2 pt-2 text-xs text-muted-foreground">Cambiar etapa a</p>
@@ -745,6 +765,11 @@ export function ServiciosTabla({
               <p>
                 <span className="text-muted-foreground">Móvil: </span>
                 {movilDe(s)}
+                {s.imagen_boleta_salida && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <FileCheck className="h-3 w-3" aria-hidden="true" /> Con boleta
+                  </span>
+                )}
               </p>
               <p>
                 <span className="text-muted-foreground">Ruta: </span>
@@ -804,6 +829,11 @@ export function ServiciosTabla({
                 <TableCell className="max-w-44">
                   <p className="break-words text-sm leading-tight">{s.tipo_servicio}</p>
                   <p className="text-xs leading-tight text-muted-foreground">Móvil {movilDe(s)}</p>
+                  {s.imagen_boleta_salida && (
+                    <p className="mt-0.5 flex items-center gap-1 text-xs leading-tight text-muted-foreground">
+                      <FileCheck className="h-3 w-3" aria-hidden="true" /> Con boleta de salida
+                    </p>
+                  )}
                 </TableCell>
                 <TableCell className="text-sm leading-tight">
                   {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
@@ -811,6 +841,19 @@ export function ServiciosTabla({
                 {puedeEditar && (
                   <TableCell>
                     <div className="flex items-center justify-end gap-2">
+                      {puedeCambiarEtapaLibre && s.etapa === "PROGRAMADO" && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          title="Marcar en curso"
+                          aria-label={`Marcar en curso el servicio ${s.id}`}
+                          disabled={busyId === s.id}
+                          onClick={() => handleEtapa(s, "CURSO")}
+                        >
+                          <Play className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      )}
                       {puedeCambiarEtapaLibre && (
                         <Select
                           disabled={busyId === s.id}
@@ -1012,8 +1055,18 @@ export function ServiciosTabla({
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Por cédula o nombre — si no aparece, es un paciente nuevo: escribe el nombre a la derecha.
+                    Por cédula o nombre — si no aparece, créalo aquí abajo para que quede su ficha.
                   </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-1"
+                    disabled={soloLecturaLogistica}
+                    onClick={() => setPacienteNuevoAbierto(true)}
+                  >
+                    <UserPlus className="mr-1 h-4 w-4" aria-hidden="true" /> Crear paciente nuevo
+                  </Button>
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor="nombre_completo">Nombre completo *</Label>
@@ -1571,6 +1624,19 @@ export function ServiciosTabla({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Aparte del <form> de servicio a propósito: son dos formularios y no se anidan. Al guardar, el paciente nuevo
+          queda elegido en el servicio (id, nombre y documento), igual que el modal de registroServicios.php en SISRES. */}
+      <PacienteFormDialog
+        open={pacienteNuevoAbierto}
+        onOpenChange={setPacienteNuevoAbierto}
+        editando={null}
+        epsOptions={epsOptions}
+        obligatorios={camposPacienteObligatorios}
+        onGuardado={(creado) => {
+          if (creado) seleccionarPaciente(creado);
+        }}
+      />
     </div>
   );
 }

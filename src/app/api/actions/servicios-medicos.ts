@@ -15,6 +15,7 @@ import { hoyBogota } from "@/lib/fechas";
 import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
 import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
+import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -371,6 +372,17 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
+  // Un servicio ya FINALIZADO no puede quedar sin sus tiempos al editarlo (editarServicio.php de SISRES lo exige al
+  // guardar con etapa FINALIZADO). Los demás estados se guardan libres.
+  const { data: actual } = await supabase
+    .from("medical_services")
+    .select("etapa")
+    .eq("id", idParsed.data)
+    .maybeSingle<{ etapa: string }>();
+  if (actual?.etapa === "FINALIZADO") {
+    const falta = mensajeFaltantesParaFinalizar(parsed.data.tipo_servicio, parsed.data);
+    if (falta) return { error: falta };
+  }
   const fila = aFilaServicio(parsed.data);
   // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
   // asignado a un servicio — tampoco al editar uno que ya lo tenía.
@@ -418,6 +430,21 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
   if (!actual || !nueva) return { error: "Etapa inválida" };
 
   const supabase = createClient();
+  // Como en SISRES: no se finaliza un servicio sin la llegada y salida de cada tramo que su tipo exige (ensuciaría los
+  // indicadores de tiempos). Allá finalizar solo se podía desde el formulario de edición, que validaba esto.
+  if (nueva === "FINALIZADO") {
+    const { data: fila } = await supabase
+      .from("medical_services")
+      .select(
+        "tipo_servicio, fecha_hora_llegada_origen, fecha_hora_salida_origen, fecha_hora_llegada_intermedia, fecha_hora_salida_intermedia, fecha_hora_llegada_destino, fecha_hora_salida_destino"
+      )
+      .eq("id", idParsed.data)
+      .maybeSingle<{ tipo_servicio: string } & FechasServicio>();
+    if (fila) {
+      const falta = mensajeFaltantesParaFinalizar(fila.tipo_servicio, fila);
+      if (falta) return { error: falta };
+    }
+  }
   const { data, error } = await supabase
     .from("medical_services")
     .update({ etapa: nueva, updated_at: new Date().toISOString() })

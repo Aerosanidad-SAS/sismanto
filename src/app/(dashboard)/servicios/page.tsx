@@ -10,6 +10,8 @@ import {
 import { getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
 import { getClientes } from "@/app/api/actions/clientes";
 import { getOpcionesServicio } from "@/app/api/actions/servicios-opciones";
+import { getEpsCatalog } from "@/app/api/actions/pacientes";
+import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
 import { getProfile } from "@/app/api/actions/auth";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
@@ -64,6 +66,8 @@ export default async function ServiciosPage({
     reguladoresDisponibles,
     resumenHoy,
     opcionesCampos,
+    epsOptions,
+    camposPacienteObligatorios,
   ] =
     await Promise.all([
       buscarServicios(filtros, pagina),
@@ -77,6 +81,9 @@ export default async function ServiciosPage({
       getUsuariosPorRol("REGULACION"),
       getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
       getOpcionesServicio(),
+      // Para crear un paciente nuevo sin salir del formulario de servicio.
+      getEpsCatalog(),
+      getCamposObligatoriosModulo("pacientes"),
     ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const etapasVisibles = Object.fromEntries((servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa]));
@@ -155,6 +162,8 @@ export default async function ServiciosPage({
             ciudadDefault={profile?.ciudad}
             ciudadRegistroDefault={ciudadRegistroDePerfil(profile)}
             opciones={opcionesCampos}
+            epsOptions={epsOptions}
+            camposPacienteObligatorios={camposPacienteObligatorios}
           />
           {total > 0 && <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
         </CardContent>
