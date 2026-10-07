@@ -46,8 +46,10 @@ import { ChecklistItemRow, agruparPorCategoria, checklistPayload, type Checklist
 import { validarPreoperacional } from "@/lib/preoperacional";
 import { aplicaAlTipo } from "@/lib/checklist-tipo";
 import {
+  borradoresVencidos,
   claveBorrador,
   evaluarKilometraje,
+  KM_MAXIMO,
   idsNuevos,
   leerBorrador,
   parseKilometraje,
@@ -109,19 +111,34 @@ type OrigenVehiculo = "unico" | "hoy" | "ultimo" | "manual" | null;
 
 const claveUltimoVehiculo = (userId: string) => `sismanto_ovem_ultimo_vehiculo_${userId}`;
 
+// El borrador va en localStorage (no en sessionStorage): sobrevive a que el navegador del celular cierre o recargue la
+// pestaña, que es justo cuando el conductor más lo necesita. La clave lleva usuario, vehículo y día.
 function leerSession(clave: string): string | null {
   try {
-    return sessionStorage.getItem(clave);
+    return localStorage.getItem(clave);
   } catch {
     return null;
   }
 }
 function escribirSession(clave: string, valor: string | null) {
   try {
-    if (valor === null) sessionStorage.removeItem(clave);
-    else sessionStorage.setItem(clave, valor);
+    if (valor === null) localStorage.removeItem(clave);
+    else localStorage.setItem(clave, valor);
   } catch {
     /* almacenamiento bloqueado: se pierde el borrador, no el trabajo en pantalla */
+  }
+}
+/** Borra los borradores de días anteriores (de cualquier usuario de este teléfono). */
+function limpiarBorradoresViejos(hoy: string) {
+  try {
+    const claves: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) claves.push(k);
+    }
+    for (const k of borradoresVencidos(claves, hoy)) localStorage.removeItem(k);
+  } catch {
+    /* sin localStorage */
   }
 }
 
@@ -168,9 +185,6 @@ export function OvemPortal({
   /** Confirmación que sobrevive al volver al menú (tanqueo, siniestro). */
   const [aviso, setAviso] = useState<string | null>(null);
   const [checkItemsState, setCheckItemsState] = useState<RespuestasChecklist>({});
-  const [incidentFromItem, setIncidentFromItem] = useState<null | { title: string; desc: string }>(
-    null
-  );
   /** Ya se intentó enviar con ítems sin responder: se resaltan. */
   const [resaltarPendientes, setResaltarPendientes] = useState(false);
   const [mostrarResumen, setMostrarResumen] = useState(false);
@@ -180,6 +194,8 @@ export function OvemPortal({
   /** Fotos elegidas en el formulario antes de enviar (mismo lugar que SISRES); se suben al confirmar el envío. */
   const [fotosSeleccionadas, setFotosSeleccionadas] = useState<Partial<Record<LadoVehiculo, File>>>({});
   const [confirmarSalida, setConfirmarSalida] = useState(false);
+  /** No se pudo traer lo que ya se había enviado hoy (sin señal): el formulario sigue siendo usable. */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
   /** `${vehicleId}|${hoy}` del borrador ya cargado; evita guardar el estado de un vehículo bajo la clave de otro. */
   const [cargadoPara, setCargadoPara] = useState<string | null>(null);
   const baselineRef = useRef<string | null>(null);
@@ -196,6 +212,7 @@ export function OvemPortal({
 
   // Sin asignación de hoy: el último vehículo usado en este teléfono (se lee tras montar, no en el render del servidor).
   useEffect(() => {
+    limpiarBorradoresViejos(hoyBogota);
     if (vehicleId) return;
     try {
       const ultimo = localStorage.getItem(claveUltimoVehiculo(userId));
@@ -266,14 +283,23 @@ export function OvemPortal({
     }
     let cancelado = false;
     setCargadoPara(null);
+    setErrorCarga(null);
     (async () => {
       // El propio OVEM: exacto a su nombre. Quien solo supervisa (ADMIN, "Ver como" aparte): el del vehículo hoy,
       // sea quien sea que lo haya registrado — la RLS de daily_checks ya le deja ver cualquier fila.
       const propio = viewerRole === "OVEM" ? userId : undefined;
-      const [dc, items] = await Promise.all([
-        getDailyCheckForToday(vehicleId, propio),
-        getDailyCheckItemsForToday(vehicleId, propio),
-      ]);
+      let dc: Awaited<ReturnType<typeof getDailyCheckForToday>> | null = null;
+      let items: unknown[] = [];
+      let sinConexion = false;
+      try {
+        const [d, i] = await Promise.all([getDailyCheckForToday(vehicleId, propio), getDailyCheckItemsForToday(vehicleId, propio)]);
+        dc = d;
+        items = i as unknown[];
+      } catch {
+        // Sin señal al abrir: no se pudo saber qué se envió hoy. El formulario se habilita igual (y el borrador se
+        // guarda); antes se quedaba sin cargar, no guardaba borrador y no avisaba al salir.
+        sinConexion = true;
+      }
       if (cancelado) return;
       const map: RespuestasChecklist = {};
       for (const it of items as any[]) {
@@ -288,9 +314,14 @@ export function OvemPortal({
       setDailyCheckDone(Boolean(dc));
       setDailyCheckId((dc as { id?: number } | null)?.id ?? null);
       setFotosPreop((dc as FotosVehiculoType | null) ?? {});
+      setErrorCarga(
+        sinConexion
+          ? "No pudimos revisar si ya enviaste tu preoperacional de hoy (sin señal). Puedes llenarlo igual: tus respuestas se guardan en este teléfono."
+          : null
+      );
       baselineRef.current = serializarBorrador({ km: kmServidor, observaciones: obsServidor, items: map });
       // Un borrador sin enviar de este vehículo y día gana sobre lo ya guardado en el servidor.
-      const borrador = leerBorrador(leerSession(claveBorrador(vehicleId, hoy)));
+      const borrador = leerBorrador(leerSession(claveBorrador(userId, vehicleId, hoy)));
       setKm(borrador ? borrador.km : kmServidor);
       setObservaciones(borrador ? borrador.observaciones : obsServidor);
       setCheckItemsState(borrador ? borrador.items : map);
@@ -319,8 +350,8 @@ export function OvemPortal({
   // Guarda el borrador mientras hay cambios sin enviar; si vuelve al estado del servidor, lo borra.
   useEffect(() => {
     if (!cargado || !vehicleId) return;
-    escribirSession(claveBorrador(vehicleId, hoy), borradorActual === baselineRef.current ? null : borradorActual);
-  }, [cargado, vehicleId, hoy, borradorActual]);
+    escribirSession(claveBorrador(userId, vehicleId, hoy), borradorActual === baselineRef.current ? null : borradorActual);
+  }, [cargado, userId, vehicleId, hoy, borradorActual]);
 
   // Aviso del navegador si cierra la pestaña con cambios sin enviar.
   useEffect(() => {
@@ -362,6 +393,10 @@ export function OvemPortal({
     setSuccess(null);
     if (kmNumero === undefined || kmNumero <= 0) {
       setError("El kilometraje actual es obligatorio y debe ser mayor a cero.");
+      return;
+    }
+    if (kmNumero > KM_MAXIMO) {
+      setError("El kilometraje es demasiado alto: revisa el número del tablero.");
       return;
     }
     if (resumen.sinResponder > 0) {
@@ -439,11 +474,14 @@ export function OvemPortal({
         }
         // Lo enviado pasa a ser la base: ya no hay cambios pendientes ni borrador.
         baselineRef.current = serializarBorrador({ km, observaciones, items: checkItemsState });
-        escribirSession(claveBorrador(vehicleId, hoy), null);
+        escribirSession(claveBorrador(userId, vehicleId, hoy), null);
         router.refresh();
       }
     } catch {
-      setError("No se pudo enviar: revisa tu señal. Tus respuestas siguen aquí; inténtalo de nuevo.");
+      // Sin señal, o la sesión venció a mitad: en ambos casos lo escrito sigue en pantalla y en el teléfono.
+      setError(
+        "No se pudo enviar: revisa tu señal. Tus respuestas siguen aquí y guardadas en este teléfono; inténtalo de nuevo. Si te pide iniciar sesión otra vez, entra y vuelve a este vehículo: lo que llenaste sigue ahí."
+      );
     }
     setLoading(false);
   };
@@ -661,7 +699,7 @@ export function OvemPortal({
           placa={selectedVehicle.placa}
           onDone={(hora, novedadCreada) => {
             // El turno terminó: el borrador del preoperacional de hoy ya no sirve.
-            escribirSession(claveBorrador(vehicleId, hoy), null);
+            escribirSession(claveBorrador(userId, vehicleId, hoy), null);
             setFlow(null);
             setAviso(`Turno cerrado a las ${hora}.${novedadCreada ? " Se abrió una novedad con lo que contaste." : ""}`);
           }}
@@ -715,9 +753,15 @@ export function OvemPortal({
             </CardHeader>
             <CardContent className="space-y-6">
               <p className="text-sm text-muted-foreground">
-                Responde cada ítem de forma independiente. Si un ítem falla, descríbela y desde ahí puedes
-                reportar una novedad (ej: &quot;farola delantera sin luz media&quot;).
+                Responde cada ítem de forma independiente. Si un ítem falla, descríbela (ej: &quot;farola delantera sin
+                luz media&quot;): al enviar el checklist, la falla se reporta sola como novedad. No la reportes dos veces.
               </p>
+
+              {errorCarga && (
+                <p role="status" className="rounded-lg border border-warning bg-warning-soft p-3 text-sm text-warning-foreground">
+                  {errorCarga}
+                </p>
+              )}
 
               {viewerRole === "OVEM" && checklistFiltrado.length > 0 && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3">
@@ -749,15 +793,6 @@ export function OvemPortal({
                         resaltarPendiente={resaltarPendientes}
                         fallaPlaceholder="Describe la falla (ej: farola sin luz media)"
                         onChange={(next) => setCheckItemsState((prev) => ({ ...prev, [it.id]: next }))}
-                        onReportarNovedad={() => {
-                          const st = checkItemsState[it.id];
-                          setIncidentFromItem({
-                            title: `Reportar novedad — ${selectedVehicle?.placa}`,
-                            desc:
-                              `${categoria.replaceAll("_", " ")}: ${it.descripcion}. ` +
-                              (st?.observacion ? `Detalle: ${st.observacion}` : "Detalle: "),
-                          });
-                        }}
                       />
                     ))}
                   </div>
@@ -944,25 +979,6 @@ export function OvemPortal({
             }}
             reportadoPorDefault={userName}
             hideSeveridad
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!incidentFromItem} onOpenChange={() => setIncidentFromItem(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{incidentFromItem?.title || "Reportar novedad"}</DialogTitle>
-          </DialogHeader>
-          <IncidentForm
-            vehicleId={vehicleId}
-            afectaOperatividad={false}
-            onSuccess={() => {
-              setIncidentFromItem(null);
-              router.refresh();
-            }}
-            reportadoPorDefault={userName}
-            hideSeveridad
-            initialDescripcion={incidentFromItem?.desc}
           />
         </DialogContent>
       </Dialog>
