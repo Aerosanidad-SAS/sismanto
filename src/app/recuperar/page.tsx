@@ -24,11 +24,16 @@ export default function RecuperarPage() {
     e.preventDefault();
     setOcupado(true);
     setError(null);
-    const r = await solicitarCodigoRecuperacion(cedula);
-    setOcupado(false);
-    if ("error" in r && r.error) return setError(r.error);
-    setAviso("mensaje" in r ? r.mensaje ?? null : null);
-    setPaso("codigo");
+    try {
+      const r = await solicitarCodigoRecuperacion(cedula);
+      if ("error" in r && r.error) return setError(r.error);
+      setAviso("mensaje" in r ? r.mensaje ?? null : null);
+      setPaso("codigo");
+    } catch {
+      setError("No se pudo conectar. Revisa tu señal e inténtalo de nuevo.");
+    } finally {
+      setOcupado(false);
+    }
   }
 
   async function cambiar(e: React.FormEvent) {
@@ -36,10 +41,15 @@ export default function RecuperarPage() {
     if (nueva !== confirmacion) return setError("Las contraseñas no coinciden");
     setOcupado(true);
     setError(null);
-    const r = await restablecerContrasena({ cedula, codigo, nueva });
-    setOcupado(false);
-    if ("error" in r && r.error) return setError(r.error);
-    setPaso("listo");
+    try {
+      const r = await restablecerContrasena({ cedula, codigo, nueva });
+      if ("error" in r && r.error) return setError(r.error);
+      setPaso("listo");
+    } catch {
+      setError("No se pudo conectar. Revisa tu señal e inténtalo de nuevo.");
+    } finally {
+      setOcupado(false);
+    }
   }
 
   return (
@@ -104,7 +114,7 @@ export default function RecuperarPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="rc-confirmacion">Repita la contraseña</Label>
+                <Label htmlFor="rc-confirmacion">Repite la contraseña</Label>
                 <Input
                   id="rc-confirmacion"
                   type="password"

@@ -2,7 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive } from "@/app/api/actions/auth";
+import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive, restablecerClaveUsuario } from "@/app/api/actions/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Check, X } from "lucide-react";
+import { Plus, Pencil, Check, X, KeyRound } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
@@ -180,7 +180,24 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
   const [editando, setEditando] = useState<string | null>(null);
   const [edicion, setEdicion] = useState<CamposPerfil>(PERFIL_VACIO);
 
+  // Restablecer clave: primero se confirma y luego se muestra la clave temporal (una sola vez).
+  const [reseteo, setReseteo] = useState<{ usuario: Usuario; clave: string | null } | null>(null);
+
   const nombreCentro = new Map(centros.map((c) => [c.id, c.nombre]));
+
+  const handleRestablecer = async () => {
+    if (!reseteo) return;
+    setLoading(true);
+    setError(null);
+    const result = await restablecerClaveUsuario(reseteo.usuario.user_id);
+    if ("error" in result && result.error) {
+      setError(result.error);
+      setReseteo(null);
+    } else if ("claveTemporal" in result && result.claveTemporal) {
+      setReseteo({ usuario: reseteo.usuario, clave: result.claveTemporal });
+    }
+    setLoading(false);
+  };
 
   const handleCreate = async () => {
     setLoading(true);
@@ -435,6 +452,16 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => setReseteo({ usuario: u, clave: null })}
+                        disabled={loading || editando !== null}
+                        className="px-2"
+                      >
+                        <KeyRound className="h-4 w-4 mr-1" />
+                        Restablecer clave
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleToggleActive(u.user_id, !u.activo)}
                         disabled={loading}
                         className={cn("px-2", u.activo ? "text-red-600" : "text-green-600")}
@@ -449,6 +476,46 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={reseteo !== null} onOpenChange={(abierto) => !abierto && setReseteo(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restablecer clave</DialogTitle>
+          </DialogHeader>
+          {reseteo && !reseteo.clave && (
+            <div className="space-y-4">
+              <p className="text-sm">
+                Se le pondrá una clave temporal a <strong>{reseteo.usuario.nombre_completo || reseteo.usuario.email}</strong>. La que tenía deja de
+                servir y el sistema le pedirá elegir una nueva al entrar.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setReseteo(null)} disabled={loading}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleRestablecer} disabled={loading}>
+                  {loading ? "Restableciendo..." : "Restablecer"}
+                </Button>
+              </div>
+            </div>
+          )}
+          {reseteo?.clave && (
+            <div className="space-y-4">
+              <p className="text-sm">
+                Clave temporal de <strong>{reseteo.usuario.nombre_completo || reseteo.usuario.email}</strong>. Solo se muestra ahora: anótala y
+                entrégasela por un canal privado.
+              </p>
+              <p className="select-all rounded-md border bg-muted px-3 py-2 text-center font-mono text-xl tracking-wider">{reseteo.clave}</p>
+              <p className="text-xs text-muted-foreground">
+                Entra con {reseteo.usuario.cedula ? `su cédula (${reseteo.usuario.cedula})` : "su correo"} y esta clave; el sistema le pedirá una nueva
+                clave propia.
+              </p>
+              <div className="flex justify-end">
+                <Button onClick={() => setReseteo(null)}>Listo</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
