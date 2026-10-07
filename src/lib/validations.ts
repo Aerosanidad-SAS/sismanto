@@ -173,7 +173,7 @@ export const dateRangeSchema = z
 export const signInSchema = z.object({
   // Cédula (usuarios migrados de SISRES) o correo (usuarios de Aeromanto) —
   // se resuelve al email de Supabase Auth en resolverEmailLogin (auth.ts).
-  identificador: z.string().trim().min(1, "Ingrese su cédula o correo").max(254),
+  identificador: z.string().trim().min(1, "Escribe tu cédula o correo").max(254),
   password: z.string().min(1, "Contraseña requerida"),
 });
 
