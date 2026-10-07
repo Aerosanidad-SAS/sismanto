@@ -14,6 +14,7 @@ import {
   generarCodigo,
   hashCodigo,
   normalizarCedula,
+  reclamoDeIntento,
 } from "@/lib/recuperar-contrasena";
 
 // Recuperar la contraseña con un código por correo (migración 102), como recuperarPassword.php de SISRES.
@@ -117,8 +118,21 @@ export async function restablecerContrasena(datos: z.input<typeof restablecerSch
     .maybeSingle<{ id: number; codigo_hash: string; expira_en: string; usado: boolean; intentos: number }>();
   if (!fila || estadoCodigo(fila) !== "valido") return { error: CODIGO_INVALIDO };
 
+  // El intento se RECLAMA de forma atómica ANTES de comparar el código (compare-and-swap sobre `intentos`): con
+  // peticiones en paralelo todas leen el mismo contador, pero solo una logra subirlo y las demás ni siquiera comparan.
+  // Así el tope de MAX_INTENTOS_CODIGO vale aunque el atacante dispare cientos de peticiones a la vez. Sumar el intento
+  // después de comparar (lectura-modificación-escritura) dejaba pasar todas las simultáneas.
+  const reclamo = reclamoDeIntento(fila);
+  const { data: reclamado } = await admin
+    .from("password_reset_codes")
+    .update({ intentos: reclamo.nuevo } as never)
+    .eq("id", reclamo.id)
+    .eq("intentos", reclamo.esperado)
+    .eq("usado", false)
+    .select("id");
+  if (!reclamado || reclamado.length === 0) return { error: CODIGO_INVALIDO };
+
   if (!codigoCoincide(usuario.userId, parsed.data.codigo, fila.codigo_hash)) {
-    await admin.from("password_reset_codes").update({ intentos: fila.intentos + 1 } as never).eq("id", fila.id);
     await auditar("ERROR", "login", usuario.userId, "Código de recuperación incorrecto", ANONIMO);
     return { error: CODIGO_INVALIDO };
   }
