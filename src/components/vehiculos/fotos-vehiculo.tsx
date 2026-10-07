@@ -5,6 +5,7 @@ import { Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getUrlFotoVehiculo } from "@/app/api/actions/vehiculo-fotos";
+import { comprimirFoto } from "@/lib/comprimir-imagen";
 import { LADOS_VEHICULO, type FotosVehiculo, type LadoVehiculo } from "@/lib/vehiculo-fotos";
 
 type ResultadoSubida = { error: string } | { success: true; ruta: string };
@@ -72,11 +73,20 @@ function SlotFoto({
   }, [rutaActual]);
 
   async function elegir(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const original = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (!original) return;
     setSubiendo(true);
     setError(null);
+    // Misma razón que en el preoperacional: la foto del celular se reduce antes de subir (límite de 4,5 MB por petición en Vercel).
+    let file: File;
+    try {
+      file = await comprimirFoto(original);
+    } catch (err) {
+      setSubiendo(false);
+      setError(err instanceof Error ? err.message : "No se pudo preparar la foto");
+      return;
+    }
     const r = await onUpload(lado, file);
     setSubiendo(false);
     if ("error" in r) setError(r.error);

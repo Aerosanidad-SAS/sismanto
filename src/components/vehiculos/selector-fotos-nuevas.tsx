@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Camera } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { comprimirFoto } from "@/lib/comprimir-imagen";
 import { LADOS_VEHICULO, MAX_BYTES_FOTO_VEHICULO, MAX_MB_FOTO_VEHICULO, type LadoVehiculo } from "@/lib/vehiculo-fotos";
 
 /**
@@ -52,15 +53,24 @@ function SlotSeleccion({
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  function elegir(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
+  async function elegir(e: React.ChangeEvent<HTMLInputElement>) {
+    const original = e.target.files?.[0] ?? null;
     e.target.value = "";
-    if (!f) return;
+    if (!original) return;
+    setError(null);
+    // Una foto de celular pesa 3 a 10 MB y Vercel corta las peticiones de más de 4,5 MB: se reduce aquí (lado mayor
+    // 1600 px, JPEG) antes de guardarla; así la subida pesa menos de 1 MB y no depende de la señal del conductor.
+    let f: File;
+    try {
+      f = await comprimirFoto(original);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo preparar la foto");
+      return;
+    }
     if (f.size > MAX_BYTES_FOTO_VEHICULO) {
       setError(`No puede pesar más de ${MAX_MB_FOTO_VEHICULO} MB`);
       return;
     }
-    setError(null);
     onChange(lado, f);
   }
 
