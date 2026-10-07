@@ -7,6 +7,11 @@ export const MINUTOS_VIGENCIA_CODIGO = 15;
 export const MAX_INTENTOS_CODIGO = 5;
 export const LARGO_MINIMO_CONTRASENA = 8; // mismo mínimo que al crear usuarios (validations.ts)
 
+/** Correo inventado por la carga masiva para quien no tiene uno (usuario.<cédula>@sismanto.invalid): no recibe nada. */
+export function esCorreoInterno(email: string): boolean {
+  return /@sismanto\.(invalid|test)$/i.test(email.trim());
+}
+
 /** Código de 6 dígitos con un generador criptográfico (incluye ceros a la izquierda). */
 export function generarCodigo(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
@@ -32,6 +37,14 @@ export function estadoCodigo(c: { expira_en: string; usado: boolean; intentos: n
   if (c.intentos >= MAX_INTENTOS_CODIGO) return "bloqueado";
   if (Date.parse(c.expira_en) <= ahora) return "vencido";
   return "valido";
+}
+
+/**
+ * Cómo se reclama un intento sobre un código ya leído: la actualización solo vale si `intentos` sigue siendo
+ * `esperado` (compare-and-swap). Quien la pierde no compara el código. Ver `restablecerContrasena`.
+ */
+export function reclamoDeIntento(fila: { id: number; intentos: number }): { id: number; esperado: number; nuevo: number } {
+  return { id: fila.id, esperado: fila.intentos, nuevo: fila.intentos + 1 };
 }
 
 /** Cédula normalizada (sin puntos ni espacios) o null si no parece una cédula; mismo criterio que el login. */

@@ -43,7 +43,7 @@ export default function LoginPage() {
         router.refresh();
       }
     } catch {
-      setError("Error al iniciar sesión");
+      setError("No se pudo iniciar sesión. Revisa tu señal e inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }
