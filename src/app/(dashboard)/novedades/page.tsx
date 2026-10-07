@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getProfile } from "@/app/api/actions/auth";
-import { isAdminLike } from "@/lib/auth-utils";
+import { centroVisible, isAdminLike } from "@/lib/auth-utils";
 import { NovedadesTabla } from "@/components/novedades/novedades-tabla";
 import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
 import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
@@ -15,16 +15,19 @@ const ROLES_CIERRE = ["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"];
 // no crear mantenimientos, así que no ve esa opción específica.
 const ROLES_CREAN_MANTENIMIENTO = ["ADMIN", "ANALISTA", "MANTENIMIENTO"];
 
-async function getNovedades() {
+async function getNovedades(centroCodigo: string | null) {
   try {
     const supabase = createClient();
-    const { data } = await supabase
+    let query = supabase
       .from("incidents")
       .select(`
         *,
         vehicles!inner(placa, centro_operativo)
       `)
       .order("fecha_reporte", { ascending: false });
+    // Regulación y Coordinación ven las novedades de los vehículos de su centro (DEU-05 de PARIDAD_REGULACION.md).
+    if (centroCodigo) query = query.eq("vehicles.centro_operativo", centroCodigo);
+    const { data } = await query;
 
     return data || [];
   } catch {
@@ -33,9 +36,9 @@ async function getNovedades() {
 }
 
 export default async function NovedadesPage() {
-  const [profile, novedades, solicitudesNoApto] = await Promise.all([
-    getProfile(),
-    getNovedades(),
+  const profile = await getProfile();
+  const [novedades, solicitudesNoApto] = await Promise.all([
+    getNovedades(centroVisible(profile)?.codigo ?? null),
     getSolicitudesNoAptoPendientes().catch(() => []),
   ]);
   const isAdmin = profile ? isAdminLike(profile.role_codigo) : false;
