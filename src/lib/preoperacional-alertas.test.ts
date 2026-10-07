@@ -79,3 +79,12 @@ test("ítem sin severidad configurada se trata como media", () => {
   assert.equal(h[0].severidad, "MEDIA");
   assert.equal(h[0].fds, false);
 });
+
+test("el resumen no afirma que se avisó cuando el correo no salió", () => {
+  const h = hallazgosPreoperacional([item("Freno de pedal", "FALLA", "CRITICA", "x")], AL_DIA, HOY);
+  assert.match(resumirHallazgos(h, "ENVIADO").mensaje ?? "", /se avisó a Regulación/);
+  const fallo = resumirHallazgos(h, "FALLO").mensaje ?? "";
+  assert.match(fallo, /NO se pudo enviar/);
+  assert.doesNotMatch(fallo, /se avisó/);
+  assert.match(resumirHallazgos(h, "YA_REPORTADO").mensaje ?? "", /ya estaba reportado/);
+});
