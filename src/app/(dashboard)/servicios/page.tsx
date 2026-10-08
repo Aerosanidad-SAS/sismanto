@@ -27,7 +27,8 @@ import { AvisosServicios } from "@/components/servicios/avisos-servicios";
 export const metadata = { title: "Servicios" };
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
-const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
+// El ADMIN ve la misma lista corta, pero de todos los servicios activos (ver `modoAdmin` en MisServicios).
+const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA", "ADMIN"];
 
 async function getVehiculosActivos() {
   try {
@@ -128,8 +129,8 @@ export default async function ServiciosPage({
 
       {mostrarMisServicios && (
         <div>
-          <h2 className="text-xl mb-3">Mis servicios asignados</h2>
-          <MisServicios servicios={misServicios as any} />
+          <h2 className="text-xl mb-3">{profile?.role_codigo === "ADMIN" ? "Servicios programados y en curso" : "Mis servicios asignados"}</h2>
+          <MisServicios servicios={misServicios as any} modoAdmin={profile?.role_codigo === "ADMIN"} />
         </div>
       )}
 
