@@ -13,7 +13,7 @@ import {
   updateKilometrajeOdometerSchema,
 } from "@/lib/validations";
 import type { RoadAccidentFormData } from "@/lib/validations";
-import { validarPreoperacional } from "@/lib/preoperacional";
+import { catalogoSinSeveridad, itemsEvaluados, validarPreoperacional, type ItemCatalogo } from "@/lib/preoperacional";
 import { mensajeErrorGuardado } from "@/lib/errores-guardado";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
 import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
