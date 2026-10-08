@@ -17,6 +17,7 @@ import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaci
 import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
 import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
+import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -337,6 +338,9 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   // sucedió (ej. FALLIDO, NO EFECTIVO) sin pasarlo primero por PROGRAMADO.
   const etapa = ETAPAS_SERVICIO.find((e) => e === etapaInicial);
   if (!etapa) return { error: "Debes seleccionar la etapa del servicio" };
+  // Las horas del recorrido deben ir en el orden en que ocurren (no se validaba en SISRES).
+  const desorden = errorDeCronologia(parsed.data);
+  if (desorden) return { error: desorden };
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -375,6 +379,8 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   const supabase = createClient();
   // Un servicio ya FINALIZADO no puede quedar sin sus tiempos al editarlo (editarServicio.php de SISRES lo exige al
   // guardar con etapa FINALIZADO). Los demás estados se guardan libres.
+  const desorden = errorDeCronologia(parsed.data);
+  if (desorden) return { error: desorden };
   const { data: actual } = await supabase
     .from("medical_services")
     .select("etapa")
@@ -437,13 +443,16 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
     const { data: fila } = await supabase
       .from("medical_services")
       .select(
-        "tipo_servicio, fecha_hora_llegada_origen, fecha_hora_salida_origen, fecha_hora_llegada_intermedia, fecha_hora_salida_intermedia, fecha_hora_llegada_destino, fecha_hora_salida_destino"
+        "tipo_servicio, fecha_hora_programacion, fecha_hora_inicio_desplazamiento, fecha_hora_llegada_origen, fecha_hora_salida_origen, fecha_hora_llegada_intermedia, fecha_hora_salida_intermedia, fecha_hora_llegada_destino, fecha_hora_salida_destino"
       )
       .eq("id", idParsed.data)
-      .maybeSingle<{ tipo_servicio: string } & FechasServicio>();
+      .maybeSingle<{ tipo_servicio: string } & FechasServicio & TiemposServicio>();
     if (fila) {
       const falta = mensajeFaltantesParaFinalizar(fila.tipo_servicio, fila);
       if (falta) return { error: falta };
+      // Finalizar fija el servicio (migración 055): si el recorrido está desordenado, hay que corregirlo antes.
+      const desorden = errorDeCronologia(fila);
+      if (desorden) return { error: desorden + " Edita el servicio, corrige las horas y luego finalízalo." };
     }
   }
   const { data, error } = await supabase
