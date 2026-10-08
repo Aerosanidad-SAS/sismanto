@@ -26,6 +26,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      # `ignoreBuildErrors` oculta los errores de tipos al compilar; esto vigila solo los graves (nombres o imports que
+      # no existen), que revientan en producción. Ver scripts/check-nombres-sin-definir.mjs.
+      - run: npm run check:nombres
       # Corre las pruebas con TZ=UTC, America/Bogota y Asia/Tokyo: si un cálculo depende de la zona horaria, falla.
       - run: npm test
       - run: npm run build

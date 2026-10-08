@@ -43,7 +43,7 @@ async function usuarioPorCedula(cedula: string): Promise<{ userId: string; email
   if (!perfil) return null;
   const { data } = await admin.auth.admin.getUserById(perfil.user_id);
   const email = data.user?.email;
-  return email && !CORREO_INTERNO.test(email) ? { userId: perfil.user_id, email } : null;
+  return email && !esCorreoInterno(email) ? { userId: perfil.user_id, email } : null;
 }
 
 /** Paso 1: envía un código al correo del usuario con esa cédula. Siempre responde lo mismo. */
@@ -71,8 +71,12 @@ export async function solicitarCodigoRecuperacion(cedulaEscrita: string) {
       codigo_hash: hashCodigo(usuario.userId, codigo),
       expira_en: new Date(Date.now() + MINUTOS_VIGENCIA_CODIGO * 60_000).toISOString(),
     } as never);
-    if (!error) {
-      await enviarCorreo(
+    if (error) {
+      // La respuesta al usuario es siempre la misma (no revela si la cédula existe); el motivo real queda para el ADMIN.
+      console.error("[recuperar] no se pudo guardar el código:", error.message);
+      await auditar("ERROR", "login", usuario.userId, "No se pudo generar el código de recuperación de contraseña", ANONIMO);
+    } else {
+      const envio = await enviarCorreo(
         [usuario.email],
         "Código para recuperar tu contraseña de SISMANTO",
         `<div style="font-family:sans-serif;color:#111827">
@@ -82,7 +86,13 @@ export async function solicitarCodigoRecuperacion(cedulaEscrita: string) {
           <p style="color:#6b7280;font-size:12px">Si no lo pediste, ignora este correo: tu contraseña no cambia.</p>
         </div>`
       );
-      await auditar("NOTIFICAR", "login", usuario.userId, "Código de recuperación de contraseña enviado", ANONIMO);
+      // Antes se registraba «enviado» sin mirar el resultado: si el SMTP fallaba, nadie lo sabía.
+      if (envio.ok) {
+        await auditar("NOTIFICAR", "login", usuario.userId, "Código de recuperación de contraseña enviado", ANONIMO);
+      } else {
+        console.error("[recuperar] el correo no salió:", envio.error);
+        await auditar("ERROR", "login", usuario.userId, `No salió el correo con el código de recuperación: ${(envio.error ?? "").slice(0, 200)}`, ANONIMO);
+      }
     }
   }
   return { success: true as const, mensaje: MENSAJE_ENVIO };
