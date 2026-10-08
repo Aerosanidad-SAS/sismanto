@@ -42,6 +42,31 @@ export function ciudadRegistroDePerfil(perfil: { centro_codigo: string | null; c
   return clave ? CIUDAD_REGISTRO_CANONICA[clave] : "";
 }
 
+/**
+ * Opciones del campo «Ciudad de registro» del formulario: el CRA que recibe la solicitud. Se muestra «CRA MEDELLÍN» y
+ * «CRA BOGOTÁ», pero lo que se guarda es el texto canónico de siempre (`MEDELLÍN`, `BOGOTA D.C.`): los 41 mil servicios
+ * de SISRES, los filtros por ciudad y las estadísticas dependen de él.
+ */
+export const OPCIONES_CIUDAD_REGISTRO = [
+  { valor: CIUDAD_REGISTRO_CANONICA.medellin, etiqueta: "CRA MEDELLÍN" },
+  { valor: CIUDAD_REGISTRO_CANONICA.bogota, etiqueta: "CRA BOGOTÁ" },
+] as const;
+
+/**
+ * Texto canónico de la ciudad de registro para cualquier variante que empiece como Bogotá o Medellín («bogota», «CRA
+ * MEDELLÍN»…); null si está vacío o no es ninguna de las dos.
+ */
+export function ciudadRegistroCanonica(valor: string | null | undefined): string | null {
+  const texto = (valor ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/^cra[\s_-]+/, "");
+  const ciudad = CIUDADES_SERVICIO.find((c) => texto.startsWith(c.prefijo));
+  return ciudad ? CIUDAD_REGISTRO_CANONICA[ciudad.clave] : null;
+}
+
 export interface FiltrosServicios {
   /** "bogota" | "medellin": ciudad de registro del servicio (la del CRA que lo recibió). Vacío = ambas. */
   ciudad?: string;

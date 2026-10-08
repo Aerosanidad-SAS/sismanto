@@ -22,6 +22,7 @@ import {
   SERVICIOS_POR_PAGINA,
   prefijoCiudad,
   ETAPAS_SIN_GESTIONAR,
+  ciudadRegistroCanonica,
   esUnidadSinGestionar,
   limiteSinGestionar,
   type FiltrosServicios,
@@ -328,9 +329,20 @@ export async function getServiciosParaAvisos() {
   }[];
 }
 
+/** La ciudad de registro es CRA Medellín o CRA Bogotá: se guarda el texto canónico; cualquier otro valor se rechaza. */
+function normalizarCiudadRegistro(datos: { ciudad_registro?: string }): string | null {
+  if (!datos.ciudad_registro) return null;
+  const canonica = ciudadRegistroCanonica(datos.ciudad_registro);
+  if (!canonica) return "La ciudad de registro debe ser CRA Medellín o CRA Bogotá";
+  datos.ciudad_registro = canonica;
+  return null;
+}
+
 export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const errorCiudad = normalizarCiudadRegistro(parsed.data);
+  if (errorCiudad) return { error: errorCiudad };
 
   // SISRES pide la etapa como select obligatorio al registrar
   // (registroServicios.php) — permite loguear directo un servicio que ya
@@ -371,6 +383,8 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
 
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const errorCiudad = normalizarCiudadRegistro(parsed.data);
+  if (errorCiudad) return { error: errorCiudad };
 
   const supabase = createClient();
   // Un servicio ya FINALIZADO no puede quedar sin sus tiempos al editarlo (editarServicio.php de SISRES lo exige al
