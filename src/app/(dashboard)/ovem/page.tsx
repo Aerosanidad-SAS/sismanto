@@ -88,7 +88,8 @@ export default async function OvemPage() {
   }
 
   const checklistItems = await getChecklistItemsActivos("PREOPERACIONAL");
-  const servicios = profile.role_codigo === "OVEM" ? await getServiciosMedicos() : [];
+  // El OVEM ve los suyos (la RLS filtra); el ADMIN ve los programados y en curso de todos los centros, en modo consulta.
+  const servicios = await getServiciosMedicos();
 
   return (
     <div className="space-y-6">

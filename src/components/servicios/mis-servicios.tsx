@@ -30,6 +30,8 @@ interface ServicioAsignado {
 
 interface MisServiciosProps {
   servicios: ServicioAsignado[];
+  /** El Administrador ve todos los servicios activos (no solo los suyos) y lo que marque queda a su nombre. */
+  modoAdmin?: boolean;
 }
 
 /** Paso pendiente de confirmar: los que abren o cierran una etapa piden un segundo toque. */
@@ -53,7 +55,7 @@ function horaCorta(iso: string | null): string {
   });
 }
 
-export function MisServicios({ servicios }: MisServiciosProps) {
+export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps) {
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<number | null>(null);
   /** El error vive pegado a la tarjeta que falló, no arriba de la lista (fuera de pantalla en el celular). */
@@ -89,7 +91,7 @@ export function MisServicios({ servicios }: MisServiciosProps) {
       <Card>
         <CardContent className="py-8">
           <p className="text-center text-muted-foreground">
-            No tienes servicios asignados en este momento.
+            {modoAdmin ? "No hay servicios programados ni en curso en este momento." : "No tienes servicios asignados en este momento."}
           </p>
         </CardContent>
       </Card>
@@ -137,6 +139,12 @@ export function MisServicios({ servicios }: MisServiciosProps) {
 
   return (
     <div className="space-y-4">
+      {modoAdmin && (
+        <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+          Ves los servicios programados y en curso de todos los centros. Si marcas un paso aquí, queda en la bitácora a tu
+          nombre como Administrador, no a nombre de la tripulación.
+        </p>
+      )}
       {activos.map((s) => {
         const pasos = pasosPorTipo(s.tipo_servicio);
         const estado = estadoOperativo(s);

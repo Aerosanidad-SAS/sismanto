@@ -2,19 +2,19 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { VehiculosTablaExpandible } from "@/components/vehiculos/vehiculos-tabla-expandible";
 import { getProfile } from "@/app/api/actions/auth";
-import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
+import { centroVisible, puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { AlertasHojaDeVida } from "@/components/vehiculos/alertas-hoja-de-vida";
 import { hoyBogota } from "@/lib/fechas";
 
 export const metadata = { title: "Vehículos" };
 
-async function getVehicles() {
+async function getVehicles(centroCodigo: string | null) {
   try {
     const supabase = createClient();
-    const { data } = await supabase
-      .from("vehicles")
-      .select("*")
-      .order("placa");
+    let query = supabase.from("vehicles").select("*").order("placa");
+    // Regulación y Coordinación ven los vehículos de su centro (DEU-05 de PARIDAD_REGULACION.md).
+    if (centroCodigo) query = query.eq("centro_operativo", centroCodigo);
+    const { data } = await query;
 
     return data || [];
   } catch {
@@ -32,7 +32,8 @@ async function contarCostosEstimados(): Promise<number> {
 }
 
 export default async function VehiculosPage() {
-  const [vehicles, profile, estimados] = await Promise.all([getVehicles(), getProfile(), contarCostosEstimados()]);
+  const profile = await getProfile();
+  const [vehicles, estimados] = await Promise.all([getVehicles(centroVisible(profile)?.codigo ?? null), contarCostosEstimados()]);
   const puedeEditarEstado = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
 
   return (

@@ -7,8 +7,8 @@ import { getProfile } from "@/app/api/actions/auth";
 import { auditar } from "@/lib/auditoria";
 import { prestadorSchema, puedeEditarPrestadores, type PrestadorFormData } from "@/lib/prestadores";
 
-// Crear y editar prestadores médicos (medical_providers). La RLS de la migración 058 ya limita INSERT/UPDATE a
-// ADMIN y ANALISTA; aquí se revisa también para dar un mensaje claro.
+// Crear y editar prestadores médicos (medical_providers). La RLS (migraciones 058 y 123) limita INSERT/UPDATE a
+// ADMIN, ANALISTA y REGULACION; aquí se revisa también para dar un mensaje claro.
 
 async function editor() {
   const profile = await getProfile();

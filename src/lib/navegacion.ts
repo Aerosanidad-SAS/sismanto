@@ -6,6 +6,7 @@ import {
   BarChart3,
   Settings,
   Plug,
+  ServerCog,
   Settings2,
   ShieldCheck,
   Fuel,
@@ -307,6 +308,13 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         hint: "Credenciales de GPS (ProTrack365), plantilla de WhatsApp de ubicación y llave de Google Maps.",
       },
       {
+        name: "Estado del entorno",
+        href: "/admin/entorno",
+        icon: ServerCog,
+        roles: ["ADMIN"],
+        hint: "Qué variables de entorno tiene este despliegue (solo nombres y si tienen valor; nunca los valores).",
+      },
+      {
         name: "Aerolíneas",
         href: "/aerolineas",
         icon: PlaneTakeoff,
@@ -325,7 +333,7 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         href: "/clientes",
         icon: Handshake,
         roles: ["ADMIN", "REGULACION", "ANALISTA"],
-        hint: "Directorio de clientes y aseguradoras (consulta).",
+        hint: "Clientes y aseguradoras: consulta, registro y edición.",
       },
       {
         name: "Proveedores",

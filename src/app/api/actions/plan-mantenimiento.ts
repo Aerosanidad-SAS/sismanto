@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProfile } from "@/app/api/actions/auth";
+import { auditar } from "@/lib/auditoria";
 import { z } from "zod";
 import type { MaintenanceAlert, MaintenancePlanItem } from "@/types";
 
@@ -95,5 +96,11 @@ export async function registrarCumplimiento(input: LogPlanItemInput) {
   });
 
   if (error) return { error: error.message };
+  await auditar(
+    "INSERTAR",
+    "mantenimientos",
+    parsed.data.vehicle_id,
+    `Cumplimiento del plan registrado (ítem ${parsed.data.plan_item_id}, ${parsed.data.fecha_realizado})`
+  );
   return { error: null };
 }

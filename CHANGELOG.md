@@ -2,6 +2,34 @@
 
 Lo genera `npm run release` a partir de los archivos de `changelog/unreleased/`. No se edita a mano (ver `changelog/README.md`).
 
+## v0.6.0 — 2026-10-08
+
+Migraciones incluidas: 123, 124.
+
+### Funcionalidades
+
+- **clientes** — Regulación puede registrar y editar clientes (desde «Clientes») y prestadores (desde «Proveedores»), como en SISRES; desactivarlos sigue siendo solo del administrador. _Roles: REGULACION, ADMIN, ANALISTA. Migración: 123._
+- **correo** — El sistema ya puede enviar correos por el servidor SMTP de HostGator, como hacía SISRES: recuperar la contraseña con código, avisos de tickets, de NO APTO, de vencimientos y cotizaciones. Si no se configura el SMTP, sigue funcionando con Microsoft Graph o, sin ninguno, sin enviar. _Roles: todos._
+- **flota** — El menú tiene una campana de «Alertas» que muestra los vehículos con SOAT, técnico-mecánica o pase aeroportuario vencidos o por vencer, con semáforo (verde, amarillo, rojo) y el número de los que piden atención. _Roles: REGULACION, COORDINACION, MANTENIMIENTO, ADMIN, ANALISTA._
+- **flota** — Vehículos tiene buscador (placa, tipo, marca, modelo o ciudad), Vehículos y Novedades muestran a Regulación y Coordinación solo lo de su centro, y los directorios de clientes y proveedores se pasan por páginas de 100 en vez de cortarse en 300. _Roles: REGULACION, COORDINACION, ADMIN, ANALISTA, MANTENIMIENTO._
+- **ovem** — El Administrador ahora ve en el Portal OVEM y en Servicios los servicios programados y en curso, puede marcar sus pasos (queda en la bitácora a su nombre como Administrador) y consulta los cierres de turno del día. _Roles: ADMIN._
+- **servicios** — Las alertas de servicios suenan aunque nadie haya tocado la página todavía, y de 8 p. m. a 11 p. m. (una vez por hora) avisan con sonido cuántos servicios siguen abiertos para que los cierren. _Roles: REGULACION, ADMIN, ANALISTA, COORDINACION._
+- **servicios** — En el formulario de servicio, «Ciudad de registro» ahora es una lista con CRA MEDELLÍN y CRA BOGOTÁ en vez de un texto libre. _Roles: REGULACION, ADMIN, ANALISTA._
+- **servicios** — Regulación puede marcar un servicio «en curso» con un clic, crear un paciente nuevo sin salir del formulario del servicio y ver en la lista cuáles servicios ya tienen boleta de salida; un servicio solo se finaliza con las fechas de llegada y salida que su tipo exige, y solo un administrador desactiva pacientes. _Roles: REGULACION, ADMIN, ANALISTA._
+- **servicios** — Los servicios cerrados en bloque para limpiar el historial quedan marcados como «cierre automático» y no entran en las estadísticas (sus horas de cierre son asignadas, no reales). Se añade la herramienta para repetir el corte el día del despliegue, con respaldo previo. _Roles: ADMIN, ANALISTA, REGULACION. Migración: 123._
+- **servicios** — Al guardar un servicio, o al finalizarlo, el sistema revisa que las horas del recorrido estén en orden (salida después de la llegada, destino después de origen, fin no antes de la programación) y avisa cuál está mal en vez de guardar tiempos imposibles. _Roles: REGULACION, ADMIN, ANALISTA._
+
+### Correcciones
+
+- **auditoria** — La auditoría ahora también registra quién eliminó un vehículo, quién registró kilometraje o combustible y quién marcó un ítem del plan de mantenimiento como cumplido. _Roles: ADMIN._
+- **interfaz** — Se corrige un aviso de React que aparecía en todas las pantallas por el sistema de avisos (Toaster) y que podía provocar errores de hidratación. _Roles: todos._
+- **regulacion** — La sala de control ya no se llena de servicios viejos sin cerrar: muestra los abiertos de hoy y de los últimos 3 días, avisa cuántos más antiguos hay para revisarlos en Servicios, y los retrasos largos se escriben como «+3 h 20 min» o «más de 1 día» en vez de miles de minutos. _Roles: REGULACION, ADMIN, ANALISTA._
+- **servicios** — Regulación y Coordinación ya no pueden leer, por ningún camino, los servicios asignados a otro centro operativo; antes solo la pantalla los ocultaba. _Roles: REGULACION, COORDINACION. Migración: 124._
+
+### Mantenimiento
+
+- **infra** — Se vuelve a registrar la migración de cierre automático de servicios, que se había perdido al combinar dos cambios; no cambia nada para quien usa el sistema. _Roles: ninguno._
+
 ## v0.5.0 — 2026-10-07
 
 Migraciones incluidas: 109, 111, 112, 114, 115, 116, 117, 118, 119, 120, 121, 122.

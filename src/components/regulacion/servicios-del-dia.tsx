@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HelpTrigger } from "@/components/ui/help-trigger";
+import { textoRetraso } from "@/lib/servicios-abiertos";
 import {
   Table,
   TableBody,
@@ -70,7 +71,7 @@ function lugar(direccion: string | null, ciudad: string | null): string | null {
 
 type Filtro = "abiertos" | "todos";
 
-export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) {
+export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicios: ServicioDelDia[]; antiguosSinCerrar?: number }) {
   const [filtro, setFiltro] = useState<Filtro>("abiertos");
   const ahora = Date.now();
 
@@ -100,7 +101,7 @@ export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) 
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <CardTitle className="flex items-center gap-2">
           Servicios del día
-          <HelpTrigger text="Servicios abiertos de cualquier fecha y los programados o registrados hoy. El estado lo actualiza la tripulación desde Mis servicios; en rojo, los que ya pasaron su hora de recogida sin llegar al sitio." />
+          <HelpTrigger text="Servicios abiertos de hoy y de los últimos 3 días, y los programados o registrados hoy. Los abiertos más antiguos se cuentan aparte: casi siempre son servicios que se hicieron y nunca se finalizaron. El estado lo actualiza la tripulación desde Mis servicios; en rojo, los que ya pasaron su hora de recogida sin llegar al sitio." />
         </CardTitle>
         <div className="flex flex-wrap items-center gap-2">
           <div role="group" aria-label="Filtrar servicios" className="flex rounded-md border p-0.5 text-sm">
@@ -127,6 +128,15 @@ export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) 
           </Button>
         </div>
       </CardHeader>
+      {antiguosSinCerrar > 0 && (
+        <div role="status" className="mx-6 mb-2 rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-foreground">
+          Hay <strong>{antiguosSinCerrar}</strong> servicios abiertos de hace más de 3 días que no se muestran aquí. Revísalos y ciérralos en{" "}
+          <Link href="/servicios" className="font-medium underline">
+            Servicios
+          </Link>
+          .
+        </div>
+      )}
       <CardContent className="space-y-4">
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           <Contador etiqueta="Sin asignar" valor={conteo.sinAsignar} resaltar={conteo.sinAsignar > 0} tono="warning" aviso />
@@ -219,7 +229,7 @@ export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) 
                         <Badge variant={VARIANTE_POR_TONO[estado.tono]}>{estado.etiqueta}</Badge>
                         {retraso !== null && (
                           <Badge variant="destructive" title="Minutos desde la hora de recogida sin llegar al sitio">
-                            +{retraso} min
+                            {textoRetraso(retraso)}
                           </Badge>
                         )}
                       </div>

@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, BellOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getServiciosParaAvisos } from "@/app/api/actions/servicios-medicos";
+import { getResumenAbiertosFinDeDia } from "@/app/api/actions/servicios-fin-de-dia";
 import { getUmbralesEstancado } from "@/app/api/actions/servicios-estancados";
 import { horasEstancado, UMBRALES_PROXIMOS_MIN } from "@/lib/servicios-lista";
+import { claveAvisoFinDeDia, horaEnBogota, textoAvisoFinDeDia, tocaAvisoFinDeDia } from "@/lib/servicios-fin-de-dia";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,20 +17,36 @@ import { cn } from "@/lib/utils";
  * - refresco cada 60 s;
  * - sonido y aviso 60, 30 y 15 min antes de la hora programada;
  * - aviso de servicios estancados (agrupado si son muchos);
- * - tono al pasar un servicio a CURSO o FINALIZADO.
+ * - tono al pasar un servicio a CURSO o FINALIZADO;
+ * - aviso de fin de día (de 8 p. m. a 11 p. m., una vez por hora) con los servicios que siguen abiertos y hay que cerrar.
  * El sonido se activa o apaga por navegador (localStorage), igual que SISRES.
  */
 
-type TipoSonido = "click" | "alerta60" | "alerta30" | "alerta15" | "enCurso" | "finalizado";
-type Aviso = { id: string; titulo: string; detalle: string; tono: "info" | "alerta" | "urgente" | "ok" };
+type TipoSonido = "click" | "alerta60" | "alerta30" | "alerta15" | "enCurso" | "finalizado" | "finDia";
+type Aviso = { id: string; titulo: string; detalle: string; tono: "info" | "alerta" | "urgente" | "ok"; enlace?: string };
 
 const REFRESCO_MS = 60_000;
 const MAX_AVISOS_ESTANCADO_INDIVIDUALES = 3;
 const CLAVE_SONIDO = "sismanto_sonido";
 
 let ctxAudio: AudioContext | null = null;
+/**
+ * El navegador crea el audio en pausa hasta que la persona toca la página (política de autoplay): un beep pedido antes
+ * de ese primer toque se perdía en silencio. Aquí se crea una vez y se reanuda cada vez que se pide un sonido; el primer
+ * clic o tecla de la página lo deja funcionando (ver el efecto de `AvisosServicios`).
+ */
+function contextoAudio(): AudioContext | null {
+  try {
+    ctxAudio ??= new AudioContext();
+    if (ctxAudio.state === "suspended") void ctxAudio.resume();
+    return ctxAudio;
+  } catch {
+    return null;
+  }
+}
 function beep(frecuencia: number, inicio: number, duracion: number, volumen: number, forma: OscillatorType = "sine") {
-  ctxAudio ??= new AudioContext();
+  const ctxAudio = contextoAudio();
+  if (!ctxAudio) return;
   const osc = ctxAudio.createOscillator();
   const gain = ctxAudio.createGain();
   osc.type = forma;
@@ -63,6 +82,13 @@ const SONIDOS: Record<TipoSonido, () => void> = {
     beep(784, 0.36, 0.15, 0.3);
     beep(1047, 0.54, 0.3, 0.4);
   },
+  // Fin de día: cuatro tonos largos que bajan y suben, distinto de los avisos de hora para que no se confunda.
+  finDia: () => {
+    beep(587, 0, 0.3, 0.45, "triangle");
+    beep(440, 0.4, 0.3, 0.45, "triangle");
+    beep(587, 0.8, 0.3, 0.45, "triangle");
+    beep(440, 1.2, 0.5, 0.5, "triangle");
+  },
 };
 
 function leerStorage(storage: "local" | "session", clave: string): string | null {
@@ -94,11 +120,28 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
   const [actualizado, setActualizado] = useState<string>("");
   const etapasPrevias = useRef<Record<number, string> | null>(null);
   const sonidoRef = useRef(true);
+  // true mientras el navegador no deja sonar (nadie ha tocado la página todavía): se avisa para que no parezca roto.
+  const [audioBloqueado, setAudioBloqueado] = useState(false);
 
   useEffect(() => {
     const on = leerStorage("local", CLAVE_SONIDO) !== "off";
     setSonidoOn(on);
     sonidoRef.current = on;
+  }, []);
+
+  // Desbloquea el audio con el primer clic, toque o tecla, y mantiene al día el aviso de «sonido bloqueado».
+  useEffect(() => {
+    const revisarAudio = () => {
+      const ctx = contextoAudio();
+      setAudioBloqueado(Boolean(ctx) && ctx?.state !== "running");
+      if (ctx) ctx.onstatechange = () => setAudioBloqueado(ctx.state !== "running");
+    };
+    revisarAudio();
+    const eventos = ["pointerdown", "keydown", "touchstart"] as const;
+    for (const e of eventos) window.addEventListener(e, revisarAudio);
+    return () => {
+      for (const e of eventos) window.removeEventListener(e, revisarAudio);
+    };
   }, []);
 
   const sonar = useCallback((tipo: TipoSonido) => {
@@ -172,8 +215,29 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
     }
     if (estancados.length > 0 && !peorSonido) peorSonido = "alerta15";
 
+    // Fin de día: una consulta por hora y por sesión, solo entre las 8 p. m. y las 11 p. m. (hora de Colombia).
+    let sonarFinDia = false;
+    if (tocaAvisoFinDeDia(horaEnBogota(ahora))) {
+      const clave = claveAvisoFinDeDia(ahora);
+      if (!leerStorage("session", clave)) {
+        try {
+          const abiertos = await getResumenAbiertosFinDeDia();
+          // Se marca como hecho incluso si no aplica o no quedan abiertos: no se vuelve a preguntar en esta hora.
+          escribirStorage("session", clave, "1");
+          const texto = abiertos.aplica ? textoAvisoFinDeDia(abiertos) : null;
+          if (abiertos.aplica && texto) {
+            nuevos.push({ id: clave, ...texto, tono: "urgente", enlace: abiertos.enlace });
+            sonarFinDia = true;
+          }
+        } catch {
+          /* sin red o sesión vencida: se reintenta en la próxima revisión, sin marcar la hora */
+        }
+      }
+    }
+
     agregar(nuevos);
-    if (peorSonido) sonar(peorSonido);
+    if (sonarFinDia) sonar("finDia");
+    else if (peorSonido) sonar(peorSonido);
   }, [agregar, sonar]);
 
   // Refresco periódico de la lista y de los avisos.
@@ -243,6 +307,11 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
           {sonidoOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
           Sonido {sonidoOn ? "ON" : "OFF"}
         </Button>
+        {sonidoOn && audioBloqueado && (
+          <span role="status" className="text-xs text-amber-700">
+            Toca la página para activar el sonido
+          </span>
+        )}
       </div>
 
       {avisos.length > 0 && (
@@ -264,7 +333,12 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
             >
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{a.titulo}</p>
-                <p className="truncate text-xs">{a.detalle}</p>
+                <p className={cn("text-xs", !a.enlace && "truncate")}>{a.detalle}</p>
+                {a.enlace && (
+                  <Link href={a.enlace} className="text-xs font-medium underline">
+                    Ver los servicios abiertos
+                  </Link>
+                )}
               </div>
               <button
                 type="button"

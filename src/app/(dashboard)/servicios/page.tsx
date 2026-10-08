@@ -10,6 +10,8 @@ import {
 import { getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
 import { getClientes } from "@/app/api/actions/clientes";
 import { getOpcionesServicio } from "@/app/api/actions/servicios-opciones";
+import { getEpsCatalog } from "@/app/api/actions/pacientes";
+import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
 import { getProfile } from "@/app/api/actions/auth";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
@@ -25,7 +27,8 @@ import { AvisosServicios } from "@/components/servicios/avisos-servicios";
 export const metadata = { title: "Servicios" };
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
-const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
+// El ADMIN ve la misma lista corta, pero de todos los servicios activos (ver `modoAdmin` en MisServicios).
+const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA", "ADMIN"];
 
 async function getVehiculosActivos() {
   try {
@@ -64,6 +67,8 @@ export default async function ServiciosPage({
     reguladoresDisponibles,
     resumenHoy,
     opcionesCampos,
+    epsOptions,
+    camposPacienteObligatorios,
   ] =
     await Promise.all([
       buscarServicios(filtros, pagina),
@@ -77,6 +82,9 @@ export default async function ServiciosPage({
       getUsuariosPorRol("REGULACION"),
       getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
       getOpcionesServicio(),
+      // Para crear un paciente nuevo sin salir del formulario de servicio.
+      getEpsCatalog(),
+      getCamposObligatoriosModulo("pacientes"),
     ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const etapasVisibles = Object.fromEntries((servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa]));
@@ -121,8 +129,8 @@ export default async function ServiciosPage({
 
       {mostrarMisServicios && (
         <div>
-          <h2 className="text-xl mb-3">Mis servicios asignados</h2>
-          <MisServicios servicios={misServicios as any} />
+          <h2 className="text-xl mb-3">{profile?.role_codigo === "ADMIN" ? "Servicios programados y en curso" : "Mis servicios asignados"}</h2>
+          <MisServicios servicios={misServicios as any} modoAdmin={profile?.role_codigo === "ADMIN"} />
         </div>
       )}
 
@@ -155,6 +163,8 @@ export default async function ServiciosPage({
             ciudadDefault={profile?.ciudad}
             ciudadRegistroDefault={ciudadRegistroDePerfil(profile)}
             opciones={opcionesCampos}
+            epsOptions={epsOptions}
+            camposPacienteObligatorios={camposPacienteObligatorios}
           />
           {total > 0 && <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
         </CardContent>

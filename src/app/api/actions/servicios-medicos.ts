@@ -15,11 +15,15 @@ import { hoyBogota } from "@/lib/fechas";
 import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
 import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
+import { detalleConAtribucion } from "@/lib/atribucion-admin";
+import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
+import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
   prefijoCiudad,
   ETAPAS_SIN_GESTIONAR,
+  ciudadRegistroCanonica,
   esUnidadSinGestionar,
   limiteSinGestionar,
   type FiltrosServicios,
@@ -326,15 +330,29 @@ export async function getServiciosParaAvisos() {
   }[];
 }
 
+/** La ciudad de registro es CRA Medellín o CRA Bogotá: se guarda el texto canónico; cualquier otro valor se rechaza. */
+function normalizarCiudadRegistro(datos: { ciudad_registro?: string }): string | null {
+  if (!datos.ciudad_registro) return null;
+  const canonica = ciudadRegistroCanonica(datos.ciudad_registro);
+  if (!canonica) return "La ciudad de registro debe ser CRA Medellín o CRA Bogotá";
+  datos.ciudad_registro = canonica;
+  return null;
+}
+
 export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const errorCiudad = normalizarCiudadRegistro(parsed.data);
+  if (errorCiudad) return { error: errorCiudad };
 
   // SISRES pide la etapa como select obligatorio al registrar
   // (registroServicios.php) — permite loguear directo un servicio que ya
   // sucedió (ej. FALLIDO, NO EFECTIVO) sin pasarlo primero por PROGRAMADO.
   const etapa = ETAPAS_SERVICIO.find((e) => e === etapaInicial);
   if (!etapa) return { error: "Debes seleccionar la etapa del servicio" };
+  // Las horas del recorrido deben ir en el orden en que ocurren (no se validaba en SISRES).
+  const desorden = errorDeCronologia(parsed.data);
+  if (desorden) return { error: desorden };
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -369,8 +387,23 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
 
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const errorCiudad = normalizarCiudadRegistro(parsed.data);
+  if (errorCiudad) return { error: errorCiudad };
 
   const supabase = createClient();
+  // Un servicio ya FINALIZADO no puede quedar sin sus tiempos al editarlo (editarServicio.php de SISRES lo exige al
+  // guardar con etapa FINALIZADO). Los demás estados se guardan libres.
+  const desorden = errorDeCronologia(parsed.data);
+  if (desorden) return { error: desorden };
+  const { data: actual } = await supabase
+    .from("medical_services")
+    .select("etapa")
+    .eq("id", idParsed.data)
+    .maybeSingle<{ etapa: string }>();
+  if (actual?.etapa === "FINALIZADO") {
+    const falta = mensajeFaltantesParaFinalizar(parsed.data.tipo_servicio, parsed.data);
+    if (falta) return { error: falta };
+  }
   const fila = aFilaServicio(parsed.data);
   // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
   // asignado a un servicio — tampoco al editar uno que ya lo tenía.
@@ -418,6 +451,24 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
   if (!actual || !nueva) return { error: "Etapa inválida" };
 
   const supabase = createClient();
+  // Como en SISRES: no se finaliza un servicio sin la llegada y salida de cada tramo que su tipo exige (ensuciaría los
+  // indicadores de tiempos). Allá finalizar solo se podía desde el formulario de edición, que validaba esto.
+  if (nueva === "FINALIZADO") {
+    const { data: fila } = await supabase
+      .from("medical_services")
+      .select(
+        "tipo_servicio, fecha_hora_programacion, fecha_hora_inicio_desplazamiento, fecha_hora_llegada_origen, fecha_hora_salida_origen, fecha_hora_llegada_intermedia, fecha_hora_salida_intermedia, fecha_hora_llegada_destino, fecha_hora_salida_destino"
+      )
+      .eq("id", idParsed.data)
+      .maybeSingle<{ tipo_servicio: string } & FechasServicio & TiemposServicio>();
+    if (fila) {
+      const falta = mensajeFaltantesParaFinalizar(fila.tipo_servicio, fila);
+      if (falta) return { error: falta };
+      // Finalizar fija el servicio (migración 055): si el recorrido está desordenado, hay que corregirlo antes.
+      const desorden = errorDeCronologia(fila);
+      if (desorden) return { error: desorden + " Edita el servicio, corrige las horas y luego finalízalo." };
+    }
+  }
   const { data, error } = await supabase
     .from("medical_services")
     .update({ etapa: nueva, updated_at: new Date().toISOString() })
@@ -474,7 +525,14 @@ export async function marcarPasoServicio(
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   if (nueva) await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
-  await auditar("MODIFICAR", "servicios", data[0].id, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`);
+  // Si lo marca el ADMIN (no la tripulación), el detalle lo dice: el actor de la bitácora ya es él.
+  const rol = (await getProfile())?.role_codigo;
+  await auditar(
+    "MODIFICAR",
+    "servicios",
+    data[0].id,
+    detalleConAtribucion(rol, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`)
+  );
   revalidatePath("/servicios");
   revalidatePath("/ovem");
   return { success: true };
