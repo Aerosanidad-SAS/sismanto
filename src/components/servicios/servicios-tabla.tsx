@@ -39,7 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { fechaHora24, horasEstancado } from "@/lib/servicios-lista";
+import { ciudadRegistroCanonica, fechaHora24, horasEstancado, OPCIONES_CIUDAD_REGISTRO } from "@/lib/servicios-lista";
 import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
@@ -194,12 +194,9 @@ const CAMPOS_RUTA: CampoDef[] = [
 // (PRESTADORES_SISRES — en SISRES es la misma tabla `proveedores` para
 // ambos campos), se renderiza aparte, más abajo.
 // usuario_recibe/usuario_despacha (select de Reguladores reales),
-// motivo_externo/motivo_interno (catálogos fijos) y estado_servicio
-// (ACTIVO/INACTIVO) ya no están acá: SISRES los resuelve con <select>, no
-// texto libre — se renderizan aparte, más abajo.
-const CAMPOS_CIERRE: CampoDef[] = [
-  { name: "ciudad_registro", label: "Ciudad de registro", placeholder: "Ciudad donde se registra el servicio" },
-];
+// motivo_externo/motivo_interno (catálogos fijos), estado_servicio
+// (ACTIVO/INACTIVO) y ciudad_registro (CRA Medellín / CRA Bogotá) ya no están
+// acá: se resuelven con <select>, no texto libre — se renderizan aparte, más abajo.
 
 type PersonaTripulacion = { user_id: string; nombre_completo: string | null; email: string | null };
 
@@ -307,6 +304,7 @@ export function ServiciosTabla({
   const tipoSeleccionado = watch("tipo_servicio");
   const vehiculoSeleccionado = watch("vehicle_id");
   const turnoSeleccionado = watch("turno_programacion");
+  const ciudadRegistroSeleccionada = watch("ciudad_registro");
   const cieSeleccionado = watch("cie_codigo");
   const aislamientoSeleccionado = watch("requiere_aislamiento");
   const finalidadSeleccionada = watch("finalidad_traslado");
@@ -1430,18 +1428,25 @@ export function ServiciosTabla({
                     />
                   </div>
                 )}
-                {paraPerfil(CAMPOS_CIERRE, perfil).map((campo) => (
-                  <div key={campo.name} className="space-y-1">
-                    <Label htmlFor={campo.name}>{campo.label}</Label>
-                    <Input
-                      id={campo.name}
-                      type={campo.type ?? "text"}
-                      placeholder={campo.placeholder}
-                      disabled={campoBloqueado(campo.name)}
-                      {...register(campo.name)}
-                    />
-                  </div>
-                ))}
+                <div className="space-y-1">
+                  <Label htmlFor="ciudad_registro">Ciudad de registro</Label>
+                  <Select
+                    value={ciudadRegistroCanonica(ciudadRegistroSeleccionada) ?? ciudadRegistroSeleccionada ?? ""}
+                    onValueChange={(v) => setValue("ciudad_registro", v)}
+                    disabled={campoBloqueado("ciudad_registro")}
+                  >
+                    <SelectTrigger id="ciudad_registro">
+                      <SelectValue placeholder="Selecciona el CRA…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {OPCIONES_CIUDAD_REGISTRO.map((o) => (
+                        <SelectItem key={o.valor} value={o.valor}>
+                          {o.etiqueta}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-1">
                   <Label htmlFor="usuario_recibe">Usuario que recibe</Label>
                   <Select
