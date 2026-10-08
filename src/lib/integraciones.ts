@@ -1,5 +1,6 @@
 // Parámetros de integraciones externas editables por el ADMIN (migración 104). Puro: el catálogo y cómo se muestran.
 // La lectura real (con la clave de servicio y el respaldo en variables de entorno) está en integraciones-servidor.ts.
+import { CAMPOS_CORREO } from "@/lib/correo-config";
 
 export interface CampoIntegracion {
   clave: string;
@@ -10,6 +11,8 @@ export interface CampoIntegracion {
   /** Variable de entorno que se usa si el valor no está configurado en la aplicación. */
   env: string;
   porDefecto?: string;
+  /** Mensaje de error si el valor no sirve para este campo, o null si está bien (se comprueba al guardar). */
+  validar?: (valor: string) => string | null;
 }
 
 export const GRUPOS_INTEGRACION: { grupo: string; titulo: string; descripcion: string; campos: CampoIntegracion[] }[] = [
@@ -47,7 +50,21 @@ export const GRUPOS_INTEGRACION: { grupo: string; titulo: string; descripcion: s
   },
 ];
 
-export const CAMPOS_INTEGRACION: CampoIntegracion[] = GRUPOS_INTEGRACION.flatMap((g) => g.campos);
+/** Grupos de «Configuración general» (no se muestran en Integraciones). */
+export const GRUPOS_CONFIG_GENERAL: { grupo: string; titulo: string; descripcion: string; campos: CampoIntegracion[] }[] = [
+  {
+    grupo: "correo",
+    titulo: "Correo saliente (SMTP)",
+    descripcion:
+      "Desde dónde sale el correo del sistema: recuperar contraseña, tickets, avisos de vencimientos y de NO APTO. Lo que escriba aquí tiene prioridad sobre las variables de entorno del servidor.",
+    campos: CAMPOS_CORREO,
+  },
+];
+
+export const CAMPOS_INTEGRACION: CampoIntegracion[] = [
+  ...GRUPOS_INTEGRACION.flatMap((g) => g.campos),
+  ...GRUPOS_CONFIG_GENERAL.flatMap((g) => g.campos),
+];
 
 export function campoIntegracion(clave: string): CampoIntegracion | undefined {
   return CAMPOS_INTEGRACION.find((c) => c.clave === clave);

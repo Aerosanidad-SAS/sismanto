@@ -32,7 +32,7 @@ interface FilaTicket {
 
 export async function notificarTicket(evento: "NUEVO" | "TOMADO" | "RESUELTO" | "REABIERTO", ticketId: number, extra: { nota?: string } = {}): Promise<void> {
   try {
-    if (!emailConfigurado()) return;
+    if (!(await emailConfigurado())) return;
     const admin = createAdminClient();
 
     const { data } = await admin

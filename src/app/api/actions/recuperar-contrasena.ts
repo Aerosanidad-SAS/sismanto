@@ -54,7 +54,7 @@ export async function solicitarCodigoRecuperacion(cedulaEscrita: string) {
   }
   const cedula = normalizarCedula(z.string().max(30).catch("").parse(cedulaEscrita));
   if (!cedula) return { error: "Escribe tu número de cédula, solo números." };
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !emailConfigurado()) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !(await emailConfigurado())) {
     return { error: "La recuperación de contraseña no está disponible en este momento. Pide ayuda a un administrador." };
   }
   if (!permitirIntento(`recuperar-cedula:${cedula}`, 3, 15 * 60_000)) return { success: true as const, mensaje: MENSAJE_ENVIO };
