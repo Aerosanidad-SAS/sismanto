@@ -15,7 +15,6 @@ import { hoyBogota } from "@/lib/fechas";
 import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
 import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
-import { inicioVentanaAbiertos } from "@/lib/servicios-abiertos";
 import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import {
@@ -327,40 +326,6 @@ export async function getServiciosParaAvisos() {
     tipo_servicio: string;
     fecha_hora_programacion: string;
   }[];
-}
-
-/** Quiénes reciben el aviso de fin de día: los que pueden cerrar servicios. */
-const ROLES_AVISO_FIN_DE_DIA = ["ADMIN", "REGULACION", "ANALISTA", "COORDINACION"];
-
-/**
- * Servicios que siguen abiertos (PROGRAMADO o CURSO) de hoy y de los últimos días, los mismos que muestra la sala de
- * control (ver `servicios-abiertos.ts`: lo más viejo se revisa aparte). Para el aviso de fin de día. Cuenta, no lista,
- * y respeta el centro de quien consulta. No usa `requireRole`: se llama sola desde las pantallas y un rol sin aviso no
- * debe terminar redirigido.
- */
-export async function getResumenAbiertosFinDeDia(): Promise<
-  { aplica: false } | { aplica: true; programado: number; curso: number; enlace: string }
-> {
-  const profile = await getProfile();
-  if (!profile || !ROLES_AVISO_FIN_DE_DIA.includes(profile.role_codigo)) return { aplica: false };
-
-  const supabase = createClient();
-  const centroId = centroVisible(profile)?.id ?? null;
-  const desde = `${inicioVentanaAbiertos(hoyBogota())}T00:00:00-05:00`;
-  const ahora = new Date().toISOString();
-  const contar = async (etapa: "PROGRAMADO" | "CURSO") => {
-    const query = supabase
-      .from("medical_services")
-      .select("id", { count: "exact", head: true })
-      .eq("etapa", etapa)
-      .gte("fecha_hora_programacion", desde)
-      .lte("fecha_hora_programacion", ahora);
-    const { count, error } = await aplicarFiltrosServicios(query, {}, centroId);
-    if (error) throw new Error(error.message);
-    return count ?? 0;
-  };
-  const [programado, curso] = await Promise.all([contar("PROGRAMADO"), contar("CURSO")]);
-  return { aplica: true, programado, curso, enlace: profile.role_codigo === "COORDINACION" ? "/servicios" : "/regulacion" };
 }
 
 export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
