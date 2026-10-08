@@ -7,6 +7,7 @@ import {
   Settings,
   Plug,
   ServerCog,
+  SlidersHorizontal,
   Settings2,
   ShieldCheck,
   Fuel,
@@ -306,6 +307,13 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         icon: Plug,
         roles: ["ADMIN"],
         hint: "Credenciales de GPS (ProTrack365), plantilla de WhatsApp de ubicación y llave de Google Maps.",
+      },
+      {
+        name: "Configuración general",
+        href: "/admin/configuracion-general",
+        icon: SlidersHorizontal,
+        roles: ["ADMIN"],
+        hint: "Correo saliente del sistema: servidor, usuario, clave y nombre del remitente, con envío de prueba.",
       },
       {
         name: "Estado del entorno",

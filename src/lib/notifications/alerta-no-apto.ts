@@ -50,7 +50,7 @@ export async function avisarVehiculoNoApto(
       return { destinatarios: 0, enviado: false };
     }
 
-    if (!emailConfigurado()) {
+    if (!(await emailConfigurado())) {
       // enviarCorreo responde «ok» sin enviar cuando Azure no está configurado: aquí no se puede dar por avisado.
       console.error("[no-apto] " + v.placa + ": el correo no está configurado (SMTP_* o AZURE_* con NOTIFICATIONS_MAIL_FROM); nadie fue avisado");
       return { destinatarios: correos.size, enviado: false };

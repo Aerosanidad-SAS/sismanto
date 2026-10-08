@@ -2,7 +2,8 @@ import { requireRole } from "@/app/api/actions/auth";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { diagnosticarEntorno, type EstadoVariable, type Veredicto } from "@/lib/entorno-diagnostico";
+import { correoEfectivo } from "@/lib/correo-config-servidor";
+import { diagnosticarEntorno, resumenCorreo, type EstadoVariable, type Veredicto } from "@/lib/entorno-diagnostico";
 
 export const metadata = { title: "Estado del entorno" };
 // Se lee en cada visita: tiene que reflejar el despliegue que se está mirando, no el de la construcción.
@@ -27,6 +28,10 @@ const ETIQUETA_ENTORNO: Record<string, string> = {
 export default async function EntornoPage() {
   await requireRole(["ADMIN"]);
   const d = diagnosticarEntorno(process.env);
+  // El correo puede estar configurado en Administración → Configuración general (pisa a las variables): el resumen
+  // cuenta eso también. Las filas de abajo siguen mostrando solo las variables de entorno.
+  const correo = await correoEfectivo();
+  d.correo = resumenCorreo(correo.env);
   const entorno = process.env.VERCEL_ENV ?? "development";
 
   return (
@@ -63,6 +68,12 @@ export default async function EntornoPage() {
               </span>
             )}
           </p>
+          {correo.desdeLaAplicacion.length > 0 && (
+            <p className="text-muted-foreground">
+              Parte del correo ({correo.desdeLaAplicacion.length} campo{correo.desdeLaAplicacion.length === 1 ? "" : "s"}) viene de{" "}
+              <strong>Configuración general</strong>, que tiene prioridad sobre las variables de abajo.
+            </p>
+          )}
           <p>
             «¿Olvidaste tu contraseña?» disponible:{" "}
             <Badge variant={d.correo.recuperacionDisponible ? "success" : "destructive"}>

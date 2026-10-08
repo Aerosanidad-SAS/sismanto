@@ -8,6 +8,8 @@
 import nodemailer from "nodemailer";
 import { getAccessToken } from "@/lib/graph/client";
 import { configSmtp, proveedorCorreo } from "@/lib/notifications/proveedor-correo";
+import { correoEfectivo } from "@/lib/correo-config-servidor";
+import type { CorreoEfectivo } from "@/lib/correo-config";
 
 export interface EmailSendResult {
   ok: boolean;
@@ -24,13 +26,23 @@ export interface AdjuntoCorreo {
 /** Graph `sendMail` lleva los adjuntos dentro del JSON: el total no debe pasar de ~3 MB (4 MB es el tope de la petición). */
 const ADJUNTOS_MAX_BYTES = 3 * 1024 * 1024;
 
-export function emailConfigurado(): boolean {
-  return proveedorCorreo(process.env) !== "ninguno";
+/**
+ * ¿Hay algún proveedor de correo? Cuenta lo configurado en Administración → Configuración general y, si falta, las
+ * variables de entorno. Es asíncrona porque lee la configuración de la base (con una caché corta).
+ */
+export async function emailConfigurado(): Promise<boolean> {
+  return proveedorCorreo((await correoEfectivo()).env) !== "ninguno";
 }
 
 /** Envío por SMTP. Los tiempos de espera son cortos: en una función serverless un servidor que no responde no debe colgarla. */
-async function enviarPorSmtp(destinatarios: string[], asunto: string, cuerpoHtml: string, adjuntos: AdjuntoCorreo[]): Promise<EmailSendResult> {
-  const cfg = configSmtp(process.env);
+async function enviarPorSmtp(
+  efectivo: CorreoEfectivo,
+  destinatarios: string[],
+  asunto: string,
+  cuerpoHtml: string,
+  adjuntos: AdjuntoCorreo[]
+): Promise<EmailSendResult> {
+  const cfg = configSmtp(efectivo.env);
   try {
     const transporte = nodemailer.createTransport({
       host: cfg.host,
@@ -42,7 +54,7 @@ async function enviarPorSmtp(destinatarios: string[], asunto: string, cuerpoHtml
       socketTimeout: 20_000,
     });
     await transporte.sendMail({
-      from: { name: "SISMANTO — Aerosanidad", address: process.env.NOTIFICATIONS_MAIL_FROM!.trim() },
+      from: { name: efectivo.nombreRemitente, address: efectivo.env.NOTIFICATIONS_MAIL_FROM!.trim() },
       to: destinatarios,
       subject: asunto,
       html: cuerpoHtml,
@@ -65,13 +77,14 @@ export async function enviarCorreo(
   const bytes = adjuntos.reduce((n, a) => n + Math.floor((a.base64.length * 3) / 4), 0);
   if (bytes > ADJUNTOS_MAX_BYTES) return { ok: false, error: "Los adjuntos superan los 3 MB permitidos" };
 
-  const proveedor = proveedorCorreo(process.env);
+  const efectivo = await correoEfectivo();
+  const proveedor = proveedorCorreo(efectivo.env);
   if (proveedor === "ninguno") {
     return { ok: true, error: null };
   }
-  if (proveedor === "smtp") return enviarPorSmtp(destinatarios, asunto, cuerpoHtml, adjuntos);
+  if (proveedor === "smtp") return enviarPorSmtp(efectivo, destinatarios, asunto, cuerpoHtml, adjuntos);
 
-  const from = process.env.NOTIFICATIONS_MAIL_FROM!;
+  const from = efectivo.env.NOTIFICATIONS_MAIL_FROM!;
   try {
     const token = await getAccessToken();
     const res = await fetch(
