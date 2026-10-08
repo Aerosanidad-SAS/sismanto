@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HelpTrigger } from "@/components/ui/help-trigger";
+import { textoRetraso } from "@/lib/servicios-abiertos";
 import {
   Table,
   TableBody,
@@ -29,6 +30,7 @@ export interface ServicioDelDia extends ServicioParaEstado {
   nombre_completo: string | null;
   fecha_hora_registro: string | null;
   ciudad_origen: string | null;
+  ciudad_registro?: string | null;
   direccion_origen: string | null;
   ciudad_intermedia: string | null;
   direccion_intermedia: string | null;
@@ -69,7 +71,7 @@ function lugar(direccion: string | null, ciudad: string | null): string | null {
 
 type Filtro = "abiertos" | "todos";
 
-export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) {
+export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicios: ServicioDelDia[]; antiguosSinCerrar?: number }) {
   const [filtro, setFiltro] = useState<Filtro>("abiertos");
   const ahora = Date.now();
 
@@ -90,42 +92,54 @@ export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) 
     cerrados: filas.filter((f) => f.estado.tono === "cerrado").length,
   };
 
-  const visibles = filtro === "abiertos" ? filas.filter((f) => f.estado.activo) : filas;
+  const abiertosOTodos = filtro === "abiertos" ? filas.filter((f) => f.estado.activo) : filas;
+  // Los retrasados van primero (el más atrasado arriba); el resto conserva el orden por hora de recogida.
+  const visibles = [...abiertosOTodos].sort((a, b) => (b.retraso ?? -1) - (a.retraso ?? -1));
 
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <CardTitle className="flex items-center gap-2">
           Servicios del día
-          <HelpTrigger text="Servicios abiertos de cualquier fecha y los programados o registrados hoy. El estado lo actualiza la tripulación desde Mis servicios; en rojo, los que ya pasaron su hora de recogida sin llegar al sitio." />
+          <HelpTrigger text="Servicios abiertos de hoy y de los últimos 3 días, y los programados o registrados hoy. Los abiertos más antiguos se cuentan aparte: casi siempre son servicios que se hicieron y nunca se finalizaron. El estado lo actualiza la tripulación desde Mis servicios; en rojo, los que ya pasaron su hora de recogida sin llegar al sitio." />
         </CardTitle>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-md border p-0.5 text-sm">
+          <div role="group" aria-label="Filtrar servicios" className="flex rounded-md border p-0.5 text-sm">
             {(["abiertos", "todos"] as const).map((f) => (
               <button
                 key={f}
                 type="button"
                 onClick={() => setFiltro(f)}
+                aria-pressed={filtro === f}
                 className={cn(
-                  "rounded px-3 py-1",
-                  filtro === f ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  "min-h-9 rounded px-3 py-1",
+                  filtro === f ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
                 )}
               >
                 {f === "abiertos" ? "Abiertos" : "Todos hoy"}
               </button>
             ))}
           </div>
-          <Button asChild size="sm">
-            <Link href="/servicios">
-              <Plus className="mr-1 h-4 w-4" />
+          <Button asChild>
+            <Link href="/servicios?nuevo=1">
+              <Plus className="mr-1 h-4 w-4" aria-hidden />
               Nuevo servicio
             </Link>
           </Button>
         </div>
       </CardHeader>
+      {antiguosSinCerrar > 0 && (
+        <div role="status" className="mx-6 mb-2 rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-foreground">
+          Hay <strong>{antiguosSinCerrar}</strong> servicios abiertos de hace más de 3 días que no se muestran aquí. Revísalos y ciérralos en{" "}
+          <Link href="/servicios" className="font-medium underline">
+            Servicios
+          </Link>
+          .
+        </div>
+      )}
       <CardContent className="space-y-4">
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          <Contador etiqueta="Sin asignar" valor={conteo.sinAsignar} resaltar={conteo.sinAsignar > 0} tono="warning" />
+          <Contador etiqueta="Sin asignar" valor={conteo.sinAsignar} resaltar={conteo.sinAsignar > 0} tono="warning" aviso />
           <Contador etiqueta="Asignados" valor={conteo.asignados} />
           <Contador etiqueta="En curso" valor={conteo.enCurso} />
           <Contador etiqueta="Retrasados" valor={conteo.retrasados} resaltar={conteo.retrasados > 0} tono="destructive" />
@@ -164,7 +178,13 @@ export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) 
 
                 return (
                   <TableRow key={s.id} className={cn(retraso !== null && "bg-destructive/5")}>
-                    <TableCell className="whitespace-nowrap align-top">
+                    <TableCell
+                      className={cn(
+                        "whitespace-nowrap align-top",
+                        // Borde de color además del texto «+N min»: la fila retrasada se ve de lejos.
+                        retraso !== null && "border-l-4 border-l-destructive"
+                      )}
+                    >
                       <p className="text-base font-semibold tabular-nums">{hora(s.fecha_hora_programacion)}</p>
                       <p className="text-xs text-muted-foreground">Recibido {hora(s.fecha_hora_registro)}</p>
                     </TableCell>
@@ -175,21 +195,13 @@ export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) 
                         {modalidad && ` · ${MODALIDAD[modalidad]}`}
                       </p>
                     </TableCell>
-                    <TableCell className="max-w-[18rem] align-top text-sm">
+                    <TableCell className="min-w-[16rem] max-w-[24rem] align-top text-sm">
                       {origen || destino ? (
                         <div className="space-y-0.5">
-                          {origen && (
-                            <p className="truncate" title={origen}>
-                              Recoge: {origen}
-                            </p>
-                          )}
-                          {intermedio && (
-                            <p className="truncate" title={intermedio}>
-                              Intermedio: {intermedio}
-                            </p>
-                          )}
+                          {origen && <p className="break-words">Recoge: {origen}</p>}
+                          {intermedio && <p className="break-words">Intermedio: {intermedio}</p>}
                           {destino && (
-                            <p className="truncate" title={destino}>
+                            <p className="break-words">
                               {esTraslado ? "Entrega" : "Atención"}: {destino}
                             </p>
                           )}
@@ -217,7 +229,7 @@ export function ServiciosDelDia({ servicios }: { servicios: ServicioDelDia[] }) 
                         <Badge variant={VARIANTE_POR_TONO[estado.tono]}>{estado.etiqueta}</Badge>
                         {retraso !== null && (
                           <Badge variant="destructive" title="Minutos desde la hora de recogida sin llegar al sitio">
-                            +{retraso} min
+                            {textoRetraso(retraso)}
                           </Badge>
                         )}
                       </div>
@@ -238,17 +250,21 @@ function Contador({
   valor,
   resaltar = false,
   tono,
+  aviso = false,
 }: {
   etiqueta: string;
   valor: number;
   resaltar?: boolean;
   tono?: "warning" | "destructive";
+  /** Anuncia el cambio del número a lectores de pantalla (el tablero se refresca solo). */
+  aviso?: boolean;
 }) {
   return (
     <div
+      aria-live={aviso ? "polite" : undefined}
       className={cn(
         "rounded-md border p-2",
-        resaltar && tono === "warning" && "border-amber-300 bg-amber-50",
+        resaltar && tono === "warning" && "border-warning/50 bg-warning-soft",
         resaltar && tono === "destructive" && "border-destructive/40 bg-destructive/5"
       )}
     >

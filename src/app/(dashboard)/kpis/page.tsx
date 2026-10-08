@@ -1,11 +1,16 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { KPIDashboard } from "@/components/charts/kpi-dashboard";
+import { KpiMantenimiento } from "@/components/charts/kpi-mantenimiento";
+import { getKpisMantenimiento } from "@/app/api/actions/kpis-mantenimiento";
 import { isReferenceSparkCombustionPlaca } from "@/lib/fleet-reference-plates";
 import { getMetricasConsumo } from "@/app/api/actions/consumo";
 import { requireRole } from "@/app/api/actions/auth";
-import { costoFijoDelPeriodo, type TarifasRtm } from "@/lib/costos-fijos";
+import { costosPorVehiculo } from "@/lib/costos-vehiculo";
 import { diasDelRango, esDia, hoyBogota, limitesInstante } from "@/lib/fechas";
+import { KpisSkeleton } from "@/components/layout/skeletons";
+
+export const metadata = { title: "KPIs y métricas" };
 
 type TcoTipoFiltro = "AMBOS" | "PREVENTIVO" | "CORRECTIVO";
 type FuelResumenKPI = {
@@ -15,6 +20,26 @@ type FuelResumenKPI = {
   vehiculosConDatos: number;
   vehiculosAnalizados: number;
 };
+type RatioPC = {
+  costoPreventivo: number;
+  costoCorrectivo: number;
+  ratio: number;
+  cantidadPreventivo: number;
+  cantidadCorrectivo: number;
+};
+
+function mapearTco(costos: Awaited<ReturnType<typeof costosPorVehiculo>>) {
+  return costos.map((c) => ({
+    placa: c.placa,
+    centroOperativo: c.centroOperativo,
+    costoPreventivo: c.costoPreventivo,
+    costoCorrectivo: c.costoCorrectivo,
+    costoCombustible: c.costoCombustible,
+    costoFijoAnual: c.costoFijoAnual,
+    costoTotal: c.costoTotal,
+    cantidadMantenimientos: c.cantidadMantenimientos,
+  }));
+}
 
 async function getKPIData(
   fechaInicio: string,
@@ -79,117 +104,32 @@ async function getKPIData(
       };
     });
 
-    // KPI 2: CTO (Costo Total de Operación)
-    const { data: vehiclesCostRaw } = await supabase
-      .from("vehicles")
-      .select(
-        "id, placa, centro_operativo, centro_operativo_id, costo_soat_anual, costo_poliza_anual"
-      );
-    const { data: rtmRowsKpi } = await supabase
-      .from("rtm_historico")
-      .select("anio, valor");
-    const rtmByYearKpi: TarifasRtm = {};
-    for (const r of rtmRowsKpi || []) {
-      rtmByYearKpi[r.anio] = Number(r.valor);
-    }
-    let vehiclesCost = (vehiclesCostRaw || []).filter(
-      (v: any) => !isReferenceSparkCombustionPlaca(v.placa)
-    );
-    if (tcoFiltros?.centroId != null && !Number.isNaN(tcoFiltros.centroId)) {
-      vehiclesCost = vehiclesCost.filter(
-        (v: any) => Number(v.centro_operativo_id) === tcoFiltros.centroId
-      );
-    }
-    if (tcoFiltros?.placaFragment?.trim()) {
-      const q = tcoFiltros.placaFragment.trim().toUpperCase();
-      vehiclesCost = vehiclesCost.filter((v: any) =>
-        String(v.placa || "").toUpperCase().includes(q)
-      );
-    }
-    const vehicleIds = vehiclesCost.map((v: any) => v.id);
-
-    let mantenimientos: any[] = [];
-    if (vehicleIds.length > 0) {
-      let mantQuery = supabase
-        .from("maintenance_records")
-        .select(
-          `tipo, valor, vehicle_id, vehicles!inner(placa, centro_operativo, centro_operativo_id)`
-        )
-        .in("vehicle_id", vehicleIds)
-        .gte("fecha", fechaInicio)
-        .lte("fecha", fechaFin);
-      if (tcoFiltros?.tipo && tcoFiltros.tipo !== "AMBOS") {
-        mantQuery = mantQuery.eq("tipo", tcoFiltros.tipo);
-      }
-      mantenimientos = (await mantQuery).data || [];
-    }
-
-    const { data: fuelRows } = vehicleIds.length
-      ? await supabase
-          .from("fuel_logs")
-          .select("vehicle_id, costo")
-          .in("vehicle_id", vehicleIds)
-          .gte("fecha", fechaInicio)
-          .lte("fecha", fechaFin)
-      : { data: [] as any[] };
-
-    const tcoData: Record<string, any> = {};
-    for (const v of vehiclesCost) {
-      const costoFijoAnual = costoFijoDelPeriodo(
-        { soatAnual: v.costo_soat_anual, polizaAnual: v.costo_poliza_anual },
-        fechaInicio,
-        fechaFin,
-        rtmByYearKpi
-      );
-      tcoData[v.id] = {
-        placa: v.placa,
-        centroOperativo: v.centro_operativo,
-        costoPreventivo: 0,
-        costoCorrectivo: 0,
-        costoCombustible: 0,
-        costoFijoAnual,
-        costoTotal: costoFijoAnual,
-        cantidadMantenimientos: 0,
+    // KPI 2 y 3: CTO y Ratio Preventivo/Correctivo. Misma función SQL que el dashboard: una sola fuente de costos.
+    // Try/catch propio (Aegis, #116): costosPorVehiculo lanza si la RPC falla (p. ej. la migración 089 aún no
+    // aplicada al desplegar) y no debe arrastrar a KPI 1 (disponibilidad) ni KPI 4 (resolución), que no dependen de ella.
+    let tcoData: ReturnType<typeof mapearTco> = [];
+    let ratioPC: RatioPC = { costoPreventivo: 0, costoCorrectivo: 0, ratio: 0, cantidadPreventivo: 0, cantidadCorrectivo: 0 };
+    try {
+      const centroCosto = tcoFiltros?.centroId;
+      const costos = await costosPorVehiculo(supabase, {
+        desde: fechaInicio,
+        hasta: fechaFin,
+        tipo: tcoFiltros?.tipo,
+        centroOperativoId: centroCosto != null && !Number.isNaN(centroCosto) ? centroCosto : undefined,
+        placaFragmento: tcoFiltros?.placaFragment,
+      });
+      tcoData = mapearTco(costos);
+      ratioPC = {
+        costoPreventivo: costos.reduce((s, c) => s + c.costoPreventivo, 0),
+        costoCorrectivo: costos.reduce((s, c) => s + c.costoCorrectivo, 0),
+        ratio: 0,
+        cantidadPreventivo: costos.reduce((s, c) => s + c.cantidadPreventivo, 0),
+        cantidadCorrectivo: costos.reduce((s, c) => s + c.cantidadCorrectivo, 0),
       };
+      ratioPC.ratio = ratioPC.costoCorrectivo > 0 ? ratioPC.costoPreventivo / ratioPC.costoCorrectivo : 0;
+    } catch (e) {
+      console.error("KPI costos (costosPorVehiculo) falló, el resto del tablero sigue:", e instanceof Error ? e.message : e);
     }
-
-    for (const m of mantenimientos) {
-      const entry = tcoData[m.vehicle_id];
-      if (!entry) continue;
-      const valor = Number(m.valor || 0);
-      entry.cantidadMantenimientos += 1;
-      if (m.tipo === "PREVENTIVO") entry.costoPreventivo += valor;
-      if (m.tipo === "CORRECTIVO") entry.costoCorrectivo += valor;
-      entry.costoTotal += valor;
-    }
-
-    for (const f of fuelRows || []) {
-      const entry = tcoData[f.vehicle_id];
-      if (!entry) continue;
-      const costo = Number(f.costo || 0);
-      entry.costoCombustible += costo;
-      entry.costoTotal += costo;
-    }
-
-    // KPI 3: Ratio Preventivo/Correctivo (subconjunto de mantenimientos filtrado)
-    const totalPreventivo = mantenimientos.reduce(
-      (sum, m: any) => sum + (m.tipo === "PREVENTIVO" ? m.valor || 0 : 0),
-      0
-    );
-    const totalCorrectivo = mantenimientos.reduce(
-      (sum, m: any) => sum + (m.tipo === "CORRECTIVO" ? m.valor || 0 : 0),
-      0
-    );
-    const cantidadPreventivo = mantenimientos.filter((m: any) => m.tipo === "PREVENTIVO").length;
-    const cantidadCorrectivo = mantenimientos.filter((m: any) => m.tipo === "CORRECTIVO").length;
-
-    const ratioPC = {
-      costoPreventivo: totalPreventivo,
-      costoCorrectivo: totalCorrectivo,
-      ratio: totalCorrectivo > 0 ? totalPreventivo / totalCorrectivo : 0,
-      cantidadPreventivo,
-      cantidadCorrectivo,
-    };
 
     // KPI 4: Tiempo Medio de Resolución
     const { data: incidentsResolucion } = await supabase
@@ -231,7 +171,7 @@ async function getKPIData(
 
     return {
       uptimeData,
-      tcoData: Object.values(tcoData),
+      tcoData,
       ratioPC,
       resolucionData,
     };
@@ -308,7 +248,7 @@ export default async function KPIsPage({
     )
   );
 
-  const [kpiData, fuelResumen] = await Promise.all([
+  const [kpiData, fuelResumen, kpisMant] = await Promise.all([
     getKPIData(
       fechaInicio,
       fechaFin,
@@ -316,6 +256,7 @@ export default async function KPIsPage({
       dispCentroId
     ),
     getFuelResumen(fechaInicio, fechaFin),
+    getKpisMantenimiento(fechaInicio, fechaFin),
   ]);
 
   return (
@@ -327,7 +268,7 @@ export default async function KPIsPage({
         </p>
       </div>
 
-      <Suspense fallback={<div>Cargando KPIs...</div>}>
+      <Suspense fallback={<KpisSkeleton />}>
         <KPIDashboard
           uptimeData={kpiData.uptimeData}
           tcoData={kpiData.tcoData}
@@ -344,6 +285,8 @@ export default async function KPIsPage({
           fuelResumen={fuelResumen}
         />
       </Suspense>
+
+      <KpiMantenimiento datos={kpisMant} />
     </div>
   );
 }

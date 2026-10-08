@@ -1,13 +1,14 @@
 "use client";
 
 import { hoyBogota } from "@/lib/fechas";
-import { useState, useCallback, useRef } from "react";
-import { FileUp, Loader2, CheckCircle2, XCircle, Trash2, RotateCcw, FileText, Image } from "lucide-react";
+import { useState, useCallback, useRef, useId } from "react";
+import { Loader2, CheckCircle2, XCircle, Trash2, RotateCcw, FileText, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { DateField } from "@/components/forms/date-field";
+import { ImportFileDrop, ImportSteps } from "@/components/configuracion/import-flow";
 import {
   extractInvoiceAction,
   aprobarFacturaMantenimiento,
@@ -34,68 +35,18 @@ interface QueueItem {
 const VALID_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_MB = 8;
 
-// ─── Drop Zone ────────────────────────────────────────────────────────────────
+// ─── Archivos ─────────────────────────────────────────────────────────────────
 
-function DropZone({
-  compact,
-  onFiles,
-}: {
-  compact: boolean;
-  onFiles: (files: File[]) => void;
-}) {
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      const files = Array.from(e.dataTransfer.files).filter(
-        (f) => VALID_TYPES.includes(f.type) && f.size <= MAX_SIZE_MB * 1024 * 1024
-      );
-      if (files.length) onFiles(files);
-    },
-    [onFiles]
-  );
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter(
-      (f) => VALID_TYPES.includes(f.type) && f.size <= MAX_SIZE_MB * 1024 * 1024
-    );
-    if (files.length) onFiles(files);
-    e.target.value = "";
-  };
-
-  if (compact) {
-    return (
-      <button
-        onClick={() => inputRef.current?.click()}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors border border-dashed rounded-lg px-4 py-2"
-      >
-        <FileUp className="h-4 w-4" />
-        Agregar más facturas
-        <input ref={inputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={handleChange} />
-      </button>
-    );
+/** Separa los archivos válidos de los rechazados (con el motivo, para mostrarlo). */
+function filtrarArchivos(files: File[]): { validos: File[]; rechazados: string[] } {
+  const validos: File[] = [];
+  const rechazados: string[] = [];
+  for (const f of files) {
+    if (!VALID_TYPES.includes(f.type)) rechazados.push(`${f.name}: formato no admitido`);
+    else if (f.size > MAX_SIZE_MB * 1024 * 1024) rechazados.push(`${f.name}: pesa más de ${MAX_SIZE_MB} MB`);
+    else validos.push(f);
   }
-
-  return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={handleDrop}
-      onClick={() => inputRef.current?.click()}
-      className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
-        dragging ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"
-      }`}
-    >
-      <FileUp className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-      <p className="text-lg font-medium">Arrastra las facturas aquí</p>
-      <p className="text-sm text-muted-foreground mt-1">o haz clic para seleccionar archivos</p>
-      <p className="text-xs text-muted-foreground mt-3">PDF, JPG, PNG, WEBP — máx. {MAX_SIZE_MB} MB por archivo</p>
-      <input ref={inputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={handleChange} />
-    </div>
-  );
+  return { validos, rechazados };
 }
 
 // ─── Preview Form ─────────────────────────────────────────────────────────────
@@ -114,6 +65,8 @@ function InvoicePreviewForm({
   onDiscard: () => void;
 }) {
   const ext = item.extracted!;
+  const uid = useId();
+  const fid = (campo: string) => `${uid}-${campo}`;
   const matchedVehicle = vehicles.find(
     (v) => v.placa.toLowerCase() === (ext.placa || "").toLowerCase()
   );
@@ -188,8 +141,8 @@ function InvoicePreviewForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Vehículo */}
         <div className="space-y-1">
-          <Label>Vehículo *</Label>
-          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className={inputClass}>
+          <Label htmlFor={fid("vehiculo")}>Vehículo *</Label>
+          <select id={fid("vehiculo")} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className={inputClass}>
             <option value="">— Seleccionar —</option>
             {vehicles.map((v) => (
               <option key={v.id} value={v.id}>{v.placa}</option>
@@ -204,14 +157,14 @@ function InvoicePreviewForm({
 
         {/* Fecha */}
         <div className="space-y-1">
-          <Label>Fecha *</Label>
-          <DateField value={fecha} onChange={setFecha} />
+          <Label htmlFor={fid("fecha")}>Fecha *</Label>
+          <DateField id={fid("fecha")} value={fecha} onChange={setFecha} />
         </div>
 
         {/* Tipo */}
         <div className="space-y-1">
-          <Label>Tipo *</Label>
-          <select value={tipo} onChange={(e) => setTipo(e.target.value as "PREVENTIVO" | "CORRECTIVO")} className={inputClass}>
+          <Label htmlFor={fid("tipo")}>Tipo *</Label>
+          <select id={fid("tipo")} value={tipo} onChange={(e) => setTipo(e.target.value as "PREVENTIVO" | "CORRECTIVO")} className={inputClass}>
             <option value="PREVENTIVO">PREVENTIVO</option>
             <option value="CORRECTIVO">CORRECTIVO</option>
           </select>
@@ -219,8 +172,8 @@ function InvoicePreviewForm({
 
         {/* Categoría */}
         <div className="space-y-1">
-          <Label>Categoría (opcional)</Label>
-          <select value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)} className={inputClass}>
+          <Label htmlFor={fid("categoria")}>Categoría (opcional)</Label>
+          <select id={fid("categoria")} value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)} className={inputClass}>
             <option value="">— Sin categoría —</option>
             {Object.entries(gruposCategoria).map(([grupo, cats]) => (
               <optgroup key={grupo} label={grupo}>
@@ -234,20 +187,21 @@ function InvoicePreviewForm({
 
         {/* Proveedor */}
         <div className="space-y-1">
-          <Label>Proveedor *</Label>
-          <input type="text" value={proveedor} onChange={(e) => setProveedor(e.target.value)} className={inputClass} placeholder="Nombre del taller" />
+          <Label htmlFor={fid("proveedor")}>Proveedor *</Label>
+          <input id={fid("proveedor")} type="text" value={proveedor} onChange={(e) => setProveedor(e.target.value)} className={inputClass} placeholder="Nombre del taller" />
         </div>
 
         {/* Nº Factura */}
         <div className="space-y-1">
-          <Label>Nº Factura</Label>
-          <input type="text" value={factura} onChange={(e) => setFactura(e.target.value)} className={inputClass} placeholder="F-0001" />
+          <Label htmlFor={fid("factura")}>Nº Factura</Label>
+          <input id={fid("factura")} type="text" value={factura} onChange={(e) => setFactura(e.target.value)} className={inputClass} placeholder="F-0001" />
         </div>
 
         {/* Valor */}
         <div className="space-y-1">
-          <Label>Valor (COP) *</Label>
+          <Label htmlFor={fid("valor")}>Valor (COP) *</Label>
           <input
+            id={fid("valor")}
             type="number"
             min="0"
             value={valor}
@@ -259,21 +213,22 @@ function InvoicePreviewForm({
 
         {/* Kilometraje */}
         <div className="space-y-1">
-          <Label>Kilometraje (si conocido)</Label>
-          <input type="number" min="0" value={km} onChange={(e) => setKm(e.target.value)} className={`${inputClass} font-mono`} placeholder="0" />
+          <Label htmlFor={fid("km")}>Kilometraje (si conocido)</Label>
+          <input id={fid("km")} type="number" min="0" value={km} onChange={(e) => setKm(e.target.value)} className={`${inputClass} font-mono`} placeholder="0" />
         </div>
 
         {/* Tiempo fuera de servicio */}
         <div className="space-y-1">
-          <Label>Horas fuera de servicio</Label>
-          <input type="number" min="0" step="0.5" value={tfs} onChange={(e) => setTfs(e.target.value)} className={inputClass} placeholder="0" />
+          <Label htmlFor={fid("tfs")}>Horas fuera de servicio</Label>
+          <input id={fid("tfs")} type="number" min="0" step="0.5" value={tfs} onChange={(e) => setTfs(e.target.value)} className={inputClass} placeholder="0" />
         </div>
       </div>
 
       {/* Descripción */}
       <div className="space-y-1">
-        <Label>Descripción del trabajo *</Label>
+        <Label htmlFor={fid("descripcion")}>Descripción del trabajo *</Label>
         <textarea
+          id={fid("descripcion")}
           value={descripcion}
           onChange={(e) => setDescripcion(e.target.value)}
           rows={3}
@@ -284,8 +239,9 @@ function InvoicePreviewForm({
 
       {/* Notas adicionales */}
       <div className="space-y-1">
-        <Label>Notas adicionales</Label>
+        <Label htmlFor={fid("notas")}>Notas adicionales</Label>
         <textarea
+          id={fid("notas")}
           value={notas}
           onChange={(e) => setNotas(e.target.value)}
           rows={2}
@@ -295,7 +251,7 @@ function InvoicePreviewForm({
       </div>
 
       {validationError && (
-        <p className="text-sm text-destructive">{validationError}</p>
+        <p role="alert" className="text-sm text-destructive">{validationError}</p>
       )}
 
       <div className="flex gap-3 pt-2">
@@ -331,7 +287,7 @@ function QueueItemCard({
 }) {
   const fileIcon = item.file.type === "application/pdf"
     ? <FileText className="h-4 w-4 text-muted-foreground" />
-    : <Image className="h-4 w-4 text-muted-foreground" />;
+    : <ImageIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />;
 
   const isDuplicateWarning = item.status === "preview" && !!item.duplicado;
 
@@ -443,6 +399,7 @@ export function InvoiceUploader({
 }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const processingRef = useRef(false);
+  const [rechazados, setRechazados] = useState<string[]>([]);
 
   const updateItem = (uid: string, patch: Partial<QueueItem>) =>
     setQueue((q) => q.map((i) => (i.uid === uid ? { ...i, ...patch } : i)));
@@ -460,7 +417,10 @@ export function InvoiceUploader({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addFiles = useCallback(
-    async (files: File[]) => {
+    async (todos: File[]) => {
+      const { validos: files, rechazados: noAdmitidos } = filtrarArchivos(todos);
+      setRechazados(noAdmitidos);
+      if (files.length === 0) return;
       const items: QueueItem[] = files.map((f) => ({
         uid: crypto.randomUUID(),
         file: f,
@@ -510,11 +470,35 @@ export function InvoiceUploader({
   const activeCount = queue.filter((i) => !["done", "discarded"].includes(i.status)).length;
   const doneCount = queue.filter((i) => i.status === "done").length;
   const hasQueue = queue.length > 0;
+  const pasoActual: "subir" | "revisar" | "confirmar" = queue.some((i) => i.status === "preview" || i.status === "approving" || i.status === "done")
+    ? "confirmar"
+    : queue.some((i) => i.status === "pending" || i.status === "extracting")
+      ? "revisar"
+      : "subir";
 
   return (
     <div className="space-y-4">
-      {/* Drop zone */}
-      <DropZone compact={hasQueue} onFiles={addFiles} />
+      <ImportSteps current={pasoActual} />
+
+      <ImportFileDrop
+        accept=".pdf,.jpg,.jpeg,.png,.webp"
+        multiple
+        compact={hasQueue}
+        label={hasQueue ? "Agregar más facturas" : "Elige las facturas o arrástralas aquí"}
+        hint={`PDF, JPG, PNG o WEBP, máximo ${MAX_SIZE_MB} MB por archivo. Revisarás los datos de cada una antes de guardar.`}
+        onFiles={addFiles}
+      />
+
+      {rechazados.length > 0 && (
+        <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <p className="font-medium">No se agregaron {rechazados.length === 1 ? "este archivo" : "estos archivos"}:</p>
+          <ul className="mt-1 list-disc pl-5">
+            {rechazados.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Summary bar */}
       {hasQueue && (
@@ -526,8 +510,9 @@ export function InvoiceUploader({
           </span>
           {queue.every((i) => ["done", "discarded", "error"].includes(i.status)) && (
             <button
-              onClick={() => setQueue([])}
-              className="text-xs hover:text-foreground transition-colors"
+              type="button"
+              onClick={() => { setQueue([]); setRechazados([]); }}
+              className="min-h-9 px-2 text-xs hover:text-foreground transition-colors"
             >
               Limpiar lista
             </button>

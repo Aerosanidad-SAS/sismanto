@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitDailyCheck, getDailyCheckForToday, getDailyCheckItemsForToday } from "@/app/api/actions/ovem";
+import { subirFotoPreoperacional } from "@/app/api/actions/vehiculo-fotos";
+import { FotosVehiculo } from "@/components/vehiculos/fotos-vehiculo";
+import { SelectorFotosNuevas } from "@/components/vehiculos/selector-fotos-nuevas";
+import { columnaDeLado, type FotosVehiculo as FotosVehiculoType, type LadoVehiculo } from "@/lib/vehiculo-fotos";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +22,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -28,17 +33,37 @@ import {
   AlertCircle,
   ClipboardCheck,
   ArrowLeft,
-  ArrowRight,
   Ambulance,
   Fuel,
+  LogOut,
+  RefreshCw,
   Siren,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VehiculoConDocumentos } from "@/lib/vencimientos";
-import { ChecklistItemRow, agruparPorCategoria, type ChecklistItem } from "./checklist-item-row";
+import { ChecklistItemRow, agruparPorCategoria, checklistPayload, type ChecklistItem } from "./checklist-item-row";
+import { validarPreoperacional } from "@/lib/preoperacional";
+import { aplicaAlTipo } from "@/lib/checklist-tipo";
+import {
+  borradoresVencidos,
+  claveBorrador,
+  evaluarKilometraje,
+  KM_MAXIMO,
+  idsNuevos,
+  leerBorrador,
+  parseKilometraje,
+  resumirRespuestas,
+  serializarBorrador,
+  textoResumen,
+  type RespuestasChecklist,
+} from "@/lib/ovem-portal";
+import { CierreTurnoForm } from "./cierre-turno-form";
+import { CierresTurnoConsulta } from "./cierres-turno-consulta";
 import { CombustibleForm } from "./combustible-form";
 import { SiniestroForm } from "./siniestro-form";
 import { DocumentosVehiculo } from "./documentos-vehiculo";
+import { alertNewService, useAutoRefresh } from "./use-auto-refresh";
 
 interface OvemPortalProps {
   userId: string;
@@ -51,6 +76,7 @@ interface OvemPortalProps {
       modelo?: string | null;
       estado_actual?: string;
       centro_operativo?: string;
+      tipo_vehiculo?: string | null;
     }
   >;
   checklistItems: ChecklistItem[];
@@ -59,9 +85,13 @@ interface OvemPortalProps {
   isAdmin: boolean;
   viewerRole?: "OVEM" | "ADMIN";
   servicios?: Array<Record<string, unknown> & { id: number; etapa: string }>;
+  /** Vehículos que Regulación le programó hoy a este conductor. Con uno solo se preselecciona. */
+  vehiculosDeHoy?: string[];
+  /** Último kilometraje conocido por vehículo, para la ayuda y el aviso al digitar. */
+  ultimoKmPorVehiculo?: Record<string, number>;
 }
 
-type Flow = null | "preoperacional" | "combustible" | "novedad" | "siniestro" | "servicios";
+type Flow = null | "preoperacional" | "combustible" | "novedad" | "siniestro" | "servicios" | "cierre";
 
 const FLOW_LABEL: Record<Exclude<Flow, null>, string> = {
   preoperacional: "Preoperacional",
@@ -69,7 +99,59 @@ const FLOW_LABEL: Record<Exclude<Flow, null>, string> = {
   novedad: "Reporte de novedad",
   siniestro: "Siniestro vial",
   servicios: "Mis servicios",
+  cierre: "Cerrar turno",
 };
+
+/** El Administrador no «tiene» servicios ni cierra turnos: los consulta. */
+const FLOW_LABEL_ADMIN: Partial<Record<Exclude<Flow, null>, string>> = {
+  servicios: "Servicios programados y en curso",
+  cierre: "Cierres de turno (consulta)",
+};
+
+/** Referencia estable: un `[]` por defecto se recrearía en cada render y dispararía los efectos que dependen de él. */
+const SIN_SERVICIOS: NonNullable<OvemPortalProps["servicios"]> = [];
+const SIN_VEHICULOS_DE_HOY: string[] = [];
+const SIN_KM: Record<string, number> = {};
+
+/** Cómo quedó elegido el vehículo; solo para explicarlo en pantalla. */
+type OrigenVehiculo = "unico" | "hoy" | "ultimo" | "manual" | null;
+
+const claveUltimoVehiculo = (userId: string) => `sismanto_ovem_ultimo_vehiculo_${userId}`;
+
+// El borrador va en localStorage (no en sessionStorage): sobrevive a que el navegador del celular cierre o recargue la
+// pestaña, que es justo cuando el conductor más lo necesita. La clave lleva usuario, vehículo y día.
+function leerSession(clave: string): string | null {
+  try {
+    return localStorage.getItem(clave);
+  } catch {
+    return null;
+  }
+}
+function escribirSession(clave: string, valor: string | null) {
+  try {
+    if (valor === null) localStorage.removeItem(clave);
+    else localStorage.setItem(clave, valor);
+  } catch {
+    /* almacenamiento bloqueado: se pierde el borrador, no el trabajo en pantalla */
+  }
+}
+/** Borra los borradores de días anteriores (de cualquier usuario de este teléfono). */
+function limpiarBorradoresViejos(hoy: string) {
+  try {
+    const claves: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) claves.push(k);
+    }
+    for (const k of borradoresVencidos(claves, hoy)) localStorage.removeItem(k);
+  } catch {
+    /* sin localStorage */
+  }
+}
+
+function horaCorta(d: Date): string {
+  return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Bogota" });
+}
 
 export function OvemPortal({
   userId,
@@ -79,12 +161,27 @@ export function OvemPortal({
   hoyBogota,
   isAdmin,
   viewerRole = "ADMIN",
-  servicios = [],
+  servicios = SIN_SERVICIOS,
+  vehiculosDeHoy = SIN_VEHICULOS_DE_HOY,
+  ultimoKmPorVehiculo = SIN_KM,
 }: OvemPortalProps) {
   const router = useRouter();
-  const serviciosActivos = servicios.filter((s) => s.etapa === "PROGRAMADO" || s.etapa === "CURSO");
+  const serviciosActivos = useMemo(
+    () => servicios.filter((s) => s.etapa === "PROGRAMADO" || s.etapa === "CURSO"),
+    [servicios]
+  );
   const [flow, setFlow] = useState<Flow>(null);
-  const [vehicleId, setVehicleId] = useState("");
+  // El vehículo se conserva entre flujos: se elige una vez (o llega preseleccionado) y vale para toda la sesión.
+  const [vehicleId, setVehicleId] = useState<string>(() => {
+    if (vehicles.length === 1) return vehicles[0].id;
+    if (vehiculosDeHoy.length === 1 && vehicles.some((v) => v.id === vehiculosDeHoy[0])) return vehiculosDeHoy[0];
+    return "";
+  });
+  const [origenVehiculo, setOrigenVehiculo] = useState<OrigenVehiculo>(() => {
+    if (vehicles.length === 1) return "unico";
+    if (vehiculosDeHoy.length === 1 && vehicles.some((v) => v.id === vehiculosDeHoy[0])) return "hoy";
+    return null;
+  });
   const [km, setKm] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [showNovedadDialog, setShowNovedadDialog] = useState(false);
@@ -94,57 +191,185 @@ export function OvemPortal({
   const [success, setSuccess] = useState<string | null>(null);
   /** Confirmación que sobrevive al volver al menú (tanqueo, siniestro). */
   const [aviso, setAviso] = useState<string | null>(null);
-  const [novedadesOpen, setNovedadesOpen] = useState(false);
-  const [checkItemsState, setCheckItemsState] = useState<
-    Record<
-      number,
-      { estado: "OK" | "FALLA" | "NO_APLICA"; cantidadOk?: number; observacion?: string }
-    >
-  >({});
-  const [incidentFromItem, setIncidentFromItem] = useState<null | { title: string; desc: string }>(
-    null
-  );
+  const [checkItemsState, setCheckItemsState] = useState<RespuestasChecklist>({});
+  /** Ya se intentó enviar con ítems sin responder: se resaltan. */
+  const [resaltarPendientes, setResaltarPendientes] = useState(false);
+  const [mostrarResumen, setMostrarResumen] = useState(false);
+  /** Preoperacional de hoy ya enviado: habilita el paso opcional de las 4 fotos del vehículo. */
+  const [dailyCheckId, setDailyCheckId] = useState<number | null>(null);
+  const [fotosPreop, setFotosPreop] = useState<FotosVehiculoType>({});
+  /** Fotos elegidas en el formulario antes de enviar (mismo lugar que SISRES); se suben al confirmar el envío. */
+  const [fotosSeleccionadas, setFotosSeleccionadas] = useState<Partial<Record<LadoVehiculo, File>>>({});
+  const [confirmarSalida, setConfirmarSalida] = useState(false);
+  /** No se pudo traer lo que ya se había enviado hoy (sin señal): el formulario sigue siendo usable. */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  /** `${vehicleId}|${hoy}` del borrador ya cargado; evita guardar el estado de un vehículo bajo la clave de otro. */
+  const [cargadoPara, setCargadoPara] = useState<string | null>(null);
+  const baselineRef = useRef<string | null>(null);
 
   const hoy = hoyBogota; // día de hoy en Colombia, calculado en el servidor
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+  const ultimoKm = vehicleId ? (ultimoKmPorVehiculo[vehicleId] ?? null) : null;
 
+  // Vehículo de hoy primero en la lista.
+  const vehiculosOrdenados = useMemo(() => {
+    const deHoy = new Set(vehiculosDeHoy);
+    return [...vehicles].sort((a, b) => Number(deHoy.has(b.id)) - Number(deHoy.has(a.id)));
+  }, [vehicles, vehiculosDeHoy]);
+
+  // Sin asignación de hoy: el último vehículo usado en este teléfono (se lee tras montar, no en el render del servidor).
   useEffect(() => {
-    if (vehicleId && flow === "preoperacional") {
-      getDailyCheckForToday(userId, vehicleId).then((dc) => {
-        if (dc) {
-          setDailyCheckDone(true);
-          setObservaciones(dc.observaciones || "");
-          if (dc.kilometraje_inicial) setKm(String(dc.kilometraje_inicial));
-        } else {
-          setDailyCheckDone(false);
-        }
-      });
-
-      getDailyCheckItemsForToday(userId, vehicleId).then((items) => {
-        const map: typeof checkItemsState = {};
-        for (const it of items as any[]) {
-          map[it.checklist_item_id] = {
-            estado: it.estado,
-            cantidadOk: it.cantidad_ok ?? undefined,
-            observacion: it.observacion ?? undefined,
-          };
-        }
-        setCheckItemsState(map);
-      });
-    } else if (!vehicleId || flow !== "preoperacional") {
-      setDailyCheckDone(false);
+    limpiarBorradoresViejos(hoyBogota);
+    if (vehicleId) return;
+    try {
+      const ultimo = localStorage.getItem(claveUltimoVehiculo(userId));
+      if (ultimo && vehicles.some((v) => v.id === ultimo)) {
+        setVehicleId(ultimo);
+        setOrigenVehiculo("ultimo");
+      }
+    } catch {
+      /* sin localStorage: se elige a mano */
     }
-  }, [vehicleId, userId, flow]);
+    // Solo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  const elegirVehiculo = (id: string) => {
+    setVehicleId(id);
+    setOrigenVehiculo("manual");
+    try {
+      localStorage.setItem(claveUltimoVehiculo(userId), id);
+    } catch {
+      /* sin localStorage */
+    }
+  };
+
+  /* ─── Refresco automático de «Mis servicios» (MOV-02) ─── */
+  const refrescarServicios = viewerRole === "OVEM" && (flow === null || flow === "servicios");
+  const refrescarAhora = useAutoRefresh(refrescarServicios);
+  const [actualizado, setActualizado] = useState<Date | null>(null);
+  const [avisoNuevo, setAvisoNuevo] = useState<string | null>(null);
+  const idsPrevios = useRef<number[] | null>(null);
+
+  // Cada vez que el servidor entrega servicios (carga o refresco) se marca la hora.
   useEffect(() => {
-    setVehicleId("");
+    setActualizado(new Date());
+  }, [servicios]);
+
+  const claveIdsActivos = serviciosActivos.map((s) => s.id).join(",");
+  useEffect(() => {
+    if (viewerRole !== "OVEM") return;
+    const actuales = serviciosActivos.map((s) => s.id);
+    const nuevos = idsNuevos(idsPrevios.current, actuales);
+    idsPrevios.current = actuales;
+    if (nuevos.length === 0) return;
+    const detalle = serviciosActivos.find((s) => s.id === nuevos[0]);
+    const tipo = detalle ? String(detalle.tipo_servicio ?? "") : "";
+    setAvisoNuevo(
+      nuevos.length === 1
+        ? `Tienes un servicio nuevo asignado: #${nuevos[0]}${tipo ? ` · ${tipo}` : ""}.`
+        : `Tienes ${nuevos.length} servicios nuevos asignados.`
+    );
+    alertNewService();
+    // La clave de ids resume a serviciosActivos: solo reacciona cuando cambia el conjunto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveIdsActivos, viewerRole]);
+
+  const claveCarga = vehicleId ? `${vehicleId}|${hoy}` : null;
+
+  /* ─── Carga del preoperacional de hoy + borrador local (MOV-04) ─── */
+  useEffect(() => {
+    if (!vehicleId || flow !== "preoperacional") {
+      setDailyCheckDone(false);
+      setDailyCheckId(null);
+      setFotosPreop({});
+      setFotosSeleccionadas({});
+      setCargadoPara(null);
+      baselineRef.current = null;
+      return;
+    }
+    let cancelado = false;
+    setCargadoPara(null);
+    setErrorCarga(null);
+    (async () => {
+      // El propio OVEM: exacto a su nombre. Quien solo supervisa (ADMIN, "Ver como" aparte): el del vehículo hoy,
+      // sea quien sea que lo haya registrado — la RLS de daily_checks ya le deja ver cualquier fila.
+      const propio = viewerRole === "OVEM" ? userId : undefined;
+      let dc: Awaited<ReturnType<typeof getDailyCheckForToday>> | null = null;
+      let items: unknown[] = [];
+      let sinConexion = false;
+      try {
+        const [d, i] = await Promise.all([getDailyCheckForToday(vehicleId, propio), getDailyCheckItemsForToday(vehicleId, propio)]);
+        dc = d;
+        items = i as unknown[];
+      } catch {
+        // Sin señal al abrir: no se pudo saber qué se envió hoy. El formulario se habilita igual (y el borrador se
+        // guarda); antes se quedaba sin cargar, no guardaba borrador y no avisaba al salir.
+        sinConexion = true;
+      }
+      if (cancelado) return;
+      const map: RespuestasChecklist = {};
+      for (const it of items as any[]) {
+        map[it.checklist_item_id] = {
+          estado: it.estado,
+          cantidadOk: it.cantidad_ok ?? undefined,
+          observacion: it.observacion ?? undefined,
+        };
+      }
+      const kmServidor = dc?.kilometraje_inicial ? String(dc.kilometraje_inicial) : "";
+      const obsServidor = dc?.observaciones || "";
+      setDailyCheckDone(Boolean(dc));
+      setDailyCheckId((dc as { id?: number } | null)?.id ?? null);
+      setFotosPreop((dc as FotosVehiculoType | null) ?? {});
+      setErrorCarga(
+        sinConexion
+          ? "No pudimos revisar si ya enviaste tu preoperacional de hoy (sin señal). Puedes llenarlo igual: tus respuestas se guardan en este teléfono."
+          : null
+      );
+      baselineRef.current = serializarBorrador({ km: kmServidor, observaciones: obsServidor, items: map });
+      // Un borrador sin enviar de este vehículo y día gana sobre lo ya guardado en el servidor.
+      const borrador = leerBorrador(leerSession(claveBorrador(userId, vehicleId, hoy)));
+      setKm(borrador ? borrador.km : kmServidor);
+      setObservaciones(borrador ? borrador.observaciones : obsServidor);
+      setCheckItemsState(borrador ? borrador.items : map);
+      setCargadoPara(`${vehicleId}|${hoy}`);
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [vehicleId, userId, flow, hoy, viewerRole]);
+
+  // Al cambiar de flujo se limpian los campos propios de cada uno; el vehículo se conserva.
+  useEffect(() => {
     setKm("");
     setError(null);
     setSuccess(null);
     setShowNovedadDialog(false);
-    setNovedadesOpen(false);
     setCheckItemsState({});
+    setResaltarPendientes(false);
+    setMostrarResumen(false);
   }, [flow]);
+
+  const cargado = flow === "preoperacional" && claveCarga !== null && cargadoPara === claveCarga;
+  const borradorActual = serializarBorrador({ km, observaciones, items: checkItemsState });
+  const hayCambios = cargado && borradorActual !== baselineRef.current;
+
+  // Guarda el borrador mientras hay cambios sin enviar; si vuelve al estado del servidor, lo borra.
+  useEffect(() => {
+    if (!cargado || !vehicleId) return;
+    escribirSession(claveBorrador(userId, vehicleId, hoy), borradorActual === baselineRef.current ? null : borradorActual);
+  }, [cargado, userId, vehicleId, hoy, borradorActual]);
+
+  // Aviso del navegador si cierra la pestaña con cambios sin enviar.
+  useEffect(() => {
+    if (!hayCambios) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hayCambios]);
 
   const checklistFiltrado = useMemo(() => {
     return checklistItems.filter((it) => {
@@ -153,32 +378,53 @@ export function OvemPortal({
         const co = selectedVehicle?.centro_operativo;
         if (!co || String(co).toUpperCase() !== "AIRPLAN") return false;
       }
+      // Dos listas: ambulancia (TAB/TAM) y automóvil o van (DOMI, VAN, ADMIN). Lo que no aplica va como NO_APLICA.
+      if (!aplicaAlTipo(it.tipos_vehiculo, selectedVehicle?.tipo_vehiculo)) return false;
       return true;
     });
-  }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo]);
+  }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo, selectedVehicle?.tipo_vehiculo]);
 
   const checklistItemsByCategoria = useMemo(() => agruparPorCategoria(checklistFiltrado), [checklistFiltrado]);
+  const resumen = useMemo(
+    () => resumirRespuestas(checklistFiltrado.map((it) => it.id), checkItemsState),
+    [checklistFiltrado, checkItemsState]
+  );
+  const kmNumero = parseKilometraje(km);
+  const avisoKm = evaluarKilometraje(kmNumero, ultimoKm).mensaje;
+  const fallasResumen = checklistFiltrado.filter((it) => checkItemsState[it.id]?.estado === "FALLA");
 
-  const handleSubmitChecklist = async () => {
+  /** Primer paso del envío: valida y abre el resumen; no guarda nada todavía. */
+  const revisarChecklist = () => {
     if (!vehicleId || flow !== "preoperacional") return;
-    setLoading(true);
     setError(null);
     setSuccess(null);
-    const kmNum = parseInt(km, 10);
-    if (isNaN(kmNum) || kmNum <= 0) {
+    if (kmNumero === undefined || kmNumero <= 0) {
       setError("El kilometraje actual es obligatorio y debe ser mayor a cero.");
-      setLoading(false);
       return;
     }
+    if (kmNumero > KM_MAXIMO) {
+      setError("El kilometraje es demasiado alto: revisa el número del tablero.");
+      return;
+    }
+    if (resumen.sinResponder > 0) {
+      setResaltarPendientes(true);
+      setError(
+        `Faltan ${resumen.sinResponder} ítem${resumen.sinResponder === 1 ? "" : "s"} por responder. Responde cada uno de forma consciente: la revisión es ítem por ítem.`
+      );
+      return;
+    }
+    const errorChecklist = validarPreoperacional(checklistItems, armarItems());
+    if (errorChecklist) {
+      setError(errorChecklist);
+      return;
+    }
+    setMostrarResumen(true);
+  };
+
+  /** Ítems visibles respondidos + los ocultos por tipo de vehículo como NO_APLICA (misma regla que ya validaba el servidor). */
+  const armarItems = () => {
     const idsVisibles = new Set(checklistFiltrado.map((it) => it.id));
-    const desdeEstado = Object.entries(checkItemsState)
-      .filter(([id]) => idsVisibles.has(parseInt(id, 10)))
-      .map(([id, v]) => ({
-        checklistItemId: parseInt(id, 10),
-        estado: v.estado,
-        cantidadOk: v.cantidadOk,
-        observacion: v.observacion,
-      }));
+    const visibles = checklistPayload(checklistFiltrado, checkItemsState);
     const noAplicaOcultos = checklistItems
       .filter((it) => !idsVisibles.has(it.id))
       .map((it) => ({
@@ -186,28 +432,75 @@ export function OvemPortal({
         estado: "NO_APLICA" as const,
         observacion: undefined as string | undefined,
       }));
+    return [...visibles, ...noAplicaOcultos];
+  };
 
-    const result = await submitDailyCheck({
-      userId,
-      vehicleId,
-      fecha: hoy,
-      kilometrajeInicial: kmNum,
-      kilometrajeFinal: kmNum,
-      observaciones: observaciones || undefined,
-      items: [...desdeEstado, ...noAplicaOcultos],
-    });
-    if (result?.error) setError(result.error);
-    else {
-      setSuccess("Checklist completado correctamente");
-      setDailyCheckDone(true);
-      router.refresh();
+  const handleSubmitChecklist = async () => {
+    if (!vehicleId || flow !== "preoperacional" || kmNumero === undefined) return;
+    setMostrarResumen(false);
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    const items = armarItems();
+    try {
+      const result = await submitDailyCheck({
+        userId,
+        vehicleId,
+        fecha: hoy,
+        kilometrajeInicial: kmNumero,
+        kilometrajeFinal: kmNumero,
+        observaciones: observaciones || undefined,
+        items,
+      });
+      if (result?.error) setError(result.error);
+      else {
+        const avisoServidor = result?.hallazgos?.mensaje;
+        if (avisoServidor && (result?.hallazgos?.criticos ?? 0) > 0) setError(`Checklist guardado. ${avisoServidor}`);
+        else setSuccess(avisoServidor ? `Checklist guardado. ${avisoServidor}` : "Checklist completado correctamente");
+        setDailyCheckDone(true);
+        const dcId = result?.dailyCheckId ?? null;
+        setDailyCheckId(dcId);
+        // Las fotos elegidas en el formulario se suben ahora: el preoperacional recién existe, hace falta su id.
+        if (dcId && Object.keys(fotosSeleccionadas).length > 0) {
+          const subidas = await Promise.all(
+            (Object.entries(fotosSeleccionadas) as [LadoVehiculo, File][]).map(
+              async ([lado, file]) => [lado, await subirFotoPreoperacional(dcId, lado, file)] as const
+            )
+          );
+          const nuevasFotos: FotosVehiculoType = {};
+          let fallos = 0;
+          for (const [lado, r] of subidas) {
+            if ("ruta" in r) nuevasFotos[columnaDeLado(lado)] = r.ruta;
+            else fallos++;
+          }
+          setFotosPreop((prev) => ({ ...prev, ...nuevasFotos }));
+          setFotosSeleccionadas({});
+          if (fallos > 0) {
+            setError(`El checklist se guardó, pero ${fallos} foto${fallos === 1 ? "" : "s"} no se pudo subir. Vuelve a intentarlo abajo.`);
+          }
+        }
+        // Lo enviado pasa a ser la base: ya no hay cambios pendientes ni borrador.
+        baselineRef.current = serializarBorrador({ km, observaciones, items: checkItemsState });
+        escribirSession(claveBorrador(userId, vehicleId, hoy), null);
+        router.refresh();
+      }
+    } catch {
+      // Sin señal, o la sesión venció a mitad: en ambos casos lo escrito sigue en pantalla y en el teléfono.
+      setError(
+        "No se pudo enviar: revisa tu señal. Tus respuestas siguen aquí y guardadas en este teléfono; inténtalo de nuevo. Si te pide iniciar sesión otra vez, entra y vuelve a este vehículo: lo que llenaste sigue ahí."
+      );
     }
     setLoading(false);
   };
 
   const goHub = () => {
     setFlow(null);
-    setVehicleId("");
+  };
+
+  /** «Volver» con cambios sin enviar pide confirmación; el borrador queda guardado en el teléfono. */
+  const pedirVolver = () => {
+    if (hayCambios) setConfirmarSalida(true);
+    else goHub();
   };
 
   const abrir = (f: Exclude<Flow, null>) => {
@@ -228,29 +521,66 @@ export function OvemPortal({
                 : "Servicios asignados por Regulación",
           },
         ]
-      : []),
+      : [
+          {
+            flow: "servicios" as const,
+            icon: Ambulance,
+            titulo: FLOW_LABEL_ADMIN.servicios as string,
+            detalle: `${serviciosActivos.length} programado${serviciosActivos.length === 1 ? "" : "s"} o en curso`,
+          },
+        ]),
     { flow: "preoperacional", icon: ClipboardCheck, titulo: "Iniciar preoperacional", detalle: "Checklist diario, kilometraje y documentos" },
     { flow: "combustible", icon: Fuel, titulo: "Registrar tanqueo", detalle: "Galones, kilometraje y recibo" },
     { flow: "novedad", icon: AlertCircle, titulo: "Reportar novedad", detalle: "Falla o daño del vehículo" },
     { flow: "siniestro", icon: Siren, titulo: "Reportar siniestro", detalle: "Choque o accidente de tránsito" },
+    ...(viewerRole === "OVEM"
+      ? [{ flow: "cierre" as const, icon: LogOut, titulo: "Cerrar turno", detalle: "Km final, novedades y entrega del vehículo" }]
+      : [{ flow: "cierre" as const, icon: LogOut, titulo: FLOW_LABEL_ADMIN.cierre as string, detalle: "Quién cerró hoy y qué vehículos faltan" }]),
   ];
+
+  /** Hora de la última actualización, aviso de servicio nuevo y botón manual (solo para el OVEM, en el menú y «Mis servicios»). */
+  const barraActualizacion = refrescarServicios && (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          {actualizado ? `Actualizado ${horaCorta(actualizado)}` : "Se actualiza cada 30 segundos"}
+        </p>
+        <Button type="button" variant="ghost" size="sm" className="min-h-11 gap-2" onClick={refrescarAhora}>
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          Actualizar
+        </Button>
+      </div>
+      <div role="status" aria-live="polite">
+        {avisoNuevo && (
+          <div className="flex items-start gap-2 rounded-lg border border-info bg-info-soft p-3 text-sm text-foreground">
+            <p className="flex-1 font-medium">{avisoNuevo}</p>
+            <button
+              type="button"
+              aria-label="Cerrar aviso"
+              className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md hover:bg-black/5"
+              onClick={() => setAvisoNuevo(null)}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   /* Flujo inicial: opciones sin exigir asignaciones */
   if (flow === null) {
     return (
       <div className="space-y-6">
         {aviso && (
-          <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800" role="status">
+          <p className="rounded-lg border border-success bg-success-soft p-3 text-sm text-foreground" role="status">
             {aviso}
           </p>
         )}
+        {barraActualizacion}
         <Card>
           <CardHeader>
-            <CardTitle>Elija una acción</CardTitle>
-            <CardDescription>
-              Puede trabajar con cualquier vehículo de la flota. No necesita tener una asignación previa
-              en regulación para iniciar preoperacional o reportar una novedad.
-            </CardDescription>
+            <CardTitle>¿Qué vas a hacer?</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             {acciones.map(({ flow: f, icon: Icon, titulo, detalle }) => (
@@ -258,8 +588,8 @@ export function OvemPortal({
                 key={f}
                 className={cn(
                   "h-auto min-h-24 flex-col gap-2 px-2 py-4",
-                  // Con cinco acciones, siniestro ocupa la fila completa en el celular.
-                  f === "siniestro" && "col-span-2 border-red-200 lg:col-span-1"
+                  // Siniestro se distingue por el borde y el ícono además del texto (nada solo por color).
+                  f === "siniestro" && "border-red-200"
                 )}
                 variant="outline"
                 onClick={() => abrir(f)}
@@ -284,7 +614,7 @@ export function OvemPortal({
           <Card>
             <CardContent className="py-8">
               <p className="text-center text-muted-foreground">
-                No hay vehículos en el sistema todavía. Si cree que es un error, contacte al administrador.
+                No hay vehículos en el sistema todavía. Si crees que es un error, contacta al administrador.
               </p>
             </CardContent>
           </Card>
@@ -293,35 +623,62 @@ export function OvemPortal({
     );
   }
 
+  const descripcionVehiculo =
+    origenVehiculo === "hoy"
+      ? "Es tu vehículo de hoy según Regulación. Cámbialo si vas a usar otro."
+      : origenVehiculo === "ultimo"
+        ? "Es el último que usaste. Cámbialo si vas a usar otro."
+        : origenVehiculo === "manual"
+          ? "Este vehículo se mantiene en las demás acciones. Cámbialo si hace falta."
+          : "Elígelo una vez: se mantiene en las demás acciones.";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button type="button" variant="ghost" onClick={goHub} className="h-11 gap-2">
+        <Button type="button" variant="ghost" onClick={pedirVolver} className="h-11 gap-2">
           <ArrowLeft className="h-4 w-4" />
           Volver
         </Button>
-        <p className="text-sm text-muted-foreground">{FLOW_LABEL[flow]}</p>
+        <p className="text-sm text-muted-foreground">{(viewerRole !== "OVEM" && FLOW_LABEL_ADMIN[flow]) || FLOW_LABEL[flow]}</p>
       </div>
 
-      {flow === "servicios" && <MisServicios servicios={servicios as any} />}
+      {flow === "servicios" && (
+        <>
+          {barraActualizacion}
+          <MisServicios servicios={servicios as any} modoAdmin={viewerRole !== "OVEM"} />
+        </>
+      )}
 
-      {flow !== "servicios" && (
+      {flow === "cierre" && viewerRole !== "OVEM" && <CierresTurnoConsulta />}
+
+      {flow !== "servicios" && !(flow === "cierre" && viewerRole !== "OVEM") && vehicles.length === 1 && selectedVehicle && (
+        <p className="text-sm text-foreground">
+          Vehículo: <span className="font-semibold">{selectedVehicle.placa}</span>
+          {selectedVehicle.marca ? ` — ${selectedVehicle.marca}` : ""}
+        </p>
+      )}
+
+      {flow !== "servicios" && !(flow === "cierre" && viewerRole !== "OVEM") && vehicles.length !== 1 && (
         <Card>
           <CardHeader>
-            <CardTitle>Seleccionar vehículo</CardTitle>
-            <CardDescription>El mismo vehículo aplica para esta sesión.</CardDescription>
+            <CardTitle>Vehículo</CardTitle>
+            <CardDescription>{descripcionVehiculo}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Select value={vehicleId} onValueChange={setVehicleId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccione un vehículo" />
+            <Label htmlFor="ovem-vehiculo" className="sr-only">
+              Vehículo
+            </Label>
+            <Select value={vehicleId} onValueChange={elegirVehiculo}>
+              <SelectTrigger id="ovem-vehiculo" className="min-h-11">
+                <SelectValue placeholder="Selecciona un vehículo" />
               </SelectTrigger>
               <SelectContent>
-                {vehicles.map((v) => (
+                {vehiculosOrdenados.map((v) => (
                   <SelectItem key={v.id} value={v.id}>
                     {v.placa}
-                    {v.marca ? ` — ${v.marca}` : ""}{" "}
-                    {v.estado_actual === "FUERA_DE_SERVICIO" ? "(FDS)" : ""}
+                    {v.marca ? ` — ${v.marca}` : ""}
+                    {vehiculosDeHoy.includes(v.id) ? " · asignado hoy" : ""}
+                    {v.estado_actual === "FUERA_DE_SERVICIO" ? " (fuera de servicio)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -344,9 +701,23 @@ export function OvemPortal({
           vehicleId={vehicleId}
           placa={selectedVehicle.placa}
           hoy={hoyBogota}
+          ultimoKm={ultimoKm}
           onDone={() => {
             setFlow(null);
             setAviso(`Tanqueo de ${selectedVehicle.placa} registrado.`);
+          }}
+        />
+      )}
+
+      {vehicleId && selectedVehicle && flow === "cierre" && viewerRole === "OVEM" && (
+        <CierreTurnoForm
+          vehicleId={vehicleId}
+          placa={selectedVehicle.placa}
+          onDone={(hora, novedadCreada) => {
+            // El turno terminó: el borrador del preoperacional de hoy ya no sirve.
+            escribirSession(claveBorrador(userId, vehicleId, hoy), null);
+            setFlow(null);
+            setAviso(`Turno cerrado a las ${hora}.${novedadCreada ? " Se abrió una novedad con lo que contaste." : ""}`);
           }}
         />
       )}
@@ -394,18 +765,32 @@ export function OvemPortal({
                 <CheckCircle2 className="h-5 w-5" />
                 Checklist pre-operacional diario
               </CardTitle>
-              <CardDescription>Revise los puntos antes de iniciar su turno.</CardDescription>
+              <CardDescription>Revisa los puntos antes de iniciar tu turno.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <p className="text-sm text-muted-foreground">
-                Responda cada ítem de forma independiente. Si un ítem falla, descríbalo y desde ahí puede
-                reportar una novedad (ej: &quot;farola delantera sin luz media&quot;).
+                Responde cada ítem de forma independiente. Si un ítem falla, descríbela (ej: &quot;farola delantera sin
+                luz media&quot;): al enviar el checklist, la falla se reporta sola como novedad. No la reportes dos veces.
               </p>
+
+              {errorCarga && (
+                <p role="status" className="rounded-lg border border-warning bg-warning-soft p-3 text-sm text-warning-foreground">
+                  {errorCarga}
+                </p>
+              )}
+
+              {viewerRole === "OVEM" && checklistFiltrado.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3">
+                  <p className="text-sm text-foreground">
+                    Respondidos {resumen.total - resumen.sinResponder} de {resumen.total}
+                  </p>
+                </div>
+              )}
 
               {checklistFiltrado.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No hay ítems activos del checklist en este momento. Comuníquese con coordinación o administración
-                  para que configuren el preoperacional de su centro.
+                  No hay ítems activos del checklist en este momento. Comunícate con coordinación o administración
+                  para que configuren el preoperacional de tu centro.
                 </p>
               )}
 
@@ -420,17 +805,10 @@ export function OvemPortal({
                         key={it.id}
                         item={it}
                         state={checkItemsState[it.id]}
-                        fallaPlaceholder="Describa la falla (ej: farola sin luz media)"
+                        exigirRespuesta
+                        resaltarPendiente={resaltarPendientes}
+                        fallaPlaceholder="Describe la falla (ej: farola sin luz media)"
                         onChange={(next) => setCheckItemsState((prev) => ({ ...prev, [it.id]: next }))}
-                        onReportarNovedad={() => {
-                          const st = checkItemsState[it.id];
-                          setIncidentFromItem({
-                            title: `Reportar novedad — ${selectedVehicle?.placa}`,
-                            desc:
-                              `${categoria.replaceAll("_", " ")}: ${it.descripcion}. ` +
-                              (st?.observacion ? `Detalle: ${st.observacion}` : "Detalle: "),
-                          });
-                        }}
                       />
                     ))}
                   </div>
@@ -442,13 +820,28 @@ export function OvemPortal({
                 <span className="text-destructive"> *</span>
                 <Input
                   id="km-inicial"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9.\s]+"
+                  enterKeyHint="next"
                   required
+                  aria-describedby="km-inicial-ayuda"
                   value={km}
                   onChange={(e) => setKm(e.target.value)}
                   placeholder="Ej: 125000"
                   className="mt-1 max-w-xs"
                 />
+                <p id="km-inicial-ayuda" className="mt-1 text-xs text-muted-foreground">
+                  {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
+                </p>
+                {avisoKm && (
+                  <p
+                    role="status"
+                    className="mt-2 rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground"
+                  >
+                    {avisoKm}
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="obs">Observaciones</Label>
@@ -461,58 +854,137 @@ export function OvemPortal({
                   rows={2}
                 />
               </div>
-              {error && <p className="text-sm text-red-600">{error}</p>}
-              {success && <p className="text-sm text-green-600">{success}</p>}
-              <Button onClick={handleSubmitChecklist} disabled={loading}>
-                {loading ? "Guardando..." : dailyCheckDone ? "Actualizar checklist" : "Enviar checklist"}
-              </Button>
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+              {success && (
+                <p role="status" className="text-sm text-success">
+                  {success}
+                </p>
+              )}
+              {!dailyCheckId && viewerRole === "OVEM" ? (
+                // Mismo lugar que SISRES: las 4 fotos van en el formulario, antes de enviar — no un paso aparte
+                // después. Solo quedan elegidas aquí; se suben de verdad al confirmar el envío (abajo).
+                <div className="space-y-2 border-t pt-4">
+                  <p className="text-sm font-medium">Fotos del vehículo (opcional)</p>
+                  <SelectorFotosNuevas
+                    valores={fotosSeleccionadas}
+                    onChange={(lado, file) =>
+                      setFotosSeleccionadas((prev) => {
+                        const next = { ...prev };
+                        if (file) next[lado] = file;
+                        else delete next[lado];
+                        return next;
+                      })
+                    }
+                  />
+                </div>
+              ) : dailyCheckId ? (
+                // Ya enviado hoy: reemplazar una foto (el propio OVEM) o solo verlas (quien supervisa).
+                <div className="space-y-2 border-t pt-4">
+                  <p className="text-sm font-medium">Fotos del vehículo{viewerRole === "OVEM" ? " (opcional)" : ""}</p>
+                  <FotosVehiculo
+                    fotos={fotosPreop}
+                    onUpload={(lado, file) => subirFotoPreoperacional(dailyCheckId, lado, file)}
+                    deshabilitado={viewerRole !== "OVEM"}
+                  />
+                </div>
+              ) : null}
+              {viewerRole === "OVEM" ? (
+                <Button className="min-h-11" onClick={revisarChecklist} disabled={loading}>
+                  {loading ? "Guardando..." : dailyCheckDone ? "Revisar y actualizar" : "Revisar y enviar"}
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Solo el OVEM del vehículo envía el preoperacional; desde este rol la vista es de consulta.
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <AlertCircle className="h-5 w-5" />
-                    Reportar novedad desde preoperacional
-                  </CardTitle>
-                  <CardDescription>
-                    Si detectó una falla durante la inspección, regístrela aquí (mismo vehículo).
-                  </CardDescription>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 shrink-0"
-                  onClick={() => setNovedadesOpen((o) => !o)}
-                >
-                  {novedadesOpen ? "Ocultar" : "Mostrar"}
-                  <ArrowRight className={`h-4 w-4 transition ${novedadesOpen ? "rotate-90" : ""}`} />
-                </Button>
-              </div>
-            </CardHeader>
-            {novedadesOpen && (
-              <CardContent className="space-y-3 border-t pt-4">
-                <p className="text-sm text-muted-foreground">
-                  También puede abrir el mismo formulario en una ventana aparte si prefiere.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => setShowNovedadDialog(true)}>
-                    Abrir formulario de novedad
-                  </Button>
-                </div>
-              </CardContent>
-            )}
-          </Card>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 w-full gap-2 sm:w-auto"
+            onClick={() => setShowNovedadDialog(true)}
+          >
+            <AlertCircle className="h-4 w-4" aria-hidden="true" />
+            Reportar novedad
+          </Button>
         </>
       )}
+
+      <Dialog open={mostrarResumen} onOpenChange={setMostrarResumen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Revisa antes de enviar</DialogTitle>
+            <DialogDescription>
+              {selectedVehicle?.placa} · {kmNumero !== undefined ? `${kmNumero.toLocaleString("es-CO")} km` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-lg font-semibold text-foreground">{textoResumen(resumen)}</p>
+            {fallasResumen.length > 0 && (
+              <ul className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                {fallasResumen.map((it) => (
+                  <li key={it.id}>
+                    <span className="font-medium">{it.descripcion}</span>
+                    {checkItemsState[it.id]?.observacion ? `: ${checkItemsState[it.id]?.observacion}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {avisoKm && (
+              <p className="rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground">
+                Kilometraje: {avisoKm}
+              </p>
+            )}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" className="min-h-11" onClick={() => setMostrarResumen(false)}>
+                Seguir revisando
+              </Button>
+              <Button type="button" className="min-h-11" onClick={handleSubmitChecklist}>
+                {dailyCheckDone ? "Actualizar checklist" : "Enviar checklist"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmarSalida} onOpenChange={setConfirmarSalida}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tienes respuestas sin enviar</DialogTitle>
+            <DialogDescription>
+              Si sales, tus respuestas quedan guardadas en este teléfono y las recuperas al volver a este vehículo.
+              No llegan a Regulación hasta que envíes el checklist.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              onClick={() => {
+                setConfirmarSalida(false);
+                goHub();
+              }}
+            >
+              Salir
+            </Button>
+            <Button type="button" className="min-h-11" onClick={() => setConfirmarSalida(false)}>
+              Seguir aquí
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showNovedadDialog} onOpenChange={setShowNovedadDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reportar Novedad — {selectedVehicle?.placa}</DialogTitle>
+            <DialogTitle>Reportar novedad — {selectedVehicle?.placa}</DialogTitle>
           </DialogHeader>
           <IncidentForm
             vehicleId={vehicleId}
@@ -523,25 +995,6 @@ export function OvemPortal({
             }}
             reportadoPorDefault={userName}
             hideSeveridad
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!incidentFromItem} onOpenChange={() => setIncidentFromItem(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{incidentFromItem?.title || "Reportar novedad"}</DialogTitle>
-          </DialogHeader>
-          <IncidentForm
-            vehicleId={vehicleId}
-            afectaOperatividad={false}
-            onSuccess={() => {
-              setIncidentFromItem(null);
-              router.refresh();
-            }}
-            reportadoPorDefault={userName}
-            hideSeveridad
-            initialDescripcion={incidentFromItem?.desc}
           />
         </DialogContent>
       </Dialog>

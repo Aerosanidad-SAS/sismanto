@@ -10,6 +10,8 @@ import { AeropuertosPaginacion } from "@/components/aeropuertos/aeropuertos-pagi
 import { codigoAeropuerto, leerBusquedaAeropuertos, tipoAeropuertoLegible } from "@/lib/aeropuertos";
 import { formatNumber } from "@/lib/utils";
 
+export const metadata = { title: "Aeropuertos" };
+
 export default async function AeropuertosPage({
   searchParams,
 }: {

@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import * as Tabs from "@radix-ui/react-tabs";
-import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTabParam } from "@/components/layout/use-tab-param";
 import { VehiculosTab } from "./vehiculos-tab";
 import { CentrosTab } from "./centros-tab";
 import { ProveedoresTab } from "./proveedores-tab";
@@ -41,51 +40,49 @@ export function ConfiguracionTabs({
   logoUrl,
   esAdmin,
 }: ConfiguracionTabsProps) {
+  const [tab, setTab] = useTabParam(
+    tabItems.map((t) => t.id),
+    "vehiculos"
+  );
+
   return (
-    <Tabs.Root defaultValue="vehiculos">
-      <Tabs.List className="flex border-b border-gray-200 mb-6">
-        {tabItems.map((tab) => (
-          <Tabs.Trigger
-            key={tab.id}
-            value={tab.id}
-            className={cn(
-              "px-5 py-3 text-sm font-medium border-b-2 -mb-px transition-colors",
-              "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300",
-              "data-[state=active]:border-blue-600 data-[state=active]:text-blue-600"
-            )}
-          >
-            {tab.label}
-          </Tabs.Trigger>
+    <Tabs value={tab} onValueChange={setTab}>
+      {/* En móvil las 7 pestañas no caben: la barra se desplaza en horizontal en vez de cortarse. */}
+      <TabsList className="mb-4 flex h-auto w-full justify-start overflow-x-auto">
+        {tabItems.map((t) => (
+          <TabsTrigger key={t.id} value={t.id} className="shrink-0 px-4 py-2">
+            {t.label}
+          </TabsTrigger>
         ))}
-      </Tabs.List>
+      </TabsList>
 
-      <Tabs.Content value="vehiculos">
+      <TabsContent value="vehiculos">
         <VehiculosTab vehicles={vehicles} centros={centros} />
-      </Tabs.Content>
+      </TabsContent>
 
-      <Tabs.Content value="centros">
+      <TabsContent value="centros">
         <CentrosTab centros={centros} />
-      </Tabs.Content>
+      </TabsContent>
 
-      <Tabs.Content value="proveedores">
+      <TabsContent value="proveedores">
         <ProveedoresTab proveedores={proveedores} />
-      </Tabs.Content>
+      </TabsContent>
 
-      <Tabs.Content value="clientes">
-        <ClientesTab clientes={clientes} />
-      </Tabs.Content>
+      <TabsContent value="clientes">
+        <ClientesTab clientes={clientes} puedeEliminar={esAdmin} />
+      </TabsContent>
 
-      <Tabs.Content value="servicios">
+      <TabsContent value="servicios">
         <ServiciosTab initialTypes={serviceTypes} />
-      </Tabs.Content>
+      </TabsContent>
 
-      <Tabs.Content value="carga">
+      <TabsContent value="carga">
         <CargaMasivaTab />
-      </Tabs.Content>
+      </TabsContent>
 
-      <Tabs.Content value="marca">
+      <TabsContent value="marca">
         <MarcaTab logoUrl={logoUrl} puedeEditar={esAdmin} />
-      </Tabs.Content>
-    </Tabs.Root>
+      </TabsContent>
+    </Tabs>
   );
 }

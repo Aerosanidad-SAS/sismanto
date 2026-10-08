@@ -11,6 +11,7 @@ import {
   fechaHora24,
   type FiltrosServicios,
 } from "@/lib/servicios-lista";
+import { TITULOS_PACIENTE_EN_SERVICIO } from "@/lib/pacientes-export";
 
 const CAMPOS_FECHA = new Set(COLUMNAS_EXPORT.map(([, c]) => c).filter((c) => c.startsWith("fecha_hora")));
 
@@ -30,15 +31,17 @@ export function ExportarServicios({ filtros }: { filtros: FiltrosServicios }) {
     }
     const filas = (res.filas ?? []) as Record<string, unknown>[];
     const XLSX = await import("xlsx");
+    // Con datos del paciente (solo roles que pueden exportar pacientes), sus columnas van a la derecha, como en SISRES.
     const datos = [
-      COLUMNAS_EXPORT.map(([titulo]) => titulo),
-      ...filas.map((s) =>
-        COLUMNAS_EXPORT.map(([, campo]) => {
+      [...COLUMNAS_EXPORT.map(([titulo]) => titulo), ...(res.conPaciente ? TITULOS_PACIENTE_EN_SERVICIO : [])],
+      ...filas.map((s) => [
+        ...COLUMNAS_EXPORT.map(([, campo]) => {
           const v = s[campo];
           if (CAMPOS_FECHA.has(campo) && typeof v === "string") return fechaHora24(v, true);
           return celdaExcelSegura(v);
-        })
-      ),
+        }),
+        ...(Array.isArray(s.paciente) ? s.paciente.map(celdaExcelSegura) : []),
+      ]),
     ];
     const hoja = XLSX.utils.aoa_to_sheet(datos);
     const libro = XLSX.utils.book_new();
@@ -53,7 +56,7 @@ export function ExportarServicios({ filtros }: { filtros: FiltrosServicios }) {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button type="button" variant="outline" onClick={exportar} disabled={cargando} className="gap-2">
+      <Button type="button" variant="outline" onClick={exportar} disabled={cargando} className="h-8 gap-2 px-3 text-sm">
         <FileSpreadsheet className="h-4 w-4" />
         {cargando ? "Exportando…" : "Exportar Excel"}
       </Button>

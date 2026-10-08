@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { hoyBogota } from "@/lib/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,20 +9,26 @@ import {
 } from "@/app/api/actions/servicios-medicos";
 import { getResumenOperativoDiario } from "@/app/api/actions/estadisticas-servicios";
 import { getClientes } from "@/app/api/actions/clientes";
+import { getOpcionesServicio } from "@/app/api/actions/servicios-opciones";
+import { getEpsCatalog } from "@/app/api/actions/pacientes";
+import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
 import { getProfile } from "@/app/api/actions/auth";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 import { MisServicios } from "@/components/servicios/mis-servicios";
 import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { centroVisible } from "@/lib/auth-utils";
-import { leerFiltros } from "@/lib/servicios-lista";
+import { ciudadRegistroDePerfil, leerFiltros } from "@/lib/servicios-lista";
 import { ServiciosFiltros } from "@/components/servicios/servicios-filtros";
 import { ServiciosPaginacion } from "@/components/servicios/servicios-paginacion";
 import { ExportarServicios } from "@/components/servicios/exportar-servicios";
 import { AvisosServicios } from "@/components/servicios/avisos-servicios";
 
+export const metadata = { title: "Servicios" };
+
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
-const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA"];
+// El ADMIN ve la misma lista corta, pero de todos los servicios activos (ver `modoAdmin` en MisServicios).
+const ROLES_MIS_SERVICIOS = ["MEDICO", "AUXILIAR_ENFERMERIA", "ADMIN"];
 
 async function getVehiculosActivos() {
   try {
@@ -59,6 +66,9 @@ export default async function ServiciosPage({
     medicosDisponibles,
     reguladoresDisponibles,
     resumenHoy,
+    opcionesCampos,
+    epsOptions,
+    camposPacienteObligatorios,
   ] =
     await Promise.all([
       buscarServicios(filtros, pagina),
@@ -71,6 +81,10 @@ export default async function ServiciosPage({
       getUsuariosPorRol("MEDICO"),
       getUsuariosPorRol("REGULACION"),
       getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
+      getOpcionesServicio(),
+      // Para crear un paciente nuevo sin salir del formulario de servicio.
+      getEpsCatalog(),
+      getCamposObligatoriosModulo("pacientes"),
     ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const etapasVisibles = Object.fromEntries((servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa]));
@@ -92,12 +106,22 @@ export default async function ServiciosPage({
   }
 
   return (
-    <div className="space-y-8">
+    // En pantallas grandes, -mx-4 recorta el relleno de 32 px del layout a 16 px (la lista necesita ancho).
+    // Bajo lg no se recorta: el relleno ya es de 16 px y el contenido no debe quedar pegado al borde.
+    <div className="space-y-4 lg:-mx-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl">Servicios registrados</h1>
-          <p className="mt-2 text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             Despacho y seguimiento de traslados y servicios asistenciales.
+            {profile?.role_codigo === "ADMIN" && (
+              <>
+                {" "}
+                <Link href="/servicios/configuracion" className="underline">
+                  Configurar opciones del formulario
+                </Link>
+              </>
+            )}
           </p>
         </div>
         <AvisosServicios etapasVisibles={etapasVisibles} />
@@ -105,13 +129,13 @@ export default async function ServiciosPage({
 
       {mostrarMisServicios && (
         <div>
-          <h2 className="text-xl mb-3">Mis servicios asignados</h2>
-          <MisServicios servicios={misServicios as any} />
+          <h2 className="text-xl mb-3">{profile?.role_codigo === "ADMIN" ? "Servicios programados y en curso" : "Mis servicios asignados"}</h2>
+          <MisServicios servicios={misServicios as any} modoAdmin={profile?.role_codigo === "ADMIN"} />
         </div>
       )}
 
       <Card>
-        <CardContent className="space-y-4 pt-6">
+        <CardContent className="space-y-3 p-4">
           <ServiciosFiltros
             key={JSON.stringify(filtros)}
             inicial={filtros}
@@ -119,16 +143,14 @@ export default async function ServiciosPage({
             origenes={opciones.origenes}
             destinos={opciones.destinos}
           />
-          <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <ExportarServicios filtros={filtros} />
-          </div>
           {errorLista && (
-            <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               No se pudo cargar la lista de servicios: {errorLista}
             </p>
           )}
-          <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />
           <ServiciosTabla
+            barra={<ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
+            acciones={<ExportarServicios filtros={filtros} />}
             servicios={servicios as any}
             vehiculos={vehiculos}
             clientes={clientes.map((c) => c.nombre)}
@@ -139,12 +161,16 @@ export default async function ServiciosPage({
             reguladoresDisponibles={reguladoresDisponibles}
             tripulacionPorVehiculo={tripulacionPorVehiculo}
             ciudadDefault={profile?.ciudad}
+            ciudadRegistroDefault={ciudadRegistroDePerfil(profile)}
+            opciones={opcionesCampos}
+            epsOptions={epsOptions}
+            camposPacienteObligatorios={camposPacienteObligatorios}
           />
           {total > 0 && <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
         </CardContent>
       </Card>
 
-      <ResumenOperativo inicial={resumenHoy} />
+      <ResumenOperativo inicial={resumenHoy} ciudad={filtros.ciudad ?? ""} />
     </div>
   );
 }

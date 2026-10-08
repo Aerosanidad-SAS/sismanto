@@ -1,9 +1,13 @@
-// Envío de correo vía Microsoft Graph (sendMail) — reutiliza el flujo
-// app-only de src/lib/graph/client.ts. Reemplaza a PHPMailer/SMTP de SISRES.
-// Env adicional: NOTIFICATIONS_MAIL_FROM (buzón remitente del tenant).
-// Sin esa variable opera en modo desarrollo: no envía y simula OK.
+// Envío de correo. Dos proveedores, elegidos por las variables de entorno (ver proveedor-correo.ts):
+//  · SMTP (HostGator u otro) con nodemailer — equivale a PHPMailer de SISRES. Variables: SMTP_HOST, SMTP_PORT (465 por
+//    defecto), SMTP_USER, SMTP_PASS y NOTIFICATIONS_MAIL_FROM. Si ambos están configurados, gana SMTP.
+//  · Microsoft Graph (sendMail), con el flujo app-only de src/lib/graph/client.ts.
+// Sin ninguno de los dos opera en modo desarrollo: no envía y simula OK.
+// Quien llama no cambia: sigue usando enviarCorreo() y emailConfigurado().
 
+import nodemailer from "nodemailer";
 import { getAccessToken } from "@/lib/graph/client";
+import { configSmtp, proveedorCorreo } from "@/lib/notifications/proveedor-correo";
 
 export interface EmailSendResult {
   ok: boolean;
@@ -21,12 +25,34 @@ export interface AdjuntoCorreo {
 const ADJUNTOS_MAX_BYTES = 3 * 1024 * 1024;
 
 export function emailConfigurado(): boolean {
-  return Boolean(
-    process.env.NOTIFICATIONS_MAIL_FROM &&
-    process.env.AZURE_TENANT_ID &&
-    process.env.AZURE_CLIENT_ID &&
-    process.env.AZURE_CLIENT_SECRET
-  );
+  return proveedorCorreo(process.env) !== "ninguno";
+}
+
+/** Envío por SMTP. Los tiempos de espera son cortos: en una función serverless un servidor que no responde no debe colgarla. */
+async function enviarPorSmtp(destinatarios: string[], asunto: string, cuerpoHtml: string, adjuntos: AdjuntoCorreo[]): Promise<EmailSendResult> {
+  const cfg = configSmtp(process.env);
+  try {
+    const transporte = nodemailer.createTransport({
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      auth: { user: cfg.user, pass: cfg.pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
+    });
+    await transporte.sendMail({
+      from: { name: "SISMANTO — Aerosanidad", address: process.env.NOTIFICATIONS_MAIL_FROM!.trim() },
+      to: destinatarios,
+      subject: asunto,
+      html: cuerpoHtml,
+      attachments: adjuntos.map((a) => ({ filename: a.nombre, contentType: a.contentType, content: Buffer.from(a.base64, "base64") })),
+    });
+    return { ok: true, error: null };
+  } catch (e) {
+    // El mensaje del servidor SMTP no incluye la clave; se recorta por si trae el detalle largo de la conversación.
+    return { ok: false, error: `SMTP: ${(e instanceof Error ? e.message : "Error de red").slice(0, 300)}` };
+  }
 }
 
 export async function enviarCorreo(
@@ -39,9 +65,11 @@ export async function enviarCorreo(
   const bytes = adjuntos.reduce((n, a) => n + Math.floor((a.base64.length * 3) / 4), 0);
   if (bytes > ADJUNTOS_MAX_BYTES) return { ok: false, error: "Los adjuntos superan los 3 MB permitidos" };
 
-  if (!emailConfigurado()) {
+  const proveedor = proveedorCorreo(process.env);
+  if (proveedor === "ninguno") {
     return { ok: true, error: null };
   }
+  if (proveedor === "smtp") return enviarPorSmtp(destinatarios, asunto, cuerpoHtml, adjuntos);
 
   const from = process.env.NOTIFICATIONS_MAIL_FROM!;
   try {

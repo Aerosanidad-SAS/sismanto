@@ -3,6 +3,11 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/app/api/actions/auth";
 import { isAdminLike } from "@/lib/auth-utils";
 import { AdminUsuarios } from "@/components/admin/admin-usuarios";
+import { UsuariosCargaMasiva } from "@/components/admin/usuarios-carga-masiva";
+
+// La carga masiva crea los usuarios por lotes desde esta página (acciones de servidor): sin un tope propio, el límite por
+// defecto de la función es corto y un lote lento se cortaría a medias.
+export const maxDuration = 60;
 
 export default async function AdminUsuariosPage() {
   const profile = await getProfile();
@@ -37,6 +42,7 @@ export default async function AdminUsuariosPage() {
         <h1 className="text-3xl">Gestión de Usuarios</h1>
         <p className="mt-2 text-muted-foreground">Crear, editar y deshabilitar usuarios y roles</p>
       </div>
+      <UsuariosCargaMasiva />
       <AdminUsuarios users={usersWithRole} roles={roles || []} centros={centros || []} />
     </div>
   );

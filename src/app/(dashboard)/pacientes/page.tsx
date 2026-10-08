@@ -1,12 +1,17 @@
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buscarPacientes, getEpsCatalog, getResumenPacientes } from "@/app/api/actions/pacientes";
 import { formatNumber } from "@/lib/utils";
 import { getProfile } from "@/app/api/actions/auth";
 import { PacientesTabla } from "@/components/pacientes/pacientes-tabla";
+import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
 import { ExportarPacientes } from "@/components/pacientes/exportar-pacientes";
 import { PacientesPaginacion } from "@/components/pacientes/pacientes-paginacion";
 import { ROLES_EXPORTAR_PACIENTES } from "@/lib/pacientes-export";
 import { leerBusquedaPacientes } from "@/lib/pacientes-lista";
+import { puedeDesactivarPaciente } from "@/lib/pacientes-reglas";
+
+export const metadata = { title: "Pacientes" };
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 
@@ -16,11 +21,12 @@ export default async function PacientesPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const { q, pagina } = leerBusquedaPacientes(searchParams);
-  const [profile, { pacientes, total, error: errorLista }, resumen, epsOptions] = await Promise.all([
+  const [profile, { pacientes, total, error: errorLista }, resumen, epsOptions, obligatorios] = await Promise.all([
     getProfile(),
     buscarPacientes(q, pagina),
     getResumenPacientes(),
     getEpsCatalog(),
+    getCamposObligatoriosModulo("pacientes"),
   ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const puedeExportar = (ROLES_EXPORTAR_PACIENTES as readonly string[]).includes(profile?.role_codigo ?? "");
@@ -31,6 +37,14 @@ export default async function PacientesPage({
         <h1 className="text-3xl">Pacientes</h1>
         <p className="mt-2 text-muted-foreground">
           Registro maestro de pacientes para servicios médicos y valoraciones.
+          {profile?.role_codigo === "ADMIN" && (
+            <>
+              {" "}
+              <Link href="/admin/campos-obligatorios?modulo=pacientes" className="underline">
+                Configurar campos obligatorios
+              </Link>
+            </>
+          )}
         </p>
       </div>
 
@@ -75,7 +89,14 @@ export default async function PacientesPage({
               No se pudo cargar la lista de pacientes: {errorLista}
             </p>
           )}
-          <PacientesTabla pacientes={pacientes} puedeEditar={puedeEditar} epsOptions={epsOptions} busqueda={q} />
+          <PacientesTabla
+            pacientes={pacientes}
+            puedeEditar={puedeEditar}
+            puedeDesactivar={puedeDesactivarPaciente(profile?.role_codigo)}
+            epsOptions={epsOptions}
+            busqueda={q}
+            obligatorios={obligatorios}
+          />
           <PacientesPaginacion q={q} pagina={pagina} total={total} />
         </CardContent>
       </Card>

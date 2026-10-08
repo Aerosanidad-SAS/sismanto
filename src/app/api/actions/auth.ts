@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { auditar } from "@/lib/auditoria";
 import { enmascararIdentificador } from "@/lib/auditoria-lista";
+import { validarClaveNueva } from "@/lib/usuarios-carga";
+import { generarClaveTemporal } from "@/lib/clave-temporal";
 import { revalidatePath } from "next/cache";
 import { type UserRole, getDefaultRoute } from "@/lib/auth-utils";
 import {
@@ -28,6 +30,8 @@ export interface UserProfile {
   centro_codigo: string | null;
   centro_nombre: string | null;
   activo: boolean;
+  /** TRUE hasta que la persona cambie la clave inicial (carga masiva). */
+  debe_cambiar_password: boolean;
 }
 
 export async function getSession() {
@@ -41,9 +45,7 @@ export async function getProfile(): Promise<UserProfile | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data } = await supabase
-    .from("user_profiles")
-    .select(`
+  const columnas = (extra: string) => `
       id,
       user_id,
       role_id,
@@ -51,13 +53,16 @@ export async function getProfile(): Promise<UserProfile | null> {
       email,
       ciudad,
       operational_center_id,
-      activo,
+      activo,${extra}
       roles!inner(codigo),
       operational_centers(codigo, nombre)
-    `)
-    .eq("user_id", user.id)
-    .eq("activo", true)
-    .single();
+    `;
+  const consultar = (extra: string) =>
+    supabase.from("user_profiles").select(columnas(extra)).eq("user_id", user.id).eq("activo", true).single();
+
+  let { data } = await consultar(" debe_cambiar_password,");
+  // Entre el despliegue y la migración 095 la columna puede no existir todavía: sin este reintento nadie podría entrar.
+  if (!data) ({ data } = await consultar(""));
 
   if (!data) return null;
   return {
@@ -72,6 +77,7 @@ export async function getProfile(): Promise<UserProfile | null> {
     centro_codigo: (data as any).operational_centers?.codigo ?? null,
     centro_nombre: (data as any).operational_centers?.nombre ?? null,
     activo: data.activo,
+    debe_cambiar_password: Boolean((data as any).debe_cambiar_password),
   };
 }
 
@@ -98,12 +104,28 @@ async function resolverEmailLogin(identificador: string): Promise<string | null>
   // Cliente admin: quien intenta entrar todavía no tiene sesión, y la RLS de
   // user_profiles no deja leer perfiles ajenos sin ella.
   const admin = createAdminClient();
-  const { data: perfil } = await admin
-    .from("user_profiles")
-    .select("user_id")
-    .eq("cedula", cedula)
-    .eq("activo", true)
-    .maybeSingle<{ user_id: string }>();
+
+  // Seis números: primero como código de acceso (la carga masiva garantiza que ningún código coincide con una cédula);
+  // si no lo es, se intenta como cédula de seis dígitos.
+  let perfil: { user_id: string } | null = null;
+  if (/^\d{6}$/.test(cedula)) {
+    const { data } = await admin
+      .from("user_profiles")
+      .select("user_id")
+      .eq("codigo_acceso", cedula)
+      .eq("activo", true)
+      .maybeSingle<{ user_id: string }>();
+    perfil = data;
+  }
+  if (!perfil) {
+    const { data } = await admin
+      .from("user_profiles")
+      .select("user_id")
+      .eq("cedula", cedula)
+      .eq("activo", true)
+      .maybeSingle<{ user_id: string }>();
+    perfil = data;
+  }
   if (!perfil) return null;
 
   const { data } = await admin.auth.admin.getUserById(perfil.user_id);
@@ -138,11 +160,11 @@ export async function signIn(identificador: string, password: string) {
     }
     // Mismo mensaje para cédula inexistente y clave errada, para no revelar
     // qué cédulas tienen cuenta. Solo el bloqueo por intentos se distingue.
-    if (error.status === 429) return { error: "Demasiados intentos. Espere unos minutos e intente de nuevo." };
+    if (error.status === 429) return { error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo." };
     // Sin status (fallo de red) o 5xx: Auth no respondió. No es una clave
     // errada, y decirlo así haría pasar una caída por un problema del usuario.
     if (!error.status || error.status >= 500) {
-      return { error: "No se pudo conectar con el servicio de autenticación. Intente de nuevo en unos minutos." };
+      return { error: "No se pudo conectar con el servicio de autenticación. Inténtalo de nuevo en unos minutos." };
     }
     return { error: CREDENCIALES_INVALIDAS };
   }
@@ -178,6 +200,37 @@ export async function requireRole(allowed: UserRole[]): Promise<UserProfile> {
     redirect(getDefaultRoute(profile.role_codigo));
   }
   return profile;
+}
+
+/**
+ * Primer ingreso: la persona elige su propia clave. Rechaza la cédula y el código de acceso como clave (son lo que
+ * cualquiera que la conozca probaría primero) y apaga la marca `debe_cambiar_password`.
+ */
+export async function cambiarClaveInicial(nueva: string, confirmacion: string) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+
+  const admin = createAdminClient();
+  const { data: perfil } = await admin
+    .from("user_profiles")
+    .select("cedula, codigo_acceso")
+    .eq("user_id", user.id)
+    .maybeSingle<{ cedula: string | null; codigo_acceso: string | null }>();
+  if (!perfil) return { error: "No se encontró tu perfil." };
+
+  const problema = validarClaveNueva(nueva, confirmacion, perfil.cedula, perfil.codigo_acceso);
+  if (problema) return { error: problema };
+
+  const { error } = await admin.auth.admin.updateUserById(user.id, { password: nueva });
+  if (error) {
+    console.error("[auth] no se pudo cambiar la clave inicial:", error.message);
+    return { error: "No se pudo guardar la clave. Prueba con otra más larga o con letras y números; si sigue fallando, avisa a un administrador." };
+  }
+  await admin.from("user_profiles").update({ debe_cambiar_password: false, updated_at: new Date().toISOString() }).eq("user_id", user.id);
+  await auditar("MODIFICAR", "usuarios", user.id, "El usuario cambió su clave inicial");
+  revalidatePath("/");
+  return { success: true };
 }
 
 export async function createUserAsAdmin(data: {
@@ -306,4 +359,43 @@ export async function toggleUserActive(userId: string, activo: boolean) {
   await auditar(parsed.data.activo ? "MODIFICAR" : "ELIMINAR", "usuarios", parsed.data.userId, parsed.data.activo ? "Usuario activado" : "Usuario desactivado");
   revalidatePath("/admin/usuarios");
   return { success: true };
+}
+
+/**
+ * Restablece la clave de otra persona: genera una clave temporal, la fija en Auth y marca que debe cambiarla al
+ * entrar. Es la salida para quien olvidó la clave y no tiene un correo real al que llegue el código de «¿Olvidaste tu
+ * contraseña?» (los conductores de la carga masiva sin correo). La clave se devuelve una sola vez, para que quien
+ * restablece se la entregue por un canal privado; nunca se guarda en claro.
+ */
+export async function restablecerClaveUsuario(userId: string) {
+  const caller = await requireRole(["ADMIN", "ANALISTA"]);
+  const parsed = toggleUserActiveSchema.shape.userId.safeParse(userId);
+  if (!parsed.success) return { error: "ID de usuario inválido" };
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return { error: "SUPABASE_SERVICE_ROLE_KEY no configurado." };
+
+  const admin = createAdminClient() as any;
+  const { data: perfil } = await admin
+    .from("user_profiles")
+    .select("user_id, nombre_completo, roles!inner(codigo)")
+    .eq("user_id", parsed.data)
+    .maybeSingle();
+  if (!perfil) return { error: "Usuario no encontrado" };
+  // Misma regla que al crear o editar: un no-ADMIN no toca a un ADMIN (quedaría con su clave en la mano).
+  if (caller.role_codigo !== "ADMIN" && perfil.roles?.codigo === "ADMIN") {
+    return { error: "Solo un Administrador puede restablecer la clave de otro Administrador" };
+  }
+
+  const claveTemporal = generarClaveTemporal();
+  // Primero la marca y después la clave: si la segunda falla, lo peor es que la persona deba cambiar su clave actual.
+  const { error: errMarca } = await admin
+    .from("user_profiles")
+    .update({ debe_cambiar_password: true, updated_at: new Date().toISOString() })
+    .eq("user_id", parsed.data);
+  if (errMarca) return { error: errMarca.message };
+  const { error: errClave } = await admin.auth.admin.updateUserById(parsed.data, { password: claveTemporal });
+  if (errClave) return { error: errClave.message };
+
+  await auditar("MODIFICAR", "usuarios", parsed.data, "Clave restablecida por administración (clave temporal; debe cambiarla al entrar)");
+  revalidatePath("/admin/usuarios");
+  return { success: true as const, claveTemporal };
 }

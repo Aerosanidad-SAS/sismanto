@@ -1,0 +1,154 @@
+"use server";
+
+import { headers } from "next/headers";
+import { z } from "zod";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { auditar } from "@/lib/auditoria";
+import { enviarCorreo, emailConfigurado } from "@/lib/notifications/email";
+import { permitirIntento } from "@/lib/rate-limit-memoria";
+import {
+  LARGO_MINIMO_CONTRASENA,
+  MINUTOS_VIGENCIA_CODIGO,
+  codigoCoincide,
+  esCorreoInterno,
+  estadoCodigo,
+  generarCodigo,
+  hashCodigo,
+  normalizarCedula,
+  reclamoDeIntento,
+} from "@/lib/recuperar-contrasena";
+
+// Recuperar la contraseña con un código por correo (migración 102), como recuperarPassword.php de SISRES.
+// Es público (sin sesión): todo pasa por la clave de servicio y las respuestas no revelan si una cédula tiene cuenta.
+
+const MENSAJE_ENVIO =
+  "Si la cédula corresponde a un usuario activo con correo registrado, en unos segundos te llegará un código de 6 dígitos. Revisa también la carpeta de spam. Si no tienes un correo registrado en SISMANTO, pídele a tu coordinación o a un administrador que te restablezca la clave.";
+const CODIGO_INVALIDO = "Código inválido o vencido. Pide uno nuevo si ya pasaron 15 minutos o se agotaron los intentos.";
+
+function ip(): string {
+  return headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "sin-ip";
+}
+
+const ANONIMO = { userId: null, label: "anónimo" } as const;
+
+/** Usuario activo con esa cédula y su correo, o null. */
+async function usuarioPorCedula(cedula: string): Promise<{ userId: string; email: string } | null> {
+  const admin = createAdminClient();
+  const { data: perfil } = await admin
+    .from("user_profiles")
+    .select("user_id")
+    .eq("cedula", cedula)
+    .eq("activo", true)
+    .maybeSingle<{ user_id: string }>();
+  if (!perfil) return null;
+  const { data } = await admin.auth.admin.getUserById(perfil.user_id);
+  const email = data.user?.email;
+  return email && !CORREO_INTERNO.test(email) ? { userId: perfil.user_id, email } : null;
+}
+
+/** Paso 1: envía un código al correo del usuario con esa cédula. Siempre responde lo mismo. */
+export async function solicitarCodigoRecuperacion(cedulaEscrita: string) {
+  // Frena scripts: 5 solicitudes por IP cada 15 minutos, y 3 por cédula cada 15 minutos (no llenar el correo de nadie).
+  if (!permitirIntento(`recuperar-ip:${ip()}`, 5, 15 * 60_000)) {
+    return { error: "Demasiadas solicitudes. Espera unos minutos e inténtalo de nuevo." };
+  }
+  const cedula = normalizarCedula(z.string().max(30).catch("").parse(cedulaEscrita));
+  if (!cedula) return { error: "Escribe tu número de cédula, solo números." };
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !emailConfigurado()) {
+    return { error: "La recuperación de contraseña no está disponible en este momento. Pide ayuda a un administrador." };
+  }
+  if (!permitirIntento(`recuperar-cedula:${cedula}`, 3, 15 * 60_000)) return { success: true as const, mensaje: MENSAJE_ENVIO };
+
+  const usuario = await usuarioPorCedula(cedula);
+  // Los usuarios de la carga masiva sin correo tienen uno interno (@sismanto.invalid): no existe, no se le escribe.
+  if (usuario && !esCorreoInterno(usuario.email)) {
+    const admin = createAdminClient();
+    const codigo = generarCodigo();
+    // Un código nuevo invalida los anteriores de ese usuario.
+    await admin.from("password_reset_codes").update({ usado: true } as never).eq("user_id", usuario.userId).eq("usado", false);
+    const { error } = await admin.from("password_reset_codes").insert({
+      user_id: usuario.userId,
+      codigo_hash: hashCodigo(usuario.userId, codigo),
+      expira_en: new Date(Date.now() + MINUTOS_VIGENCIA_CODIGO * 60_000).toISOString(),
+    } as never);
+    if (!error) {
+      await enviarCorreo(
+        [usuario.email],
+        "Código para recuperar tu contraseña de SISMANTO",
+        `<div style="font-family:sans-serif;color:#111827">
+          <p>Recibimos una solicitud para cambiar la contraseña de tu cuenta.</p>
+          <p style="font-size:28px;font-weight:700;letter-spacing:6px">${codigo}</p>
+          <p>El código vence en ${MINUTOS_VIGENCIA_CODIGO} minutos y sirve una sola vez.</p>
+          <p style="color:#6b7280;font-size:12px">Si no lo pediste, ignora este correo: tu contraseña no cambia.</p>
+        </div>`
+      );
+      await auditar("NOTIFICAR", "login", usuario.userId, "Código de recuperación de contraseña enviado", ANONIMO);
+    }
+  }
+  return { success: true as const, mensaje: MENSAJE_ENVIO };
+}
+
+const restablecerSchema = z.object({
+  cedula: z.string().max(30),
+  codigo: z.string().trim().regex(/^\d{6}$/, "El código tiene 6 dígitos"),
+  nueva: z.string().min(LARGO_MINIMO_CONTRASENA, `La contraseña debe tener al menos ${LARGO_MINIMO_CONTRASENA} caracteres`).max(72),
+});
+
+/** Paso 2: con el código correcto, cambia la contraseña. Máximo 5 intentos por código. */
+export async function restablecerContrasena(datos: z.input<typeof restablecerSchema>) {
+  if (!permitirIntento(`restablecer-ip:${ip()}`, 10, 15 * 60_000)) {
+    return { error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo." };
+  }
+  const parsed = restablecerSchema.safeParse(datos);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const cedula = normalizarCedula(parsed.data.cedula);
+  if (!cedula || !process.env.SUPABASE_SERVICE_ROLE_KEY) return { error: CODIGO_INVALIDO };
+
+  const usuario = await usuarioPorCedula(cedula);
+  if (!usuario) return { error: CODIGO_INVALIDO };
+
+  const admin = createAdminClient();
+  const { data: fila } = await admin
+    .from("password_reset_codes")
+    .select("id, codigo_hash, expira_en, usado, intentos")
+    .eq("user_id", usuario.userId)
+    .order("creado_en", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: number; codigo_hash: string; expira_en: string; usado: boolean; intentos: number }>();
+  if (!fila || estadoCodigo(fila) !== "valido") return { error: CODIGO_INVALIDO };
+
+  // El intento se RECLAMA de forma atómica ANTES de comparar el código (compare-and-swap sobre `intentos`): con
+  // peticiones en paralelo todas leen el mismo contador, pero solo una logra subirlo y las demás ni siquiera comparan.
+  // Así el tope de MAX_INTENTOS_CODIGO vale aunque el atacante dispare cientos de peticiones a la vez. Sumar el intento
+  // después de comparar (lectura-modificación-escritura) dejaba pasar todas las simultáneas.
+  const reclamo = reclamoDeIntento(fila);
+  const { data: reclamado } = await admin
+    .from("password_reset_codes")
+    .update({ intentos: reclamo.nuevo } as never)
+    .eq("id", reclamo.id)
+    .eq("intentos", reclamo.esperado)
+    .eq("usado", false)
+    .select("id");
+  if (!reclamado || reclamado.length === 0) return { error: CODIGO_INVALIDO };
+
+  if (!codigoCoincide(usuario.userId, parsed.data.codigo, fila.codigo_hash)) {
+    await auditar("ERROR", "login", usuario.userId, "Código de recuperación incorrecto", ANONIMO);
+    return { error: CODIGO_INVALIDO };
+  }
+
+  // Se marca usado ANTES de cambiar la clave: un segundo envío con el mismo código ya no pasa.
+  const { data: marcado } = await admin
+    .from("password_reset_codes")
+    .update({ usado: true } as never)
+    .eq("id", fila.id)
+    .eq("usado", false)
+    .select("id");
+  if (!marcado || marcado.length === 0) return { error: CODIGO_INVALIDO };
+
+  const { error } = await admin.auth.admin.updateUserById(usuario.userId, { password: parsed.data.nueva });
+  if (error) return { error: "No se pudo cambiar la contraseña. Inténtalo de nuevo o pide ayuda a un administrador." };
+  // La eligió la persona misma: ya no hace falta llevarla a /cambiar-password (marca de la carga masiva).
+  await admin.from("user_profiles").update({ debe_cambiar_password: false, updated_at: new Date().toISOString() } as never).eq("user_id", usuario.userId);
+  await auditar("MODIFICAR", "login", usuario.userId, "Contraseña restablecida con código", ANONIMO);
+  return { success: true as const };
+}

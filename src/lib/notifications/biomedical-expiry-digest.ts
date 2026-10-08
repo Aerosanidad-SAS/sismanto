@@ -91,10 +91,13 @@ function filaAlerta(a: AlertaBiomedica): string {
   </tr>`;
 }
 
-/** Cuerpo HTML del correo con todas las alertas del día (un solo correo, sin recorte por rol/centro). */
-export function armarCorreoVencimientosBiomedico(alertas: AlertaBiomedica[]): string {
+/**
+ * Cuerpo HTML del correo con todas las alertas del día de un área (un solo correo, sin recorte por rol/centro).
+ * `area` es el texto que describe los equipos («biomédicos» o «del área de Sistemas»).
+ */
+export function armarCorreoVencimientosBiomedico(alertas: AlertaBiomedica[], area = "biomédicos"): string {
   return `<div style="font-family:sans-serif;color:#111827">
-    <p>Equipos biomédicos con mantenimiento, calibración o parche próximos a vencer o ya vencidos.</p>
+    <p>Equipos ${area} con mantenimiento, calibración o parche próximos a vencer o ya vencidos.</p>
     <table style="width:100%;border-collapse:collapse;font-family:sans-serif;font-size:14px">
       <thead><tr style="text-align:left;color:#6b7280">
         <th style="padding:6px 10px">Placa</th><th style="padding:6px 10px">Equipo</th>
@@ -109,8 +112,12 @@ export function armarCorreoVencimientosBiomedico(alertas: AlertaBiomedica[]): st
   </div>`;
 }
 
-export function asuntoCorreoVencimientosBiomedico(alertas: AlertaBiomedica[]): string {
+/** `sistemas`: el asunto dice «de Sistemas» en vez de «biomédico(s)». */
+export function asuntoCorreoVencimientosBiomedico(alertas: AlertaBiomedica[], sistemas = false): string {
   const vencidos = alertas.filter((a) => a.diasRestantes <= 0).length;
-  if (vencidos > 0) return `⚠️ Aeromanto: ${vencidos} vencimiento${vencidos === 1 ? "" : "s"} biomédico${vencidos === 1 ? "" : "s"} urgente${vencidos === 1 ? "" : "s"}`;
-  return `Aeromanto: ${alertas.length} vencimiento${alertas.length === 1 ? "" : "s"} biomédico${alertas.length === 1 ? "" : "s"} próximo${alertas.length === 1 ? "" : "s"}`;
+  const n = vencidos > 0 ? vencidos : alertas.length;
+  const s = n === 1 ? "" : "s";
+  const de = sistemas ? " de Sistemas" : ` biomédico${s}`;
+  if (vencidos > 0) return `⚠️ Aeromanto: ${n} vencimiento${s}${de} urgente${s}`;
+  return `Aeromanto: ${n} vencimiento${s}${de} próximo${s}`;
 }

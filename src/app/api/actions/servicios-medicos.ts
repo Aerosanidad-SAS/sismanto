@@ -11,16 +11,27 @@ import { centroVisible, type UserRole } from "@/lib/auth-utils";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
+import { hoyBogota } from "@/lib/fechas";
+import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
+import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
+import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
+import { detalleConAtribucion } from "@/lib/atribucion-admin";
+import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
+import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
+  prefijoCiudad,
+  ETAPAS_SIN_GESTIONAR,
+  ciudadRegistroCanonica,
+  esUnidadSinGestionar,
+  limiteSinGestionar,
   type FiltrosServicios,
 } from "@/lib/servicios-lista";
 
 // Mismo rol que ve la sección completa en SISRES (editarServicio.php,
 // "!$esMedicoAux") — Médico/Auxiliar no ven ni suben la Boleta de Salida.
 const ROLES_BOLETA_SALIDA: UserRole[] = ["ADMIN", "REGULACION", "ANALISTA"];
-const BOLETA_TIPOS_PERMITIDOS = ["image/png", "image/jpeg", "image/webp"];
 const BOLETA_TAMANO_MAXIMO = 8 * 1024 * 1024; // 8MB — foto de un documento físico
 
 // SISRES no tiene una máquina de estados fija (Ronda 2, pregunta 3 en
@@ -190,7 +201,7 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
 
 // ── Lista de servicios con filtros de SISRES (mostrarServicios.php) ────────
 
-const ROLES_LISTA_SERVICIOS: UserRole[] = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"];
+const ROLES_LISTA_SERVICIOS: UserRole[] = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA", "COORDINACION"];
 
 // Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este
 // repo (ver CLAUDE.md), y el builder solo recibe filtros encadenados.
@@ -200,12 +211,20 @@ function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centroId
   if (filtros.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtros.etapa)) q = q.eq("etapa", filtros.etapa);
   if (filtros.tipo) q = q.eq("tipo_servicio", filtros.tipo);
   if (filtros.cliente) q = q.eq("cliente", filtros.cliente);
+  const prefijo = prefijoCiudad(filtros.ciudad);
+  if (prefijo) q = q.ilike("ciudad_registro", `${prefijo}%`);
   if (filtros.origen) q = q.eq("ciudad_origen", filtros.origen);
   if (filtros.destino) q = q.eq("ciudad_destino", filtros.destino);
   if (filtros.cedula) q = q.ilike("cedula_paciente", `%${filtros.cedula.replace(/[%_\\]/g, "")}%`);
   // Como SISRES: el rango es sobre la fecha programada, en hora de Colombia.
   if (filtros.desde) q = q.gte("fecha_hora_programacion", `${filtros.desde}T00:00:00-05:00`);
   if (filtros.hasta) q = q.lte("fecha_hora_programacion", `${filtros.hasta}T23:59:59.999-05:00`);
+  // «Sin gestionar»: se suma (AND) a los demás filtros, incluida la etapa, como en SISRES.
+  const cantidad = Number(filtros.sinGestionar);
+  if (Number.isInteger(cantidad) && cantidad > 0) {
+    const unidad = esUnidadSinGestionar(filtros.sinGestionarUnidad) ? filtros.sinGestionarUnidad : "dia";
+    q = q.in("etapa", ETAPAS_SIN_GESTIONAR).lte("fecha_hora_programacion", limiteSinGestionar(cantidad, unidad));
+  }
   return q;
 }
 
@@ -249,11 +268,13 @@ export async function exportarServicios(filtros: FiltrosServicios) {
   const profile = await requireRole(ROLES_LISTA_SERVICIOS);
   const supabase = createClient();
   const filas: Record<string, unknown>[] = [];
+  // Datos del paciente solo para quien ya puede exportar pacientes: a los demás roles no se les vuelca la tabla por aquí.
+  const conPaciente = exportaDatosPaciente(profile.role_codigo);
   const LOTE = 1000; // PostgREST devuelve máximo 1000 filas por consulta
   for (let desde = 0; desde < EXPORT_MAX_FILAS; desde += LOTE) {
     const query = supabase
       .from("medical_services")
-      .select("*, vehicles(placa)")
+      .select(conPaciente ? `*, vehicles(placa), patients(${CAMPOS_PACIENTE_EN_SERVICIO})` : "*, vehicles(placa)")
       .order("fecha_hora_registro", { ascending: false })
       .order("id", { ascending: false })
       .range(desde, desde + LOTE - 1);
@@ -263,14 +284,22 @@ export async function exportarServicios(filtros: FiltrosServicios) {
     if (!data || data.length < LOTE) break;
   }
   // Quién sacó datos de servicios (pacientes, diagnósticos) a un archivo y cuántas filas: solo la cuenta, no el contenido.
-  await auditar("EXPORTAR", "servicios", "", `Exportación de servicios (${filas.length} filas${filas.length >= EXPORT_MAX_FILAS ? ", truncada" : ""})`);
+  await auditar(
+    "EXPORTAR",
+    "servicios",
+    "",
+    `Exportación de servicios (${filas.length} filas${filas.length >= EXPORT_MAX_FILAS ? ", truncada" : ""}${conPaciente ? ", con datos del paciente" : ""})`
+  );
+  const hoy = hoyBogota();
   return {
-    filas: filas.map((s) => ({
+    filas: filas.map(({ patients, ...s }) => ({
       ...s,
       movil: (s.vehicles as { placa?: string } | null)?.placa ?? s.movil_placa ?? "",
       diagnostico: [s.cie_codigo, s.cie_descripcion].filter(Boolean).join(" — "),
+      paciente: conPaciente ? celdasPacienteEnServicio(s.patient_id, (patients ?? null) as PacienteExport | null, hoy) : null,
     })),
     truncado: filas.length >= EXPORT_MAX_FILAS,
+    conPaciente,
   };
 }
 
@@ -301,20 +330,39 @@ export async function getServiciosParaAvisos() {
   }[];
 }
 
+/** La ciudad de registro es CRA Medellín o CRA Bogotá: se guarda el texto canónico; cualquier otro valor se rechaza. */
+function normalizarCiudadRegistro(datos: { ciudad_registro?: string }): string | null {
+  if (!datos.ciudad_registro) return null;
+  const canonica = ciudadRegistroCanonica(datos.ciudad_registro);
+  if (!canonica) return "La ciudad de registro debe ser CRA Medellín o CRA Bogotá";
+  datos.ciudad_registro = canonica;
+  return null;
+}
+
 export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const errorCiudad = normalizarCiudadRegistro(parsed.data);
+  if (errorCiudad) return { error: errorCiudad };
 
   // SISRES pide la etapa como select obligatorio al registrar
   // (registroServicios.php) — permite loguear directo un servicio que ya
   // sucedió (ej. FALLIDO, NO EFECTIVO) sin pasarlo primero por PROGRAMADO.
   const etapa = ETAPAS_SERVICIO.find((e) => e === etapaInicial);
   if (!etapa) return { error: "Debes seleccionar la etapa del servicio" };
+  // Las horas del recorrido deben ir en el orden en que ocurren (no se validaba en SISRES).
+  const desorden = errorDeCronologia(parsed.data);
+  if (desorden) return { error: desorden };
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const profile = await getProfile();
   const fila = aFilaServicio(parsed.data);
+  // Bloqueo provisional (migración 113): no se despacha un servicio con un vehículo que tiene una solicitud de
+  // NO APTO pendiente de aval.
+  if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
+    return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
+  }
 
   const { data, error } = await supabase
     .from("medical_services")
@@ -339,9 +387,29 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
 
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const errorCiudad = normalizarCiudadRegistro(parsed.data);
+  if (errorCiudad) return { error: errorCiudad };
 
   const supabase = createClient();
+  // Un servicio ya FINALIZADO no puede quedar sin sus tiempos al editarlo (editarServicio.php de SISRES lo exige al
+  // guardar con etapa FINALIZADO). Los demás estados se guardan libres.
+  const desorden = errorDeCronologia(parsed.data);
+  if (desorden) return { error: desorden };
+  const { data: actual } = await supabase
+    .from("medical_services")
+    .select("etapa")
+    .eq("id", idParsed.data)
+    .maybeSingle<{ etapa: string }>();
+  if (actual?.etapa === "FINALIZADO") {
+    const falta = mensajeFaltantesParaFinalizar(parsed.data.tipo_servicio, parsed.data);
+    if (falta) return { error: falta };
+  }
   const fila = aFilaServicio(parsed.data);
+  // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
+  // asignado a un servicio — tampoco al editar uno que ya lo tenía.
+  if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
+    return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
+  }
   // Solo el vehículo redefine el centro al editar: sin vehículo se conserva
   // el que ya tenía, no el de quien edita.
   const centro = fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
@@ -383,6 +451,24 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
   if (!actual || !nueva) return { error: "Etapa inválida" };
 
   const supabase = createClient();
+  // Como en SISRES: no se finaliza un servicio sin la llegada y salida de cada tramo que su tipo exige (ensuciaría los
+  // indicadores de tiempos). Allá finalizar solo se podía desde el formulario de edición, que validaba esto.
+  if (nueva === "FINALIZADO") {
+    const { data: fila } = await supabase
+      .from("medical_services")
+      .select(
+        "tipo_servicio, fecha_hora_programacion, fecha_hora_inicio_desplazamiento, fecha_hora_llegada_origen, fecha_hora_salida_origen, fecha_hora_llegada_intermedia, fecha_hora_salida_intermedia, fecha_hora_llegada_destino, fecha_hora_salida_destino"
+      )
+      .eq("id", idParsed.data)
+      .maybeSingle<{ tipo_servicio: string } & FechasServicio & TiemposServicio>();
+    if (fila) {
+      const falta = mensajeFaltantesParaFinalizar(fila.tipo_servicio, fila);
+      if (falta) return { error: falta };
+      // Finalizar fija el servicio (migración 055): si el recorrido está desordenado, hay que corregirlo antes.
+      const desorden = errorDeCronologia(fila);
+      if (desorden) return { error: desorden + " Edita el servicio, corrige las horas y luego finalízalo." };
+    }
+  }
   const { data, error } = await supabase
     .from("medical_services")
     .update({ etapa: nueva, updated_at: new Date().toISOString() })
@@ -439,7 +525,14 @@ export async function marcarPasoServicio(
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   if (nueva) await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
-  await auditar("MODIFICAR", "servicios", data[0].id, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`);
+  // Si lo marca el ADMIN (no la tripulación), el detalle lo dice: el actor de la bitácora ya es él.
+  const rol = (await getProfile())?.role_codigo;
+  await auditar(
+    "MODIFICAR",
+    "servicios",
+    data[0].id,
+    detalleConAtribucion(rol, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`)
+  );
   revalidatePath("/servicios");
   revalidatePath("/ovem");
   return { success: true };
@@ -468,20 +561,23 @@ export async function subirBoletaSalida(servicioId: number, file: File) {
 
   const idParsed = z.number().int().positive().safeParse(servicioId);
   if (!idParsed.success) return { error: "ID inválido" };
-  if (!BOLETA_TIPOS_PERMITIDOS.includes(file.type)) {
-    return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
-  }
   if (file.size > BOLETA_TAMANO_MAXIMO) {
     return { error: "La imagen no puede pesar más de 8MB" };
   }
+  // Por el contenido real del archivo, no por lo que declare el navegador (auditoría 2026-10-01, hallazgo #5).
+  const cabecera = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const tipo = tipoImagenPorContenido(cabecera);
+  if (!tipo) {
+    return { error: "Formato no soportado — usa PNG, JPG o WEBP" };
+  }
 
   const supabase = createClient();
-  const extension = file.name.split(".").pop() || "jpg";
-  const ruta = `servicio-${idParsed.data}-${Date.now()}.${extension}`;
+  const ruta = `servicio-${idParsed.data}-${Date.now()}.${tipo.ext}`;
 
   const { error: uploadError } = await supabase.storage.from("servicios-boletas").upload(ruta, file, {
     cacheControl: "3600",
     upsert: false,
+    contentType: tipo.mime,
   });
   if (uploadError) return { error: uploadError.message };
 

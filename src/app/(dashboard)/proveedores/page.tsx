@@ -1,9 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { getProfile } from "@/app/api/actions/auth";
 import { getDirectorioProveedores } from "@/app/api/actions/directorios";
-import { DirectorioTabla } from "@/components/directorio/directorio-tabla";
+import { PrestadoresDirectorio } from "@/components/proveedores/prestadores-directorio";
+import { puedeEditarPrestadores } from "@/lib/prestadores";
+
+export const metadata = { title: "Proveedores" };
 
 export default async function ProveedoresPage() {
-  const proveedores = await getDirectorioProveedores();
+  const [proveedores, profile] = await Promise.all([getDirectorioProveedores(), getProfile()]);
   return (
     <div className="space-y-8">
       <div>
@@ -12,23 +16,7 @@ export default async function ProveedoresPage() {
       </div>
       <Card>
         <CardContent className="pt-6">
-          <DirectorioTabla
-            filas={proveedores}
-            columnas={[
-              { campo: "nombre", titulo: "Nombre" },
-              { campo: "numero", titulo: "Documento" },
-              { campo: "area", titulo: "Área" },
-              { campo: "ciudad", titulo: "Ciudad" },
-              { campo: "telefono1", titulo: "Teléfono" },
-              { campo: "correo", titulo: "Correo" },
-            ]}
-            // Los mismos filtros que agregó SISRES a mostrarProveedores.php (2026-08-28).
-            filtros={[
-              { campo: "ciudad", titulo: "Ciudad" },
-              { campo: "area", titulo: "Área" },
-            ]}
-            vacio="Todavía no hay proveedores cargados (llegan con la migración de datos de SISRES)."
-          />
+          <PrestadoresDirectorio filas={proveedores} puedeEditar={puedeEditarPrestadores(profile?.role_codigo)} />
         </CardContent>
       </Card>
     </div>

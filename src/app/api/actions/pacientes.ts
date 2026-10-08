@@ -5,8 +5,11 @@ import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
 import type { PatientFormData } from "@/lib/validations";
 import { patientSchema } from "@/lib/validations";
+import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
+import { camposFaltantes, mensajeFaltantes } from "@/lib/campos-obligatorios";
 import { z } from "zod";
-import { requireRole } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { cedulaPacienteValida, CEDULA_PACIENTE_MIN, puedeDesactivarPaciente } from "@/lib/pacientes-reglas";
 import { EXPORT_PACIENTES_MAX_FILAS, ROLES_EXPORTAR_PACIENTES, type PacienteExport } from "@/lib/pacientes-export";
 import {
   COLUMNAS_BUSQUEDA_PACIENTES,
@@ -115,6 +118,13 @@ export async function buscarPacientesTypeahead(busqueda: string): Promise<Pacien
 export async function crearPaciente(formData: PatientFormData) {
   const parsed = patientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  // Regla de SISRES (insertarPacientes.php). Solo al registrar: editar un paciente histórico con documento corto no debe fallar.
+  if (!cedulaPacienteValida(parsed.data.cedula)) {
+    return { error: `El número de documento debe tener mínimo ${CEDULA_PACIENTE_MIN} caracteres` };
+  }
+  // Campos opcionales que el administrador volvió obligatorios (migración 101).
+  const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
+  if (faltan) return { error: faltan };
 
   const supabase = createClient();
 
@@ -150,6 +160,9 @@ export async function actualizarPaciente(id: number, formData: PatientFormData) 
 
   const parsed = patientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  // Campos opcionales que el administrador volvió obligatorios (migración 101).
+  const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
+  if (faltan) return { error: faltan };
 
   const supabase = createClient();
   const { error } = await supabase
@@ -169,6 +182,10 @@ export async function actualizarPaciente(id: number, formData: PatientFormData) 
 export async function eliminarPaciente(id: number) {
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
+  const profile = await getProfile();
+  if (!puedeDesactivarPaciente(profile?.role_codigo)) {
+    return { error: "Sin permiso: solo un administrador puede desactivar pacientes" };
+  }
 
   const supabase = createClient();
   // Soft delete — el historial de servicios del paciente se conserva

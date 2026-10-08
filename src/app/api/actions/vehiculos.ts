@@ -56,6 +56,7 @@ export async function registrarKilometrajeVehiculo(input: z.infer<typeof registr
   );
 
   if (error) return { error: error.message };
+  await auditar("MODIFICAR", "vehiculos", vid, `Kilometraje registrado: ${kmVal} km (${fechaVal})`);
   revalidatePath("/vehiculos");
   revalidatePath(`/vehiculos/${vid}`);
   revalidatePath("/");
@@ -97,7 +98,7 @@ export async function crearVehiculo(formData: VehicleFormData) {
     .eq("id", fd.centro_operativo_id)
     .single();
 
-  const { error } = await supabase.from("vehicles").insert({
+  const { data: nuevo, error } = await supabase.from("vehicles").insert({
     placa: fd.placa.toUpperCase(),
     marca: fd.marca || null,
     modelo: fd.modelo || null,
@@ -124,13 +125,13 @@ export async function crearVehiculo(formData: VehicleFormData) {
     centro_operativo: centro?.codigo || "OTRO",
     centro_operativo_id: fd.centro_operativo_id,
     estado_actual: "OPERATIVO",
-  });
+  }).select("id").single();
 
   if (error) return { error: error.message };
-  await auditar("INSERTAR", "vehiculos", "", "Vehículo creado");
+  await auditar("INSERTAR", "vehiculos", (nuevo as { id: string } | null)?.id ?? "", "Vehículo creado");
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
-  return { success: true };
+  return { success: true, vehicleId: (nuevo as { id: string } | null)?.id ?? null };
 }
 
 export async function actualizarVehiculo(id: string, formData: VehicleFormData) {
@@ -284,6 +285,7 @@ export async function eliminarVehiculo(id: string) {
 
   const { error } = await supabase.from("vehicles").delete().eq("id", idParsed.data);
   if (error) return { error: error.message };
+  await auditar("ELIMINAR", "vehiculos", idParsed.data, "Vehículo eliminado");
   revalidatePath("/configuracion");
   revalidatePath("/vehiculos");
   return { success: true };

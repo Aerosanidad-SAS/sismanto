@@ -8,21 +8,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { evaluarKilometraje, parseKilometraje, parseNumeroDecimal } from "@/lib/ovem-portal";
 
-function numero(v: string): number | undefined {
-  const n = Number(v.replace(",", "."));
-  return v.trim() && Number.isFinite(n) ? n : undefined;
-}
 
 export function CombustibleForm({
   vehicleId,
   placa,
   hoy,
+  ultimoKm,
   onDone,
 }: {
   vehicleId: string;
   placa: string;
   hoy: string;
+  /** Último kilometraje registrado del vehículo (para la ayuda y el aviso), si se conoce. */
+  ultimoKm?: number | null;
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -34,6 +34,8 @@ export function CombustibleForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const avisoKm = evaluarKilometraje(parseKilometraje(km), ultimoKm).mensaje;
+
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -41,9 +43,9 @@ export function CombustibleForm({
     const result = await submitOvemFuelLog({
       vehicleId,
       fecha,
-      kilometraje: Math.trunc(numero(km) ?? 0),
-      galones: numero(galones) ?? 0,
-      costo: numero(costo),
+      kilometraje: parseKilometraje(km) ?? 0,
+      galones: parseNumeroDecimal(galones) ?? 0,
+      costo: parseNumeroDecimal(costo),
       numeroVenta: numeroVenta || undefined,
     });
     setLoading(false);
@@ -76,14 +78,24 @@ export function CombustibleForm({
             </Label>
             <Input
               id="fuel-km"
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={1}
+              pattern="[0-9.\s]+"
+              enterKeyHint="next"
+              aria-describedby="fuel-km-ayuda"
               value={km}
               onChange={(e) => setKm(e.target.value)}
               placeholder="Ej: 125000"
               required
             />
+            <p id="fuel-km-ayuda" className="text-xs text-muted-foreground">
+              {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
+            </p>
+            {avisoKm && (
+              <p role="status" className="rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground">
+                {avisoKm}
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="fuel-galones">
@@ -91,13 +103,13 @@ export function CombustibleForm({
             </Label>
             <Input
               id="fuel-galones"
-              type="number"
+              type="text"
               inputMode="decimal"
-              step="0.001"
-              min={0.001}
+              pattern="[0-9]+([.,][0-9]{1,3})?"
+              enterKeyHint="next"
               value={galones}
               onChange={(e) => setGalones(e.target.value)}
-              placeholder="Ej: 12.5"
+              placeholder="Ej: 12,5"
               required
             />
           </div>
@@ -105,9 +117,9 @@ export function CombustibleForm({
             <Label htmlFor="fuel-costo">Valor pagado (COP)</Label>
             <Input
               id="fuel-costo"
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={0}
+              pattern="[0-9]*"
               value={costo}
               onChange={(e) => setCosto(e.target.value)}
               placeholder="Opcional"
@@ -123,7 +135,11 @@ export function CombustibleForm({
               maxLength={40}
             />
           </div>
-          {error && <p className="text-sm text-red-600 sm:col-span-2">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive sm:col-span-2">
+              {error}
+            </p>
+          )}
           <Button type="submit" disabled={loading} className="h-11 w-full sm:col-span-2 sm:w-auto sm:justify-self-start">
             {loading ? "Guardando…" : "Registrar tanqueo"}
           </Button>

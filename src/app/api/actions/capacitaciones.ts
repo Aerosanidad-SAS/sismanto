@@ -5,6 +5,7 @@ import { auditar } from "@/lib/auditoria";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProfile } from "@/app/api/actions/auth";
 import { z } from "zod";
+import { puedeVerRespuestasCorrectas, seleccionOpciones } from "@/lib/capacitaciones-opciones";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -74,12 +75,16 @@ export async function listTrainings() {
 }
 
 export async function getTrainingWithQuestions(trainingId: number) {
-  const supabase = createClient();
+  const profile = await getProfile();
+  if (!profile) return { data: null, error: "No autenticado" };
+  // Quien rinde la evaluación nunca recibe `es_correcta` (migración 121: la base tampoco se la entrega al rol
+  // `authenticated`). ADMIN y COORDINACION la leen con la clave de servicio, ya con el rol comprobado arriba.
+  const supabase = puedeVerRespuestasCorrectas(profile.role_codigo) ? createAdminClient() : createClient();
   const [{ data: training, error }, { data: questions }] = await Promise.all([
     supabase.from("trainings").select("*").eq("id", trainingId).single(),
     supabase
       .from("training_questions")
-      .select("*, training_question_options(*)")
+      .select(`*, training_question_options(${seleccionOpciones(profile.role_codigo)})`)
       .eq("training_id", trainingId)
       .eq("activo", true)
       .order("orden"),
