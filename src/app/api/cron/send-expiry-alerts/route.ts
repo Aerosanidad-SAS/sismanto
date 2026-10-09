@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cronAutorizado } from "@/lib/cron-auth";
-import { enviarCorreo } from "@/lib/notifications/email";
+import { emailConfigurado, enviarCorreo } from "@/lib/notifications/email";
+import { clavesSinEntregar, soloEnviables } from "@/lib/correo-destinatarios";
 import {
   alertaMantenimientoFila,
   alertasDocumentosVehiculo,
@@ -29,6 +30,12 @@ export async function POST(request: NextRequest): Promise<Response> {
   const auth = request.headers.get("authorization");
   if (!cronAutorizado(auth, cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Sin proveedor de correo, enviarCorreo «sale» sin salir (modo desarrollo): marcar los hitos como avisados los daría
+  // por entregados para siempre. Si no hay correo, no se toca nada y la próxima corrida lo intenta de nuevo.
+  if (!(await emailConfigurado())) {
+    return NextResponse.json({ enviados: 0, mensaje: "El correo no está configurado: no se marcó ningún hito como avisado" });
   }
 
   const supabase = createAdminClient();
@@ -66,10 +73,12 @@ export async function POST(request: NextRequest): Promise<Response> {
       candidatas.map((a) => ({ vehicle_id: a.vehicleId, item_type: a.itemType, item_key: a.itemKey, milestone: a.milestone })),
       { onConflict: "vehicle_id,item_type,item_key,milestone", ignoreDuplicates: true }
     )
-    .select("vehicle_id, item_type, item_key, milestone");
+    .select("id, vehicle_id, item_type, item_key, milestone");
   if (errLog) return NextResponse.json({ error: errLog.message }, { status: 500 });
 
-  const clavesNuevas = new Set((insertadas ?? []).map((r) => `${r.vehicle_id}:${r.item_type}:${r.item_key}:${r.milestone}`));
+  const filasLog = (insertadas ?? []) as unknown as { id: number; vehicle_id: string; item_type: string; item_key: string; milestone: string }[];
+  const idPorClave = new Map(filasLog.map((r) => [`${r.vehicle_id}:${r.item_type}:${r.item_key}:${r.milestone}`, r.id]));
+  const clavesNuevas = new Set(idPorClave.keys());
   const nuevas = candidatas.filter((a) => clavesNuevas.has(`${a.vehicleId}:${a.itemType}:${a.itemKey}:${a.milestone}`));
 
   if (nuevas.length === 0) {
@@ -86,7 +95,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   const globales = new Set<string>();
   const porCentro = new Map<number, Set<string>>();
   for (const p of (perfiles ?? []) as { email: string | null; operational_center_id: number | null; roles: { codigo: string } }[]) {
-    if (!p.email) continue;
+    if (!p.email || soloEnviables([p.email]).length === 0) continue; // sin cuentas de prueba (@sismanto.test, @staging.local…)
     if (p.roles.codigo === "REGULACION") {
       if (p.operational_center_id == null) continue; // sin centro asignado: no sabemos qué le corresponde
       if (!porCentro.has(p.operational_center_id)) porCentro.set(p.operational_center_id, new Set());
@@ -121,13 +130,24 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (propias.length > 0) envios.push({ destinatarios: [...correos], alcance: " de su centro", alertas: propias });
   }
 
+  const clave = (a: Alerta) => `${a.vehicleId}:${a.itemType}:${a.itemKey}:${a.milestone}`;
   const resultados: { destinatarios: number; alertas: number; ok: boolean; error: string | null }[] = [];
+  const realizados: { claves: string[]; ok: boolean }[] = [];
   for (const envio of envios) {
     const res = await enviarCorreo(envio.destinatarios, asuntoCorreoVencimientos(envio.alertas), armarCorreoVencimientos(envio.alertas, envio.alcance));
     resultados.push({ destinatarios: envio.destinatarios.length, alertas: envio.alertas.length, ok: res.ok, error: res.error });
+    realizados.push({ claves: envio.alertas.map(clave), ok: res.ok });
   }
 
-  return NextResponse.json({ enviados: resultados.length, nuevas: nuevas.length, resultados });
+  // Los avisos que no llegaron a nadie (envío fallido, sin destinatarios) se desmarcan para que la próxima corrida los
+  // reintente; antes quedaban «avisados» sin que nadie los hubiera recibido.
+  const sinEntregar = clavesSinEntregar(nuevas.map(clave), realizados);
+  const ids = sinEntregar.map((k) => idPorClave.get(k)).filter((id): id is number => id !== undefined);
+  for (let i = 0; i < ids.length; i += 200) {
+    await supabase.from("expiry_alerts_log").delete().in("id", ids.slice(i, i + 200));
+  }
+
+  return NextResponse.json({ enviados: resultados.filter((r) => r.ok).length, nuevas: nuevas.length, sinEntregar: sinEntregar.length, resultados });
 }
 
 // Vercel Cron invoca con GET; POST queda para lanzarlo a mano con el mismo secreto.

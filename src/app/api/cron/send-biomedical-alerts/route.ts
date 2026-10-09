@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cronAutorizado } from "@/lib/cron-auth";
-import { enviarCorreo } from "@/lib/notifications/email";
+import { emailConfigurado, enviarCorreo } from "@/lib/notifications/email";
+import { soloEnviables } from "@/lib/correo-destinatarios";
 import {
   alertasEquipoBiomedico,
   armarCorreoVencimientosBiomedico,
@@ -30,6 +31,12 @@ export async function POST(request: NextRequest): Promise<Response> {
   const auth = request.headers.get("authorization");
   if (!cronAutorizado(auth, cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Sin proveedor de correo, enviarCorreo «sale» sin salir (modo desarrollo): marcar los hitos como avisados los daría
+  // por entregados para siempre. Si no hay correo, no se toca nada y la próxima corrida lo intenta de nuevo.
+  if (!(await emailConfigurado())) {
+    return NextResponse.json({ enviados: 0, mensaje: "El correo no está configurado: no se marcó ningún hito como avisado" });
   }
 
   const supabase = createAdminClient();
@@ -75,7 +82,8 @@ export async function POST(request: NextRequest): Promise<Response> {
   let enviados = 0;
 
   for (const { area } of AREAS_INVENTARIO) {
-    const para = destinatarios.get(area) ?? [];
+    // Solo correos de personas: sin las cuentas de prueba (@sismanto.test, @staging.local…).
+    const para = soloEnviables(destinatarios.get(area) ?? []);
     // Un área sin destinatarios no marca nada como avisado: si se configura después, sus hitos siguen pendientes.
     if (para.length === 0) {
       resultado[area] = { enviados: 0, mensaje: "Sin destinatarios configurados" };
@@ -95,10 +103,12 @@ export async function POST(request: NextRequest): Promise<Response> {
         candidatas.map((a) => ({ equipment_id: a.equipmentId, item_type: a.itemType, milestone: a.milestone })),
         { onConflict: "equipment_id,item_type,milestone", ignoreDuplicates: true }
       )
-      .select("equipment_id, item_type, milestone");
+      .select("id, equipment_id, item_type, milestone");
     if (errLog) return NextResponse.json({ error: errLog.message }, { status: 500 });
 
-    const clavesNuevas = new Set((insertadas ?? []).map((r) => `${r.equipment_id}:${r.item_type}:${r.milestone}`));
+    const filasLog = (insertadas ?? []) as unknown as { id: number; equipment_id: number; item_type: string; milestone: string }[];
+    const idPorClave = new Map(filasLog.map((r) => [`${r.equipment_id}:${r.item_type}:${r.milestone}`, r.id]));
+    const clavesNuevas = new Set(idPorClave.keys());
     const nuevas = candidatas.filter((a) => clavesNuevas.has(`${a.equipmentId}:${a.itemType}:${a.milestone}`));
     if (nuevas.length === 0) {
       resultado[area] = { enviados: 0, mensaje: "Todos los hitos de hoy ya se avisaron" };
@@ -112,8 +122,18 @@ export async function POST(request: NextRequest): Promise<Response> {
       asuntoCorreoVencimientosBiomedico(nuevas, sistemas),
       armarCorreoVencimientosBiomedico(nuevas, sistemas ? "del área de Sistemas" : "biomédicos")
     );
+    if (!res.ok) {
+      // El correo no salió: se desmarcan estos hitos para que la próxima corrida los reintente (antes quedaban
+      // «avisados» sin que nadie los hubiera recibido).
+      const ids = nuevas.map((a) => idPorClave.get(`${a.equipmentId}:${a.itemType}:${a.milestone}`)).filter((id): id is number => id !== undefined);
+      for (let i = 0; i < ids.length; i += 200) {
+        await supabase.from("biomedical_alerts_log").delete().in("id", ids.slice(i, i + 200));
+      }
+      resultado[area] = { enviados: 0, nuevas: nuevas.length, destinatarios: para.length, ok: false, error: res.error, reintentara: true };
+      continue;
+    }
     enviados++;
-    resultado[area] = { enviados: 1, nuevas: nuevas.length, destinatarios: para.length, ok: res.ok, error: res.error };
+    resultado[area] = { enviados: 1, nuevas: nuevas.length, destinatarios: para.length, ok: true, error: null };
   }
 
   return NextResponse.json({ enviados, areas: resultado });
