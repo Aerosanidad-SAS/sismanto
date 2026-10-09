@@ -100,11 +100,12 @@ async function getCentrosOperativos() {
   }
 }
 
-export default async function VehicleDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function VehicleDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const vehicle = await getVehicle(params.id);
 
   if (!vehicle) {

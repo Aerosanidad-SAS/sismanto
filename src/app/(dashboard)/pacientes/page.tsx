@@ -15,11 +15,12 @@ export const metadata = { title: "Pacientes" };
 
 const ROLES_EDICION = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
 
-export default async function PacientesPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function PacientesPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const { q, pagina } = leerBusquedaPacientes(searchParams);
   const [profile, { pacientes, total, error: errorLista }, resumen, epsOptions, obligatorios] = await Promise.all([
     getProfile(),

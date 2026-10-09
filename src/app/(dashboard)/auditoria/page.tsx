@@ -45,7 +45,10 @@ function fechaHora(iso: string): string {
   });
 }
 
-export default async function AuditoriaPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+export default async function AuditoriaPage(
+  props: { searchParams: Promise<Record<string, string | string[] | undefined>> }
+) {
+  const searchParams = await props.searchParams;
   await requireRole(["ADMIN"]);
   const filtros = leerFiltrosAuditoria(searchParams);
   const { filas, total, error } = await listarAuditoria(filtros);

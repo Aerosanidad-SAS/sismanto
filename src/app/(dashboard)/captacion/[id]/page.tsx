@@ -5,7 +5,8 @@ import { getCamposObligatorios, getCaptacion, getCatalogosCaptacion } from "@/ap
 import { FormularioCaptacion } from "@/components/captacion/formulario-captacion";
 import { ROLES_CAPTACION_LISTA, puedeAdministrarCaptacion } from "@/lib/captacion";
 
-export default async function CaptacionDetallePage({ params }: { params: { id: string } }) {
+export default async function CaptacionDetallePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const profile = await requireRole(ROLES_CAPTACION_LISTA);
   // Editar es solo del Administrador (cargo 1 de SISRES); los demás roles ven el registro.
   const puedeEditar = puedeAdministrarCaptacion(profile.role_codigo);

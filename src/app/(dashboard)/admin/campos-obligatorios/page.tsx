@@ -6,10 +6,11 @@ import { MODULOS_CAMPOS, MODULOS_CONFIGURABLES, esModuloCampos } from "@/lib/cam
 import { cn } from "@/lib/utils";
 
 interface Props {
-  searchParams: { modulo?: string };
+  searchParams: Promise<{ modulo?: string }>;
 }
 
-export default async function CamposObligatoriosPage({ searchParams }: Props) {
+export default async function CamposObligatoriosPage(props: Props) {
+  const searchParams = await props.searchParams;
   // Solo Administrador (SISRES: act_configurar_campos_* por módulo).
   await requireRole(["ADMIN"]);
   const modulo = searchParams.modulo && esModuloCampos(searchParams.modulo) ? searchParams.modulo : MODULOS_CONFIGURABLES[0];

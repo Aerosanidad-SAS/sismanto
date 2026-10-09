@@ -153,7 +153,7 @@ export async function crearActaEntrega(entrada: ActaEntregaEntrada, firmas: Firm
     if (e2) avisos.push(`El acta se creó pero no se pudieron enlazar las firmas: ${e2.message}`);
   }
   if (porCorreo) {
-    const envio = await enviarEnlaceFirmaActa(createAdminClient(), enviarCorreo, urlBaseSitio(), {
+    const envio = await enviarEnlaceFirmaActa(createAdminClient(), enviarCorreo, await urlBaseSitio(), {
       registroId: fila.id,
       numeroOrden: fila.numero_orden,
       nombre: d.recibe_nombre,
@@ -240,7 +240,7 @@ export async function reenviarEnlaceFirmaActa(id: number) {
   const acta = data as unknown as ActaEntregaFila;
   if (acta.firma_recibe_ruta) return { error: "Esta acta ya está firmada por quien recibe." };
 
-  const envio = await enviarEnlaceFirmaActa(createAdminClient(), enviarCorreo, urlBaseSitio(), {
+  const envio = await enviarEnlaceFirmaActa(createAdminClient(), enviarCorreo, await urlBaseSitio(), {
     registroId: acta.id,
     numeroOrden: acta.numero_orden,
     nombre: acta.recibe_nombre,

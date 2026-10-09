@@ -18,17 +18,17 @@ import { permitirIntento } from "@/lib/rate-limit-memoria";
 const MAXIMO_INTENTOS = 30;
 const VENTANA_MS = 5 * 60_000;
 
-function ipDeLaPeticion(): string {
-  return headers().get("x-forwarded-for")?.split(",")[0]?.trim() ?? "sin-ip";
+async function ipDeLaPeticion(): Promise<string> {
+  return (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "sin-ip";
 }
 
 export async function contextoFirmaRemota(token: string): Promise<ContextoFirma> {
-  if (!permitirIntento(`contexto:${ipDeLaPeticion()}`, MAXIMO_INTENTOS, VENTANA_MS)) return { estado: "invalido" };
+  if (!permitirIntento(`contexto:${await ipDeLaPeticion()}`, MAXIMO_INTENTOS, VENTANA_MS)) return { estado: "invalido" };
   return contextoFirma(createAdminClient(), token);
 }
 
 export async function firmarRemoto(token: string, dataUri: string): Promise<{ success: true } | { error: string }> {
-  const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   if (!permitirIntento(`firmar:${ip ?? "sin-ip"}`, MAXIMO_INTENTOS, VENTANA_MS)) {
     return { error: "Demasiados intentos. Espera unos minutos e intenta de nuevo." };
   }

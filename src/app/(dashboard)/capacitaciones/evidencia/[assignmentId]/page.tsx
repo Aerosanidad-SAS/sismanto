@@ -7,11 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { formatDateShort } from "@/lib/utils";
 import { PrintButton } from "@/components/ui/print-button";
 
-export default async function EvidenciaCapacitacionPage({
-  params,
-}: {
-  params: { assignmentId: string };
-}) {
+export default async function EvidenciaCapacitacionPage(
+  props: {
+    params: Promise<{ assignmentId: string }>;
+  }
+) {
+  const params = await props.params;
   const assignmentId = Number(params.assignmentId);
   if (!Number.isFinite(assignmentId) || assignmentId <= 0) notFound();
 

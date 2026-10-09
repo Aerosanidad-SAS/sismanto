@@ -4,7 +4,8 @@ import { requireRole } from "@/app/api/actions/auth";
 import { getTicketGestion } from "@/app/api/actions/tickets-gestion";
 import { DetalleTicketGestion } from "@/components/soporte/detalle-ticket-gestion";
 
-export default async function GestionTicketPage({ params }: { params: { id: string } }) {
+export default async function GestionTicketPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const profile = await requireRole(["ADMIN", "ANALISTA", "COORDINACION", "TECNICO"]);
 
   const id = Number(params.id);

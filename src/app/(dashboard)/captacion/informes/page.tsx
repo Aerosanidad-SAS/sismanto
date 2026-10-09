@@ -12,10 +12,11 @@ import {
 } from "@/lib/informes-captacion";
 
 interface Props {
-  searchParams: { informe?: string; desde?: string; hasta?: string; aeropuerto?: string };
+  searchParams: Promise<{ informe?: string; desde?: string; hasta?: string; aeropuerto?: string }>;
 }
 
-export default async function InformesCaptacionPage({ searchParams }: Props) {
+export default async function InformesCaptacionPage(props: Props) {
+  const searchParams = await props.searchParams;
   // Mismos roles que la lista de captaciones (puede_captacion() en la base, migración 080).
   await requireRole(ROLES_CAPTACION_LISTA);
 

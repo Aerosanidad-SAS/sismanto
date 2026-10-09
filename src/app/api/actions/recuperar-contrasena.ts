@@ -25,8 +25,8 @@ const MENSAJE_ENVIO =
   "Si la cédula corresponde a un usuario activo con correo registrado, en unos segundos te llegará un código de 6 dígitos. Revisa también la carpeta de spam. Si no tienes un correo registrado en SISMANTO, pídele a tu coordinación o a un administrador que te restablezca la clave.";
 const CODIGO_INVALIDO = "Código inválido o vencido. Pide uno nuevo si ya pasaron 15 minutos o se agotaron los intentos.";
 
-function ip(): string {
-  return headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "sin-ip";
+async function ip(): Promise<string> {
+  return (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "sin-ip";
 }
 
 const ANONIMO = { userId: null, label: "anónimo" } as const;
@@ -49,7 +49,7 @@ async function usuarioPorCedula(cedula: string): Promise<{ userId: string; email
 /** Paso 1: envía un código al correo del usuario con esa cédula. Siempre responde lo mismo. */
 export async function solicitarCodigoRecuperacion(cedulaEscrita: string) {
   // Frena scripts: 5 solicitudes por IP cada 15 minutos, y 3 por cédula cada 15 minutos (no llenar el correo de nadie).
-  if (!permitirIntento(`recuperar-ip:${ip()}`, 5, 15 * 60_000)) {
+  if (!permitirIntento(`recuperar-ip:${await ip()}`, 5, 15 * 60_000)) {
     return { error: "Demasiadas solicitudes. Espera unos minutos e inténtalo de nuevo." };
   }
   const cedula = normalizarCedula(z.string().max(30).catch("").parse(cedulaEscrita));
@@ -106,7 +106,7 @@ const restablecerSchema = z.object({
 
 /** Paso 2: con el código correcto, cambia la contraseña. Máximo 5 intentos por código. */
 export async function restablecerContrasena(datos: z.input<typeof restablecerSchema>) {
-  if (!permitirIntento(`restablecer-ip:${ip()}`, 10, 15 * 60_000)) {
+  if (!permitirIntento(`restablecer-ip:${await ip()}`, 10, 15 * 60_000)) {
     return { error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo." };
   }
   const parsed = restablecerSchema.safeParse(datos);

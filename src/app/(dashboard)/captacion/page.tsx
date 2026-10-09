@@ -9,10 +9,11 @@ import { ROLES_CAPTACION_LISTA, puedeAdministrarCaptacion } from "@/lib/captacio
 export const metadata = { title: "Captación" };
 
 interface Props {
-  searchParams: { buscar?: string; desde?: string; hasta?: string; aeropuerto?: string };
+  searchParams: Promise<{ buscar?: string; desde?: string; hasta?: string; aeropuerto?: string }>;
 }
 
-export default async function CaptacionPage({ searchParams }: Props) {
+export default async function CaptacionPage(props: Props) {
+  const searchParams = await props.searchParams;
   // Mismos roles que puede_captacion() en la base (migración 080).
   const profile = await requireRole(ROLES_CAPTACION_LISTA);
 
