@@ -172,7 +172,7 @@ export function RegulacionFleet({
   const [dialogMsg, setDialogMsg] = useState<{ tipo: "error" | "info"; texto: string } | null>(null);
   const [unassignAssignmentId, setUnassignAssignmentId] = useState<number | null>(null);
   const [confirmFds, setConfirmFds] = useState<{ id: string; placa: string } | null>(null);
-  const [aviso, setAviso] = useState<{ texto: string; deshacer: () => void } | null>(null);
+  const [aviso, setAviso] = useState<{ texto: string; deshacer?: () => void } | null>(null);
   const hoy = hoyBogota();
 
   const USERS_POR_ROL: Record<Rol, TripulacionUser[]> = {
@@ -274,6 +274,7 @@ export function RegulacionFleet({
     setLoading(true);
     setDialogMsg(null);
     let fallo: string | null = null;
+    let reasignados = 0;
     // Secuencial: cada asignación desactiva la anterior del mismo rol y reasigna servicios no iniciados.
     for (const rol of rolesConCambio) {
       const result = await asignarTripulacion(assigningVehicle, crew[rol], rol, hoy);
@@ -281,9 +282,16 @@ export function RegulacionFleet({
         fallo = `${ROL_LABEL[rol]}: ${result.error}`;
         break;
       }
+      reasignados += "reasignados" in result ? result.reasignados ?? 0 : 0;
     }
     if (fallo) setDialogMsg({ tipo: "error", texto: fallo });
-    else cerrarAsignar();
+    else {
+      cerrarAsignar();
+      // DEU-01: antes los servicios PROGRAMADO sin iniciar se reasignaban en silencio, sin decir cuántos.
+      if (reasignados > 0) {
+        setAviso({ texto: `Los ${reasignados} servicio${reasignados === 1 ? "" : "s"} PROGRAMADO sin iniciar de este vehículo pasaron a la nueva tripulación.` });
+      }
+    }
     // Si falló a medias, lo ya guardado debe verse reflejado.
     router.refresh();
     setLoading(false);
@@ -393,10 +401,12 @@ export function RegulacionFleet({
           className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted p-3 text-sm"
         >
           <span>{aviso.texto}</span>
-          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={aviso.deshacer}>
-            <Undo2 className="mr-1 h-4 w-4" aria-hidden />
-            Deshacer
-          </Button>
+          {aviso.deshacer && (
+            <Button type="button" variant="outline" size="sm" disabled={loading} onClick={aviso.deshacer}>
+              <Undo2 className="mr-1 h-4 w-4" aria-hidden />
+              Deshacer
+            </Button>
+          )}
         </div>
       )}
 

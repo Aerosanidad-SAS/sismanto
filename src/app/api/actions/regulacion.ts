@@ -78,13 +78,15 @@ async function reasignarServiciosNoIniciados(
   vehicleId: string,
   rol: keyof typeof CAMPO_TRIPULACION,
   userId: string | null
-) {
-  await supabase
+): Promise<number> {
+  const { data } = await supabase
     .from("medical_services")
     .update({ [CAMPO_TRIPULACION[rol]]: userId, updated_at: new Date().toISOString() })
     .eq("vehicle_id", vehicleId)
     .eq("etapa", "PROGRAMADO")
-    .is("fecha_hora_inicio_desplazamiento", null);
+    .is("fecha_hora_inicio_desplazamiento", null)
+    .select("id");
+  return (data ?? []).length;
 }
 
 /**
@@ -145,11 +147,11 @@ export async function asignarTripulacion(
   });
 
   if (error) return { error: error.message };
-  await reasignarServiciosNoIniciados(supabase, parsed.data.vehicleId, parsed.data.rol, parsed.data.userId);
-  await auditar("MODIFICAR", "regulacion", parsed.data.vehicleId, `Tripulación asignada (rol ${parsed.data.rol})`);
+  const reasignados = await reasignarServiciosNoIniciados(supabase, parsed.data.vehicleId, parsed.data.rol, parsed.data.userId);
+  await auditar("MODIFICAR", "regulacion", parsed.data.vehicleId, `Tripulación asignada (rol ${parsed.data.rol}); servicios reasignados: ${reasignados}`);
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
-  return { success: true };
+  return { success: true, reasignados };
 }
 
 /**
