@@ -47,11 +47,12 @@ async function getVehiculosActivos() {
   }
 }
 
-export default async function ServiciosPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function ServiciosPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const hoyIso = hoyBogota();
   const { filtros, pagina } = leerFiltros(searchParams);
   const profile = await getProfile();

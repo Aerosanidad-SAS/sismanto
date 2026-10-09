@@ -5,11 +5,12 @@ import { ActaEntregaTabla } from "@/components/formatos-ti/acta-entrega-tabla";
 import { FormatosPaginacion } from "@/components/formatos-ti/formatos-paginacion";
 import { ROLES_FORMATOS_TI, paramPagina, paramTexto } from "@/lib/formatos-ti/comun";
 
-export default async function ActaEntregaPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function ActaEntregaPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole([...ROLES_FORMATOS_TI]);
   const filtros = {
     q: paramTexto(searchParams, "q"),

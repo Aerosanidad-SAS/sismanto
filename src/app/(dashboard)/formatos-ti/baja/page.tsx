@@ -6,11 +6,12 @@ import { FormatosPaginacion } from "@/components/formatos-ti/formatos-paginacion
 import { CAUSAS_BAJA } from "@/lib/formatos-ti/baja";
 import { ROLES_FORMATOS_TI, paramPagina, paramTexto } from "@/lib/formatos-ti/comun";
 
-export default async function BajaPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function BajaPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole([...ROLES_FORMATOS_TI]);
   const tipo = paramTexto(searchParams, "tipo");
   const causa = paramTexto(searchParams, "causa");

@@ -7,10 +7,10 @@ import { getProfile } from "@/app/api/actions/auth";
 import { ROLES_FORMATOS_TI } from "./comun";
 
 /** URL pública del sitio para armar enlaces de correo: NEXT_PUBLIC_APP_URL o, si falta, el host de la petición. */
-export function urlBaseSitio(): string {
+export async function urlBaseSitio(): Promise<string> {
   const env = process.env.NEXT_PUBLIC_APP_URL;
   if (env) return env.replace(/\/+$/, "");
-  const h = headers();
+  const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   if (!host) return "";
   return `${h.get("x-forwarded-proto") ?? "https"}://${host}`;

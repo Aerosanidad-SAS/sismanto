@@ -11,11 +11,12 @@ import { TrainingDetailAdmin } from "@/components/capacitaciones/training-detail
 import { EvaluacionFlow } from "@/components/capacitaciones/evaluacion-flow";
 import { Badge } from "@/components/ui/badge";
 
-export default async function CapacitacionDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function CapacitacionDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const id = Number(params.id);
   if (!Number.isFinite(id) || id <= 0) notFound();
 
