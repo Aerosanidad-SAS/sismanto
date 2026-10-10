@@ -68,6 +68,8 @@ import {
   getUrlBoletaSalida,
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
+import { toast } from "@/components/ui/toaster";
+import { errorDeCambioEtapa, esEtapaCerrada, esEtapaNegativa, MOTIVO_MAX, puedeReabrir } from "@/lib/servicios-etapas";
 import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
@@ -291,6 +293,9 @@ export function ServiciosTabla({
   const [creadoMsg, setCreadoMsg] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ titulo: string; mensaje: string } | null>(null);
   const [porEliminar, setPorEliminar] = useState<ServicioRow | null>(null);
+  // Cambio a una etapa negativa en espera del motivo (y la confirmación) de quien lo hace.
+  const [porEtapa, setPorEtapa] = useState<{ servicio: ServicioRow; etapaNueva: string } | null>(null);
+  const [motivoEtapa, setMotivoEtapa] = useState("");
   const [menuId, setMenuId] = useState<number | null>(null);
   const inicioFormRef = useRef<HTMLDivElement>(null);
   // Umbral de servicios estancados configurado por el ADMIN (migración 103).
@@ -362,6 +367,8 @@ export function ServiciosTabla({
   const campoBloqueado = (name: keyof MedicalServiceFormData) =>
     soloLecturaLogistica && !CAMPOS_CLINICOS_MEDICO_AUX.has(name);
   const puedeCambiarEtapaLibre = puedeEditar && !esMedicoAux;
+  // Un servicio FINALIZADO o CANCELADO solo lo reabre un ADMIN (QA 2026-10-10, E2): al resto no se le ofrece el menú.
+  const puedeMoverEtapa = (s: ServicioRow) => puedeCambiarEtapaLibre && (!esEtapaCerrada(s.etapa) || puedeReabrir(viewerRole));
 
   // Candado de servicios FINALIZADO (Daniel, 2026-07-29): solo
   // ADMIN/ANALISTA/REGULACION puede volver a tocarlo — la migración 055
@@ -565,12 +572,35 @@ export function ServiciosTabla({
   }));
   const mensajeError = (name: string) => listaErrores.find((e) => e.name === name)?.message;
 
-  const handleEtapa = async (servicio: ServicioRow, etapaNueva: string) => {
+  const aplicarEtapa = async (servicio: ServicioRow, etapaNueva: string, motivo?: string) => {
     setBusyId(servicio.id);
-    const res = await cambiarEtapaServicio(servicio.id, servicio.etapa, etapaNueva);
+    const res = await cambiarEtapaServicio(servicio.id, servicio.etapa, etapaNueva, motivo);
     setBusyId(null);
-    if (res.error) setAviso({ titulo: "No se pudo cambiar la etapa", mensaje: res.error });
-    else router.refresh();
+    if (res.error) {
+      setAviso({ titulo: "No se pudo cambiar la etapa", mensaje: res.error });
+      return;
+    }
+    // CURSO y FINALIZADO ya los anuncia AvisosServicios al refrescar; aquí se confirman las demás (p. ej. cancelar, que no avisaba nada).
+    if (etapaNueva !== "CURSO" && etapaNueva !== "FINALIZADO") toast.success(`Servicio #${servicio.id}: ${servicio.etapa} → ${etapaNueva}`);
+    router.refresh();
+  };
+
+  // Las etapas negativas no se aplican de un clic: primero se pide el motivo y se confirma.
+  const handleEtapa = (servicio: ServicioRow, etapaNueva: string) => {
+    if (esEtapaNegativa(etapaNueva)) {
+      setMotivoEtapa("");
+      setPorEtapa({ servicio, etapaNueva });
+      return;
+    }
+    return aplicarEtapa(servicio, etapaNueva);
+  };
+
+  const errorMotivoEtapa = porEtapa ? errorDeCambioEtapa(porEtapa.servicio.etapa, porEtapa.etapaNueva, viewerRole, motivoEtapa) : null;
+  const confirmarEtapaNegativa = async () => {
+    if (!porEtapa || errorMotivoEtapa) return;
+    const { servicio, etapaNueva } = porEtapa;
+    setPorEtapa(null);
+    await aplicarEtapa(servicio, etapaNueva, motivoEtapa.trim());
   };
 
   // Borrado físico — igual que SISRES (delete.php, tabla=servicios: DELETE
@@ -715,7 +745,7 @@ export function ServiciosTabla({
                         <Play className="h-4 w-4" aria-hidden="true" /> Marcar en curso
                       </button>
                     )}
-                    {puedeCambiarEtapaLibre && (
+                    {puedeMoverEtapa(s) && (
                       <>
                         <p className="px-2 pt-2 text-xs text-muted-foreground">Cambiar etapa a</p>
                         {ETAPAS_DESTINO(s.etapa).map((etapa) => (
@@ -852,7 +882,7 @@ export function ServiciosTabla({
                           <Play className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       )}
-                      {puedeCambiarEtapaLibre && (
+                      {puedeMoverEtapa(s) && (
                         <Select
                           disabled={busyId === s.id}
                           onValueChange={(v) => handleEtapa(s, v)}
@@ -940,6 +970,41 @@ export function ServiciosTabla({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={porEtapa !== null} onOpenChange={(abierto) => !abierto && setPorEtapa(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {porEtapa ? `Pasar el servicio #${porEtapa.servicio.id} a ${porEtapa.etapaNueva}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Quedará en la bitácora con tu nombre y este motivo. Escríbelo para poder confirmar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="motivo-etapa">Motivo</Label>
+            <Textarea
+              id="motivo-etapa"
+              value={motivoEtapa}
+              onChange={(e) => setMotivoEtapa(e.target.value)}
+              maxLength={MOTIVO_MAX}
+              rows={3}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              {motivoEtapa.trim().length}/{MOTIVO_MAX}
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPorEtapa(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmarEtapaNegativa} disabled={errorMotivoEtapa !== null}>
+              {porEtapa ? `Pasar a ${porEtapa.etapaNueva}` : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
