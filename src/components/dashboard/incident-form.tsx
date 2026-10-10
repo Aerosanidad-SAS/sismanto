@@ -159,7 +159,7 @@ export function IncidentForm({
           {...register("descripcion")}
           aria-invalid={errors.descripcion ? "true" : undefined}
           aria-describedby={errors.descripcion ? `${uid}-descripcion-error` : undefined}
-          placeholder="Describe la novedad o incidente..."
+          placeholder="Describe la novedad o incidente. Si te la reportó otra persona, escribe quién."
           className="mt-1"
         />
         {errors.descripcion && (
@@ -203,6 +203,7 @@ export function IncidentForm({
           aria-invalid={errors.reportadoPor ? "true" : undefined}
           aria-describedby={errors.reportadoPor ? `${uid}-reportado-error` : undefined}
           placeholder="Nombre de quien reporta"
+          readOnly={Boolean(reportadoPorDefault)}
           className="mt-1"
         />
         {errors.reportadoPor && (
