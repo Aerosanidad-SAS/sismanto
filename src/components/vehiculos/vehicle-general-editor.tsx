@@ -41,9 +41,11 @@ interface VehicleGeneralEditorProps {
   };
   centros: { id: number; nombre: string }[];
   canEdit: boolean;
+  /** Rol limitado a su centro (Regulación): no ve ni cambia el centro operativo ni los costos anuales. */
+  soloOperacion?: boolean;
 }
 
-export function VehicleGeneralEditor({ vehicle, centros, canEdit }: VehicleGeneralEditorProps) {
+export function VehicleGeneralEditor({ vehicle, centros, canEdit, soloOperacion = false }: VehicleGeneralEditorProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +140,7 @@ export function VehicleGeneralEditor({ vehicle, centros, canEdit }: VehicleGener
               />
             </div>
 
+            {!soloOperacion && (
             <div className="md:col-span-2">
               <Label htmlFor="centro_operativo">Centro operativo</Label>
               <Select
@@ -159,6 +162,7 @@ export function VehicleGeneralEditor({ vehicle, centros, canEdit }: VehicleGener
                 </SelectContent>
               </Select>
             </div>
+            )}
 
             <div>
               <Label htmlFor="vencimiento_soat">Vencimiento SOAT</Label>
@@ -184,6 +188,8 @@ export function VehicleGeneralEditor({ vehicle, centros, canEdit }: VehicleGener
                 onChange={(v) => setField("vencimiento_tecnicomecanica", v)}
               />
             </div>
+            {!soloOperacion && (
+              <>
             <div>
               <Label htmlFor="costo_soat_anual">Costo SOAT anual</Label>
               <Input
@@ -214,6 +220,8 @@ export function VehicleGeneralEditor({ vehicle, centros, canEdit }: VehicleGener
                 onChange={(e) => setField("costo_poliza_anual", e.target.value)}
               />
             </div>
+              </>
+            )}
           </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
