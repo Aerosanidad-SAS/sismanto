@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
 import { centroVisible } from "@/lib/auth-utils";
+import { errorSiVehiculoDeOtroCentro } from "@/lib/vehiculo-centro";
 import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
 import { revalidatePath } from "next/cache";
 import { perfilFormularioServicio, toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
@@ -20,6 +21,9 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
+
+  const otroCentro = await errorSiVehiculoDeOtroCentro(supabase, profile, parsed.data.vehicleId);
+  if (otroCentro) return { error: otroCentro };
 
   // Leer estado anterior para el historial
   const { data: vehicleActual } = await supabase
