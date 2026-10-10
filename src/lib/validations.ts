@@ -28,7 +28,7 @@ export type MaintenanceFormData = z.infer<typeof maintenanceSchema>;
 // Schema de validación para incidente/novedad (severidad opcional si el reporter no la define; servidor usa MEDIA)
 export const incidentSchema = z.object({
   vehicleId: z.string().uuid('ID de vehículo inválido'),
-  descripcion: z.string().min(10, 'Mínimo 10 caracteres'),
+  descripcion: z.string().min(10, 'Mínimo 10 caracteres').max(2000, 'Máximo 2000 caracteres'),
   severidad: z.enum(['BAJA', 'MEDIA', 'ALTA']).optional(),
   reportadoPor: z.string().min(3, 'Mínimo 3 caracteres'),
   afectaOperatividad: z.boolean().default(false),
@@ -554,8 +554,22 @@ export const SEXO_OPCIONES = ["HOMBRE", "MUJER", "NO BINARIO", "TRANSGENERO", "T
 
 export const RH_OPCIONES = ["A+", "A-", "O+", "O-", "B+", "B-", "AB+", "AB-"] as const;
 
+/** Celular opcional: solo dígitos y los signos habituales (+, paréntesis, guion, espacio), entre 7 y 20 caracteres. */
+const optCelular = z
+  .string()
+  .trim()
+  .regex(/^[0-9+()\-\s]{7,20}$/, "El celular debe tener entre 7 y 20 caracteres y solo números")
+  .optional()
+  .or(z.literal(""))
+  .transform((v) => (v ? v : undefined));
+
 export const patientSchema = z.object({
-  cedula: z.string().trim().min(4, "Documento inválido").max(20),
+  cedula: z
+    .string()
+    .trim()
+    .min(4, "Documento inválido")
+    .max(20)
+    .regex(/^[A-Za-z0-9-]+$/, "El documento solo puede llevar letras, números y guion"),
   tipo_documento: z.enum(TIPOS_DOCUMENTO, { errorMap: () => ({ message: "Selecciona un tipo de documento válido" }) }),
   nombre1: z.string().trim().min(2, "Nombre requerido").max(60),
   nombre2: optStr,
@@ -571,7 +585,7 @@ export const patientSchema = z.object({
   sexo: optStr,
   estatura: optStr,
   eps: optStr,
-  celular: optStr,
+  celular: optCelular,
   correo: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
 });
 export type PatientFormData = z.input<typeof patientSchema>;
