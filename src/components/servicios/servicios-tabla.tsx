@@ -69,6 +69,7 @@ import {
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
 import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
+import { textoChoque, type ServicioEnChoque } from "@/lib/servicios-choque";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 // Casi todos los servicios nacen programados: las demás etapas solo se eligen al registrar uno que ya ocurrió.
@@ -290,6 +291,8 @@ export function ServiciosTabla({
   const [yaOcurrido, setYaOcurrido] = useState(false);
   const [creadoMsg, setCreadoMsg] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ titulo: string; mensaje: string } | null>(null);
+  // Otro servicio abierto usa el mismo vehículo o tripulante a esa hora: se pide confirmar antes de guardar.
+  const [choque, setChoque] = useState<{ lista: ServicioEnChoque[]; values: MedicalServiceFormData; crearOtro: boolean } | null>(null);
   const [porEliminar, setPorEliminar] = useState<ServicioRow | null>(null);
   const [menuId, setMenuId] = useState<number | null>(null);
   const inicioFormRef = useRef<HTMLDivElement>(null);
@@ -535,14 +538,18 @@ export function ServiciosTabla({
     if (primero) enfocarCampo(primero);
   };
 
-  const onSubmit = async (values: MedicalServiceFormData, crearOtro = false) => {
+  const onSubmit = async (values: MedicalServiceFormData, crearOtro = false, confirmarChoque = false) => {
     setGuardando(true);
     setError(null);
     setCreadoMsg(null);
     const res = editando
-      ? await actualizarServicioMedico(editando.id, values)
-      : await crearServicioMedico(values, etapaInicial);
+      ? await actualizarServicioMedico(editando.id, values, confirmarChoque)
+      : await crearServicioMedico(values, etapaInicial, confirmarChoque);
     setGuardando(false);
+    if ("choque" in res && res.choque) {
+      setChoque({ lista: res.choque, values, crearOtro });
+      return;
+    }
     if (res.error) {
       setError(res.error);
       return;
@@ -924,6 +931,38 @@ export function ServiciosTabla({
               }}
             >
               Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={choque !== null} onOpenChange={(abierto) => !abierto && setChoque(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ya hay un servicio a esa hora</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Este servicio comparte vehículo o tripulación con otro que sigue abierto a una hora muy cercana:</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  {choque &&
+                    textoChoque(choque.lista, (iso) => aTextoLocalColombia(iso).replace("T", " ")).map((linea) => (
+                      <li key={linea}>{linea}</li>
+                    ))}
+                </ul>
+                <p>¿Quieres guardarlo de todos modos?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Revisar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const pendiente = choque;
+                setChoque(null);
+                if (pendiente) void onSubmit(pendiente.values, pendiente.crearOtro, true);
+              }}
+            >
+              Guardar de todos modos
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

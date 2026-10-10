@@ -18,6 +18,7 @@ import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
 import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
+import { ETAPAS_QUE_CHOCAN, filtroRecursos, motivosDeChoque, ventanaChoque, type RecursosServicio, type ServicioEnChoque } from "@/lib/servicios-choque";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -339,7 +340,40 @@ function normalizarCiudadRegistro(datos: { ciudad_registro?: string }): string |
   return null;
 }
 
-export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
+/**
+ * Servicios abiertos que chocan con el que se va a guardar: misma ventana de tiempo y el mismo vehículo o la misma
+ * persona de la tripulación. Sin fecha de programación o sin ningún recurso asignado no hay con qué chocar.
+ */
+async function buscarChoques(
+  supabase: ReturnType<typeof createClient>,
+  fila: Record<string, unknown>,
+  excluirId?: number
+): Promise<ServicioEnChoque[]> {
+  const nuevo = fila as RecursosServicio & { fecha_hora_programacion?: string | null };
+  const ventana = nuevo.fecha_hora_programacion ? ventanaChoque(nuevo.fecha_hora_programacion) : null;
+  const filtro = filtroRecursos(nuevo);
+  if (!ventana || !filtro) return [];
+
+  let consulta = supabase
+    .from("medical_services")
+    .select("id, nombre_completo, fecha_hora_programacion, vehicle_id, ovem_user_id, medico_user_id, auxiliar_user_id")
+    .in("etapa", [...ETAPAS_QUE_CHOCAN])
+    .gte("fecha_hora_programacion", ventana.desde)
+    .lte("fecha_hora_programacion", ventana.hasta)
+    .or(filtro)
+    .limit(10);
+  if (excluirId) consulta = consulta.neq("id", excluirId);
+  const { data } = await consulta;
+
+  return ((data ?? []) as (RecursosServicio & { id: number; nombre_completo: string; fecha_hora_programacion: string })[]).map((o) => ({
+    id: o.id,
+    nombre_completo: o.nombre_completo,
+    fecha_hora_programacion: o.fecha_hora_programacion,
+    motivos: motivosDeChoque(nuevo, o),
+  }));
+}
+
+export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string, confirmarChoque = false) {
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const errorCiudad = normalizarCiudadRegistro(parsed.data);
@@ -363,6 +397,11 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
     return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
   }
+  // Aviso (no bloqueo) si otro servicio abierto usa el mismo vehículo o tripulante a esa hora: Regulación lo confirma.
+  if (!confirmarChoque && (ETAPAS_QUE_CHOCAN as readonly string[]).includes(etapa)) {
+    const choque = await buscarChoques(supabase, fila);
+    if (choque.length > 0) return { choque };
+  }
 
   const { data, error } = await supabase
     .from("medical_services")
@@ -381,7 +420,7 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   return { success: true, data };
 }
 
-export async function actualizarServicioMedico(id: number, formData: MedicalServiceFormData) {
+export async function actualizarServicioMedico(id: number, formData: MedicalServiceFormData, confirmarChoque = false) {
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
 
@@ -409,6 +448,11 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   // asignado a un servicio — tampoco al editar uno que ya lo tenía.
   if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
     return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
+  }
+  // Mismo aviso que al crear; el servicio que se edita no choca consigo mismo.
+  if (!confirmarChoque && actual && (ETAPAS_QUE_CHOCAN as readonly string[]).includes(actual.etapa)) {
+    const choque = await buscarChoques(supabase, fila, idParsed.data);
+    if (choque.length > 0) return { choque };
   }
   // Solo el vehículo redefine el centro al editar: sin vehículo se conserva
   // el que ya tenía, no el de quien edita.
