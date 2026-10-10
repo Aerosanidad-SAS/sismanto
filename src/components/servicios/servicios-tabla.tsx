@@ -69,6 +69,7 @@ import {
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
 import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
+import { CAMPOS_CLINICOS_MEDICO_AUX as CAMPOS_CLINICOS_LISTA } from "@/lib/servicios-actualizacion";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 // Casi todos los servicios nacen programados: las demás etapas solo se eligen al registrar uno que ya ocurrió.
@@ -242,17 +243,7 @@ const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p
 // móvil, tripulación, ruta, facturación...) queda bloqueado, igual que
 // editarServicio.php en SISRES (Ronda 2, pregunta 4: "$esMedicoAux" bloquea
 // campos de logística con readonly/campo-bloqueado, no oculta secciones).
-const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>([
-  "cie_codigo",
-  "requiere_aislamiento",
-  "finalidad_traslado",
-  "acepta_ips",
-  "novedad_servicio",
-  "observaciones",
-  "motivo_externo",
-  "motivo_interno",
-  "estado_servicio",
-]);
+const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>(CAMPOS_CLINICOS_LISTA);
 
 export function ServiciosTabla({
   servicios,
