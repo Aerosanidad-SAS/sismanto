@@ -29,7 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Check, X, KeyRound } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
@@ -295,7 +296,8 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
               {success}
             </div>
           )}
-          <Table>
+          {/* Cada columna mide lo que mide su contenido más largo (nada se corta ni se trunca); si no cabe en la pantalla, la tabla se desplaza en horizontal y «Acciones» queda fija a la derecha. */}
+          <Table className="min-w-max whitespace-nowrap">
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -305,7 +307,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                 <TableHead>Centro</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead className="sticky right-0 bg-muted text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -325,19 +327,17 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                           value={edicion.nombreCompleto}
                           onChange={(e) => setCampo("nombreCompleto", e.target.value)}
                           onKeyDown={teclas}
-                          className="h-8 w-40"
+                          className="h-8 w-56"
                           autoFocus
                         />
                       </TableCell>
-                      <TableCell className="max-w-[12rem] truncate" title={u.email ?? undefined}>
-                        {u.email || "—"}
-                      </TableCell>
+                      <TableCell>{u.email || "—"}</TableCell>
                       <TableCell>
                         <Input
                           value={edicion.cedula}
                           onChange={(e) => setCampo("cedula", e.target.value)}
                           onKeyDown={teclas}
-                          className="h-8 w-28"
+                          className="h-8 w-36"
                         />
                       </TableCell>
                       <TableCell>
@@ -345,12 +345,12 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                           value={edicion.ciudad}
                           onChange={(e) => setCampo("ciudad", e.target.value)}
                           onKeyDown={teclas}
-                          className="h-8 w-28"
+                          className="h-8 w-36"
                         />
                       </TableCell>
                       <TableCell>
                         <Select value={edicion.centroId} onValueChange={(v) => setCampo("centroId", v)}>
-                          <SelectTrigger className="h-8 w-36">
+                          <SelectTrigger className="h-8 w-44">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -368,7 +368,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                           value={edicion.roleCodigo}
                           onValueChange={(v) => setCampo("roleCodigo", v as UserRole)}
                         >
-                          <SelectTrigger className="h-8 w-40">
+                          <SelectTrigger className="h-8 w-52">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -385,7 +385,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                           {u.activo ? "Activo" : "Deshabilitado"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
+                      <TableCell className="sticky right-0 bg-muted text-right">
                         <Button
                           size="sm"
                           onClick={handleSaveEdit}
@@ -413,9 +413,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                 return (
                   <TableRow key={u.user_id}>
                     <TableCell className="font-medium">{u.nombre_completo || "—"}</TableCell>
-                    <TableCell className="max-w-[12rem] truncate" title={u.email ?? undefined}>
-                      {u.email || "—"}
-                    </TableCell>
+                    <TableCell>{u.email || "—"}</TableCell>
                     <TableCell>{u.cedula || "—"}</TableCell>
                     <TableCell>{u.ciudad || "—"}</TableCell>
                     <TableCell>
@@ -438,36 +436,52 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                         {u.activo ? "Activo" : "Deshabilitado"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => abrirEdicion(u)}
-                        disabled={loading || editando !== null}
-                        className="px-2"
-                      >
-                        <Pencil className="h-4 w-4 mr-1" />
-                        Editar
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setReseteo({ usuario: u, clave: null })}
-                        disabled={loading || editando !== null}
-                        className="px-2"
-                      >
-                        <KeyRound className="h-4 w-4 mr-1" />
-                        Restablecer clave
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleActive(u.user_id, !u.activo)}
-                        disabled={loading}
-                        className={cn("px-2", u.activo ? "text-red-600" : "text-green-600")}
-                      >
-                        {u.activo ? "Deshabilitar" : "Habilitar"}
-                      </Button>
+                    <TableCell className="sticky right-0 bg-card text-right">
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger
+                          aria-label={`Acciones de ${u.nombre_completo || u.email || "usuario"}`}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 text-sm text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent"
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content
+                            align="end"
+                            sideOffset={4}
+                            className="z-50 min-w-[12rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+                          >
+                            <DropdownMenu.Item
+                              disabled={loading || editando !== null}
+                              onSelect={() => abrirEdicion(u)}
+                              className="flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                            >
+                              <Pencil className="h-4 w-4" aria-hidden="true" />
+                              Editar datos
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item
+                              disabled={loading || editando !== null}
+                              onSelect={() => setReseteo({ usuario: u, clave: null })}
+                              className="flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                            >
+                              <KeyRound className="h-4 w-4" aria-hidden="true" />
+                              Restablecer clave
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                            <DropdownMenu.Item
+                              disabled={loading}
+                              onSelect={() => handleToggleActive(u.user_id, !u.activo)}
+                              className={cn(
+                                "flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm font-medium outline-none focus:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                                u.activo ? "text-destructive focus:text-destructive" : "text-green-700 focus:text-green-700"
+                              )}
+                            >
+                              {u.activo ? <UserX className="h-4 w-4" aria-hidden="true" /> : <UserCheck className="h-4 w-4" aria-hidden="true" />}
+                              {u.activo ? "Deshabilitar" : "Habilitar"}
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu.Root>
                     </TableCell>
                   </TableRow>
                 );
