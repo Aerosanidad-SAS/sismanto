@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { incidentSchema, patientSchema } from "./validations";
+import { incidentSchema, patientSchema, patientSchemaEdicion } from "./validations";
 import { errorDeDocumento, normalizarCelularColombia } from "./documento-colombia";
 
 const base = { tipo_documento: "CEDULA CIUDADANIA", cedula: "1020437165", nombre1: "Ana", apellido1: "Gómez" } as const;
@@ -73,6 +73,32 @@ describe("celular: formato colombiano", () => {
       assert.equal(patientSchema.safeParse({ ...base, celular }).success, false, celular);
     }
     assert.match(mensajeDe({ ...base, celular: "12345" }, "celular") ?? "", /10 dígitos y empieza por 3/);
+  });
+});
+
+describe("patientSchemaEdicion: pacientes históricos", () => {
+  const guardado = { cedula: "ABCDE12345", apellido1: "—", celular: "12345" };
+  const historico = { ...base, cedula: "ABCDE12345", apellido1: "—", celular: "12345" };
+
+  it("lo que no cambió no se vuelve a exigir (documento, apellido y celular históricos)", () => {
+    const r = patientSchemaEdicion(guardado).safeParse({ ...historico, barrio: "Laureles" });
+    assert.equal(r.success, true);
+    if (r.success) {
+      assert.equal(r.data.cedula, "ABCDE12345");
+      assert.equal(r.data.celular, "12345");
+    }
+  });
+
+  it("lo que sí cambió se valida con las reglas de siempre", () => {
+    assert.equal(patientSchemaEdicion(guardado).safeParse({ ...historico, apellido1: "G" }).success, false);
+    assert.equal(patientSchemaEdicion(guardado).safeParse({ ...historico, apellido1: "Gómez" }).success, true);
+    assert.equal(patientSchemaEdicion(guardado).safeParse({ ...historico, celular: "12346" }).success, false);
+    assert.equal(patientSchemaEdicion(guardado).safeParse({ ...historico, celular: "3144913969" }).success, true);
+    assert.equal(patientSchemaEdicion(guardado).safeParse({ ...historico, cedula: "ABCDE1234" }).success, false);
+  });
+
+  it("al crear sigue exigiéndose todo", () => {
+    assert.equal(patientSchema.safeParse({ ...historico }).success, false);
   });
 });
 
