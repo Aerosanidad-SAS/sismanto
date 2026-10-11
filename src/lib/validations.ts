@@ -564,8 +564,8 @@ const optCelular = z
   .or(z.literal(""))
   .transform((v) => (v ? v : undefined));
 
-export const patientSchema = z
-  .object({
+/** Los campos del paciente, sin las reglas que cruzan varios (esas están en `patientSchema`). */
+export const patientFieldsSchema = z.object({
   cedula: z
     .string()
     .trim()
@@ -588,7 +588,9 @@ export const patientSchema = z
   eps: optStr,
   celular: optCelular,
   correo: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
-  })
+});
+
+export const patientSchema = patientFieldsSchema
   // Formato de documento y celular según las reglas de Colombia: el mensaje dice cuál es la regla (QA R13, U2).
   .superRefine((p, ctx) => {
     const errorDoc = errorDeDocumento(p.tipo_documento, p.cedula);
