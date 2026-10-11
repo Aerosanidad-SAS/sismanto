@@ -8,6 +8,7 @@ describe("esEtapaNegativa / esEtapaCerrada", () => {
     for (const e of ["PROGRAMADO", "CURSO", "FINALIZADO"]) assert.equal(esEtapaNegativa(e), false);
     assert.equal(esEtapaCerrada("FINALIZADO"), true);
     assert.equal(esEtapaCerrada("CANCELADO"), true);
+    assert.equal(esEtapaCerrada("DUPLICADO"), true);
     assert.equal(esEtapaCerrada("FALLIDO"), false);
   });
 });
@@ -31,6 +32,7 @@ describe("errorDeCambioEtapa", () => {
   it("solo un ADMIN saca un servicio de una etapa cerrada", () => {
     assert.match(errorDeCambioEtapa("FINALIZADO", "PROGRAMADO", "REGULACION", null) ?? "", /administrador/);
     assert.match(errorDeCambioEtapa("CANCELADO", "CURSO", "ANALISTA", null) ?? "", /administrador/);
+    assert.match(errorDeCambioEtapa("DUPLICADO", "PROGRAMADO", "REGULACION", null) ?? "", /administrador/);
     assert.equal(errorDeCambioEtapa("FINALIZADO", "PROGRAMADO", "ADMIN", null), null);
   });
 

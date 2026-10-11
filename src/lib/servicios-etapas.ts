@@ -3,14 +3,14 @@
  * Sin dependencias de servidor: las usan la acción y la pantalla.
  *
  * - Las etapas negativas piden un motivo (y la pantalla, confirmación): quedan en la bitácora con quién y por qué.
- * - Sacar un servicio de una etapa cerrada (FINALIZADO, CANCELADO) lo hace solo un ADMIN, con bitácora.
+ * - Sacar un servicio de una etapa cerrada (FINALIZADO, CANCELADO, DUPLICADO) lo hace solo un ADMIN, con bitácora.
  */
 
 /** Etapas que cierran un servicio sin que se haya prestado: hay que decir por qué. */
 export const ETAPAS_NEGATIVAS = ["CANCELADO", "FALLIDO", "NO EFECTIVO", "DUPLICADO"] as const;
 
 /** Etapas cerradas: reabrirlas (cambiar a otra etapa) es una corrección que solo hace un ADMIN. */
-export const ETAPAS_CERRADAS = ["FINALIZADO", "CANCELADO"] as const;
+export const ETAPAS_CERRADAS = ["FINALIZADO", "CANCELADO", "DUPLICADO"] as const;
 
 export const MOTIVO_MIN = 5;
 export const MOTIVO_MAX = 200;
