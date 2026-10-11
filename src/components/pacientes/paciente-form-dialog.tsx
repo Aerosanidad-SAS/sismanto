@@ -1,8 +1,8 @@
 "use client";
 
 import { edadEn, esDia, hoyBogota, normalizarDia } from "@/lib/fechas";
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo, useState } from "react";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { CatalogCombobox } from "@/components/forms/catalog-combobox";
 import { DateField } from "@/components/forms/date-field";
 import {
   patientSchema,
+  patientSchemaEdicion,
   type PatientFormData,
   TIPOS_DOCUMENTO,
   TIPOS_DOCUMENTO_SOLO_ADULTO,
@@ -97,8 +98,16 @@ export function PacienteFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
+  // Al editar, lo que no se tocó (documento, celular, apellido) no se vuelve a exigir: los pacientes históricos no cumplen el formato actual.
+  const esquema = useMemo(
+    () =>
+      editando
+        ? patientSchemaEdicion({ cedula: editando.cedula, apellido1: editando.apellido1, celular: editando.celular ?? null })
+        : patientSchema,
+    [editando]
+  );
   const { register, handleSubmit, reset, setValue, watch, formState } = useForm<PatientFormData>({
-    resolver: zodResolver(patientSchema),
+    resolver: zodResolver(esquema) as Resolver<PatientFormData>,
   });
 
   // Cada vez que se abre: formulario limpio (nuevo) o con los datos del paciente (edición).
