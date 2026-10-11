@@ -3,6 +3,7 @@ import { esDia } from '@/lib/fechas';
 import { validarObligatoriosSiniestro } from '@/lib/siniestro-datos';
 import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 import { TIPOS_MANTENIMIENTO_BIOMEDICO } from '@/lib/biomedico-fechas';
+import { errorDeDocumento, mensajeCelular, normalizarCelularColombia, normalizarDocumento } from '@/lib/documento-colombia';
 
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
@@ -554,22 +555,22 @@ export const SEXO_OPCIONES = ["HOMBRE", "MUJER", "NO BINARIO", "TRANSGENERO", "T
 
 export const RH_OPCIONES = ["A+", "A-", "O+", "O-", "B+", "B-", "AB+", "AB-"] as const;
 
-/** Celular opcional: solo dígitos y los signos habituales (+, paréntesis, guion, espacio), entre 7 y 20 caracteres. */
+/** Celular opcional: el formato colombiano se valida en `patientSchema` (ver `documento-colombia.ts`). */
 const optCelular = z
   .string()
   .trim()
-  .regex(/^[0-9+()\-\s]{7,20}$/, "El celular debe tener entre 7 y 20 caracteres y solo números")
+  .max(25, "El celular es demasiado largo")
   .optional()
   .or(z.literal(""))
   .transform((v) => (v ? v : undefined));
 
-export const patientSchema = z.object({
+export const patientSchema = z
+  .object({
   cedula: z
     .string()
     .trim()
-    .min(4, "Documento inválido")
-    .max(20)
-    .regex(/^[A-Za-z0-9-]+$/, "El documento solo puede llevar letras, números y guion"),
+    .min(1, "Escribe el número de documento")
+    .max(25, "El documento es demasiado largo"),
   tipo_documento: z.enum(TIPOS_DOCUMENTO, { errorMap: () => ({ message: "Selecciona un tipo de documento válido" }) }),
   nombre1: z.string().trim().min(2, "Nombre requerido").max(60),
   nombre2: optStr,
@@ -587,7 +588,21 @@ export const patientSchema = z.object({
   eps: optStr,
   celular: optCelular,
   correo: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
-});
+  })
+  // Formato de documento y celular según las reglas de Colombia: el mensaje dice cuál es la regla (QA R13, U2).
+  .superRefine((p, ctx) => {
+    const errorDoc = errorDeDocumento(p.tipo_documento, p.cedula);
+    if (errorDoc) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cedula"], message: errorDoc });
+    if (p.celular && normalizarCelularColombia(p.celular) === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["celular"], message: mensajeCelular() });
+    }
+  })
+  // Se guarda normalizado: documento sin puntos ni espacios y celular solo con dígitos (sin +57), listo para WhatsApp.
+  .transform((p) => ({
+    ...p,
+    cedula: normalizarDocumento(p.cedula),
+    celular: p.celular ? (normalizarCelularColombia(p.celular) ?? p.celular) : undefined,
+  }));
 export type PatientFormData = z.input<typeof patientSchema>;
 
 // Verificado contra SISRES real (Ronda 2, pregunta 3): "NO EFECTIVO" lleva
