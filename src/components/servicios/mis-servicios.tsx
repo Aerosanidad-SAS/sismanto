@@ -6,7 +6,7 @@ import { marcarPasoServicio, cambiarEtapaServicio } from "@/app/api/actions/serv
 import { estadoOperativo, pasosPorTipo, type CampoPasoServicio } from "@/lib/estado-servicio";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, CheckCircle2, Circle } from "lucide-react";
+import { MapPin, CheckCircle2, Circle, Clock, Navigation } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ServicioAsignado {
@@ -20,6 +20,8 @@ interface ServicioAsignado {
   direccion_intermedia?: string | null;
   ciudad_destino: string | null;
   direccion_destino: string | null;
+  /** Cuándo está programado el servicio (instante ISO); puede faltar en servicios sin hora. */
+  fecha_hora_programacion?: string | null;
   fecha_hora_inicio_desplazamiento: string | null;
   fecha_hora_llegada_origen: string | null;
   fecha_hora_salida_origen: string | null;
@@ -53,6 +55,45 @@ function horaCorta(iso: string | null): string {
     hour12: false,
     timeZone: "America/Bogota",
   });
+}
+
+const ZONA = "America/Bogota";
+
+/** «Hoy 14:30», «Mañana 08:00» o «13 oct 14:30», en hora de Colombia. Vacío si no hay hora programada. */
+function programacionTexto(iso: string | null | undefined, ahora: Date = new Date()): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const dia = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: ZONA });
+  const hora = horaCorta(iso);
+  const manana = new Date(ahora.getTime() + 24 * 60 * 60 * 1000);
+  if (dia(d) === dia(ahora)) return `Hoy ${hora}`;
+  if (dia(d) === dia(manana)) return `Mañana ${hora}`;
+  const fecha = d.toLocaleDateString("es-CO", { day: "numeric", month: "short", timeZone: ZONA }).replace(".", "");
+  return `${fecha} ${hora}`;
+}
+
+/** Enlace de Google Maps con la ruta hacia una parada (abre la app de mapas del teléfono). Null si no hay dirección. */
+function urlRuta(direccion: string | null | undefined, ciudad: string | null | undefined): string | null {
+  const destino = [direccion, ciudad].filter((x) => x && String(x).trim()).join(", ");
+  if (!destino) return null;
+  return `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(destino)}`;
+}
+
+function EnlaceRuta({ href, parada }: { href: string | null; parada: string }) {
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Ir: cómo llegar al ${parada}`}
+      className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md border border-input bg-background px-3 text-sm font-medium text-primary"
+    >
+      <Navigation className="h-4 w-4" aria-hidden="true" />
+      Ir
+    </a>
+  );
 }
 
 export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps) {
@@ -151,6 +192,7 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
         const completados = pasos.filter((p) => s[p.campo]).length;
         const siguientePaso = pasos.find((p) => !s[p.campo]);
         const errorDeEsta = error?.servicioId === s.id ? error.mensaje : null;
+        const cuando = programacionTexto(s.fecha_hora_programacion);
 
         return (
           <Card key={s.id}>
@@ -201,34 +243,39 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <CardTitle className="text-base">{s.tipo_servicio}</CardTitle>
+                  {cuando && (
+                    <p suppressHydrationWarning className="mt-1 flex items-center gap-1 text-base font-semibold text-foreground">
+                      <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      {cuando}
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground truncate">{s.nombre_completo}</p>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {(s.ciudad_origen || s.direccion_origen || s.ciudad_destino || s.direccion_destino) && (
-                <div className="flex items-start gap-2 text-sm">
-                  <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-                  <div className="space-y-0.5">
-                    {(s.ciudad_origen || s.direccion_origen) && (
-                      <p>
-                        <span className="text-muted-foreground">Origen: </span>
-                        {s.direccion_origen || s.ciudad_origen}
-                      </p>
-                    )}
-                    {(s.ciudad_intermedia || s.direccion_intermedia) && (
-                      <p>
-                        <span className="text-muted-foreground">Punto intermedio: </span>
-                        {s.direccion_intermedia || s.ciudad_intermedia}
-                      </p>
-                    )}
-                    {(s.ciudad_destino || s.direccion_destino) && (
-                      <p>
-                        <span className="text-muted-foreground">Destino: </span>
-                        {s.direccion_destino || s.ciudad_destino}
-                      </p>
-                    )}
-                  </div>
+                <div className="space-y-2 text-sm">
+                  {(
+                    [
+                      { rotulo: "Origen", dir: s.direccion_origen, ciudad: s.ciudad_origen },
+                      { rotulo: "Punto intermedio", dir: s.direccion_intermedia, ciudad: s.ciudad_intermedia },
+                      { rotulo: "Destino", dir: s.direccion_destino, ciudad: s.ciudad_destino },
+                    ] as const
+                  )
+                    .filter((p) => p.dir || p.ciudad)
+                    .map((p) => (
+                      <div key={p.rotulo} className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-start gap-2">
+                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          <p className="[overflow-wrap:anywhere]">
+                            <span className="text-muted-foreground">{p.rotulo}: </span>
+                            {p.dir || p.ciudad}
+                          </p>
+                        </div>
+                        <EnlaceRuta href={urlRuta(p.dir, p.ciudad)} parada={p.rotulo.toLowerCase()} />
+                      </div>
+                    ))}
                 </div>
               )}
 
