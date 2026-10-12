@@ -198,6 +198,7 @@ export function DashboardShell({
           className="h-11 w-11 shrink-0 border-border shadow-sm touch-manipulation"
           aria-expanded={mobileNavOpen}
           aria-controls="dashboard-sidebar"
+          aria-label={mobileNavOpen ? "Cerrar menú" : "Abrir menú"}
           onClick={() => setMobileNavOpen((o) => !o)}
         >
           {mobileNavOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
@@ -215,7 +216,7 @@ export function DashboardShell({
               unoptimized={Boolean(logoUrl)}
             />
           </div>
-          <p className="font-[var(--font-bebas-neue)] truncate whitespace-nowrap text-xl uppercase leading-none tracking-wide">
+          <p className="font-[var(--font-bebas-neue)] truncate text-xl uppercase leading-none tracking-wide">
             <span className="text-primary">Aero</span> <span className="text-accent">Manto</span>
           </p>
         </div>
