@@ -125,10 +125,25 @@ export async function submitDailyCheck(data: {
   if (errorChecklist) return { error: errorChecklist };
 
   // El km solo se queda igual o aumenta frente a TODO lo registrado (odómetro, tanqueos, preoperacionales).
-  const errorKm = await validarKmContraHistorial(row.vehicleId, fecha, row.kilometrajeInicial);
+  // El km inicial es la primera lectura del día: lo posterior de hoy (un tanqueo) no lo limita, pero tampoco puede bajar
+  // de lo que este mismo OVEM ya registró hoy (el odómetro solo avanza; corregirlo es cosa del Administrador).
+  const errorKm = await validarKmContraHistorial(row.vehicleId, fecha, row.kilometrajeInicial, { mismoDiaCuenta: false });
   if (errorKm) return { error: `Kilometraje: ${errorKm}` };
 
   const supabase = createClient();
+  const { data: propioHoy } = await (supabase as any)
+    .from("daily_checks")
+    .select("kilometraje_inicial")
+    .eq("user_id", profile.user_id)
+    .eq("vehicle_id", row.vehicleId)
+    .eq("fecha", fecha)
+    .maybeSingle();
+  const kmPropioHoy = Number(propioHoy?.kilometraje_inicial);
+  if (Number.isFinite(kmPropioHoy) && row.kilometrajeInicial < kmPropioHoy) {
+    return {
+      error: `Kilometraje: hoy ya registraste ${kmPropioHoy.toLocaleString("es-CO")} km en este vehículo y no puede bajar. Si te equivocaste al digitar, pide al Administrador que lo corrija.`,
+    };
+  }
 
   // Tras cerrar el turno el preoperacional de hoy queda como estaba: reenviarlo pisaría el km final del cierre.
   const { data: cierreHoy } = await (supabase as any)
@@ -375,7 +390,10 @@ export async function submitOvemFuelLog(data: {
   if (row.fecha > hoyOvem()) return { error: "La fecha del tanqueo no puede ser futura" };
 
   const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
-  const errorKm = await validarKmContraHistorial(row.vehicleId, row.fecha, row.kilometraje);
+  // Un tanqueo de hoy se compara con todo lo de hoy; uno atrasado, solo con los otros días (sin hora no se ordenan).
+  const errorKm = await validarKmContraHistorial(row.vehicleId, row.fecha, row.kilometraje, {
+    mismoDiaCuenta: row.fecha === hoyOvem(),
+  });
   if (errorKm) return { error: `Kilometraje: ${errorKm}` };
   const supabase = createClient();
   const { error } = await supabase.from("fuel_logs").insert({

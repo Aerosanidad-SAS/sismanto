@@ -36,3 +36,11 @@ test("mayorLectura devuelve la más alta o null", () => {
   assert.equal(mayorLectura([]), null);
   assert.equal(mayorLectura([L("2026-10-10", 5), L("2026-10-11", 9), L("2026-10-12", 7)])?.km, 9);
 });
+
+test("sin mismoDiaCuenta, las lecturas del propio día no limitan (tanqueo atrasado)", () => {
+  const lecturas = [L("2026-10-11", 900), L("2026-10-12", 1200)];
+  assert.equal(validarKmEnLinea(1000, "2026-10-11", lecturas, { mismoDiaCuenta: false }), null);
+  assert.ok(validarKmEnLinea(800, "2026-10-11", lecturas));
+  assert.equal(validarKmEnLinea(800, "2026-10-11", lecturas, { mismoDiaCuenta: false }), null);
+  assert.ok(validarKmEnLinea(1300, "2026-10-11", lecturas, { mismoDiaCuenta: false }));
+});

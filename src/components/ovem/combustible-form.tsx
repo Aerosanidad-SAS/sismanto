@@ -33,7 +33,8 @@ export function CombustibleForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const avisoKm = evaluarKilometraje(parseKilometraje(km), ultimoKm).mensaje;
+  // Solo un tanqueo de hoy se compara con el último km; uno atrasado lo valida el servidor contra las lecturas de su época.
+  const avisoKm = evaluarKilometraje(parseKilometraje(km), fecha === hoy ? ultimoKm : null).mensaje;
 
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();

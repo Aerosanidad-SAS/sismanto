@@ -24,15 +24,24 @@ const AYUDA_CORRECCION =
 
 /**
  * Error si `km` en `fecha` rompe el orden de las lecturas conocidas, o null si encaja.
- * - No puede ser menor que la mayor lectura de ese día o de días anteriores.
+ * - No puede ser menor que la mayor lectura de ese día o de días anteriores (`mismoDiaCuenta: false` ignora las del mismo
+ *   día: se usa para un tanqueo con fecha pasada y para el km inicial del preoperacional).
  * - No puede ser mayor que la menor lectura de días posteriores (un tanqueo con fecha pasada).
  * Igual al anterior es válido: el vehículo no se movió.
  */
-export function validarKmEnLinea(km: number, fecha: string, lecturas: readonly LecturaKm[]): string | null {
+export function validarKmEnLinea(
+  km: number,
+  fecha: string,
+  lecturas: readonly LecturaKm[],
+  opciones: { mismoDiaCuenta?: boolean } = {}
+): string | null {
+  const mismoDiaCuenta = opciones.mismoDiaCuenta ?? true;
   let previa: LecturaKm | null = null;
   let posterior: LecturaKm | null = null;
   for (const l of lecturas) {
     if (!Number.isFinite(l.km)) continue;
+    // Sin hora, las lecturas del mismo día no se pueden ordenar entre sí: solo cuentan cuando se registra en vivo (hoy).
+    if (l.fecha === fecha && !mismoDiaCuenta) continue;
     if (l.fecha <= fecha) {
       if (previa === null || l.km > previa.km) previa = l;
     } else if (posterior === null || l.km < posterior.km) {

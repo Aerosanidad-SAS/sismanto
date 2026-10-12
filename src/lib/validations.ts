@@ -253,8 +253,15 @@ export const supplyCheckSchema = z.object({
 /** Tanqueo registrado por el OVEM desde el portal. */
 export const ovemFuelLogSchema = z.object({
   vehicleId: z.string().uuid("Seleccione un vehículo"),
-  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
-  kilometraje: z.number().int().positive("El kilometraje es obligatorio"),
+  fecha: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida")
+    .refine((f) => new Date(`${f}T00:00:00Z`).toISOString().slice(0, 10) === f, "Fecha inválida"),
+  kilometraje: z
+    .number()
+    .int()
+    .positive("El kilometraje es obligatorio")
+    .max(2_000_000, "El kilometraje es demasiado alto: revisa el número del tablero."),
   galones: z.number().positive("Los galones deben ser mayores a cero").max(100, "Revise los galones: más de 100 no cabe en un tanque"),
   costo: z.number().nonnegative().optional(),
   numeroVenta: z.string().trim().max(40).optional(),
