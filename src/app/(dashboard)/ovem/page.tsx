@@ -6,6 +6,7 @@ import { OvemPortal } from "@/components/ovem/ovem-portal";
 import { getChecklistItemsActivos } from "@/app/api/actions/ovem";
 import { getServiciosMedicos } from "@/app/api/actions/servicios-medicos";
 import { fechaBogota } from "@/lib/vencimientos";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata = { title: "Portal OVEM" };
 
@@ -63,7 +64,9 @@ export default async function OvemPage() {
     const resultados = await Promise.all(
       fuentes.map(async ([tabla, columna]) => {
         try {
-          const { data } = await (supabase as any)
+          // Clave de servicio: el OVEM solo ve sus propios tanqueos y preoperacionales (RLS), y el «Último km» tiene que
+          // contar las lecturas de todos. Solo sale un número por vehículo.
+          const { data } = await (createAdminClient() as any)
             .from(tabla)
             .select(`vehicle_id, ${columna}`)
             .in("vehicle_id", ids)
@@ -76,11 +79,8 @@ export default async function OvemPage() {
       })
     );
     for (const { columna, filas } of resultados) {
-      const visto = new Set<string>();
       for (const f of filas) {
         const id = String(f.vehicle_id);
-        if (visto.has(id)) continue; // la primera fila de cada vehículo es la más reciente de esa tabla
-        visto.add(id);
         const km = Number(f[columna]);
         if (Number.isFinite(km) && km > (ultimoKmPorVehiculo[id] ?? 0)) ultimoKmPorVehiculo[id] = km;
       }

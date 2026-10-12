@@ -30,7 +30,6 @@ export function CombustibleForm({
   const [km, setKm] = useState("");
   const [galones, setGalones] = useState("");
   const [costo, setCosto] = useState("");
-  const [numeroVenta, setNumeroVenta] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,23 +37,35 @@ export function CombustibleForm({
 
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
-    const result = await submitOvemFuelLog({
-      vehicleId,
-      fecha,
-      kilometraje: parseKilometraje(km) ?? 0,
-      galones: parseNumeroDecimal(galones) ?? 0,
-      costo: parseNumeroDecimal(costo),
-      numeroVenta: numeroVenta || undefined,
-    });
-    setLoading(false);
-    if ("error" in result && result.error) {
-      setError(result.error);
+    // Mismo orden que el servidor: el km solo se queda igual o aumenta (solo para tanqueos de hoy; uno con fecha pasada
+    // lo valida el servidor contra las lecturas de esa época).
+    const evalKm = evaluarKilometraje(parseKilometraje(km), fecha === hoy ? ultimoKm : null);
+    if (evalKm.nivel === "menor" && evalKm.mensaje) {
+      setError(`Kilometraje: ${evalKm.mensaje}`);
       return;
     }
-    router.refresh();
-    onDone();
+    setLoading(true);
+    try {
+      const result = await submitOvemFuelLog({
+        vehicleId,
+        fecha,
+        kilometraje: parseKilometraje(km) ?? 0,
+        galones: parseNumeroDecimal(galones) ?? 0,
+        costo: parseNumeroDecimal(costo),
+      });
+      if ("error" in result && result.error) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+      onDone();
+    } catch {
+      // Sin señal: lo escrito sigue en pantalla y el botón vuelve a habilitarse.
+      setError("No se pudo guardar el tanqueo: revisa tu señal. Lo que escribiste sigue aquí; inténtalo de nuevo.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -64,7 +75,7 @@ export function CombustibleForm({
           <Fuel className="h-5 w-5" />
           Tanqueo — {placa}
         </CardTitle>
-        <CardDescription>Con los datos del recibo de la estación.</CardDescription>
+        <CardDescription>Fecha, kilometraje, galones y valor pagado.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={guardar} className="grid gap-4 sm:grid-cols-2">
@@ -123,16 +134,6 @@ export function CombustibleForm({
               value={costo}
               onChange={(e) => setCosto(e.target.value)}
               placeholder="Opcional"
-            />
-          </div>
-          <div className="space-y-1 sm:col-span-2">
-            <Label htmlFor="fuel-venta">Número de venta del recibo</Label>
-            <Input
-              id="fuel-venta"
-              value={numeroVenta}
-              onChange={(e) => setNumeroVenta(e.target.value)}
-              placeholder="Opcional"
-              maxLength={40}
             />
           </div>
           {error && (

@@ -15,6 +15,7 @@ import {
 import type { RoadAccidentFormData } from "@/lib/validations";
 import { catalogoSinSeveridad, itemsEvaluados, validarPreoperacional, type ItemCatalogo } from "@/lib/preoperacional";
 import { mensajeErrorGuardado } from "@/lib/errores-guardado";
+import { validarKmContraHistorial } from "@/lib/kilometraje-servidor";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
 import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
@@ -122,6 +123,10 @@ export async function submitDailyCheck(data: {
   const catalogo = await getChecklistItemsActivos("PREOPERACIONAL");
   const errorChecklist = validarPreoperacional(catalogo, row.items ?? []);
   if (errorChecklist) return { error: errorChecklist };
+
+  // El km solo se queda igual o aumenta frente a TODO lo registrado (odómetro, tanqueos, preoperacionales).
+  const errorKm = await validarKmContraHistorial(row.vehicleId, fecha, row.kilometrajeInicial);
+  if (errorKm) return { error: `Kilometraje: ${errorKm}` };
 
   const supabase = createClient();
 
@@ -370,6 +375,8 @@ export async function submitOvemFuelLog(data: {
   if (row.fecha > hoyOvem()) return { error: "La fecha del tanqueo no puede ser futura" };
 
   const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
+  const errorKm = await validarKmContraHistorial(row.vehicleId, row.fecha, row.kilometraje);
+  if (errorKm) return { error: `Kilometraje: ${errorKm}` };
   const supabase = createClient();
   const { error } = await supabase.from("fuel_logs").insert({
     vehicle_id: row.vehicleId,

@@ -406,6 +406,11 @@ export function OvemPortal({
       setError("El kilometraje es demasiado alto: revisa el número del tablero.");
       return;
     }
+    const evalKm = evaluarKilometraje(kmNumero, ultimoKm);
+    if (evalKm.nivel === "menor" && evalKm.mensaje) {
+      setError(`Kilometraje: ${evalKm.mensaje}`);
+      return;
+    }
     if (resumen.sinResponder > 0) {
       setResaltarPendientes(true);
       setError(
