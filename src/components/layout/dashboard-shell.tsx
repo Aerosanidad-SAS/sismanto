@@ -203,21 +203,21 @@ export function DashboardShell({
           {mobileNavOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="relative h-9 w-28 shrink-0 overflow-hidden rounded">
+          {/* El logo es casi cuadrado (490×509): una caja ancha lo dejaba en ~36 px. Caja cuadrada de 48 px. */}
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded">
             <Image
               src={logoUrl ?? "/brand/alianza.png"}
               alt="Aerosanidad e Inter Assist"
               fill
-              className="object-contain object-left"
-              sizes="112px"
+              className="object-contain"
+              sizes="48px"
               priority
               unoptimized={Boolean(logoUrl)}
             />
           </div>
-          <div className="min-w-0 leading-tight">
-            <p className="font-[var(--font-bebas-neue)] truncate text-lg uppercase tracking-wide text-primary">Aero</p>
-            <p className="font-[var(--font-bebas-neue)] truncate text-lg uppercase tracking-wide text-accent -mt-0.5">Manto</p>
-          </div>
+          <p className="font-[var(--font-bebas-neue)] truncate whitespace-nowrap text-xl uppercase leading-none tracking-wide">
+            <span className="text-primary">Aero</span> <span className="text-accent">Manto</span>
+          </p>
         </div>
       </header>
 
