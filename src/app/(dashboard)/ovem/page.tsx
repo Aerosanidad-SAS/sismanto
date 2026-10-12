@@ -91,16 +91,29 @@ export default async function OvemPage() {
   // El OVEM ve los suyos (la RLS filtra); el ADMIN ve los programados y en curso de todos los centros, en modo consulta.
   const servicios = await getServiciosMedicos();
 
+  // Qué ya hizo hoy este conductor (el menú lo muestra): el último preoperacional enviado y el último cierre de turno.
+  const placaDe = new Map((vehicles ?? []).map((v: { id: string; placa: string }) => [v.id, v.placa]));
+  let estadoHoy: { preoperacional: { placa: string; at: string } | null; cierre: { placa: string; at: string } | null } = {
+    preoperacional: null,
+    cierre: null,
+  };
+  if (profile.role_codigo === "OVEM") {
+    const [{ data: preops }, { data: cierres }] = await Promise.all([
+      (supabase as any).from("daily_checks").select("vehicle_id, created_at").eq("user_id", user.id).eq("fecha", hoy).order("created_at", { ascending: false }).limit(1),
+      (supabase as any).from("ovem_cierres_turno").select("vehicle_id, cerrado_at").eq("user_id", user.id).eq("fecha", hoy).order("cerrado_at", { ascending: false }).limit(1),
+    ]);
+    const p = (preops ?? [])[0] as { vehicle_id: string; created_at: string } | undefined;
+    const c = (cierres ?? [])[0] as { vehicle_id: string; cerrado_at: string } | undefined;
+    estadoHoy = {
+      preoperacional: p ? { placa: String(placaDe.get(p.vehicle_id) ?? ""), at: p.created_at } : null,
+      cierre: c ? { placa: String(placaDe.get(c.vehicle_id) ?? ""), at: c.cerrado_at } : null,
+    };
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl">Portal OVEM</h1>
-        <p className="mt-2 text-muted-foreground">
-          Preoperacional, tanqueos, novedades y siniestros
-        </p>
-      </div>
-
       <OvemPortal
+        estadoHoy={estadoHoy}
         userId={user.id}
         userName={profile.nombre_completo || profile.email || "Usuario"}
         vehicles={vehicles ?? []}
