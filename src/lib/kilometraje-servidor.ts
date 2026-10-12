@@ -35,16 +35,16 @@ async function leerLecturasAcotadas(vehicleId: string, fecha: string): Promise<L
 }
 
 /**
- * Valida un km nuevo contra todo el historial del vehículo. Devuelve el mensaje de error o null. Si no se puede leer
- * el historial (sin red hacia la base, tabla ilegible), NO bloquea: la regla de la base (trg_validar_km) sigue
- * protegiendo el odómetro y se deja constancia en el log del servidor.
+ * Valida un km nuevo contra todo el historial del vehículo. Devuelve el mensaje de error o null.
+ * Si no se puede leer el historial NO se deja pasar: sin poder comparar, un km bajo se colaría y rompería el plan de
+ * mantenimiento (el km solo avanza). El OVEM puede reintentar; el detalle queda en el log del servidor.
  */
 export async function validarKmContraHistorial(vehicleId: string, fecha: string, km: number): Promise<string | null> {
   try {
     return validarKmEnLinea(km, fecha, await leerLecturasAcotadas(vehicleId, fecha));
   } catch (e) {
     console.error("[kilometraje] no se pudo leer el historial para validar el km:", e instanceof Error ? e.message : e);
-    return null;
+    return "No se pudo verificar el kilometraje contra el historial del vehículo. Revisa tu señal e inténtalo de nuevo.";
   }
 }
 
