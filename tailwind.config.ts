@@ -1,6 +1,9 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  // `hover:` solo cuando el dispositivo tiene ratón. En el celular el :hover se queda pegado tras tocar y deja el
+  // botón con el fondo de acento hasta tocar otra cosa (botones «fantasma» que parecen verdes o sin forma).
+  future: { hoverOnlyWhenSupported: true },
   darkMode: ["class"],
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
