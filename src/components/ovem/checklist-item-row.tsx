@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
+import { esItemDeInventario } from "@/lib/inventario-preop";
 
 export type ChecklistEstado = "OK" | "FALLA" | "NO_APLICA";
 
@@ -59,6 +60,11 @@ interface ChecklistItemRowProps {
   exigirRespuesta?: boolean;
   /** Marca el ítem como pendiente (borde y texto) cuando está sin responder; se activa tras un envío incompleto. */
   resaltarPendiente?: boolean;
+  /**
+   * El equipo contado incompleto (extintor, chalecos…) es un faltante, no una falla: queda OK con menos unidades y el
+   * servidor abre una novedad leve. Sin esto, contar de menos pasa el ítem a FALLA (dotación y demás usos).
+   */
+  faltanteNoEsFalla?: boolean;
 }
 
 export function ChecklistItemRow({
@@ -69,6 +75,7 @@ export function ChecklistItemRow({
   onReportarNovedad,
   exigirRespuesta = false,
   resaltarPendiente = false,
+  faltanteNoEsFalla = false,
 }: ChecklistItemRowProps) {
   const uid = useId();
   const idDescripcion = `${uid}-desc`;
@@ -79,12 +86,15 @@ export function ChecklistItemRow({
   const sinResponder = exigirRespuesta && !state;
   const st: ChecklistItemState = state ?? { estado: "OK" };
   const enFalla = st.estado === "FALLA" && !sinResponder;
+  const esInventario = faltanteNoEsFalla && esItemDeInventario(item);
+  const incompleto = esInventario && !sinResponder && st.estado === "OK" && (st.cantidadOk ?? expectedNum) < expectedNum;
 
   return (
     <div
+      id={`checklist-item-${item.id}`}
       className={cn(
-        "rounded-lg border p-3",
-        enFalla ? "border-red-300 bg-red-50/50" : "border-border bg-card",
+        "scroll-mt-20 rounded-lg border p-3",
+        enFalla ? "border-red-300 bg-red-50/50" : incompleto ? "border-warning bg-warning-soft" : "border-border bg-card",
         sinResponder && resaltarPendiente && "border-warning bg-warning-soft"
       )}
     >
@@ -98,10 +108,10 @@ export function ChecklistItemRow({
         <span
           className={cn(
             "text-xs font-semibold",
-            enFalla ? "text-red-700" : sinResponder && resaltarPendiente ? "text-foreground" : "text-muted-foreground"
+            enFalla ? "text-red-700" : incompleto || (sinResponder && resaltarPendiente) ? "text-foreground" : "text-muted-foreground"
           )}
         >
-          {enFalla ? "ALERTA" : sinResponder ? "Sin responder" : "—"}
+          {enFalla ? "ALERTA" : incompleto ? "Faltante" : sinResponder ? "Sin responder" : "—"}
         </span>
       </div>
 
@@ -122,7 +132,8 @@ export function ChecklistItemRow({
                 onChange={(e) => {
                   const v = parseInt(e.target.value || "0", 10);
                   const clamped = Math.max(0, Math.min(expectedNum, Number.isNaN(v) ? 0 : v));
-                  onChange({ ...st, cantidadOk: clamped, estado: clamped < expectedNum ? "FALLA" : "OK" });
+                  // Equipo contado: menos unidades = faltante (sigue OK). Funcionamiento (luces…): menos = falla.
+                  onChange({ ...st, cantidadOk: clamped, estado: clamped < expectedNum && !esInventario ? "FALLA" : "OK" });
                 }}
                 className="w-28"
               />
