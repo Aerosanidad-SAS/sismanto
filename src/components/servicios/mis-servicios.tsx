@@ -87,7 +87,7 @@ function EnlaceRuta({ href, parada }: { href: string | null; parada: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={`Cómo llegar al ${parada}`}
+      aria-label={`Ir: cómo llegar al ${parada}`}
       className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md border border-input bg-background px-3 text-sm font-medium text-primary"
     >
       <Navigation className="h-4 w-4" aria-hidden="true" />
@@ -192,6 +192,7 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
         const completados = pasos.filter((p) => s[p.campo]).length;
         const siguientePaso = pasos.find((p) => !s[p.campo]);
         const errorDeEsta = error?.servicioId === s.id ? error.mensaje : null;
+        const cuando = programacionTexto(s.fecha_hora_programacion);
 
         return (
           <Card key={s.id}>
@@ -242,10 +243,10 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <CardTitle className="text-base">{s.tipo_servicio}</CardTitle>
-                  {programacionTexto(s.fecha_hora_programacion) && (
-                    <p className="mt-1 flex items-center gap-1 text-base font-semibold text-foreground">
+                  {cuando && (
+                    <p suppressHydrationWarning className="mt-1 flex items-center gap-1 text-base font-semibold text-foreground">
                       <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      {programacionTexto(s.fecha_hora_programacion)}
+                      {cuando}
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground truncate">{s.nombre_completo}</p>
@@ -267,7 +268,7 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
                       <div key={p.rotulo} className="flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-start gap-2">
                           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                          <p>
+                          <p className="[overflow-wrap:anywhere]">
                             <span className="text-muted-foreground">{p.rotulo}: </span>
                             {p.dir || p.ciudad}
                           </p>

@@ -91,15 +91,14 @@ interface OvemPortalProps {
   /** Último kilometraje conocido por vehículo, para la ayuda y el aviso al digitar. */
   ultimoKmPorVehiculo?: Record<string, number>;
   /** Lo que este conductor ya hizo hoy (el menú lo muestra); `at` es un instante ISO. */
-  estadoHoy?: EstadoHoy;
+  estadoHoy?: EstadoHoy | null;
 }
 
 export interface EstadoHoy {
-  preoperacional: { placa: string; at: string } | null;
+  /** `at` null: se sabe que se envió pero no a qué hora. */
+  preoperacional: { placa: string; at: string | null } | null;
   cierre: { placa: string; at: string } | null;
 }
-
-const SIN_ESTADO_HOY: EstadoHoy = { preoperacional: null, cierre: null };
 
 type Flow = null | "preoperacional" | "combustible" | "novedad" | "siniestro" | "servicios" | "cierre";
 
@@ -174,7 +173,7 @@ export function OvemPortal({
   servicios = SIN_SERVICIOS,
   vehiculosDeHoy = SIN_VEHICULOS_DE_HOY,
   ultimoKmPorVehiculo = SIN_KM,
-  estadoHoy = SIN_ESTADO_HOY,
+  estadoHoy = null,
 }: OvemPortalProps) {
   const router = useRouter();
   const serviciosActivos = useMemo(
@@ -521,17 +520,21 @@ export function OvemPortal({
 
   /** Estado del día de las dos acciones que no se pueden olvidar: el preoperacional y el cierre del turno. */
   const estadoDeAccion = (f: Exclude<Flow, null>): { texto: string; hecho: boolean } | null => {
-    if (viewerRole !== "OVEM") return null;
+    // Sin dato (consulta fallida) no se afirma nada: la tarjeta cae a su texto normal.
+    if (viewerRole !== "OVEM" || !estadoHoy) return null;
+    const lugar = (placa: string) => (placa ? ` · ${placa}` : "");
     if (f === "preoperacional") {
       const p = estadoHoy.preoperacional;
       return p
-        ? { texto: `Enviado ${horaCorta(new Date(p.at))}${p.placa ? ` · ${p.placa}` : ""}`, hecho: true }
+        ? { texto: `Enviado${p.at ? ` ${horaCorta(new Date(p.at))}` : ""}${lugar(p.placa)}`, hecho: true }
         : { texto: "Pendiente de hoy", hecho: false };
     }
     if (f === "cierre") {
-      const c = estadoHoy.cierre;
-      if (c) return { texto: `Cerrado ${horaCorta(new Date(c.at))}${c.placa ? ` · ${c.placa}` : ""}`, hecho: true };
-      return { texto: estadoHoy.preoperacional ? "Turno abierto" : "Turno sin iniciar", hecho: false };
+      const { preoperacional: p, cierre: c } = estadoHoy;
+      // Cerrar el vehículo A y empezar después el preoperacional del B deja un turno abierto: el cierre solo vale si es posterior.
+      const cierreVigente = c && !(p?.at && new Date(p.at).getTime() > new Date(c.at).getTime());
+      if (c && cierreVigente) return { texto: `Cerrado ${horaCorta(new Date(c.at))}${lugar(c.placa)}`, hecho: true };
+      return { texto: p ? "Turno abierto" : "Turno sin iniciar", hecho: false };
     }
     return null;
   };
