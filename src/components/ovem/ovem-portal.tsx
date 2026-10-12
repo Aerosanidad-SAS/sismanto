@@ -817,7 +817,10 @@ export function OvemPortal({
                   aria-describedby={errorKm ? "km-inicial-error km-inicial-ayuda" : "km-inicial-ayuda"}
                   aria-invalid={errorKm ? true : undefined}
                   value={km}
-                  onChange={(e) => setKm(e.target.value)}
+                  onChange={(e) => {
+                    setKm(e.target.value);
+                    setErrorKm(null);
+                  }}
                   placeholder="Ej: 125000"
                   className="mt-1 max-w-xs"
                 />
