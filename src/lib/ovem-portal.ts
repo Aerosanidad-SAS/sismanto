@@ -65,14 +65,26 @@ export interface ResumenRespuestas {
   falla: number;
   noAplica: number;
   sinResponder: number;
+  /** Ítems de equipo contados que no están completos: no son fallas ni OK, quedan como faltante. */
+  faltantes: number;
 }
 
-/** Cuenta las respuestas de los ítems visibles; lo que no tiene respuesta es «sin responder», nunca OK. */
-export function resumirRespuestas(ids: number[], respuestas: RespuestasChecklist): ResumenRespuestas {
-  const r: ResumenRespuestas = { total: ids.length, ok: 0, falla: 0, noAplica: 0, sinResponder: 0 };
+/**
+ * Cuenta las respuestas de los ítems visibles; lo que no tiene respuesta es «sin responder», nunca OK.
+ * `esperadasInventario`: cantidad esperada de los ítems de equipo; un OK con menos unidades cuenta como faltante.
+ */
+export function resumirRespuestas(
+  ids: number[],
+  respuestas: RespuestasChecklist,
+  esperadasInventario: Record<number, number> = {}
+): ResumenRespuestas {
+  const r: ResumenRespuestas = { total: ids.length, ok: 0, falla: 0, noAplica: 0, sinResponder: 0, faltantes: 0 };
   for (const id of ids) {
     const estado = respuestas[id]?.estado;
-    if (estado === "OK") r.ok++;
+    const esperada = esperadasInventario[id];
+    const hay = respuestas[id]?.cantidadOk;
+    if (estado === "OK" && esperada !== undefined && hay !== undefined && hay < esperada) r.faltantes++;
+    else if (estado === "OK") r.ok++;
     else if (estado === "FALLA") r.falla++;
     else if (estado === "NO_APLICA") r.noAplica++;
     else r.sinResponder++;
@@ -80,9 +92,10 @@ export function resumirRespuestas(ids: number[], respuestas: RespuestasChecklist
   return r;
 }
 
-/** «38 OK · 1 Falla · 2 N/A»; solo muestra «sin responder» si queda alguno. */
+/** «38 OK · 1 Falla · 2 N/A»; solo muestra «faltantes» y «sin responder» si hay alguno. */
 export function textoResumen(r: ResumenRespuestas): string {
   const partes = [`${r.ok} OK`, `${r.falla} ${r.falla === 1 ? "Falla" : "Fallas"}`, `${r.noAplica} N/A`];
+  if (r.faltantes > 0) partes.push(`${r.faltantes} ${r.faltantes === 1 ? "faltante" : "faltantes"}`);
   if (r.sinResponder > 0) partes.push(`${r.sinResponder} sin responder`);
   return partes.join(" · ");
 }
