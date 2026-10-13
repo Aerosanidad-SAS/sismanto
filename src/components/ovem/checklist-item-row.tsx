@@ -1,12 +1,10 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Check, MessageSquare } from "lucide-react";
+import { Check, MessageSquare, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { esItemDeInventario } from "@/lib/inventario-preop";
@@ -53,6 +51,21 @@ export function checklistPayload(items: ChecklistItem[], state: ChecklistState) 
   });
 }
 
+/** Columnas de la tabla: ítem · OK · Falla · Obs. Con 285 px útiles en un celular de 360, 136 px van a los tres botones y el ítem tiene ~150 px (2 líneas). */
+const COLUMNAS = "grid grid-cols-[minmax(0,1fr)_2.75rem_3rem_2.75rem] items-center gap-1";
+
+/** Cabecera de la tabla, una vez por categoría. */
+export function CabeceraTablaChecklist() {
+  return (
+    <div className={cn(COLUMNAS, "px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground")} aria-hidden="true">
+      <span>Ítem</span>
+      <span className="text-center">OK</span>
+      <span className="text-center">Falla</span>
+      <span className="text-center">Obs.</span>
+    </div>
+  );
+}
+
 interface ChecklistItemRowProps {
   item: ChecklistItem;
   state: ChecklistItemState | undefined;
@@ -71,6 +84,10 @@ interface ChecklistItemRowProps {
   faltanteNoEsFalla?: boolean;
 }
 
+/**
+ * Una fila de la tabla del preoperacional: ítem | OK | Falla | Obs. Un toque en OK responde; Falla (y Obs.) abren una hoja
+ * donde se describe y, si el ítem se cuenta, se dice cuántos están bien. Nada aparece ni desaparece dentro de la fila.
+ */
 export function ChecklistItemRow({
   item,
   state,
@@ -83,173 +100,190 @@ export function ChecklistItemRow({
 }: ChecklistItemRowProps) {
   const uid = useId();
   const idDescripcion = `${uid}-desc`;
-  const idCantidad = `${uid}-cant`;
   const idObservacion = `${uid}-obs`;
   const expectedNum = item.cantidad_esperada ? Number(item.cantidad_esperada) : NaN;
-  const isNumericQty = Number.isFinite(expectedNum) && expectedNum > 0;
+  const esConteo = Number.isFinite(expectedNum) && expectedNum > 0;
   const sinResponder = exigirRespuesta && !state;
   const st: ChecklistItemState = state ?? { estado: "OK" };
-  const enFalla = st.estado === "FALLA" && !sinResponder;
   const esInventario = faltanteNoEsFalla && esItemDeInventario(item);
-  const incompleto = esInventario && !sinResponder && st.estado === "OK" && (st.cantidadOk ?? expectedNum) < expectedNum;
-
-  // La observación vive en una hoja que se abre con un botón: nunca aparece un campo nuevo que empuje el resto de la lista.
-  const [obsAbierta, setObsAbierta] = useState(false);
-  const [borrador, setBorrador] = useState("");
+  const hay = st.cantidadOk ?? expectedNum;
+  const incompleto = esInventario && !sinResponder && st.estado === "OK" && hay < expectedNum;
+  const enFalla = st.estado === "FALLA" && !sinResponder;
+  const marcaOk = !sinResponder && st.estado === "OK" && !incompleto;
+  const marcaFalla = enFalla || incompleto;
+  const noAplica = !sinResponder && st.estado === "NO_APLICA";
   const tieneObs = Boolean(st.observacion?.trim());
-  const obsFalta = enFalla && !tieneObs;
-  const abrirObs = () => {
+  const pendiente = sinResponder && resaltarPendiente;
+
+  // Hoja (modal) de observación; para ítems contados también pide cuántos están bien.
+  const [abierta, setAbierta] = useState(false);
+  const [borrador, setBorrador] = useState("");
+  const [cuantos, setCuantos] = useState(esConteo ? expectedNum : 0);
+  /** La hoja se abrió desde «Falla»: guardar sin contar de menos o sin describir no tiene sentido. */
+  const [desdeFalla, setDesdeFalla] = useState(false);
+
+  const abrir = (porFalla: boolean) => {
     setBorrador(st.observacion ?? "");
-    setObsAbierta(true);
+    // Desde «Falla» en un ítem contado se propone «uno menos» para no teclear.
+    setCuantos(esConteo ? Math.min(expectedNum, porFalla && !marcaFalla ? Math.max(0, expectedNum - 1) : hay) : 0);
+    setDesdeFalla(porFalla);
+    setAbierta(true);
   };
-  /** Cambia la respuesta; si pasa a FALLA sin explicación, abre la hoja para describirla (la falla exige descripción). */
-  const cambiar = (next: ChecklistItemState) => {
-    onChange(next);
-    const pasoAFalla = next.estado === "FALLA" && (sinResponder || st.estado !== "FALLA");
-    if (pasoAFalla && !next.observacion?.trim()) {
-      setBorrador("");
-      setObsAbierta(true);
+
+  const marcarOk = () => onChange({ ...st, estado: "OK", cantidadOk: esConteo ? expectedNum : st.cantidadOk });
+
+  const textoRequerido = desdeFalla && !(esConteo && esInventario && cuantos < expectedNum) && !(esConteo && cuantos >= expectedNum);
+  const puedeGuardar = !textoRequerido || borrador.trim().length > 0;
+
+  const guardar = () => {
+    const obs = borrador.trim() || undefined;
+    if (esConteo) {
+      const n = Math.max(0, Math.min(expectedNum, cuantos));
+      // Faltan unidades: equipo contado = faltante (sigue OK); funcionamiento (luces…) = falla.
+      onChange({ estado: n >= expectedNum || esInventario ? "OK" : "FALLA", cantidadOk: n, observacion: obs });
+    } else {
+      onChange({ ...st, estado: desdeFalla || st.estado === "FALLA" ? "FALLA" : st.estado, observacion: obs });
     }
+    setAbierta(false);
   };
-  const guardarObs = () => {
-    onChange({ ...st, observacion: borrador.trim() || undefined });
-    setObsAbierta(false);
-  };
-  const botonObs = (
-    <Button
-      type="button"
-      variant={obsFalta ? "default" : "outline"}
-      className="min-h-11 shrink-0 gap-1.5 px-3"
-      disabled={sinResponder}
-      onClick={abrirObs}
-      aria-label={obsFalta ? `Describir la falla de ${item.descripcion}` : `Observación de ${item.descripcion}`}
-    >
-      {tieneObs ? <Check className="h-4 w-4" aria-hidden="true" /> : <MessageSquare className="h-4 w-4" aria-hidden="true" />}
-      {obsFalta ? "Describir" : tieneObs ? "Con obs." : "Obs."}
-    </Button>
-  );
+
+  const celda = "flex h-12 w-full items-center justify-center rounded-md border-2 text-base font-bold leading-none transition-colors";
 
   return (
     <div
       id={`checklist-item-${item.id}`}
       className={cn(
-        "scroll-mt-20 rounded-lg border p-3",
-        enFalla ? "border-red-300 bg-red-50/50" : incompleto ? "border-warning bg-warning-soft" : "border-border bg-card",
-        sinResponder && resaltarPendiente && "border-warning bg-warning-soft"
+        "scroll-mt-20 border-b py-2",
+        marcaFalla && !incompleto && "bg-red-50/60",
+        incompleto && "bg-warning-soft",
+        pendiente && "bg-warning-soft"
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p id={idDescripcion} className="text-base font-medium leading-snug text-foreground">
+      <div className={COLUMNAS}>
+        <div className="min-w-0 pl-1">
+          <p id={idDescripcion} className="text-[15px] font-medium leading-tight text-foreground">
             {item.descripcion}
           </p>
-          {detalleItem(item.descripcion) && <p className="text-sm text-muted-foreground">{detalleItem(item.descripcion)}</p>}
+          {detalleItem(item.descripcion) && <p className="text-xs leading-tight text-muted-foreground">{detalleItem(item.descripcion)}</p>}
+          {esConteo && !sinResponder && marcaFalla && (
+            <p className="text-xs font-semibold leading-tight text-foreground">
+              {hay} de {expectedNum}
+              {incompleto ? " · faltante" : ""}
+            </p>
+          )}
+          {pendiente && <p className="text-xs font-semibold leading-tight text-foreground">Sin responder</p>}
+          {noAplica && <p className="text-xs leading-tight text-muted-foreground">No aplica</p>}
         </div>
-        <span
+
+        <button
+          type="button"
+          aria-pressed={marcaOk}
+          aria-label={`OK: ${item.descripcion}`}
+          onClick={marcarOk}
+          className={cn(celda, marcaOk ? "border-success bg-success text-success-foreground" : "border-input bg-background text-foreground")}
+        >
+          OK
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={marcaFalla}
+          aria-label={`${esConteo ? "Falla o faltante" : "Falla"}: ${item.descripcion}`}
+          onClick={() => abrir(true)}
           className={cn(
-            "shrink-0 text-xs font-semibold",
-            enFalla ? "text-red-700" : incompleto || (sinResponder && resaltarPendiente) ? "text-foreground" : "text-muted-foreground"
+            celda,
+            "px-0 text-sm",
+            marcaFalla
+              ? incompleto
+                ? "border-warning-foreground bg-warning text-warning-foreground"
+                : "border-red-700 bg-red-700 text-white"
+              : "border-input bg-background text-foreground"
           )}
         >
-          {enFalla ? "ALERTA" : incompleto ? "Faltante" : sinResponder ? "Sin responder" : "—"}
-        </span>
+          {incompleto ? "Falta" : "Falla"}
+        </button>
+
+        <button
+          type="button"
+          disabled={sinResponder}
+          aria-label={tieneObs ? `Ver observación de ${item.descripcion}` : `Agregar observación a ${item.descripcion}`}
+          onClick={() => abrir(false)}
+          className={cn(celda, "border-input bg-background text-foreground disabled:opacity-100 disabled:text-muted-foreground")}
+        >
+          {tieneObs ? <Check className="h-5 w-5" aria-hidden="true" /> : <MessageSquare className="h-5 w-5" aria-hidden="true" />}
+        </button>
       </div>
 
-      {isNumericQty ? (
-        <div className="mt-3">
-          <Label htmlFor={idCantidad} className="text-sm">
-            ¿Cuántos están OK?
-          </Label>
-          <div className="mt-1 flex items-center gap-2">
-            <Input
-              id={idCantidad}
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={expectedNum}
-              value={sinResponder ? "" : st.cantidadOk ?? expectedNum}
-              onChange={(e) => {
-                const v = parseInt(e.target.value || "0", 10);
-                const clamped = Math.max(0, Math.min(expectedNum, Number.isNaN(v) ? 0 : v));
-                // Equipo contado: menos unidades = faltante (sigue OK). Funcionamiento (luces…): menos = falla.
-                cambiar({ ...st, cantidadOk: clamped, estado: clamped < expectedNum && !esInventario ? "FALLA" : "OK" });
-              }}
-              className="h-11 w-20 text-center text-base"
-            />
-            <span className="text-sm text-muted-foreground">de {expectedNum}</span>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11 shrink-0 px-3"
-              onClick={() => cambiar({ ...st, cantidadOk: expectedNum, estado: "OK" })}
-              aria-label={`Están los ${expectedNum} bien: ${item.descripcion}`}
-            >
-              Todos
-            </Button>
-            <div className="ml-auto">{botonObs}</div>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3 flex items-center gap-2">
-          <Label id={`${uid}-estado`} className="sr-only">
-            Estado
-          </Label>
-          <RadioGroup
-            value={sinResponder ? "" : st.estado}
-            aria-labelledby={`${idDescripcion} ${uid}-estado`}
-            onValueChange={(v) => cambiar({ ...st, estado: v as ChecklistEstado })}
-            className="grid flex-1 grid-cols-3 gap-2"
-          >
-            {[
-              { v: "OK", label: "OK" },
-              { v: "FALLA", label: "Falla" },
-              { v: "NO_APLICA", label: "N/A" },
-            ].map((opt) => (
-              <label key={opt.v} className="flex min-h-11 items-center gap-2 text-base">
-                <RadioGroupItem value={opt.v} />
-                <span>{opt.label}</span>
-              </label>
-            ))}
-          </RadioGroup>
-          {botonObs}
-        </div>
-      )}
-
-      <Dialog open={obsAbierta} onOpenChange={setObsAbierta}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{item.descripcion}</DialogTitle>
-            <DialogDescription>{enFalla ? "Describe la falla: se reporta sola como novedad." : "Observación opcional."}</DialogDescription>
-          </DialogHeader>
-          <Label htmlFor={idObservacion} className="sr-only">
-            Observación
-          </Label>
-          <Textarea
-            id={idObservacion}
-            autoFocus
-            rows={3}
-            value={borrador}
-            placeholder={enFalla ? fallaPlaceholder : "Opcional"}
-            onChange={(e) => setBorrador(e.target.value)}
-          />
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => setObsAbierta(false)}>
-              Cancelar
-            </Button>
-            <Button type="button" className="min-h-11" onClick={guardarObs} disabled={enFalla && !borrador.trim()}>
-              Guardar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {enFalla && onReportarNovedad && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-2 pl-1">
           <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={onReportarNovedad}>
             Reportar novedad de este ítem
           </Button>
         </div>
       )}
+
+      <Dialog open={abierta} onOpenChange={setAbierta}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{item.descripcion}</DialogTitle>
+            <DialogDescription>
+              {esConteo
+                ? "Dinos cuántos están bien y, si falta o falla algo, descríbelo."
+                : desdeFalla
+                  ? "Describe la falla: se reporta sola como novedad."
+                  : "Observación opcional."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {esConteo && (
+            <div className="flex items-center justify-center gap-4" role="group" aria-label="¿Cuántos están bien?">
+              <Button type="button" variant="outline" className="h-14 w-14" onClick={() => setCuantos((c) => Math.max(0, c - 1))} aria-label="Uno menos">
+                <Minus className="h-6 w-6" aria-hidden="true" />
+              </Button>
+              <p className="min-w-24 text-center text-2xl font-bold" aria-live="polite">
+                {cuantos} de {expectedNum}
+              </p>
+              <Button type="button" variant="outline" className="h-14 w-14" onClick={() => setCuantos((c) => Math.min(expectedNum, c + 1))} aria-label="Uno más">
+                <Plus className="h-6 w-6" aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+
+          <Label htmlFor={idObservacion} className="sr-only">
+            Observación
+          </Label>
+          <Textarea
+            id={idObservacion}
+            autoFocus={!esConteo}
+            rows={3}
+            value={borrador}
+            placeholder={textoRequerido ? fallaPlaceholder : "Opcional"}
+            onChange={(e) => setBorrador(e.target.value)}
+          />
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {!esConteo && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => {
+                  onChange({ ...st, estado: "NO_APLICA", observacion: borrador.trim() || undefined });
+                  setAbierta(false);
+                }}
+              >
+                No aplica
+              </Button>
+            )}
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => setAbierta(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" className="min-h-11" onClick={guardar} disabled={!puedeGuardar}>
+              Guardar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

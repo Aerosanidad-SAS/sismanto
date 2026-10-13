@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VehiculoConDocumentos } from "@/lib/vencimientos";
-import { ChecklistItemRow, agruparPorCategoria, checklistPayload, type ChecklistItem } from "./checklist-item-row";
+import { CabeceraTablaChecklist, ChecklistItemRow, agruparPorCategoria, checklistPayload, type ChecklistItem } from "./checklist-item-row";
 import { validarPreoperacional } from "@/lib/preoperacional";
 import { aplicaAlTipo } from "@/lib/checklist-tipo";
 import { cantidadEsperada, esItemDeInventario } from "@/lib/inventario-preop";
@@ -400,7 +400,7 @@ export function OvemPortal({
   }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo, selectedVehicle?.tipo_vehiculo]);
 
   // El ítem «Documentos (SOAT - Tecnicomecánica)» no se responde OK/Falla: se confirma leyendo los vencimientos en la tarjeta de documentos.
-  const itemDocumentos = useMemo(() => checklistFiltrado.find((it) => esItemDocumentos(it.descripcion)), [checklistFiltrado]);
+  const itemsDocumentos = useMemo(() => checklistFiltrado.filter((it) => esItemDocumentos(it.descripcion)), [checklistFiltrado]);
   const checklistItemsByCategoria = useMemo(
     () => agruparPorCategoria(checklistFiltrado.filter((it) => !esItemDocumentos(it.descripcion))),
     [checklistFiltrado]
@@ -783,14 +783,16 @@ export function OvemPortal({
           vehiculo={selectedVehicle}
           hoy={hoyBogota}
           esAeroportuario={String(selectedVehicle.centro_operativo ?? "").toUpperCase() === "AIRPLAN"}
-          confirmado={itemDocumentos ? Boolean(checkItemsState[itemDocumentos.id]) : undefined}
+          confirmado={itemsDocumentos.length > 0 ? itemsDocumentos.every((it) => Boolean(checkItemsState[it.id])) : undefined}
           onConfirmar={
-            itemDocumentos && viewerRole === "OVEM"
+            itemsDocumentos.length > 0 && viewerRole === "OVEM"
               ? (leido) =>
                   setCheckItemsState((prev) => {
                     const next = { ...prev };
-                    if (leido) next[itemDocumentos.id] = { estado: "OK" };
-                    else delete next[itemDocumentos.id];
+                    for (const it of itemsDocumentos) {
+                      if (leido) next[it.id] = { estado: "OK" };
+                      else delete next[it.id];
+                    }
                     return next;
                   })
               : undefined
@@ -938,7 +940,9 @@ export function OvemPortal({
                   <h3 className="text-sm font-semibold tracking-wide text-foreground">
                     {categoria.replaceAll("_", " ")}
                   </h3>
-                  <div className="space-y-2">
+                  {/* En el celular la tabla le quita el relleno a la tarjeta: cada píxel de ancho es una línea menos por ítem. */}
+                  <div className="-mx-3 sm:mx-0">
+                    <CabeceraTablaChecklist />
                     {items.map((it) => (
                       <ChecklistItemRow
                         key={it.id}

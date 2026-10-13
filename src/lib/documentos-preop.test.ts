@@ -20,3 +20,9 @@ test("el ítem de documentos del catálogo se reconoce; las luces internas lleva
   assert.match(detalleItem("Luces Internas") ?? "", /cabina/);
   assert.equal(detalleItem("Luces estacionarias"), null);
 });
+
+test("esItemDocumentos reconoce los dos ítems reales del catálogo", () => {
+  assert.equal(esItemDocumentos("Documento SOAT vigente"), true);
+  assert.equal(esItemDocumentos("Documento técnico-mecánica vigente"), true);
+  assert.equal(esItemDocumentos("Sticker Visible"), false);
+});
