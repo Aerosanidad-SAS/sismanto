@@ -1,10 +1,13 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
+import { Check, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { esItemDeInventario } from "@/lib/inventario-preop";
 
@@ -89,6 +92,42 @@ export function ChecklistItemRow({
   const esInventario = faltanteNoEsFalla && esItemDeInventario(item);
   const incompleto = esInventario && !sinResponder && st.estado === "OK" && (st.cantidadOk ?? expectedNum) < expectedNum;
 
+  // La observación vive en una hoja que se abre con un botón: nunca aparece un campo nuevo que empuje el resto de la lista.
+  const [obsAbierta, setObsAbierta] = useState(false);
+  const [borrador, setBorrador] = useState("");
+  const tieneObs = Boolean(st.observacion?.trim());
+  const obsFalta = enFalla && !tieneObs;
+  const abrirObs = () => {
+    setBorrador(st.observacion ?? "");
+    setObsAbierta(true);
+  };
+  /** Cambia la respuesta; si pasa a FALLA sin explicación, abre la hoja para describirla (la falla exige descripción). */
+  const cambiar = (next: ChecklistItemState) => {
+    onChange(next);
+    const pasoAFalla = next.estado === "FALLA" && (sinResponder || st.estado !== "FALLA");
+    if (pasoAFalla && !next.observacion?.trim()) {
+      setBorrador("");
+      setObsAbierta(true);
+    }
+  };
+  const guardarObs = () => {
+    onChange({ ...st, observacion: borrador.trim() || undefined });
+    setObsAbierta(false);
+  };
+  const botonObs = (
+    <Button
+      type="button"
+      variant={obsFalta ? "default" : "outline"}
+      className="min-h-11 shrink-0 gap-1.5 px-3"
+      disabled={sinResponder}
+      onClick={abrirObs}
+      aria-label={obsFalta ? `Describir la falla de ${item.descripcion}` : `Observación de ${item.descripcion}`}
+    >
+      {tieneObs ? <Check className="h-4 w-4" aria-hidden="true" /> : <MessageSquare className="h-4 w-4" aria-hidden="true" />}
+      {obsFalta ? "Describir" : tieneObs ? "Con obs." : "Obs."}
+    </Button>
+  );
+
   return (
     <div
       id={`checklist-item-${item.id}`}
@@ -99,15 +138,12 @@ export function ChecklistItemRow({
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p id={idDescripcion} className="text-sm font-medium text-foreground">
-            {item.descripcion}
-          </p>
-          <p className="text-xs text-muted-foreground">Esperado: {item.cantidad_esperada || "OK"}</p>
-        </div>
+        <p id={idDescripcion} className="min-w-0 text-base font-medium leading-snug text-foreground">
+          {item.descripcion}
+        </p>
         <span
           className={cn(
-            "text-xs font-semibold",
+            "shrink-0 text-xs font-semibold",
             enFalla ? "text-red-700" : incompleto || (sinResponder && resaltarPendiente) ? "text-foreground" : "text-muted-foreground"
           )}
         >
@@ -115,71 +151,93 @@ export function ChecklistItemRow({
         </span>
       </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
-        {isNumericQty ? (
-          <div className="space-y-2">
-            <Label htmlFor={idCantidad} className="text-xs">
-              ¿Cuántos están OK?
-            </Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id={idCantidad}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                max={expectedNum}
-                value={sinResponder ? "" : st.cantidadOk ?? expectedNum}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value || "0", 10);
-                  const clamped = Math.max(0, Math.min(expectedNum, Number.isNaN(v) ? 0 : v));
-                  // Equipo contado: menos unidades = faltante (sigue OK). Funcionamiento (luces…): menos = falla.
-                  onChange({ ...st, cantidadOk: clamped, estado: clamped < expectedNum && !esInventario ? "FALLA" : "OK" });
-                }}
-                className="w-28"
-              />
-              <span className="text-xs text-muted-foreground">de {expectedNum}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Label id={`${uid}-estado`} className="text-xs">
-              Estado
-            </Label>
-            <RadioGroup
-              value={sinResponder ? "" : st.estado}
-              aria-labelledby={`${idDescripcion} ${uid}-estado`}
-              onValueChange={(v) => onChange({ ...st, estado: v as ChecklistEstado })}
-              className="grid grid-cols-3 gap-3"
-            >
-              {[
-                { v: "OK", label: "OK" },
-                { v: "FALLA", label: "Falla" },
-                { v: "NO_APLICA", label: "N/A" },
-              ].map((opt) => (
-                <label key={opt.v} className="flex min-h-11 items-center gap-2 text-sm">
-                  <RadioGroupItem value={opt.v} />
-                  <span>{opt.label}</span>
-                </label>
-              ))}
-            </RadioGroup>
-          </div>
-        )}
-
-        {/* Sin responder no se pide observación: escribirla daría el ítem por contestado sin que lo sea. */}
-        {!sinResponder && (
-          <div className="space-y-2">
-            <Label htmlFor={idObservacion} className="text-xs">
-              Observación
-            </Label>
+      {isNumericQty ? (
+        <div className="mt-3">
+          <Label htmlFor={idCantidad} className="text-sm">
+            ¿Cuántos están OK?
+          </Label>
+          <div className="mt-1 flex items-center gap-2">
             <Input
-              id={idObservacion}
-              value={st.observacion ?? ""}
-              placeholder={enFalla ? fallaPlaceholder : "Opcional"}
-              onChange={(e) => onChange({ ...st, observacion: e.target.value })}
+              id={idCantidad}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={expectedNum}
+              value={sinResponder ? "" : st.cantidadOk ?? expectedNum}
+              onChange={(e) => {
+                const v = parseInt(e.target.value || "0", 10);
+                const clamped = Math.max(0, Math.min(expectedNum, Number.isNaN(v) ? 0 : v));
+                // Equipo contado: menos unidades = faltante (sigue OK). Funcionamiento (luces…): menos = falla.
+                cambiar({ ...st, cantidadOk: clamped, estado: clamped < expectedNum && !esInventario ? "FALLA" : "OK" });
+              }}
+              className="h-11 w-20 text-center text-base"
             />
+            <span className="text-sm text-muted-foreground">de {expectedNum}</span>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 shrink-0 px-3"
+              onClick={() => cambiar({ ...st, cantidadOk: expectedNum, estado: "OK" })}
+              aria-label={`Están los ${expectedNum} bien: ${item.descripcion}`}
+            >
+              Todos
+            </Button>
+            <div className="ml-auto">{botonObs}</div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-2">
+          <Label id={`${uid}-estado`} className="sr-only">
+            Estado
+          </Label>
+          <RadioGroup
+            value={sinResponder ? "" : st.estado}
+            aria-labelledby={`${idDescripcion} ${uid}-estado`}
+            onValueChange={(v) => cambiar({ ...st, estado: v as ChecklistEstado })}
+            className="grid flex-1 grid-cols-3 gap-2"
+          >
+            {[
+              { v: "OK", label: "OK" },
+              { v: "FALLA", label: "Falla" },
+              { v: "NO_APLICA", label: "N/A" },
+            ].map((opt) => (
+              <label key={opt.v} className="flex min-h-11 items-center gap-2 text-base">
+                <RadioGroupItem value={opt.v} />
+                <span>{opt.label}</span>
+              </label>
+            ))}
+          </RadioGroup>
+          {botonObs}
+        </div>
+      )}
+
+      <Dialog open={obsAbierta} onOpenChange={setObsAbierta}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{item.descripcion}</DialogTitle>
+            <DialogDescription>{enFalla ? "Describe la falla: se reporta sola como novedad." : "Observación opcional."}</DialogDescription>
+          </DialogHeader>
+          <Label htmlFor={idObservacion} className="sr-only">
+            Observación
+          </Label>
+          <Textarea
+            id={idObservacion}
+            autoFocus
+            rows={3}
+            value={borrador}
+            placeholder={enFalla ? fallaPlaceholder : "Opcional"}
+            onChange={(e) => setBorrador(e.target.value)}
+          />
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => setObsAbierta(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" className="min-h-11" onClick={guardarObs} disabled={enFalla && !borrador.trim()}>
+              Guardar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {enFalla && onReportarNovedad && (
         <div className="mt-3 flex flex-wrap gap-2">
