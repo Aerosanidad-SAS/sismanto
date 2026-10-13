@@ -18,7 +18,7 @@ import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
 import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
-import { ETAPAS_QUE_CHOCAN, filtroRecursos, motivosDeChoque, ventanaChoque, type RecursosServicio, type ServicioEnChoque } from "@/lib/servicios-choque";
+import { errorDeCambioEtapa } from "@/lib/servicios-etapas";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -486,15 +486,20 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
  * el UPDATE incluye la etapa actual esperada en el WHERE, así dos usuarios
  * simultáneos no pisan la transición del otro. No valida una transición
  * específica (ver nota arriba de PLANTILLA_POR_ETAPA) — cualquier etapa
- * destino válida es aceptada, igual que en SISRES.
+ * destino válida es aceptada, con dos reglas de Regulación (QA 2026-10-10, E1/E2, ver `servicios-etapas`): las etapas
+ * negativas piden `motivo` (queda en la bitácora) y sacar un servicio de FINALIZADO o CANCELADO solo lo hace un ADMIN.
  */
-export async function cambiarEtapaServicio(id: number, etapaActual: string, etapaNueva: string) {
+export async function cambiarEtapaServicio(id: number, etapaActual: string, etapaNueva: string, motivo?: string) {
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
 
   const actual = ETAPAS_SERVICIO.find((e) => e === etapaActual);
   const nueva = ETAPAS_SERVICIO.find((e) => e === etapaNueva);
   if (!actual || !nueva) return { error: "Etapa inválida" };
+
+  const perfil = await getProfile();
+  const errorEtapa = errorDeCambioEtapa(actual, nueva, perfil?.role_codigo, motivo);
+  if (errorEtapa) return { error: errorEtapa };
 
   const supabase = createClient();
   // Como en SISRES: no se finaliza un servicio sin la llegada y salida de cada tramo que su tipo exige (ensuciaría los
@@ -526,7 +531,7 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
-  await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}`);
+  await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}${motivo?.trim() ? `. Motivo: ${motivo.trim()}` : ""}`);
   revalidatePath("/servicios");
   return { success: true };
 }
