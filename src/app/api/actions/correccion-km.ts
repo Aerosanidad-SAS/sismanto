@@ -3,15 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
-import { validarKmEnLinea, type LecturaKm, type OrigenLectura } from "@/lib/kilometraje";
+import type { OrigenLectura } from "@/lib/kilometraje";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "./auth";
 
 /**
  * Corrección de lecturas de kilometraje por el ADMIN. El km solo avanza (trigger de `mileage_logs` y regla del portal OVEM),
- * así que un número mal digitado queda como tope y bloquea todo lo posterior. Aquí el ADMIN lo corrige: se cambia el valor
- * en todas las filas de ese día que lo repiten (odómetro, tanqueo, preoperacional) y se recalcula `vehicles.km_actual`.
- * Todo queda en la auditoría con el motivo.
+ * así que un número mal digitado queda como tope y bloquea todo lo posterior. Aquí el ADMIN lo corrige: la función SQL
+ * `corregir_lectura_km` (migración 128) cambia el valor en todas las filas de ese día que lo repiten (odómetro, tanqueo,
+ * preoperacional) y recalcula `vehicles.km_actual`, en una sola transacción. Queda en la auditoría con el motivo.
  */
 
 export interface LecturaListada {
@@ -78,8 +79,11 @@ export async function listarLecturasKm(vehicleId: string): Promise<{ lecturas: L
 
 const correccionSchema = z.object({
   vehicleId: z.string().uuid("Vehículo inválido"),
-  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
-  kmActual: z.number().int().positive(),
+  fecha: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida")
+    .refine((f) => new Date(`${f}T00:00:00Z`).toISOString().slice(0, 10) === f, "Fecha inválida"),
+  kmActual: z.number().int().positive().max(2_000_000),
   kmNuevo: z.number().int().positive("El kilometraje nuevo debe ser mayor a cero").max(2_000_000, "El kilometraje es demasiado alto"),
   motivo: z.string().trim().min(5, "Escribe el motivo de la corrección (mínimo 5 caracteres)").max(300),
 });
@@ -91,69 +95,23 @@ export async function corregirLecturaKm(input: z.infer<typeof correccionSchema>)
   const { vehicleId, fecha, kmActual, kmNuevo, motivo } = parsed.data;
   if (kmActual === kmNuevo) return { error: "El kilometraje nuevo es igual al actual." };
 
-  const admin = createAdminClient() as any;
   try {
-    const t = await leerTodas(vehicleId);
-    const todas = aLecturas(t);
-    if (!todas.some((l) => l.fecha === fecha && l.km === kmActual)) return { error: "Esa lectura ya cambió. Recarga la lista." };
-
-    // El valor nuevo tiene que encajar con el resto de la línea de tiempo (sin contar las filas que se van a corregir).
-    const otras: LecturaKm[] = todas.filter((l) => !(l.fecha === fecha && l.km === kmActual)).map((l) => ({ fecha: l.fecha, km: l.km, origen: l.origen }));
-    const errorLinea = validarKmEnLinea(kmNuevo, fecha, otras);
-    if (errorLinea) return { error: errorLinea };
-
-    let filas = 0;
-    // 1) Odómetro (primero: el trigger de preoperacional lo compara con GREATEST).
-    {
-      const { data, error } = await admin
-        .from("mileage_logs")
-        .update({ lectura_kilometraje: kmNuevo })
-        .eq("vehicle_id", vehicleId)
-        .eq("fecha", fecha)
-        .eq("lectura_kilometraje", kmActual)
-        .select("fecha");
-      if (error) return { error: error.message };
-      filas += (data ?? []).length;
+    // Todo el cambio ocurre en UNA transacción dentro de la base (migración 128): valida contra la línea de tiempo, corrige las
+    // filas del día en las tres tablas y recalcula vehicles.km_actual. Se llama con la sesión del ADMIN (no con la clave de
+    // servicio): la función comprueba el rol con get_user_role().
+    const supabase = createClient() as any;
+    const { data, error } = await supabase.rpc("corregir_lectura_km", {
+      p_vehicle_id: vehicleId,
+      p_fecha: fecha,
+      p_km_actual: kmActual,
+      p_km_nuevo: kmNuevo,
+    });
+    if (error) {
+      console.error("[correccion-km] la base rechazó la corrección:", error.code, error.message);
+      // Los RAISE EXCEPTION de la función están escritos para el usuario; cualquier otro error va genérico.
+      return { error: error.code === "P0001" ? error.message : "No se pudo corregir el kilometraje. Inténtalo de nuevo." };
     }
-    // 2) Tanqueos del día con ese valor.
-    {
-      const { data, error } = await admin
-        .from("fuel_logs")
-        .update({ kilometraje: kmNuevo })
-        .eq("vehicle_id", vehicleId)
-        .eq("fecha", fecha)
-        .eq("kilometraje", kmActual)
-        .select("id");
-      if (error) return { error: error.message };
-      filas += (data ?? []).length;
-    }
-    // 3) Preoperacionales del día: inicial y final juntos (la base exige final >= inicial).
-    for (const r of t.preop.filter((x) => String(x.fecha) === fecha)) {
-      const ini = Number(r.kilometraje_inicial);
-      const fin = Number(r.kilometraje_final);
-      if (ini !== kmActual && fin !== kmActual) continue;
-      const cambios = {
-        kilometraje_inicial: ini === kmActual ? kmNuevo : r.kilometraje_inicial,
-        kilometraje_final: fin === kmActual ? kmNuevo : r.kilometraje_final,
-      };
-      const { error } = await admin.from("daily_checks").update(cambios).eq("id", r.id);
-      if (error) return { error: error.message };
-      filas++;
-    }
-    if (filas === 0) return { error: "No se encontró ninguna fila para corregir." };
-
-    // 4) `km_actual` solo sube por trigger: se recalcula desde el odómetro para que baje si hacía falta.
-    const { data: mayor } = await admin
-      .from("mileage_logs")
-      .select("fecha, lectura_kilometraje")
-      .eq("vehicle_id", vehicleId)
-      .order("lectura_kilometraje", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    await admin
-      .from("vehicles")
-      .update({ km_actual: mayor?.lectura_kilometraje ?? null, fecha_km_actual: mayor?.fecha ?? null })
-      .eq("id", vehicleId);
+    const filas = Number(data) || 0;
 
     await auditar(
       "MODIFICAR",
