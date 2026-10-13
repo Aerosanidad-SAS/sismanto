@@ -440,7 +440,7 @@ export function OvemPortal({
     }
     const evalKm = evaluarKilometraje(kmNumero, ultimoKm);
     if (evalKm.nivel === "menor" && evalKm.mensaje) {
-      setError(`Kilometraje: ${evalKm.mensaje}`);
+      fallaKm(evalKm.mensaje);
       return;
     }
     if (resumen.sinResponder > 0) {
