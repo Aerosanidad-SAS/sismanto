@@ -25,6 +25,8 @@ export async function createIncident(data: IncidentFormData) {
     // sistema lo hace (y avisa de inmediato). Cualquier otra cosa queda como novedad para que Regulación o
     // Mantenimiento decidan. Los demás roles conservan su criterio.
     const perfil = await getProfile();
+    // Quien reporta lo fija la sesión, no el formulario: el campo es editable en el cliente y se podría firmar a nombre de otro.
+    const reportadoPor = perfil?.nombre_completo || perfil?.email || payload.reportadoPor;
     const afectaOperatividad = perfil?.role_codigo === "OVEM" ? payload.afectaOperatividad && esDescripcionCritica(payload.descripcion) : payload.afectaOperatividad;
     const { data: incident, error } = await supabase
       .from("incidents")
@@ -32,7 +34,7 @@ export async function createIncident(data: IncidentFormData) {
         vehicle_id: payload.vehicleId,
         descripcion: payload.descripcion,
         severidad,
-        reportado_por: payload.reportadoPor,
+        reportado_por: reportadoPor,
         afecta_operatividad: afectaOperatividad,
         estado: "ABIERTO",
       })
@@ -45,7 +47,7 @@ export async function createIncident(data: IncidentFormData) {
 
     // El trigger de la BD actualizará el estado del vehículo si afecta_operatividad = true
     if (afectaOperatividad) {
-      await avisarVehiculoNoApto(supabase, { vehicleId: payload.vehicleId, hallazgos: [payload.descripcion], reportadoPor: payload.reportadoPor });
+      await avisarVehiculoNoApto(supabase, { vehicleId: payload.vehicleId, hallazgos: [payload.descripcion], reportadoPor });
     }
 
     await auditar("INSERTAR", "novedades", (incident as unknown as { id: number }).id, `Novedad reportada (severidad ${severidad})`);
@@ -106,14 +108,24 @@ export async function closeIncident(
     cerrado_por: profile.user_id,
   };
 
+  const { data: novedad } = await supabase.from("incidents").select("estado, vehicle_id").eq("id", idParsed.data).maybeSingle();
+  if (!novedad) return { error: "Novedad no encontrada" };
+  if ((novedad as { estado: string }).estado !== "ABIERTO") return { error: "Esta novedad ya está cerrada" };
+
   if ("mantenimientoId" in payload) {
     const mantParsed = z.number().int().positive().safeParse(payload.mantenimientoId);
     if (!mantParsed.success) return { error: "Mantenimiento inválido" };
 
+    const { data: mant } = await supabase.from("maintenance_records").select("vehicle_id").eq("id_manto", mantParsed.data).maybeSingle();
+    if (!mant || (mant as { vehicle_id: string }).vehicle_id !== (novedad as { vehicle_id: string }).vehicle_id) {
+      return { error: "Ese mantenimiento no es del mismo vehículo de la novedad" };
+    }
+
     const { error } = await supabase
       .from("incidents")
       .update({ ...base, mantenimiento_cierre_id: mantParsed.data })
-      .eq("id", idParsed.data);
+      .eq("id", idParsed.data)
+      .eq("estado", "ABIERTO");
     if (error) return { error: error.message };
   } else {
     const nota = payload.notaCierre.trim();
@@ -122,7 +134,8 @@ export async function closeIncident(
     const { error } = await supabase
       .from("incidents")
       .update({ ...base, nota_cierre: nota })
-      .eq("id", idParsed.data);
+      .eq("id", idParsed.data)
+      .eq("estado", "ABIERTO");
     if (error) return { error: error.message };
   }
 
