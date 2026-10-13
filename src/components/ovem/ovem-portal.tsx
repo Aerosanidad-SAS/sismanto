@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ClipboardCheck,
+  Clock,
   ArrowLeft,
   Ambulance,
   Fuel,
@@ -89,6 +90,14 @@ interface OvemPortalProps {
   vehiculosDeHoy?: string[];
   /** Último kilometraje conocido por vehículo, para la ayuda y el aviso al digitar. */
   ultimoKmPorVehiculo?: Record<string, number>;
+  /** Lo que este conductor ya hizo hoy (el menú lo muestra); `at` es un instante ISO. */
+  estadoHoy?: EstadoHoy | null;
+}
+
+export interface EstadoHoy {
+  /** `at` null: se sabe que se envió pero no a qué hora. */
+  preoperacional: { placa: string; at: string | null } | null;
+  cierre: { placa: string; at: string } | null;
 }
 
 type Flow = null | "preoperacional" | "combustible" | "novedad" | "siniestro" | "servicios" | "cierre";
@@ -164,6 +173,7 @@ export function OvemPortal({
   servicios = SIN_SERVICIOS,
   vehiculosDeHoy = SIN_VEHICULOS_DE_HOY,
   ultimoKmPorVehiculo = SIN_KM,
+  estadoHoy = null,
 }: OvemPortalProps) {
   const router = useRouter();
   const serviciosActivos = useMemo(
@@ -513,6 +523,27 @@ export function OvemPortal({
     setFlow(f);
   };
 
+  /** Estado del día de las dos acciones que no se pueden olvidar: el preoperacional y el cierre del turno. */
+  const estadoDeAccion = (f: Exclude<Flow, null>): { texto: string; hecho: boolean } | null => {
+    // Sin dato (consulta fallida) no se afirma nada: la tarjeta cae a su texto normal.
+    if (viewerRole !== "OVEM" || !estadoHoy) return null;
+    const lugar = (placa: string) => (placa ? ` · ${placa}` : "");
+    if (f === "preoperacional") {
+      const p = estadoHoy.preoperacional;
+      return p
+        ? { texto: `Enviado${p.at ? ` ${horaCorta(new Date(p.at))}` : ""}${lugar(p.placa)}`, hecho: true }
+        : { texto: "Pendiente de hoy", hecho: false };
+    }
+    if (f === "cierre") {
+      const { preoperacional: p, cierre: c } = estadoHoy;
+      // Cerrar el vehículo A y empezar después el preoperacional del B deja un turno abierto: el cierre solo vale si es posterior.
+      const cierreVigente = c && !(p?.at && new Date(p.at).getTime() > new Date(c.at).getTime());
+      if (c && cierreVigente) return { texto: `Cerrado ${horaCorta(new Date(c.at))}${lugar(c.placa)}`, hecho: true };
+      return { texto: p ? "Turno abierto" : "Turno sin iniciar", hecho: false };
+    }
+    return null;
+  };
+
   const acciones: Array<{ flow: Exclude<Flow, null>; icon: typeof Ambulance; titulo: string; detalle: string }> = [
     ...(viewerRole === "OVEM"
       ? [
@@ -546,11 +577,12 @@ export function OvemPortal({
   /** Hora de la última actualización, aviso de servicio nuevo y botón manual (solo para el OVEM, en el menú y «Mis servicios»). */
   const barraActualizacion = refrescarServicios && (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
+      {/* La hora va encima del botón que la renueva, no en el otro extremo de la fila. */}
+      <div className="flex flex-col items-stretch gap-1 sm:items-end">
+        <p className="text-center text-sm text-muted-foreground sm:text-right">
           {actualizado ? `Actualizado ${horaCorta(actualizado)}` : "Se actualiza cada 30 segundos"}
         </p>
-        <Button type="button" variant="ghost" size="sm" className="min-h-11 gap-2" onClick={refrescarAhora}>
+        <Button type="button" variant="outline" className="min-h-11 gap-2 sm:w-auto" onClick={refrescarAhora}>
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
           Actualizar
         </Button>
@@ -588,7 +620,9 @@ export function OvemPortal({
             <CardTitle>¿Qué vas a hacer?</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            {acciones.map(({ flow: f, icon: Icon, titulo, detalle }) => (
+            {acciones.map(({ flow: f, icon: Icon, titulo, detalle }) => {
+              const estado = estadoDeAccion(f);
+              return (
               <Button
                 key={f}
                 className={cn(
@@ -601,17 +635,35 @@ export function OvemPortal({
               >
                 <Icon className={cn("h-7 w-7 sm:h-8 sm:w-8", f === "siniestro" && "text-red-600")} />
                 <span className="whitespace-normal text-center text-sm font-semibold sm:text-base">{titulo}</span>
-                {/* En el celular solo queda el conteo de servicios; el resto es obvio por el título. */}
-                <span
-                  className={cn(
-                    "whitespace-normal text-center text-xs font-normal text-muted-foreground",
-                    f === "servicios" ? "block" : "hidden sm:block"
-                  )}
-                >
-                  {detalle}
-                </span>
+                {estado ? (
+                  // Texto + ícono, nunca solo color: se lee al sol y sin distinguir colores.
+                  <span
+                    className={cn(
+                      "flex items-center gap-1 whitespace-normal text-center text-xs font-medium",
+                      estado.hecho ? "text-success" : "text-foreground"
+                    )}
+                  >
+                    {estado.hecho ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    )}
+                    {estado.texto}
+                  </span>
+                ) : (
+                  /* En el celular solo queda el conteo de servicios; el resto es obvio por el título. */
+                  <span
+                    className={cn(
+                      "whitespace-normal text-center text-xs font-normal text-muted-foreground",
+                      f === "servicios" ? "block" : "hidden sm:block"
+                    )}
+                  >
+                    {detalle}
+                  </span>
+                )}
               </Button>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -640,11 +692,13 @@ export function OvemPortal({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button type="button" variant="ghost" onClick={pedirVolver} className="h-11 gap-2">
-          <ArrowLeft className="h-4 w-4" />
+        <Button type="button" variant="outline" onClick={pedirVolver} className="h-11 gap-2">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Volver
         </Button>
-        <p className="text-sm text-muted-foreground">{(viewerRole !== "OVEM" && FLOW_LABEL_ADMIN[flow]) || FLOW_LABEL[flow]}</p>
+        <h2 className="text-lg font-semibold leading-tight text-foreground">
+          {(viewerRole !== "OVEM" && FLOW_LABEL_ADMIN[flow]) || FLOW_LABEL[flow]}
+        </h2>
       </div>
 
       {flow === "servicios" && (
