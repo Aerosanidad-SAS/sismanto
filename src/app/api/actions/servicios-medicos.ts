@@ -19,6 +19,7 @@ import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
 import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
+import { errorDeCambioEtapa } from "@/lib/servicios-etapas";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -342,7 +343,40 @@ function normalizarCiudadRegistro(datos: { ciudad_registro?: string }): string |
   return null;
 }
 
-export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
+/**
+ * Servicios abiertos que chocan con el que se va a guardar: misma ventana de tiempo y el mismo vehículo o la misma
+ * persona de la tripulación. Sin fecha de programación o sin ningún recurso asignado no hay con qué chocar.
+ */
+async function buscarChoques(
+  supabase: ReturnType<typeof createClient>,
+  fila: Record<string, unknown>,
+  excluirId?: number
+): Promise<ServicioEnChoque[]> {
+  const nuevo = fila as RecursosServicio & { fecha_hora_programacion?: string | null };
+  const ventana = nuevo.fecha_hora_programacion ? ventanaChoque(nuevo.fecha_hora_programacion) : null;
+  const filtro = filtroRecursos(nuevo);
+  if (!ventana || !filtro) return [];
+
+  let consulta = supabase
+    .from("medical_services")
+    .select("id, nombre_completo, fecha_hora_programacion, vehicle_id, ovem_user_id, medico_user_id, auxiliar_user_id")
+    .in("etapa", [...ETAPAS_QUE_CHOCAN])
+    .gte("fecha_hora_programacion", ventana.desde)
+    .lte("fecha_hora_programacion", ventana.hasta)
+    .or(filtro)
+    .limit(10);
+  if (excluirId) consulta = consulta.neq("id", excluirId);
+  const { data } = await consulta;
+
+  return ((data ?? []) as (RecursosServicio & { id: number; nombre_completo: string; fecha_hora_programacion: string })[]).map((o) => ({
+    id: o.id,
+    nombre_completo: o.nombre_completo,
+    fecha_hora_programacion: o.fecha_hora_programacion,
+    motivos: motivosDeChoque(nuevo, o),
+  }));
+}
+
+export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string, confirmarChoque = false) {
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const errorCiudad = normalizarCiudadRegistro(parsed.data);
@@ -366,6 +400,11 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
     return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
   }
+  // Aviso (no bloqueo) si otro servicio abierto usa el mismo vehículo o tripulante a esa hora: Regulación lo confirma.
+  if (!confirmarChoque && (ETAPAS_QUE_CHOCAN as readonly string[]).includes(etapa)) {
+    const choque = await buscarChoques(supabase, fila);
+    if (choque.length > 0) return { choque };
+  }
 
   const { data, error } = await supabase
     .from("medical_services")
@@ -384,7 +423,7 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   return { success: true, data };
 }
 
-export async function actualizarServicioMedico(id: number, formData: MedicalServiceFormData) {
+export async function actualizarServicioMedico(id: number, formData: MedicalServiceFormData, confirmarChoque = false) {
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
 
@@ -407,19 +446,26 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
     const falta = mensajeFaltantesParaFinalizar(parsed.data.tipo_servicio, parsed.data);
     if (falta) return { error: falta };
   }
+  const rol = (await getProfile())?.role_codigo;
+  const esMedicoAux = rol === "MEDICO" || rol === "AUXILIAR_ENFERMERIA";
   const fila = aFilaServicio(parsed.data);
   // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
   // asignado a un servicio — tampoco al editar uno que ya lo tenía.
-  if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
+  if (!esMedicoAux && fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
     return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
+  }
+  // Mismo aviso que al crear; el servicio que se edita no choca consigo mismo.
+  if (!confirmarChoque && actual && (ETAPAS_QUE_CHOCAN as readonly string[]).includes(actual.etapa)) {
+    const choque = await buscarChoques(supabase, fila, idParsed.data);
+    if (choque.length > 0) return { choque };
   }
   // Solo el vehículo redefine el centro al editar: sin vehículo se conserva
   // el que ya tenía, no el de quien edita.
-  const centro = fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
+  const centro = !esMedicoAux && fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
   const { data, error } = await supabase
     .from("medical_services")
     .update({
-      ...fila,
+      ...filaDeActualizacion(fila, esMedicoAux),
       ...(centro !== null ? { operational_center_id: centro } : {}),
       updated_at: new Date().toISOString(),
     })
@@ -443,15 +489,20 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
  * el UPDATE incluye la etapa actual esperada en el WHERE, así dos usuarios
  * simultáneos no pisan la transición del otro. No valida una transición
  * específica (ver nota arriba de PLANTILLA_POR_ETAPA) — cualquier etapa
- * destino válida es aceptada, igual que en SISRES.
+ * destino válida es aceptada, con dos reglas de Regulación (QA 2026-10-10, E1/E2, ver `servicios-etapas`): las etapas
+ * negativas piden `motivo` (queda en la bitácora) y sacar un servicio de FINALIZADO o CANCELADO solo lo hace un ADMIN.
  */
-export async function cambiarEtapaServicio(id: number, etapaActual: string, etapaNueva: string) {
+export async function cambiarEtapaServicio(id: number, etapaActual: string, etapaNueva: string, motivo?: string) {
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
 
   const actual = ETAPAS_SERVICIO.find((e) => e === etapaActual);
   const nueva = ETAPAS_SERVICIO.find((e) => e === etapaNueva);
   if (!actual || !nueva) return { error: "Etapa inválida" };
+
+  const perfil = await getProfile();
+  const errorEtapa = errorDeCambioEtapa(actual, nueva, perfil?.role_codigo, motivo);
+  if (errorEtapa) return { error: errorEtapa };
 
   const supabase = createClient();
   // Como en SISRES: no se finaliza un servicio sin la llegada y salida de cada tramo que su tipo exige (ensuciaría los
@@ -483,7 +534,7 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
-  await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}`);
+  await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}${motivo?.trim() ? `. Motivo: ${motivo.trim()}` : ""}`);
   revalidatePath("/servicios");
   return { success: true };
 }

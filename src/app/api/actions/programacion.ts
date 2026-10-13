@@ -110,12 +110,28 @@ export async function setTitulares(vehicleId: string, userIds: string[]) {
       : await supabase.from("vehicle_titulares").update({ hasta: ayer }).eq("id", t.id);
     if (error) return { error: error.message };
   }
+  // Una persona es titular de un solo vehículo (QA-REG5, B2): si alguno de estos conductores ya es titular de OTRO, se le
+  // retira de ahí, igual que el cambio del día ya lo mueve. El vehículo de origen conserva a su otro titular, si lo tiene.
+  const { data: enOtros } = await supabase
+    .from("vehicle_titulares")
+    .select("id, user_id, desde, vehicle_id")
+    .in("user_id", userIds)
+    .neq("vehicle_id", vehicleId)
+    .is("hasta", null);
+  for (const t of (enOtros ?? []) as Fila[]) {
+    const { error: errMovido } = t.desde >= hoy
+      ? await supabase.from("vehicle_titulares").delete().eq("id", t.id)
+      : await supabase.from("vehicle_titulares").update({ hasta: ayer }).eq("id", t.id);
+    if (errMovido) return { error: errMovido.message };
+  }
+
   const { error } = await supabase.from("vehicle_titulares").insert(
     userIds.map((user_id, i) => ({ vehicle_id: vehicleId, user_id, posicion: i + 1, desde: hoy, asignado_por: profile.user_id })),
   );
   if (error) return { error: error.message };
 
-  await auditar("MODIFICAR", "regulacion", vehicleId, "Conductores titulares: " + userIds.length);
+  const movidos = (enOtros ?? []).length;
+  await auditar("MODIFICAR", "regulacion", vehicleId, "Conductores titulares: " + userIds.length + (movidos > 0 ? ` (${movidos} movido(s) desde otro vehículo)` : ""));
   revalidatePath("/regulacion");
   return { success: true };
 }

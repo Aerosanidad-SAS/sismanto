@@ -132,6 +132,9 @@ export default async function ServiciosPage(
         <AvisosServicios etapasVisibles={etapasVisibles} />
       </div>
 
+      {/* Lo primero que se ve: cómo va el día. Después, los filtros y la lista. */}
+      <ResumenOperativo inicial={resumenHoy} ciudad={filtros.ciudad ?? ""} />
+
       {mostrarMisServicios && (
         <div>
           <h2 className="text-xl mb-3">{profile?.role_codigo === "ADMIN" ? "Servicios programados y en curso" : "Mis servicios asignados"}</h2>
