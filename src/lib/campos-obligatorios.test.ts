@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { camposFaltantes, conAsterisco, esModuloCampos, filtrarConocidos, mensajeFaltantes } from "./campos-obligatorios";
-import { clientSchema, patientSchema } from "./validations";
+import { clientSchema, patientFieldsSchema } from "./validations";
 import { MODULOS_CAMPOS } from "./campos-obligatorios";
 
 describe("camposFaltantes", () => {
@@ -34,7 +34,7 @@ describe("mensajes", () => {
 
 describe("catálogo de pacientes", () => {
   it("solo trae campos que existen en el esquema y que el esquema NO exige ya", () => {
-    const forma = patientSchema.shape as Record<string, { isOptional: () => boolean }>;
+    const forma = patientFieldsSchema.shape as Record<string, { isOptional: () => boolean }>;
     for (const campo of ["nombre2", "apellido2", "fecha_nacimiento", "sexo", "rh", "estatura", "departamento", "ciudad", "direccion", "barrio", "localidad", "eps", "celular", "correo"]) {
       assert.ok(forma[campo], `${campo} no está en patientSchema`);
       assert.equal(forma[campo].isOptional(), true, `${campo} ya es obligatorio en el esquema`);
