@@ -72,6 +72,7 @@ import { toast } from "@/components/ui/toaster";
 import { errorDeCambioEtapa, esEtapaCerrada, esEtapaNegativa, MOTIVO_MAX, puedeReabrir } from "@/lib/servicios-etapas";
 import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
 import { textoChoque, type ServicioEnChoque } from "@/lib/servicios-choque";
+import { CAMPOS_CLINICOS_MEDICO_AUX as CAMPOS_CLINICOS_LISTA } from "@/lib/servicios-actualizacion";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 // Casi todos los servicios nacen programados: las demás etapas solo se eligen al registrar uno que ya ocurrió.

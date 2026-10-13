@@ -21,6 +21,15 @@ import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servic
 import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
 import { errorDeCambioEtapa } from "@/lib/servicios-etapas";
 import {
+  ETAPAS_QUE_CHOCAN,
+  filtroRecursos,
+  motivosDeChoque,
+  ventanaChoque,
+  type RecursosServicio,
+  type ServicioEnChoque,
+} from "@/lib/servicios-choque";
+import { filaDeActualizacion } from "@/lib/servicios-actualizacion";
+import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
   prefijoCiudad,
