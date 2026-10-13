@@ -443,10 +443,12 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
     const falta = mensajeFaltantesParaFinalizar(parsed.data.tipo_servicio, parsed.data);
     if (falta) return { error: falta };
   }
+  const rol = (await getProfile())?.role_codigo;
+  const esMedicoAux = rol === "MEDICO" || rol === "AUXILIAR_ENFERMERIA";
   const fila = aFilaServicio(parsed.data);
   // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
   // asignado a un servicio — tampoco al editar uno que ya lo tenía.
-  if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
+  if (!esMedicoAux && fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
     return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
   }
   // Mismo aviso que al crear; el servicio que se edita no choca consigo mismo.
@@ -456,11 +458,11 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   }
   // Solo el vehículo redefine el centro al editar: sin vehículo se conserva
   // el que ya tenía, no el de quien edita.
-  const centro = fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
+  const centro = !esMedicoAux && fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
   const { data, error } = await supabase
     .from("medical_services")
     .update({
-      ...fila,
+      ...filaDeActualizacion(fila, esMedicoAux),
       ...(centro !== null ? { operational_center_id: centro } : {}),
       updated_at: new Date().toISOString(),
     })

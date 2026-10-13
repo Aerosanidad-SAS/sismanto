@@ -243,17 +243,7 @@ const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p
 // móvil, tripulación, ruta, facturación...) queda bloqueado, igual que
 // editarServicio.php en SISRES (Ronda 2, pregunta 4: "$esMedicoAux" bloquea
 // campos de logística con readonly/campo-bloqueado, no oculta secciones).
-const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>([
-  "cie_codigo",
-  "requiere_aislamiento",
-  "finalidad_traslado",
-  "acepta_ips",
-  "novedad_servicio",
-  "observaciones",
-  "motivo_externo",
-  "motivo_interno",
-  "estado_servicio",
-]);
+const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>(CAMPOS_CLINICOS_LISTA);
 
 export function ServiciosTabla({
   servicios,

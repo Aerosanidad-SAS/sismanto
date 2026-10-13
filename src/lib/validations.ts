@@ -3,6 +3,7 @@ import { esDia } from '@/lib/fechas';
 import { validarObligatoriosSiniestro } from '@/lib/siniestro-datos';
 import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 import { TIPOS_MANTENIMIENTO_BIOMEDICO } from '@/lib/biomedico-fechas';
+import { errorDeDocumento, mensajeCelular, normalizarCelularColombia, normalizarDocumento } from '@/lib/documento-colombia';
 
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
@@ -28,7 +29,7 @@ export type MaintenanceFormData = z.infer<typeof maintenanceSchema>;
 // Schema de validación para incidente/novedad (severidad opcional si el reporter no la define; servidor usa MEDIA)
 export const incidentSchema = z.object({
   vehicleId: z.string().uuid('ID de vehículo inválido'),
-  descripcion: z.string().min(10, 'Mínimo 10 caracteres'),
+  descripcion: z.string().min(10, 'Mínimo 10 caracteres').max(2000, 'Máximo 2000 caracteres'),
   severidad: z.enum(['BAJA', 'MEDIA', 'ALTA']).optional(),
   reportadoPor: z.string().min(3, 'Mínimo 3 caracteres'),
   afectaOperatividad: z.boolean().default(false),
@@ -554,8 +555,22 @@ export const SEXO_OPCIONES = ["HOMBRE", "MUJER", "NO BINARIO", "TRANSGENERO", "T
 
 export const RH_OPCIONES = ["A+", "A-", "O+", "O-", "B+", "B-", "AB+", "AB-"] as const;
 
-export const patientSchema = z.object({
-  cedula: z.string().trim().min(4, "Documento inválido").max(20),
+/** Celular opcional: el formato colombiano se valida en `patientSchema` (ver `documento-colombia.ts`). */
+const optCelular = z
+  .string()
+  .trim()
+  .max(25, "El celular es demasiado largo")
+  .optional()
+  .or(z.literal(""))
+  .transform((v) => (v ? v : undefined));
+
+/** Los campos del paciente, sin las reglas que cruzan varios (esas están en `patientSchema`). */
+export const patientFieldsSchema = z.object({
+  cedula: z
+    .string()
+    .trim()
+    .min(1, "Escribe el número de documento")
+    .max(25, "El documento es demasiado largo"),
   tipo_documento: z.enum(TIPOS_DOCUMENTO, { errorMap: () => ({ message: "Selecciona un tipo de documento válido" }) }),
   nombre1: z.string().trim().min(2, "Nombre requerido").max(60),
   nombre2: optStr,
@@ -571,9 +586,65 @@ export const patientSchema = z.object({
   sexo: optStr,
   estatura: optStr,
   eps: optStr,
-  celular: optStr,
+  celular: optCelular,
   correo: z.string().trim().email("Correo inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
 });
+
+/** Lo que un paciente ya tiene guardado: al editarlo, lo que no cambió no se vuelve a exigir (pacientes históricos de SISRES). */
+export interface PacienteGuardado {
+  cedula: string;
+  apellido1: string;
+  celular: string | null;
+}
+
+type CamposPaciente = z.output<typeof patientFieldsSchema>;
+
+/** Formato de documento y celular según las reglas de Colombia: el mensaje dice cuál es la regla (QA R13, U2). */
+function refinarPaciente(p: CamposPaciente, ctx: z.RefinementCtx, guardado?: PacienteGuardado) {
+  const documentoIgual = guardado !== undefined && p.cedula === guardado.cedula.trim();
+  const errorDoc = documentoIgual ? null : errorDeDocumento(p.tipo_documento, p.cedula);
+  if (errorDoc) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cedula"], message: errorDoc });
+  const celularIgual = guardado !== undefined && (p.celular ?? "") === (guardado.celular ?? "").trim();
+  if (!celularIgual && p.celular && normalizarCelularColombia(p.celular) === null) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["celular"], message: mensajeCelular() });
+  }
+  // En la edición el apellido solo se exige completo si la persona lo cambió: los históricos traen «—» o «0».
+  if (guardado !== undefined && p.apellido1.length < 2 && p.apellido1 !== guardado.apellido1.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["apellido1"], message: "Apellido requerido" });
+  }
+}
+
+// Se guarda normalizado: documento sin puntos ni espacios y celular solo con dígitos (sin +57), listo para WhatsApp.
+// Un documento o celular que no se tocó se conserva tal cual estaba.
+function normalizarPaciente(p: CamposPaciente, guardado?: PacienteGuardado) {
+  return {
+    ...p,
+    cedula: guardado !== undefined && p.cedula === guardado.cedula.trim() ? p.cedula : normalizarDocumento(p.cedula),
+    celular:
+      guardado !== undefined && (p.celular ?? "") === (guardado.celular ?? "").trim()
+        ? p.celular
+        : p.celular
+          ? (normalizarCelularColombia(p.celular) ?? p.celular)
+          : undefined,
+  };
+}
+
+export const patientSchema = patientFieldsSchema
+  .superRefine((p, ctx) => refinarPaciente(p, ctx))
+  .transform((p) => normalizarPaciente(p));
+
+/**
+ * Esquema para EDITAR un paciente ya guardado: igual que `patientSchema`, pero el documento, el celular y el apellido que
+ * no cambiaron no se vuelven a validar. Sin esto, un paciente histórico con documento fuera del formato actual o con
+ * apellido «—» no se podía guardar ni para corregir otro campo (QA-REG4, D6).
+ */
+export function patientSchemaEdicion(guardado: PacienteGuardado) {
+  return patientFieldsSchema
+    .extend({ apellido1: z.string().trim().max(60) })
+    .superRefine((p, ctx) => refinarPaciente(p, ctx, guardado))
+    .transform((p) => normalizarPaciente(p, guardado));
+}
+
 export type PatientFormData = z.input<typeof patientSchema>;
 
 // Verificado contra SISRES real (Ronda 2, pregunta 3): "NO EFECTIVO" lleva
