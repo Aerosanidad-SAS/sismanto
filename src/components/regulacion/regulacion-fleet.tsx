@@ -130,7 +130,8 @@ function VehicleTile({
           variant="outline"
           size="sm"
           className={cn(
-            "h-9 flex-1 min-w-[6.5rem] px-2",
+            // El texto largo («Marcar fuera de servicio») pasa a dos líneas dentro del botón en vez de desbordarse sobre la tarjeta vecina.
+            "h-auto min-h-9 flex-1 min-w-[6.5rem] whitespace-normal px-2 py-1 text-center leading-tight",
             v.estado_actual === "OPERATIVO"
               ? "border-warning/60 text-foreground hover:bg-warning-soft"
               : "border-success/60 text-foreground hover:bg-success-soft"
