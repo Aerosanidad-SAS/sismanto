@@ -39,15 +39,15 @@ export interface EvaluacionKm {
 const fmtKm = (n: number) => n.toLocaleString("es-CO");
 
 /**
- * Compara el kilometraje digitado con el último registrado. Solo avisa: el conductor puede tener razón (tablero
- * cambiado, lectura anterior mal digitada), así que no bloquea.
+ * Compara el kilometraje digitado con el último registrado. «menor» BLOQUEA el envío (el km solo se queda igual o
+ * aumenta; el servidor aplica la misma regla en `lib/kilometraje.ts`); «salto» solo avisa, porque un viaje largo es posible.
  */
 export function evaluarKilometraje(km: number | undefined, ultimo: number | null | undefined): EvaluacionKm {
   if (km === undefined || ultimo === null || ultimo === undefined || ultimo <= 0) return { nivel: "ok", mensaje: null };
   if (km < ultimo) {
     return {
       nivel: "menor",
-      mensaje: `Es menor al último registrado (${fmtKm(ultimo)} km). Revisa el número del tablero.`,
+      mensaje: `No puede ser menor al último registrado (${fmtKm(ultimo)} km): el kilometraje solo se queda igual o aumenta. Revisa el número del tablero.`,
     };
   }
   if (km - ultimo > SALTO_KM_SOSPECHOSO) {

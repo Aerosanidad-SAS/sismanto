@@ -29,7 +29,7 @@ test("parseKilometraje ignora separadores de miles", () => {
   assert.equal(parseKilometraje("x"), undefined);
 });
 
-test("evaluarKilometraje avisa si es menor o salta más de 1.000 km", () => {
+test("evaluarKilometraje marca «menor» (bloquea) y avisa si salta más de 1.000 km", () => {
   assert.equal(evaluarKilometraje(125500, 125430).nivel, "ok");
   assert.equal(evaluarKilometraje(125430, 125430).nivel, "ok");
   assert.equal(evaluarKilometraje(125000, 125430).nivel, "menor");
