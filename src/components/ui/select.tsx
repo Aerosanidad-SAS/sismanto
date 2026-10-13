@@ -165,7 +165,10 @@ const SelectContent = React.forwardRef<
     <PopoverContent
       ref={ref}
       align="start"
-      className={cn("z-50 w-[var(--radix-popover-trigger-width)] min-w-[12rem] p-0", className)}
+      className={cn(
+        "z-50 w-max min-w-[max(12rem,var(--radix-popover-trigger-width))] max-w-[min(32rem,calc(100vw-2rem))] p-0",
+        className
+      )}
       {...props}
     >
       <Command shouldFilter={false}>
@@ -217,7 +220,7 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(
             value === itemValue ? "opacity-100" : "opacity-0"
           )}
         />
-        <span className="truncate">{children}</span>
+        <span>{children}</span>
       </CommandItem>
     )
   }
