@@ -89,3 +89,34 @@ describe("itemsEvaluados", () => {
     assert.equal(catalogoSinSeveridad([]), false);
   });
 });
+
+
+describe("faltantes de equipo (inventario)", () => {
+  const cat = [
+    { id: 10, descripcion: "Chalecos reflectivos", categoria: "EQUIPO_CARRETERA", cantidad_esperada: "2", severidad_falla: "CRITICA" as const },
+    { id: 11, descripcion: "Luces principales", categoria: "LUCES", cantidad_esperada: "2", severidad_falla: "CRITICA" as const },
+  ];
+
+  it("1 chaleco de 2 es un faltante leve: no es falla ni saca el vehículo de servicio, aunque el ítem sea CRÍTICO", () => {
+    const evaluados = itemsEvaluados(cat, [{ checklistItemId: 10, estado: "FALLA", cantidadOk: 1 }]);
+    assert.equal(evaluados[0].estado, "OK");
+    assert.deepEqual(evaluados[0].faltante, { hay: 1, esperadas: 2 });
+    const h = hallazgosPreoperacional(evaluados, {}, "2026-10-12").filter((x) => x.origen === "ITEM");
+    assert.equal(h.length, 1);
+    assert.equal(h[0].severidad, "BAJA");
+    assert.equal(h[0].fds, false);
+    assert.match(h[0].titulo, /Faltante: Chalecos/);
+  });
+
+  it("0 de 2 también es faltante; completo no genera nada", () => {
+    assert.ok(itemsEvaluados(cat, [{ checklistItemId: 10, estado: "FALLA", cantidadOk: 0 }])[0].faltante);
+    assert.equal(itemsEvaluados(cat, [{ checklistItemId: 10, estado: "OK", cantidadOk: 2 }])[0].faltante, undefined);
+  });
+
+  it("una luz que no funciona (conteo de funcionamiento) sigue siendo falla crítica", () => {
+    const evaluados = itemsEvaluados(cat, [{ checklistItemId: 11, estado: "FALLA", cantidadOk: 1, observacion: "farola" }]);
+    assert.equal(evaluados[0].estado, "FALLA");
+    assert.equal(evaluados[0].faltante, undefined);
+    assert.equal(hallazgosPreoperacional(evaluados, {}, "2026-10-12")[0].fds, true);
+  });
+});

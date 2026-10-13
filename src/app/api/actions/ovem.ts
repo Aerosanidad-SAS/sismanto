@@ -15,6 +15,7 @@ import {
 import type { RoadAccidentFormData } from "@/lib/validations";
 import { catalogoSinSeveridad, itemsEvaluados, validarPreoperacional, type ItemCatalogo } from "@/lib/preoperacional";
 import { mensajeErrorGuardado } from "@/lib/errores-guardado";
+import { validarKmContraHistorial } from "@/lib/kilometraje-servidor";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
 import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
@@ -123,7 +124,26 @@ export async function submitDailyCheck(data: {
   const errorChecklist = validarPreoperacional(catalogo, row.items ?? []);
   if (errorChecklist) return { error: errorChecklist };
 
+  // El km solo se queda igual o aumenta frente a TODO lo registrado (odómetro, tanqueos, preoperacionales).
+  // El km inicial es la primera lectura del día: lo posterior de hoy (un tanqueo) no lo limita, pero tampoco puede bajar
+  // de lo que este mismo OVEM ya registró hoy (el odómetro solo avanza; corregirlo es cosa del Administrador).
+  const errorKm = await validarKmContraHistorial(row.vehicleId, fecha, row.kilometrajeInicial, { mismoDiaCuenta: false });
+  if (errorKm) return { error: `Kilometraje: ${errorKm}` };
+
   const supabase = createClient();
+  const { data: propioHoy } = await (supabase as any)
+    .from("daily_checks")
+    .select("kilometraje_inicial")
+    .eq("user_id", profile.user_id)
+    .eq("vehicle_id", row.vehicleId)
+    .eq("fecha", fecha)
+    .maybeSingle();
+  const kmPropioHoy = Number(propioHoy?.kilometraje_inicial);
+  if (Number.isFinite(kmPropioHoy) && row.kilometrajeInicial < kmPropioHoy) {
+    return {
+      error: `Kilometraje: hoy ya registraste ${kmPropioHoy.toLocaleString("es-CO")} km en este vehículo y no puede bajar. Si te equivocaste al digitar, pide al Administrador que lo corrija.`,
+    };
+  }
 
   // Tras cerrar el turno el preoperacional de hoy queda como estaba: reenviarlo pisaría el km final del cierre.
   const { data: cierreHoy } = await (supabase as any)
@@ -158,10 +178,13 @@ export async function submitDailyCheck(data: {
   }
 
   // checklist_ok lo recalcula el trigger trg_actualizar_checklist_ok (migración 005) al escribir los ítems.
-  const payload = (row.items ?? []).map((it) => ({
+  // El estado que se guarda es el evaluado: un equipo contado incompleto queda OK con su cantidad (faltante), igual que
+  // en la novedad; así lo guardado y lo reportado no se contradicen aunque llegue FALLA de un borrador o un cliente viejo.
+  const evaluados = itemsEvaluados(catalogo as ItemCatalogo[], row.items ?? []);
+  const payload = (row.items ?? []).map((it, i) => ({
     daily_check_id: checkRow.id,
     checklist_item_id: it.checklistItemId,
-    estado: it.estado,
+    estado: evaluados[i].estado,
     cantidad_ok: it.cantidadOk ?? null,
     observacion: it.observacion?.trim() || null,
   }));
@@ -184,7 +207,7 @@ export async function submitDailyCheck(data: {
       vehicleId: row.vehicleId,
       reportadoPor: profile.nombre_completo || profile.email || "OVEM",
       hoy: fecha,
-      items: itemsEvaluados(catalogo as ItemCatalogo[], row.items ?? []),
+      items: evaluados,
     });
   } catch (e) {
     console.error("[preoperacional] no se pudieron registrar los hallazgos:", e instanceof Error ? e.message : e);
@@ -370,6 +393,11 @@ export async function submitOvemFuelLog(data: {
   if (row.fecha > hoyOvem()) return { error: "La fecha del tanqueo no puede ser futura" };
 
   const profile = await requireRole(["OVEM", "ADMIN", "ANALISTA"]);
+  // Un tanqueo de hoy se compara con todo lo de hoy; uno atrasado, solo con los otros días (sin hora no se ordenan).
+  const errorKm = await validarKmContraHistorial(row.vehicleId, row.fecha, row.kilometraje, {
+    mismoDiaCuenta: row.fecha === hoyOvem(),
+  });
+  if (errorKm) return { error: `Kilometraje: ${errorKm}` };
   const supabase = createClient();
   const { error } = await supabase.from("fuel_logs").insert({
     vehicle_id: row.vehicleId,

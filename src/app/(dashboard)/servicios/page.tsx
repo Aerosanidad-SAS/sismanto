@@ -18,6 +18,7 @@ import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 import { MisServicios } from "@/components/servicios/mis-servicios";
 import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { centroVisible } from "@/lib/auth-utils";
+import { ciudadDeCentro } from "@/lib/servicios-centro";
 import { ciudadRegistroDePerfil, leerFiltros } from "@/lib/servicios-lista";
 import { ServiciosFiltros } from "@/components/servicios/servicios-filtros";
 import { ServiciosPaginacion } from "@/components/servicios/servicios-paginacion";
@@ -56,6 +57,9 @@ export default async function ServiciosPage(
   const hoyIso = hoyBogota();
   const { filtros, pagina } = leerFiltros(searchParams);
   const profile = await getProfile();
+  // Con centro asignado (Regulación, Coordinación…) la lista es de su ciudad y nada más: sin selector ni resumen de la otra.
+  const centroDelPerfil = centroVisible(profile);
+  const ciudadFija = centroDelPerfil ? ciudadDeCentro(centroDelPerfil.codigo) : null;
   const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
   const [
     { servicios, total, error: errorLista },
@@ -143,6 +147,7 @@ export default async function ServiciosPage(
           <ServiciosFiltros
             key={JSON.stringify(filtros)}
             inicial={filtros}
+            ciudadFija={ciudadFija !== null}
             clientes={opciones.clientes}
             origenes={opciones.origenes}
             destinos={opciones.destinos}
@@ -173,6 +178,8 @@ export default async function ServiciosPage(
           {total > 0 && <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
         </CardContent>
       </Card>
+
+      <ResumenOperativo inicial={resumenHoy} ciudad={ciudadFija?.clave ?? filtros.ciudad ?? ""} />
     </div>
   );
 }

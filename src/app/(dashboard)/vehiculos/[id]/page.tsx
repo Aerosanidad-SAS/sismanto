@@ -9,6 +9,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { VehicleServiceRevenuePanel } from "@/components/vehiculos/vehicle-service-revenue-panel";
 import { VehicleKilometrajeForm } from "@/components/vehiculos/vehicle-kilometraje-form";
+import { VehicleLecturasKm } from "@/components/vehiculos/vehicle-lecturas-km";
 import { ElectricVehicleInsight } from "@/components/vehiculos/electric-vehicle-insight";
 import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
 import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
@@ -194,6 +195,7 @@ export default async function VehicleDetailPage(
                 }
               />
               {canRegistrarKm ? <VehicleKilometrajeForm vehicleId={vehicle.id} placa={vehicle.placa} /> : null}
+              {profile?.role_codigo === "ADMIN" ? <VehicleLecturasKm vehicleId={vehicle.id} placa={vehicle.placa} /> : null}
             </div>
           </CardHeader>
           <CardContent className="space-y-2">

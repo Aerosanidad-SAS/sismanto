@@ -29,7 +29,7 @@ test("parseKilometraje ignora separadores de miles", () => {
   assert.equal(parseKilometraje("x"), undefined);
 });
 
-test("evaluarKilometraje avisa si es menor o salta más de 1.000 km", () => {
+test("evaluarKilometraje marca «menor» (bloquea) y avisa si salta más de 1.000 km", () => {
   assert.equal(evaluarKilometraje(125500, 125430).nivel, "ok");
   assert.equal(evaluarKilometraje(125430, 125430).nivel, "ok");
   assert.equal(evaluarKilometraje(125000, 125430).nivel, "menor");
@@ -51,10 +51,10 @@ test("resumirRespuestas: lo no respondido no cuenta como OK", () => {
     3: { estado: "NO_APLICA" },
     4: { estado: "OK" },
   });
-  assert.deepEqual(r, { total: 5, ok: 2, falla: 1, noAplica: 1, sinResponder: 1 });
+  assert.deepEqual(r, { total: 5, ok: 2, falla: 1, noAplica: 1, sinResponder: 1, faltantes: 0 });
   assert.equal(textoResumen(r), "2 OK · 1 Falla · 1 N/A · 1 sin responder");
-  assert.equal(textoResumen({ total: 41, ok: 38, falla: 1, noAplica: 2, sinResponder: 0 }), "38 OK · 1 Falla · 2 N/A");
-  assert.equal(textoResumen({ total: 3, ok: 1, falla: 2, noAplica: 0, sinResponder: 0 }), "1 OK · 2 Fallas · 0 N/A");
+  assert.equal(textoResumen({ total: 41, ok: 38, falla: 1, noAplica: 2, sinResponder: 0, faltantes: 0 }), "38 OK · 1 Falla · 2 N/A");
+  assert.equal(textoResumen({ total: 3, ok: 1, falla: 2, noAplica: 0, sinResponder: 0, faltantes: 0 }), "1 OK · 2 Fallas · 0 N/A");
 });
 
 test("borrador: ida y vuelta y clave por vehículo y día", () => {
@@ -104,4 +104,14 @@ test("borradoresVencidos devuelve solo borradores de otros días", () => {
     "otra_cosa",
   ];
   assert.deepEqual(borradoresVencidos(claves, "2026-10-12"), [claveBorrador("u1", "v1", "2026-10-11")]);
+});
+
+test("resumirRespuestas: un equipo contado incompleto es faltante, no OK ni falla", () => {
+  const r = resumirRespuestas(
+    [1, 2, 3],
+    { 1: { estado: "OK", cantidadOk: 1 }, 2: { estado: "OK", cantidadOk: 2 }, 3: { estado: "OK" } },
+    { 1: 2, 2: 2 }
+  );
+  assert.deepEqual(r, { total: 3, ok: 2, falla: 0, noAplica: 0, sinResponder: 0, faltantes: 1 });
+  assert.equal(textoResumen(r), "2 OK · 0 Fallas · 0 N/A · 1 faltante");
 });

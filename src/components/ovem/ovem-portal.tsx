@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ClipboardCheck,
+  Clock,
   ArrowLeft,
   Ambulance,
   Fuel,
@@ -45,6 +46,7 @@ import type { VehiculoConDocumentos } from "@/lib/vencimientos";
 import { ChecklistItemRow, agruparPorCategoria, checklistPayload, type ChecklistItem } from "./checklist-item-row";
 import { validarPreoperacional } from "@/lib/preoperacional";
 import { aplicaAlTipo } from "@/lib/checklist-tipo";
+import { cantidadEsperada, esItemDeInventario } from "@/lib/inventario-preop";
 import {
   borradoresVencidos,
   claveBorrador,
@@ -89,6 +91,14 @@ interface OvemPortalProps {
   vehiculosDeHoy?: string[];
   /** Último kilometraje conocido por vehículo, para la ayuda y el aviso al digitar. */
   ultimoKmPorVehiculo?: Record<string, number>;
+  /** Lo que este conductor ya hizo hoy (el menú lo muestra); `at` es un instante ISO. */
+  estadoHoy?: EstadoHoy | null;
+}
+
+export interface EstadoHoy {
+  /** `at` null: se sabe que se envió pero no a qué hora. */
+  preoperacional: { placa: string; at: string | null } | null;
+  cierre: { placa: string; at: string } | null;
 }
 
 type Flow = null | "preoperacional" | "combustible" | "novedad" | "siniestro" | "servicios" | "cierre";
@@ -164,6 +174,7 @@ export function OvemPortal({
   servicios = SIN_SERVICIOS,
   vehiculosDeHoy = SIN_VEHICULOS_DE_HOY,
   ultimoKmPorVehiculo = SIN_KM,
+  estadoHoy = null,
 }: OvemPortalProps) {
   const router = useRouter();
   const serviciosActivos = useMemo(
@@ -188,6 +199,8 @@ export function OvemPortal({
   const [dailyCheckDone, setDailyCheckDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Error del km, junto al campo (que va al inicio del formulario, lejos del botón de enviar). */
+  const [errorKm, setErrorKm] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   /** Confirmación que sobrevive al volver al menú (tanqueo, siniestro). */
   const [aviso, setAviso] = useState<string | null>(null);
@@ -343,6 +356,7 @@ export function OvemPortal({
   useEffect(() => {
     setKm("");
     setError(null);
+    setErrorKm(null);
     setSuccess(null);
     setShowNovedadDialog(false);
     setCheckItemsState({});
@@ -385,10 +399,21 @@ export function OvemPortal({
   }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo, selectedVehicle?.tipo_vehiculo]);
 
   const checklistItemsByCategoria = useMemo(() => agruparPorCategoria(checklistFiltrado), [checklistFiltrado]);
+  const esperadasInventario = useMemo(() => {
+    const m: Record<number, number> = {};
+    for (const it of checklistFiltrado) if (esItemDeInventario(it)) m[it.id] = cantidadEsperada(it.cantidad_esperada) ?? 0;
+    return m;
+  }, [checklistFiltrado]);
   const resumen = useMemo(
-    () => resumirRespuestas(checklistFiltrado.map((it) => it.id), checkItemsState),
-    [checklistFiltrado, checkItemsState]
+    () => resumirRespuestas(checklistFiltrado.map((it) => it.id), checkItemsState, esperadasInventario),
+    [checklistFiltrado, checkItemsState, esperadasInventario]
   );
+  /** Equipo contado que no está completo: se lista en la revisión final y el servidor lo abre como novedad leve. */
+  const faltantesResumen = checklistFiltrado.filter((it) => {
+    const esperada = esperadasInventario[it.id];
+    const r = checkItemsState[it.id];
+    return esperada !== undefined && r?.estado === "OK" && r.cantidadOk !== undefined && r.cantidadOk < esperada;
+  });
   const kmNumero = parseKilometraje(km);
   const avisoKm = evaluarKilometraje(kmNumero, ultimoKm).mensaje;
   const fallasResumen = checklistFiltrado.filter((it) => checkItemsState[it.id]?.estado === "FALLA");
@@ -397,17 +422,32 @@ export function OvemPortal({
   const revisarChecklist = () => {
     if (!vehicleId || flow !== "preoperacional") return;
     setError(null);
+    setErrorKm(null);
     setSuccess(null);
+    const fallaKm = (mensaje: string) => {
+      setErrorKm(mensaje);
+      const campo = document.getElementById("km-inicial");
+      campo?.scrollIntoView({ block: "center", behavior: "smooth" });
+      campo?.focus({ preventScroll: true });
+    };
     if (kmNumero === undefined || kmNumero <= 0) {
-      setError("El kilometraje actual es obligatorio y debe ser mayor a cero.");
+      fallaKm("El kilometraje actual es obligatorio y debe ser mayor a cero.");
       return;
     }
     if (kmNumero > KM_MAXIMO) {
-      setError("El kilometraje es demasiado alto: revisa el número del tablero.");
+      fallaKm("El kilometraje es demasiado alto: revisa el número del tablero.");
+      return;
+    }
+    const evalKm = evaluarKilometraje(kmNumero, ultimoKm);
+    if (evalKm.nivel === "menor" && evalKm.mensaje) {
+      fallaKm(evalKm.mensaje);
       return;
     }
     if (resumen.sinResponder > 0) {
       setResaltarPendientes(true);
+      // Lleva al primer ítem pendiente: el aviso sale abajo, junto al botón, y los ítems quedan muchas pantallas arriba.
+      const primero = checklistFiltrado.find((it) => !checkItemsState[it.id]);
+      if (primero) document.getElementById(`checklist-item-${primero.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
       setError(
         `Faltan ${resumen.sinResponder} ítem${resumen.sinResponder === 1 ? "" : "s"} por responder. Responde cada uno de forma consciente: la revisión es ítem por ítem.`
       );
@@ -508,6 +548,27 @@ export function OvemPortal({
     setFlow(f);
   };
 
+  /** Estado del día de las dos acciones que no se pueden olvidar: el preoperacional y el cierre del turno. */
+  const estadoDeAccion = (f: Exclude<Flow, null>): { texto: string; hecho: boolean } | null => {
+    // Sin dato (consulta fallida) no se afirma nada: la tarjeta cae a su texto normal.
+    if (viewerRole !== "OVEM" || !estadoHoy) return null;
+    const lugar = (placa: string) => (placa ? ` · ${placa}` : "");
+    if (f === "preoperacional") {
+      const p = estadoHoy.preoperacional;
+      return p
+        ? { texto: `Enviado${p.at ? ` ${horaCorta(new Date(p.at))}` : ""}${lugar(p.placa)}`, hecho: true }
+        : { texto: "Pendiente de hoy", hecho: false };
+    }
+    if (f === "cierre") {
+      const { preoperacional: p, cierre: c } = estadoHoy;
+      // Cerrar el vehículo A y empezar después el preoperacional del B deja un turno abierto: el cierre solo vale si es posterior.
+      const cierreVigente = c && !(p?.at && new Date(p.at).getTime() > new Date(c.at).getTime());
+      if (c && cierreVigente) return { texto: `Cerrado ${horaCorta(new Date(c.at))}${lugar(c.placa)}`, hecho: true };
+      return { texto: p ? "Turno abierto" : "Turno sin iniciar", hecho: false };
+    }
+    return null;
+  };
+
   const acciones: Array<{ flow: Exclude<Flow, null>; icon: typeof Ambulance; titulo: string; detalle: string }> = [
     ...(viewerRole === "OVEM"
       ? [
@@ -541,11 +602,12 @@ export function OvemPortal({
   /** Hora de la última actualización, aviso de servicio nuevo y botón manual (solo para el OVEM, en el menú y «Mis servicios»). */
   const barraActualizacion = refrescarServicios && (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
+      {/* La hora va encima del botón que la renueva, no en el otro extremo de la fila. */}
+      <div className="flex flex-col items-stretch gap-1 sm:items-end">
+        <p className="text-center text-sm text-muted-foreground sm:text-right">
           {actualizado ? `Actualizado ${horaCorta(actualizado)}` : "Se actualiza cada 30 segundos"}
         </p>
-        <Button type="button" variant="ghost" size="sm" className="min-h-11 gap-2" onClick={refrescarAhora}>
+        <Button type="button" variant="outline" className="min-h-11 gap-2 sm:w-auto" onClick={refrescarAhora}>
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
           Actualizar
         </Button>
@@ -583,7 +645,9 @@ export function OvemPortal({
             <CardTitle>¿Qué vas a hacer?</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            {acciones.map(({ flow: f, icon: Icon, titulo, detalle }) => (
+            {acciones.map(({ flow: f, icon: Icon, titulo, detalle }) => {
+              const estado = estadoDeAccion(f);
+              return (
               <Button
                 key={f}
                 className={cn(
@@ -596,17 +660,35 @@ export function OvemPortal({
               >
                 <Icon className={cn("h-7 w-7 sm:h-8 sm:w-8", f === "siniestro" && "text-red-600")} />
                 <span className="whitespace-normal text-center text-sm font-semibold sm:text-base">{titulo}</span>
-                {/* En el celular solo queda el conteo de servicios; el resto es obvio por el título. */}
-                <span
-                  className={cn(
-                    "whitespace-normal text-center text-xs font-normal text-muted-foreground",
-                    f === "servicios" ? "block" : "hidden sm:block"
-                  )}
-                >
-                  {detalle}
-                </span>
+                {estado ? (
+                  // Texto + ícono, nunca solo color: se lee al sol y sin distinguir colores.
+                  <span
+                    className={cn(
+                      "flex items-center gap-1 whitespace-normal text-center text-xs font-medium",
+                      estado.hecho ? "text-success" : "text-foreground"
+                    )}
+                  >
+                    {estado.hecho ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    )}
+                    {estado.texto}
+                  </span>
+                ) : (
+                  /* En el celular solo queda el conteo de servicios; el resto es obvio por el título. */
+                  <span
+                    className={cn(
+                      "whitespace-normal text-center text-xs font-normal text-muted-foreground",
+                      f === "servicios" ? "block" : "hidden sm:block"
+                    )}
+                  >
+                    {detalle}
+                  </span>
+                )}
               </Button>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -635,11 +717,13 @@ export function OvemPortal({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button type="button" variant="ghost" onClick={pedirVolver} className="h-11 gap-2">
-          <ArrowLeft className="h-4 w-4" />
+        <Button type="button" variant="outline" onClick={pedirVolver} className="h-11 gap-2">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Volver
         </Button>
-        <p className="text-sm text-muted-foreground">{(viewerRole !== "OVEM" && FLOW_LABEL_ADMIN[flow]) || FLOW_LABEL[flow]}</p>
+        <h2 className="text-lg font-semibold leading-tight text-foreground">
+          {(viewerRole !== "OVEM" && FLOW_LABEL_ADMIN[flow]) || FLOW_LABEL[flow]}
+        </h2>
       </div>
 
       {flow === "servicios" && (
@@ -779,6 +863,43 @@ export function OvemPortal({
                 </p>
               )}
 
+              <div>
+                <Label htmlFor="km-inicial" className="text-base">Kilometraje actual</Label>
+                <span className="text-destructive"> *</span>
+                <Input
+                  id="km-inicial"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9.\s]+"
+                  enterKeyHint="next"
+                  required
+                  aria-describedby={errorKm ? "km-inicial-error km-inicial-ayuda" : "km-inicial-ayuda"}
+                  aria-invalid={errorKm ? true : undefined}
+                  value={km}
+                  onChange={(e) => {
+                    setKm(e.target.value);
+                    setErrorKm(null);
+                  }}
+                  placeholder="Ej: 125000"
+                  className="mt-1 max-w-xs"
+                />
+                <p id="km-inicial-ayuda" className="mt-1 text-xs text-muted-foreground">
+                  {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
+                </p>
+                {errorKm && (
+                  <p role="alert" id="km-inicial-error" className="mt-2 text-sm font-medium text-destructive">
+                    {errorKm}
+                  </p>
+                )}
+                {avisoKm && !errorKm && (
+                  <p
+                    role="status"
+                    className="mt-2 rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground"
+                  >
+                    {avisoKm}
+                  </p>
+                )}
+              </div>
               {viewerRole === "OVEM" && checklistFiltrado.length > 0 && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3">
                   <p className="text-sm text-foreground">
@@ -806,6 +927,7 @@ export function OvemPortal({
                         item={it}
                         state={checkItemsState[it.id]}
                         exigirRespuesta
+                        faltanteNoEsFalla
                         resaltarPendiente={resaltarPendientes}
                         fallaPlaceholder="Describe la falla (ej: farola sin luz media)"
                         onChange={(next) => setCheckItemsState((prev) => ({ ...prev, [it.id]: next }))}
@@ -815,34 +937,6 @@ export function OvemPortal({
                 </div>
               ))}
 
-              <div>
-                <Label htmlFor="km-inicial">Kilometraje actual</Label>
-                <span className="text-destructive"> *</span>
-                <Input
-                  id="km-inicial"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9.\s]+"
-                  enterKeyHint="next"
-                  required
-                  aria-describedby="km-inicial-ayuda"
-                  value={km}
-                  onChange={(e) => setKm(e.target.value)}
-                  placeholder="Ej: 125000"
-                  className="mt-1 max-w-xs"
-                />
-                <p id="km-inicial-ayuda" className="mt-1 text-xs text-muted-foreground">
-                  {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
-                </p>
-                {avisoKm && (
-                  <p
-                    role="status"
-                    className="mt-2 rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground"
-                  >
-                    {avisoKm}
-                  </p>
-                )}
-              </div>
               <div>
                 <Label htmlFor="obs">Observaciones</Label>
                 <Textarea
@@ -935,6 +1029,18 @@ export function OvemPortal({
                   </li>
                 ))}
               </ul>
+            )}
+            {faltantesResumen.length > 0 && (
+              <div className="rounded-lg border border-warning bg-warning-soft p-3 text-sm">
+                <p className="font-medium">Faltantes (no son falla; se avisa como novedad):</p>
+                <ul className="mt-1 space-y-1">
+                  {faltantesResumen.map((it) => (
+                    <li key={it.id}>
+                      {it.descripcion}: {checkItemsState[it.id]?.cantidadOk} de {esperadasInventario[it.id]}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {avisoKm && (
               <p className="rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground">

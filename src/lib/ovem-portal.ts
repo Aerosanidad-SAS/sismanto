@@ -39,15 +39,15 @@ export interface EvaluacionKm {
 const fmtKm = (n: number) => n.toLocaleString("es-CO");
 
 /**
- * Compara el kilometraje digitado con el último registrado. Solo avisa: el conductor puede tener razón (tablero
- * cambiado, lectura anterior mal digitada), así que no bloquea.
+ * Compara el kilometraje digitado con el último registrado. «menor» BLOQUEA el envío (el km solo se queda igual o
+ * aumenta; el servidor aplica la misma regla en `lib/kilometraje.ts`); «salto» solo avisa, porque un viaje largo es posible.
  */
 export function evaluarKilometraje(km: number | undefined, ultimo: number | null | undefined): EvaluacionKm {
   if (km === undefined || ultimo === null || ultimo === undefined || ultimo <= 0) return { nivel: "ok", mensaje: null };
   if (km < ultimo) {
     return {
       nivel: "menor",
-      mensaje: `Es menor al último registrado (${fmtKm(ultimo)} km). Revisa el número del tablero.`,
+      mensaje: `No puede ser menor al último registrado (${fmtKm(ultimo)} km): el kilometraje solo se queda igual o aumenta. Revisa el número del tablero.`,
     };
   }
   if (km - ultimo > SALTO_KM_SOSPECHOSO) {
@@ -65,14 +65,26 @@ export interface ResumenRespuestas {
   falla: number;
   noAplica: number;
   sinResponder: number;
+  /** Ítems de equipo contados que no están completos: no son fallas ni OK, quedan como faltante. */
+  faltantes: number;
 }
 
-/** Cuenta las respuestas de los ítems visibles; lo que no tiene respuesta es «sin responder», nunca OK. */
-export function resumirRespuestas(ids: number[], respuestas: RespuestasChecklist): ResumenRespuestas {
-  const r: ResumenRespuestas = { total: ids.length, ok: 0, falla: 0, noAplica: 0, sinResponder: 0 };
+/**
+ * Cuenta las respuestas de los ítems visibles; lo que no tiene respuesta es «sin responder», nunca OK.
+ * `esperadasInventario`: cantidad esperada de los ítems de equipo; un OK con menos unidades cuenta como faltante.
+ */
+export function resumirRespuestas(
+  ids: number[],
+  respuestas: RespuestasChecklist,
+  esperadasInventario: Record<number, number> = {}
+): ResumenRespuestas {
+  const r: ResumenRespuestas = { total: ids.length, ok: 0, falla: 0, noAplica: 0, sinResponder: 0, faltantes: 0 };
   for (const id of ids) {
     const estado = respuestas[id]?.estado;
-    if (estado === "OK") r.ok++;
+    const esperada = esperadasInventario[id];
+    const hay = respuestas[id]?.cantidadOk;
+    if (estado === "OK" && esperada !== undefined && hay !== undefined && hay < esperada) r.faltantes++;
+    else if (estado === "OK") r.ok++;
     else if (estado === "FALLA") r.falla++;
     else if (estado === "NO_APLICA") r.noAplica++;
     else r.sinResponder++;
@@ -80,9 +92,10 @@ export function resumirRespuestas(ids: number[], respuestas: RespuestasChecklist
   return r;
 }
 
-/** «38 OK · 1 Falla · 2 N/A»; solo muestra «sin responder» si queda alguno. */
+/** «38 OK · 1 Falla · 2 N/A»; solo muestra «faltantes» y «sin responder» si hay alguno. */
 export function textoResumen(r: ResumenRespuestas): string {
   const partes = [`${r.ok} OK`, `${r.falla} ${r.falla === 1 ? "Falla" : "Fallas"}`, `${r.noAplica} N/A`];
+  if (r.faltantes > 0) partes.push(`${r.faltantes} ${r.faltantes === 1 ? "faltante" : "faltantes"}`);
   if (r.sinResponder > 0) partes.push(`${r.sinResponder} sin responder`);
   return partes.join(" · ");
 }

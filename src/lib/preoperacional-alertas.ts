@@ -17,6 +17,8 @@ export interface ItemEvaluado {
   estado: "OK" | "FALLA" | "NO_APLICA";
   observacion?: string | null;
   severidadFalla?: SeveridadFalla | null;
+  /** Equipo contado que no está completo: es un faltante (novedad leve), nunca una falla ni motivo de FDS. */
+  faltante?: { hay: number; esperadas: number };
 }
 
 export interface VehiculoDocumentos {
@@ -67,6 +69,16 @@ export function hallazgosPreoperacional(items: ItemEvaluado[], vehiculo: Vehicul
   const hallazgos: Hallazgo[] = [];
 
   for (const it of items) {
+    if (it.faltante) {
+      hallazgos.push({
+        severidad: "BAJA",
+        titulo: `Faltante: ${it.descripcion}`,
+        detalle: `Hay ${it.faltante.hay} de ${it.faltante.esperadas}.`,
+        fds: false,
+        origen: "ITEM",
+      });
+      continue;
+    }
     if (it.estado !== "FALLA") continue;
     const severidad = it.severidadFalla ?? "MEDIA";
     hallazgos.push({ severidad, titulo: it.descripcion, detalle: it.observacion?.trim() ?? "", fds: severidad === "CRITICA", origen: "ITEM" });
