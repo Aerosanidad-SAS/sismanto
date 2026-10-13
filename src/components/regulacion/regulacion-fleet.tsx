@@ -275,6 +275,7 @@ export function RegulacionFleet({
     setDialogMsg(null);
     let fallo: string | null = null;
     let reasignados = 0;
+    const liberados = new Set<string>();
     // Secuencial: cada asignación desactiva la anterior del mismo rol y reasigna servicios no iniciados.
     for (const rol of rolesConCambio) {
       const result = await asignarTripulacion(assigningVehicle, crew[rol], rol, hoy);
@@ -283,14 +284,21 @@ export function RegulacionFleet({
         break;
       }
       reasignados += "reasignados" in result ? result.reasignados ?? 0 : 0;
+      if ("liberados" in result) result.liberados?.forEach((placa) => liberados.add(placa));
     }
     if (fallo) setDialogMsg({ tipo: "error", texto: fallo });
     else {
       cerrarAsignar();
       // DEU-01: antes los servicios PROGRAMADO sin iniciar se reasignaban en silencio, sin decir cuántos.
+      const avisos: string[] = [];
       if (reasignados > 0) {
-        setAviso({ texto: `Los ${reasignados} servicio${reasignados === 1 ? "" : "s"} PROGRAMADO sin iniciar de este vehículo pasaron a la nueva tripulación.` });
+        avisos.push(`Los ${reasignados} servicio${reasignados === 1 ? "" : "s"} PROGRAMADO sin iniciar de este vehículo pasaron a la nueva tripulación.`);
       }
+      // Una persona no puede estar en dos vehículos: avisar de dónde quedó libre su puesto.
+      if (liberados.size > 0) {
+        avisos.push(`Quedó libre su puesto en ${[...liberados].join(", ")}: una persona solo puede estar en un vehículo.`);
+      }
+      if (avisos.length > 0) setAviso({ texto: avisos.join(" ") });
     }
     // Si falló a medias, lo ya guardado debe verse reflejado.
     router.refresh();
