@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { esItemDeInventario } from "@/lib/inventario-preop";
+import { detalleItem } from "@/lib/documentos-preop";
 
 export type ChecklistEstado = "OK" | "FALLA" | "NO_APLICA";
 
@@ -138,9 +139,12 @@ export function ChecklistItemRow({
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <p id={idDescripcion} className="min-w-0 text-base font-medium leading-snug text-foreground">
-          {item.descripcion}
-        </p>
+        <div className="min-w-0">
+          <p id={idDescripcion} className="text-base font-medium leading-snug text-foreground">
+            {item.descripcion}
+          </p>
+          {detalleItem(item.descripcion) && <p className="text-sm text-muted-foreground">{detalleItem(item.descripcion)}</p>}
+        </div>
         <span
           className={cn(
             "shrink-0 text-xs font-semibold",
