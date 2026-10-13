@@ -46,6 +46,7 @@ import type { VehiculoConDocumentos } from "@/lib/vencimientos";
 import { ChecklistItemRow, agruparPorCategoria, checklistPayload, type ChecklistItem } from "./checklist-item-row";
 import { validarPreoperacional } from "@/lib/preoperacional";
 import { aplicaAlTipo } from "@/lib/checklist-tipo";
+import { cantidadEsperada, esItemDeInventario } from "@/lib/inventario-preop";
 import {
   borradoresVencidos,
   claveBorrador,
@@ -198,6 +199,8 @@ export function OvemPortal({
   const [dailyCheckDone, setDailyCheckDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Error del km, junto al campo (que va al inicio del formulario, lejos del botón de enviar). */
+  const [errorKm, setErrorKm] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   /** Confirmación que sobrevive al volver al menú (tanqueo, siniestro). */
   const [aviso, setAviso] = useState<string | null>(null);
@@ -353,6 +356,7 @@ export function OvemPortal({
   useEffect(() => {
     setKm("");
     setError(null);
+    setErrorKm(null);
     setSuccess(null);
     setShowNovedadDialog(false);
     setCheckItemsState({});
@@ -395,10 +399,21 @@ export function OvemPortal({
   }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo, selectedVehicle?.tipo_vehiculo]);
 
   const checklistItemsByCategoria = useMemo(() => agruparPorCategoria(checklistFiltrado), [checklistFiltrado]);
+  const esperadasInventario = useMemo(() => {
+    const m: Record<number, number> = {};
+    for (const it of checklistFiltrado) if (esItemDeInventario(it)) m[it.id] = cantidadEsperada(it.cantidad_esperada) ?? 0;
+    return m;
+  }, [checklistFiltrado]);
   const resumen = useMemo(
-    () => resumirRespuestas(checklistFiltrado.map((it) => it.id), checkItemsState),
-    [checklistFiltrado, checkItemsState]
+    () => resumirRespuestas(checklistFiltrado.map((it) => it.id), checkItemsState, esperadasInventario),
+    [checklistFiltrado, checkItemsState, esperadasInventario]
   );
+  /** Equipo contado que no está completo: se lista en la revisión final y el servidor lo abre como novedad leve. */
+  const faltantesResumen = checklistFiltrado.filter((it) => {
+    const esperada = esperadasInventario[it.id];
+    const r = checkItemsState[it.id];
+    return esperada !== undefined && r?.estado === "OK" && r.cantidadOk !== undefined && r.cantidadOk < esperada;
+  });
   const kmNumero = parseKilometraje(km);
   const avisoKm = evaluarKilometraje(kmNumero, ultimoKm).mensaje;
   const fallasResumen = checklistFiltrado.filter((it) => checkItemsState[it.id]?.estado === "FALLA");
@@ -407,13 +422,20 @@ export function OvemPortal({
   const revisarChecklist = () => {
     if (!vehicleId || flow !== "preoperacional") return;
     setError(null);
+    setErrorKm(null);
     setSuccess(null);
+    const fallaKm = (mensaje: string) => {
+      setErrorKm(mensaje);
+      const campo = document.getElementById("km-inicial");
+      campo?.scrollIntoView({ block: "center", behavior: "smooth" });
+      campo?.focus({ preventScroll: true });
+    };
     if (kmNumero === undefined || kmNumero <= 0) {
-      setError("El kilometraje actual es obligatorio y debe ser mayor a cero.");
+      fallaKm("El kilometraje actual es obligatorio y debe ser mayor a cero.");
       return;
     }
     if (kmNumero > KM_MAXIMO) {
-      setError("El kilometraje es demasiado alto: revisa el número del tablero.");
+      fallaKm("El kilometraje es demasiado alto: revisa el número del tablero.");
       return;
     }
     const evalKm = evaluarKilometraje(kmNumero, ultimoKm);
@@ -423,6 +445,9 @@ export function OvemPortal({
     }
     if (resumen.sinResponder > 0) {
       setResaltarPendientes(true);
+      // Lleva al primer ítem pendiente: el aviso sale abajo, junto al botón, y los ítems quedan muchas pantallas arriba.
+      const primero = checklistFiltrado.find((it) => !checkItemsState[it.id]);
+      if (primero) document.getElementById(`checklist-item-${primero.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
       setError(
         `Faltan ${resumen.sinResponder} ítem${resumen.sinResponder === 1 ? "" : "s"} por responder. Responde cada uno de forma consciente: la revisión es ítem por ítem.`
       );
@@ -838,6 +863,43 @@ export function OvemPortal({
                 </p>
               )}
 
+              <div>
+                <Label htmlFor="km-inicial" className="text-base">Kilometraje actual</Label>
+                <span className="text-destructive"> *</span>
+                <Input
+                  id="km-inicial"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9.\s]+"
+                  enterKeyHint="next"
+                  required
+                  aria-describedby={errorKm ? "km-inicial-error km-inicial-ayuda" : "km-inicial-ayuda"}
+                  aria-invalid={errorKm ? true : undefined}
+                  value={km}
+                  onChange={(e) => {
+                    setKm(e.target.value);
+                    setErrorKm(null);
+                  }}
+                  placeholder="Ej: 125000"
+                  className="mt-1 max-w-xs"
+                />
+                <p id="km-inicial-ayuda" className="mt-1 text-xs text-muted-foreground">
+                  {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
+                </p>
+                {errorKm && (
+                  <p role="alert" id="km-inicial-error" className="mt-2 text-sm font-medium text-destructive">
+                    {errorKm}
+                  </p>
+                )}
+                {avisoKm && !errorKm && (
+                  <p
+                    role="status"
+                    className="mt-2 rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground"
+                  >
+                    {avisoKm}
+                  </p>
+                )}
+              </div>
               {viewerRole === "OVEM" && checklistFiltrado.length > 0 && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3">
                   <p className="text-sm text-foreground">
@@ -865,6 +927,7 @@ export function OvemPortal({
                         item={it}
                         state={checkItemsState[it.id]}
                         exigirRespuesta
+                        faltanteNoEsFalla
                         resaltarPendiente={resaltarPendientes}
                         fallaPlaceholder="Describe la falla (ej: farola sin luz media)"
                         onChange={(next) => setCheckItemsState((prev) => ({ ...prev, [it.id]: next }))}
@@ -874,34 +937,6 @@ export function OvemPortal({
                 </div>
               ))}
 
-              <div>
-                <Label htmlFor="km-inicial">Kilometraje actual</Label>
-                <span className="text-destructive"> *</span>
-                <Input
-                  id="km-inicial"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9.\s]+"
-                  enterKeyHint="next"
-                  required
-                  aria-describedby="km-inicial-ayuda"
-                  value={km}
-                  onChange={(e) => setKm(e.target.value)}
-                  placeholder="Ej: 125000"
-                  className="mt-1 max-w-xs"
-                />
-                <p id="km-inicial-ayuda" className="mt-1 text-xs text-muted-foreground">
-                  {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
-                </p>
-                {avisoKm && (
-                  <p
-                    role="status"
-                    className="mt-2 rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground"
-                  >
-                    {avisoKm}
-                  </p>
-                )}
-              </div>
               <div>
                 <Label htmlFor="obs">Observaciones</Label>
                 <Textarea
@@ -994,6 +1029,18 @@ export function OvemPortal({
                   </li>
                 ))}
               </ul>
+            )}
+            {faltantesResumen.length > 0 && (
+              <div className="rounded-lg border border-warning bg-warning-soft p-3 text-sm">
+                <p className="font-medium">Faltantes (no son falla; se avisa como novedad):</p>
+                <ul className="mt-1 space-y-1">
+                  {faltantesResumen.map((it) => (
+                    <li key={it.id}>
+                      {it.descripcion}: {checkItemsState[it.id]?.cantidadOk} de {esperadasInventario[it.id]}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {avisoKm && (
               <p className="rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground">

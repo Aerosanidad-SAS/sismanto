@@ -178,10 +178,13 @@ export async function submitDailyCheck(data: {
   }
 
   // checklist_ok lo recalcula el trigger trg_actualizar_checklist_ok (migración 005) al escribir los ítems.
-  const payload = (row.items ?? []).map((it) => ({
+  // El estado que se guarda es el evaluado: un equipo contado incompleto queda OK con su cantidad (faltante), igual que
+  // en la novedad; así lo guardado y lo reportado no se contradicen aunque llegue FALLA de un borrador o un cliente viejo.
+  const evaluados = itemsEvaluados(catalogo as ItemCatalogo[], row.items ?? []);
+  const payload = (row.items ?? []).map((it, i) => ({
     daily_check_id: checkRow.id,
     checklist_item_id: it.checklistItemId,
-    estado: it.estado,
+    estado: evaluados[i].estado,
     cantidad_ok: it.cantidadOk ?? null,
     observacion: it.observacion?.trim() || null,
   }));
@@ -204,7 +207,7 @@ export async function submitDailyCheck(data: {
       vehicleId: row.vehicleId,
       reportadoPor: profile.nombre_completo || profile.email || "OVEM",
       hoy: fecha,
-      items: itemsEvaluados(catalogo as ItemCatalogo[], row.items ?? []),
+      items: evaluados,
     });
   } catch (e) {
     console.error("[preoperacional] no se pudieron registrar los hallazgos:", e instanceof Error ? e.message : e);
