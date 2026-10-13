@@ -149,6 +149,8 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "123_servicios_cierre_automatico.sql",           file: "scripts/migrations/123_servicios_cierre_automatico.sql" },
   { name: "124_servicios_lectura_por_centro.sql",          file: "scripts/migrations/124_servicios_lectura_por_centro.sql" },
   { name: "125_higiene_funciones_seguridad.sql",          file: "scripts/migrations/125_higiene_funciones_seguridad.sql" },
+  { name: "126_flota_escritura_por_centro.sql",           file: "scripts/migrations/126_flota_escritura_por_centro.sql" },
+  { name: "127_servicios_lectura_por_ciudad.sql",          file: "scripts/migrations/127_servicios_lectura_por_ciudad.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
