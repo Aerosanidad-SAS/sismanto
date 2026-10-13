@@ -1,7 +1,7 @@
 "use client";
 
 import { hoyBogota } from "@/lib/fechas";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateField } from "@/components/forms/date-field";
 import { Button } from "@/components/ui/button";
@@ -120,6 +120,12 @@ export function ResumenOperativo({
   const [hasta, setHasta] = useState(hoyIso());
   const [datos, setDatos] = useState(inicial);
   const [cargando, setCargando] = useState(false);
+  // `useState(inicial)` solo toma el valor la primera vez: cuando la página se refresca (o llega un servicio nuevo) el
+  // servidor manda un `inicial` nuevo y el resumen de «Hoy» se quedaba con el viejo hasta recargar. En «Rango» manda el
+  // rango que eligió la persona, no se pisa.
+  useEffect(() => {
+    if (modo === "hoy") setDatos(inicial);
+  }, [inicial, modo]);
   const nombreCiudad = CIUDADES_SERVICIO.find((c) => c.clave === ciudad)?.nombre;
   const deLaCiudad = nombreCiudad ? datos.porCiudad.find((c) => c.ciudad === nombreCiudad) : undefined;
 
