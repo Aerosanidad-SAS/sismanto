@@ -2,6 +2,45 @@
 
 Lo genera `npm run release` a partir de los archivos de `changelog/unreleased/`. No se edita a mano (ver `changelog/README.md`).
 
+## v0.7.0 — 2026-10-13
+
+Migraciones incluidas: 125, 126, 127, 128.
+
+### Funcionalidades
+
+- **admin** — Nueva pantalla «Estado del entorno» para el administrador: muestra qué variables de configuración tiene el despliegue (solo los nombres y si tienen valor, nunca el valor) y avisa si falta alguna del correo o si trae comillas o espacios de más. _Roles: ADMIN._
+- **admin** — Nueva pantalla «Configuración general» para el administrador: permite cambiar desde SISMANTO el servidor, el puerto, el usuario, la clave y el nombre del remitente del correo saliente, y enviarse un correo de prueba, sin pedir un despliegue. _Roles: ADMIN._
+- **ovem** — El portal OVEM muestra qué ya hiciste hoy (preoperacional y cierre de turno), tiene botones con forma y sin títulos de relleno, y «Mis servicios» muestra la hora programada y un botón para abrir la ruta en el mapa. _Roles: OVEM._
+- **regulacion** — La pantalla de Novedades tiene un botón «Nueva novedad», y al asignar una tripulación el sistema avisa cuántos servicios programados pasaron a la nueva tripulación en vez de reasignarlos en silencio. _Roles: REGULACION, ADMIN, ANALISTA, MANTENIMIENTO._
+- **servicios** — Al programar o editar un servicio, el sistema avisa si el mismo vehículo o la misma persona de la tripulación tiene otro servicio abierto a menos de una hora, y te deja revisarlo o guardarlo de todos modos. _Roles: REGULACION, ADMIN, ANALISTA._
+- **servicios** — Pasar un servicio a Cancelado, Fallido, No efectivo o Duplicado ahora pide un motivo y confirmación, y queda en la bitácora. Un servicio Finalizado, Cancelado o Duplicado solo lo reabre un administrador. Al cambiar de etapa aparece un aviso de confirmación. _Roles: REGULACION, ADMIN._
+- **vehiculos** — El administrador puede corregir lecturas de kilometraje equivocadas desde la ficha del vehículo, con motivo, y queda en la auditoría. _Roles: ADMIN. Migración: 128._
+
+### Correcciones
+
+- **admin** — En Administración → Usuarios la tabla ya no corta los textos: cada columna se ajusta al contenido más largo y, si no cabe en la pantalla, se desplaza en horizontal con «Acciones» siempre visible. Editar, Restablecer clave y Deshabilitar quedan juntos en un solo menú por usuario. Las listas desplegables (rol, centro y las de todo el sistema) ahora se ensanchan para mostrar completa cada opción. _Roles: ADMIN._
+- **avisos** — Los avisos programados de vencimientos (vehículos y equipos) ya no se dan por enviados cuando el correo falla o no está configurado: se reintentan en la siguiente corrida, y dejan de escribir a cuentas de prueba. _Roles: ADMIN, MANTENIMIENTO, COORDINACION, REGULACION._
+- **login** — Se arregla «¿Olvidaste tu contraseña?», que fallaba en silencio y nunca enviaba el código, y el guardado del preoperacional de OVEM, que no registraba las novedades ni los NO APTO que genera; además, si el correo no sale, ahora queda anotado en la bitácora. _Roles: todos._
+- **novedades** — Las novedades quedan firmadas siempre con el nombre de quien tiene la sesión (ya no se puede cambiar), tienen un máximo de 2000 caracteres y solo se pueden cerrar una vez. El documento y el celular de un paciente se validan al guardar con las reglas de Colombia (la cédula de ciudadanía solo lleva números, entre 6 y 10 dígitos; el celular lleva 10 dígitos y empieza por 3, o es un fijo) y el mensaje de error dice cuál es la regla. _Roles: REGULACION, OVEM, ADMIN, ANALISTA, MANTENIMIENTO._
+- **ovem** — El kilometraje de un vehículo ya no puede bajar: si digitas un km menor al último registrado (preoperacional, tanqueo o cierre de turno) el sistema no lo guarda y te dice cuál es el último. El tanqueo ya no pide el número de venta y no se queda cargando si se va la señal. _Roles: OVEM, ADMIN._
+- **ovem** — En el preoperacional, el aviso de kilometraje menor al último sale junto al campo del kilometraje y lleva el foco, en vez de al final del formulario. _Roles: OVEM._
+- **ovem** — En el preoperacional el kilometraje se pide primero, y si falta una unidad de equipo (extintor, chalecos, herramientas) queda como faltante con una novedad leve en vez de contarse como falla o sacar el vehículo de servicio. _Roles: OVEM, REGULACION._
+- **regulacion** — En la Sala de control, el botón «Marcar fuera de servicio» de cada vehículo ya no se sale de su tarjeta: el texto pasa a dos líneas. _Roles: REGULACION, ADMIN._
+- **regulacion** — Una persona ya no puede quedar asignada a dos vehículos a la vez: al ponerla en uno nuevo, el sistema le libera el puesto en el anterior y te avisa en cuál. Lo mismo al fijar conductores titulares en la programación del día: si ya eran titulares de otro vehículo, se mueven y dejan de figurar allá. _Roles: REGULACION, ADMIN, ANALISTA._
+- **seguridad** — Regulación y Coordinación ahora solo ven y operan los vehículos, asignaciones de tripulación y novedades de su centro también en la base de datos, no solo en la pantalla. Antes alguien con su sesión podía, llamando directamente a la API, modificar la flota de otro centro o cambiarle el centro a un vehículo. _Roles: REGULACION, COORDINACION._
+- **seguridad** — Se cierran avisos de seguridad de la base de datos: cinco funciones internas de triggers ya no se pueden invocar desde fuera y nueve funciones quedan con su ruta de búsqueda fija. No cambia nada de lo que ven los usuarios. _Roles: todos. Migración: 125._
+- **seguridad** — Regulación y Coordinación ya no pueden ver ni modificar, ni siquiera llamando a la API directamente, vehículos, novedades ni servicios de otro centro o de la otra ciudad: la regla que ya aplicaba la pantalla ahora la impone la base de datos. _Roles: REGULACION, COORDINACION. Migración: 126, 127._
+- **seguridad** — Regulación y Coordinación con centro asignado ya no ven servicios de la otra ciudad en Servicios ni en la Sala de control, ni siquiera los históricos sin centro ni los que no traen ciudad de registro. Se quitó el selector Ambas/Bogotá/Medellín para ellos: ven su ciudad y nada más. _Roles: REGULACION, COORDINACION._
+- **servicios** — En Servicios, el Resumen operativo pasa al principio de la pantalla, antes de los filtros y la lista, y ahora se actualiza solo con cada refresco (antes se quedaba con los números viejos hasta recargar la página). _Roles: REGULACION, ADMIN, ANALISTA, COORDINACION._
+- **servicios** — Al editar un servicio, ahora se pueden borrar campos (autorización, asesor, observaciones, tripulación…): antes, vaciar un campo y guardar dejaba el valor anterior sin avisar. Médico y Auxiliar solo guardan los campos clínicos. _Roles: REGULACION, ADMIN, ANALISTA, MEDICO, AUXILIAR_ENFERMERIA._
+- **ui** — En el celular los botones ya no se quedan «pegados» en color de hover después de tocarlos, el nombre «AERO MANTO» va en una sola línea y el logo se ve más grande. _Roles: todos._
+- **vehiculos** — Regulación y Coordinación ya no pueden cambiar el estado, el kilometraje ni los datos de vehículos de otro centro, ni ver su ficha. Regulación tampoco puede cambiar el centro de un vehículo ni sus costos anuales. _Roles: REGULACION, COORDINACION._
+
+### Mantenimiento
+
+- **etl** — Nueva herramienta de solo lectura para comparar, antes de cargar los datos de SISRES, qué servicios, pacientes y equipos ya no existen allá y siguen en SISMANTO, y cuáles faltan por cargar. _Roles: ninguno._
+- **seguridad** — Se actualiza el framework de la aplicación (Next.js 14 a 15) para cerrar las vulnerabilidades críticas y altas que tenía; no cambia nada de lo que se ve ni de cómo se usa. _Roles: todos._
+
 ## v0.6.0 — 2026-10-08
 
 Migraciones incluidas: 123, 124.
