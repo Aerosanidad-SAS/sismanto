@@ -2,7 +2,8 @@ import { requireRole } from "@/app/api/actions/auth";
 import { getIndicadores } from "@/app/api/actions/tickets-config";
 import { IndicadoresSoporte } from "@/components/soporte/indicadores-soporte";
 
-export default async function IndicadoresSoportePage({ searchParams }: { searchParams: { desde?: string; hasta?: string } }) {
+export default async function IndicadoresSoportePage(props: { searchParams: Promise<{ desde?: string; hasta?: string }> }) {
+  const searchParams = await props.searchParams;
   await requireRole(["ADMIN", "ANALISTA", "COORDINACION", "TECNICO"]);
   const indicadores = await getIndicadores(searchParams.desde, searchParams.hasta);
 

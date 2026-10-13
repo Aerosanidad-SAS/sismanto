@@ -24,9 +24,9 @@ export interface ActorAuditoria {
   role?: string;
 }
 
-function ipDeLaPeticion(): string {
+async function ipDeLaPeticion(): Promise<string> {
   try {
-    return (headers().get("x-forwarded-for")?.split(",")[0] ?? "").trim();
+    return ((await headers()).get("x-forwarded-for")?.split(",")[0] ?? "").trim();
   } catch {
     return ""; // fuera de una petición (p. ej. un cron)
   }
@@ -45,7 +45,7 @@ export async function auditar(
     const userId = actor ? actor.userId : ((await createClient().auth.getUser()).data.user?.id ?? null);
     const admin = createAdminClient();
     const resuelto = await resolverActorPorId(admin, userId, { label: actor?.label, role: actor?.role });
-    const err = await insertarAuditoria(admin, { actor: resuelto, accion, entidad, entidadId, detalle, ip: ipDeLaPeticion() });
+    const err = await insertarAuditoria(admin, { actor: resuelto, accion, entidad, entidadId, detalle, ip: await ipDeLaPeticion() });
     if (err) console.error("[auditoria] no se pudo registrar:", err);
   } catch (e) {
     console.error("[auditoria] no se pudo registrar:", e instanceof Error ? e.message : e);

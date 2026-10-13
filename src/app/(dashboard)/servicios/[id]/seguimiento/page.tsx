@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { MapaSeguimiento } from "@/components/gps/mapa-seguimiento";
 import { EnviarUbicacionPaciente } from "@/components/gps/enviar-ubicacion-paciente";
 
-export default async function SeguimientoServicioPage({ params }: { params: { id: string } }) {
+export default async function SeguimientoServicioPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   await requireRole(["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA"]);
   const id = Number(params.id);
   if (!Number.isInteger(id) || id <= 0) notFound();

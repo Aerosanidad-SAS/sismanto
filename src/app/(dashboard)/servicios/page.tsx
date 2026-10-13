@@ -47,11 +47,12 @@ async function getVehiculosActivos() {
   }
 }
 
-export default async function ServiciosPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function ServiciosPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const hoyIso = hoyBogota();
   const { filtros, pagina } = leerFiltros(searchParams);
   const profile = await getProfile();
@@ -127,6 +128,9 @@ export default async function ServiciosPage({
         <AvisosServicios etapasVisibles={etapasVisibles} />
       </div>
 
+      {/* Lo primero que se ve: cómo va el día. Después, los filtros y la lista. */}
+      <ResumenOperativo inicial={resumenHoy} ciudad={filtros.ciudad ?? ""} />
+
       {mostrarMisServicios && (
         <div>
           <h2 className="text-xl mb-3">{profile?.role_codigo === "ADMIN" ? "Servicios programados y en curso" : "Mis servicios asignados"}</h2>
@@ -169,8 +173,6 @@ export default async function ServiciosPage({
           {total > 0 && <ServiciosPaginacion filtros={filtros} pagina={pagina} total={total} />}
         </CardContent>
       </Card>
-
-      <ResumenOperativo inicial={resumenHoy} ciudad={filtros.ciudad ?? ""} />
     </div>
   );
 }

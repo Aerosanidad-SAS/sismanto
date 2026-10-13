@@ -206,18 +206,19 @@ async function getFuelResumen(fechaInicio: string, fechaFin: string): Promise<Fu
   };
 }
 
-export default async function KPIsPage({
-  searchParams,
-}: {
-  searchParams: {
-    inicio?: string;
-    fin?: string;
-    kCentro?: string;
-    kTipo?: string;
-    kPlaca?: string;
-    kDispCentro?: string;
-  };
-}) {
+export default async function KPIsPage(
+  props: {
+    searchParams: Promise<{
+      inicio?: string;
+      fin?: string;
+      kCentro?: string;
+      kTipo?: string;
+      kPlaca?: string;
+      kDispCentro?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole(["ADMIN", "GERENCIAL", "ANALISTA"]);
   const hoy = hoyBogota();
   const fechaInicio = esDia(searchParams.inicio) ? searchParams.inicio : "2024-01-01";

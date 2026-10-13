@@ -6,12 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateShort, formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { VehicleServiceRevenuePanel } from "@/components/vehiculos/vehicle-service-revenue-panel";
 import { VehicleKilometrajeForm } from "@/components/vehiculos/vehicle-kilometraje-form";
 import { ElectricVehicleInsight } from "@/components/vehiculos/electric-vehicle-insight";
 import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
 import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
-import { puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
+import { centroVisible, puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { VehicleMaintenanceAlertsPanel } from "@/components/vehiculos/vehicle-maintenance-alerts-panel";
 import { getAlertsForVehicle } from "@/app/api/actions/plan-mantenimiento";
 import { VehicleSpecsEditor } from "@/components/vehiculos/vehicle-specs-editor";
@@ -100,11 +101,12 @@ async function getCentrosOperativos() {
   }
 }
 
-export default async function VehicleDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function VehicleDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const vehicle = await getVehicle(params.id);
 
   if (!vehicle) {
@@ -127,6 +129,10 @@ export default async function VehicleDetailPage({
       getAlertsForVehicle(params.id),
       getCentrosOperativos(),
     ]);
+
+  // Regulación y Coordinación solo ven la ficha de vehículos de su centro.
+  const centroPropio = centroVisible(profile);
+  if (centroPropio && (vehicle as { centro_operativo?: string }).centro_operativo !== centroPropio.codigo) notFound();
 
   const showRevenue =
     profile?.role_codigo === "ADMIN" || profile?.role_codigo === "GERENCIAL";
@@ -180,6 +186,7 @@ export default async function VehicleDetailPage({
               <VehicleGeneralEditor
                 vehicle={vehicle}
                 centros={centrosOperativos}
+                soloOperacion={Boolean(centroPropio)}
                 canEdit={
                   profile?.role_codigo === "ADMIN" ||
                   profile?.role_codigo === "REGULACION" ||

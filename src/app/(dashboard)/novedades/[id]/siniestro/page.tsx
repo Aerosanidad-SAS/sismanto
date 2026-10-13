@@ -47,7 +47,8 @@ function Galeria({ titulo, fotos, vacio }: { titulo: string; fotos: FotoSiniestr
 }
 
 /** El parámetro es el id de la NOVEDAD: la tabla de novedades enlaza aquí sin saber el id del siniestro. */
-export default async function SiniestroDeNovedadPage({ params }: { params: { id: string } }) {
+export default async function SiniestroDeNovedadPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const incidentId = Number(params.id);
   if (!Number.isInteger(incidentId) || incidentId <= 0) notFound();
   const accidentId = await getSiniestroIdPorNovedad(incidentId);

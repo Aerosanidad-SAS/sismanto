@@ -19,11 +19,12 @@ async function getInitialData() {
   }
 }
 
-export default async function CombustiblePage({
-  searchParams,
-}: {
-  searchParams: { inicio?: string; fin?: string; vehiculo?: string; centro?: string };
-}) {
+export default async function CombustiblePage(
+  props: {
+    searchParams: Promise<{ inicio?: string; fin?: string; vehiculo?: string; centro?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole(["ADMIN", "GERENCIAL", "ANALISTA"]);
   const hoy = hoyBogota();
   const fechaInicio = esDia(searchParams.inicio) ? searchParams.inicio : sumarMeses(hoy, -3);

@@ -58,13 +58,14 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // El historial de versiones se lee de estos archivos en tiempo de ejecución: hay que llevarlos al despliegue.
+  // (En Next 15 esta opción salió de `experimental`.)
+  outputFileTracingIncludes: {
+    "/**/*": ["./CHANGELOG.md", "./changelog/unreleased/**/*"],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "8mb",
-    },
-    // El historial de versiones se lee de estos archivos en tiempo de ejecución: hay que llevarlos al despliegue.
-    outputFileTracingIncludes: {
-      "/**/*": ["./CHANGELOG.md", "./changelog/unreleased/**/*"],
     },
   },
 };

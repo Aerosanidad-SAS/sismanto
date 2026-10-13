@@ -3,12 +3,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getProfile } from "@/app/api/actions/auth";
 import { centroVisible, isAdminLike } from "@/lib/auth-utils";
 import { NovedadesTabla } from "@/components/novedades/novedades-tabla";
+import { NuevaNovedadBoton } from "@/components/novedades/nueva-novedad-boton";
 import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
 import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
 
 export const metadata = { title: "Novedades" };
 
 const ROLES_CIERRE = ["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"];
+// Quiénes pueden reportar una novedad desde aquí: los mismos que permite la política de inserción de `incidents`.
+const ROLES_REPORTAN = ["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"];
 // Quiénes pueden crear un mantenimiento nuevo desde el cierre de una
 // novedad — mismo set que la RLS de insert en maintenance_records.
 // REGULACION puede cerrar novedades (nota o ligar a uno existente) pero
@@ -35,11 +38,25 @@ async function getNovedades(centroCodigo: string | null) {
   }
 }
 
+/** Vehículos para el botón «Nueva novedad»: los del centro de quien consulta (todos, si no tiene centro). */
+async function getVehiculosParaNovedad(centroCodigo: string | null): Promise<{ id: string; placa: string }[]> {
+  try {
+    let query = createClient().from("vehicles").select("id, placa").order("placa");
+    if (centroCodigo) query = query.eq("centro_operativo", centroCodigo);
+    const { data } = await query;
+    return (data ?? []) as { id: string; placa: string }[];
+  } catch {
+    return [];
+  }
+}
+
 export default async function NovedadesPage() {
   const profile = await getProfile();
-  const [novedades, solicitudesNoApto] = await Promise.all([
-    getNovedades(centroVisible(profile)?.codigo ?? null),
+  const centroCodigo = centroVisible(profile)?.codigo ?? null;
+  const [novedades, solicitudesNoApto, vehiculosNovedad] = await Promise.all([
+    getNovedades(centroCodigo),
     getSolicitudesNoAptoPendientes().catch(() => []),
+    getVehiculosParaNovedad(centroCodigo),
   ]);
   const isAdmin = profile ? isAdminLike(profile.role_codigo) : false;
   const puedeCerrar = ROLES_CIERRE.includes(profile?.role_codigo ?? "");
@@ -51,12 +68,16 @@ export default async function NovedadesPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl">Novedades e Incidentes</h1>
-        <p className="mt-2 text-muted-foreground">
-          Gestión de reportes de novedades. La columna Prioridad solo la establece Administración tras
-          aplicar la migración 006 en la base de datos.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl">Novedades e Incidentes</h1>
+          <p className="mt-2 text-muted-foreground">
+            Gestión de reportes de novedades de los vehículos: reportar, seguir y cerrar.
+          </p>
+        </div>
+        {ROLES_REPORTAN.includes(profile?.role_codigo ?? "") && (
+          <NuevaNovedadBoton vehiculos={vehiculosNovedad} reportadoPor={profile?.nombre_completo || profile?.email || ""} />
+        )}
       </div>
 
       <SolicitudesNoApto

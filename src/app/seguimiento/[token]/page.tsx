@@ -6,7 +6,8 @@ import { MapaSeguimiento } from "@/components/gps/mapa-seguimiento";
 // token (vigencia de 24 h y servicio activo) en cada consulta.
 export const dynamic = "force-dynamic";
 
-export default function SeguimientoPublicoPage({ params }: { params: { token: string } }) {
+export default async function SeguimientoPublicoPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   return (
     <div className="flex min-h-screen min-h-[100dvh] items-start justify-center bg-muted/40 px-4 py-6 sm:items-center">
       <Card className="w-full max-w-3xl border-border shadow-md">

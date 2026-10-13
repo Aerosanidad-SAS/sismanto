@@ -12,11 +12,12 @@ import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Aeropuertos" };
 
-export default async function AeropuertosPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function AeropuertosPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole(["ADMIN", "MEDICO", "ANALISTA", "VISTA"]);
   const { q, pais, pagina } = leerBusquedaAeropuertos(searchParams);
   const { aeropuertos, total, error } = await listarAeropuertos(q, pais, pagina);

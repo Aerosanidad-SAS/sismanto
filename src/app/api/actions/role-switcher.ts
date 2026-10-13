@@ -92,7 +92,7 @@ export async function getRoleSwitcherState(): Promise<RoleSwitcherState> {
 
   const profile = await getProfile();
   if (esUsuarioDePrueba(user)) {
-    const origen = leerOrigen(cookies().get(ORIGIN_COOKIE)?.value);
+    const origen = leerOrigen((await cookies()).get(ORIGIN_COOKIE)?.value);
     return { enabled: true, mode: "impersonating", currentRole: profile?.role_codigo, canReturn: origen !== null };
   }
   if (profile?.role_codigo === "ADMIN") return { enabled: true, mode: "admin", currentRole: "ADMIN" };
@@ -112,7 +112,7 @@ export async function switchToRole(codigo: string): Promise<{ error?: string; ro
   // Quién es el ADMIN de origen: la sesión actual si es ADMIN real; si ya estamos en un rol de prueba, la cookie.
   let origen: Origen | null;
   if (esUsuarioDePrueba(user)) {
-    origen = leerOrigen(cookies().get(ORIGIN_COOKIE)?.value);
+    origen = leerOrigen((await cookies()).get(ORIGIN_COOKIE)?.value);
     if (!origen) return { error: "La sesión de origen expiró: cierra sesión y entra como administrador" };
   } else {
     const profile = await getProfile();
@@ -148,7 +148,7 @@ export async function switchToRole(codigo: string): Promise<{ error?: string; ro
   const fallo = await cambiarSesionA(email);
   if (fallo) return { error: fallo };
 
-  cookies().set(ORIGIN_COOKIE, codificarOrigen(origen), {
+  (await cookies()).set(ORIGIN_COOKIE, codificarOrigen(origen), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -168,7 +168,7 @@ export async function returnToAdmin(): Promise<{ error?: string; route?: string 
   } = await createClient().auth.getUser();
   if (!esUsuarioDePrueba(user)) return { error: "No estás en una sesión de prueba" };
 
-  const origen = leerOrigen(cookies().get(ORIGIN_COOKIE)?.value);
+  const origen = leerOrigen((await cookies()).get(ORIGIN_COOKIE)?.value);
   if (!origen) return { error: "La sesión de origen expiró: cierra sesión y entra como administrador" };
 
   // Se revalida en la base que el origen sigue siendo un ADMIN activo (no basta con la cookie).
@@ -186,7 +186,7 @@ export async function returnToAdmin(): Promise<{ error?: string; route?: string 
   const fallo = await cambiarSesionA(origen.email);
   if (fallo) return { error: fallo };
 
-  cookies().delete(ORIGIN_COOKIE);
+  (await cookies()).delete(ORIGIN_COOKIE);
   await auditar("LOGIN", "role_switch", origen.uid, `ADMIN ${origen.email} vuelve a su sesión`, {
     userId: origen.uid,
     label: origen.email,

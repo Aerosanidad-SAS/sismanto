@@ -217,7 +217,7 @@ export async function enviarCertificadoValoracion(id: number) {
   if (v.activo === false) return { error: "La valoración está eliminada: no se puede enviar" };
   const destino = (v.correo ?? "").trim();
   if (!CORREO_VALIDO.test(destino)) return { error: "La valoración no tiene un correo válido del pasajero. Edítala y agrégalo." };
-  if (!emailConfigurado()) return { error: "El envío de correo no está configurado en este entorno (faltan las variables de Microsoft Graph)." };
+  if (!(await emailConfigurado())) return { error: "El envío de correo no está configurado en este entorno (faltan las variables de Microsoft Graph)." };
 
   const res = await enviarCorreo([destino], asuntoCertificado(v.id), armarCorreoCertificado({ nombre: v.nombre_completo, numero: v.id }), [
     { nombre: nombreAdjuntoCertificado(v.id), contentType: "application/pdf", base64: armado.buffer.toString("base64") },

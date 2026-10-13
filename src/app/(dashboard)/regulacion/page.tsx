@@ -33,11 +33,12 @@ const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];
 // se sube el tope por defecto de la función (60 s es el máximo de Hobby).
 export const maxDuration = 60;
 
-export default async function RegulacionPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function RegulacionPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const pedida = Array.isArray(searchParams.ciudad) ? searchParams.ciudad[0] : searchParams.ciudad;
   const prefijoDeCiudad = prefijoCiudad(pedida);
   const profile = await getProfile();

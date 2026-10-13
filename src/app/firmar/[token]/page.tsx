@@ -14,7 +14,8 @@ const MENSAJES: Record<string, { titulo: string; detalle: string }> = {
   firmada: { titulo: "Acta ya firmada", detalle: "Esta acta ya tiene tu firma. No tienes que hacer nada más." },
 };
 
-export default async function FirmarPage({ params }: { params: { token: string } }) {
+export default async function FirmarPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const ctx = await contextoFirmaRemota(params.token);
 
   return (

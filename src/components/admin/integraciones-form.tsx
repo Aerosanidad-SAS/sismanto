@@ -56,7 +56,7 @@ export function IntegracionesForm({ estado }: { estado: EstadoCampoIntegracion[]
   );
 }
 
-function CampoForm({ campo, estado }: { campo: CampoIntegracion; estado?: EstadoCampoIntegracion }) {
+export function CampoForm({ campo, estado }: { campo: CampoIntegracion; estado?: EstadoCampoIntegracion }) {
   const router = useRouter();
   // Un secreto nunca llega al navegador: el campo arranca vacío y solo se escribe uno nuevo.
   const [valor, setValor] = useState(campo.secreto ? "" : estado?.visible ?? "");
