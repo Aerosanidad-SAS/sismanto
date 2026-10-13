@@ -47,6 +47,7 @@ import { ChecklistItemRow, agruparPorCategoria, checklistPayload, type Checklist
 import { validarPreoperacional } from "@/lib/preoperacional";
 import { aplicaAlTipo } from "@/lib/checklist-tipo";
 import { cantidadEsperada, esItemDeInventario } from "@/lib/inventario-preop";
+import { esItemDocumentos } from "@/lib/documentos-preop";
 import {
   borradoresVencidos,
   claveBorrador,
@@ -398,7 +399,12 @@ export function OvemPortal({
     });
   }, [checklistItems, viewerRole, selectedVehicle?.centro_operativo, selectedVehicle?.tipo_vehiculo]);
 
-  const checklistItemsByCategoria = useMemo(() => agruparPorCategoria(checklistFiltrado), [checklistFiltrado]);
+  // El ítem «Documentos (SOAT - Tecnicomecánica)» no se responde OK/Falla: se confirma leyendo los vencimientos en la tarjeta de documentos.
+  const itemDocumentos = useMemo(() => checklistFiltrado.find((it) => esItemDocumentos(it.descripcion)), [checklistFiltrado]);
+  const checklistItemsByCategoria = useMemo(
+    () => agruparPorCategoria(checklistFiltrado.filter((it) => !esItemDocumentos(it.descripcion))),
+    [checklistFiltrado]
+  );
   const esperadasInventario = useMemo(() => {
     const m: Record<number, number> = {};
     for (const it of checklistFiltrado) if (esItemDeInventario(it)) m[it.id] = cantidadEsperada(it.cantidad_esperada) ?? 0;
@@ -777,6 +783,18 @@ export function OvemPortal({
           vehiculo={selectedVehicle}
           hoy={hoyBogota}
           esAeroportuario={String(selectedVehicle.centro_operativo ?? "").toUpperCase() === "AIRPLAN"}
+          confirmado={itemDocumentos ? Boolean(checkItemsState[itemDocumentos.id]) : undefined}
+          onConfirmar={
+            itemDocumentos && viewerRole === "OVEM"
+              ? (leido) =>
+                  setCheckItemsState((prev) => {
+                    const next = { ...prev };
+                    if (leido) next[itemDocumentos.id] = { estado: "OK" };
+                    else delete next[itemDocumentos.id];
+                    return next;
+                  })
+              : undefined
+          }
         />
       )}
 
