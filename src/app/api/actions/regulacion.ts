@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
 import { centroVisible } from "@/lib/auth-utils";
-import { errorSiVehiculoDeOtroCentro } from "@/lib/vehiculo-centro";
+import { condicionServiciosDeCentro } from "@/lib/servicios-centro";
 import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
 import { revalidatePath } from "next/cache";
 import { perfilFormularioServicio, toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
@@ -459,7 +459,7 @@ export async function getTableroRegulacion() {
     .or(`and(etapa.in.(PROGRAMADO,CURSO),fecha_hora_programacion.gte.${desde}T00:00:00-05:00),fecha_hora_programacion.gte.${hoy}T00:00:00-05:00,fecha_hora_registro.gte.${hoy}T00:00:00-05:00`)
     .order("fecha_hora_programacion", { ascending: true, nullsFirst: false })
     .limit(300);
-  if (centro) serviciosQuery = serviciosQuery.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+  if (centro) serviciosQuery = serviciosQuery.or(condicionServiciosDeCentro(centro));
   const { data: servicios } = await serviciosQuery;
 
   let antiguosQuery = supabase
@@ -467,7 +467,7 @@ export async function getTableroRegulacion() {
     .select("id", { count: "exact", head: true })
     .in("etapa", ["PROGRAMADO", "CURSO"])
     .lt("fecha_hora_programacion", `${desde}T00:00:00-05:00`);
-  if (centro) antiguosQuery = antiguosQuery.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+  if (centro) antiguosQuery = antiguosQuery.or(condicionServiciosDeCentro(centro));
   const { count: antiguosSinCerrar } = await antiguosQuery;
 
   const ids = new Set<string>();

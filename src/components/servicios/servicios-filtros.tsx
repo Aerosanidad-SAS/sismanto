@@ -24,11 +24,14 @@ export function ServiciosFiltros({
   clientes,
   origenes,
   destinos,
+  ciudadFija = false,
 }: {
   inicial: FiltrosServicios;
   clientes: string[];
   origenes: string[];
   destinos: string[];
+  /** Quien está limitado a su centro solo ve su ciudad: no se le ofrece el selector Ambas/Bogotá/Medellín. */
+  ciudadFija?: boolean;
 }) {
   const router = useRouter();
   const [f, setF] = useState<FiltrosServicios>(inicial);
@@ -64,14 +67,16 @@ export function ServiciosFiltros({
       }}
     >
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-        <FiltroCiudad
-          valor={f.ciudad ?? ""}
-          onChange={(clave) => {
-            const siguiente = { ...f, ciudad: clave };
-            setF(siguiente);
-            aplicar(siguiente);
-          }}
-        />
+        {!ciudadFija && (
+          <FiltroCiudad
+            valor={f.ciudad ?? ""}
+            onChange={(clave) => {
+              const siguiente = { ...f, ciudad: clave };
+              setF(siguiente);
+              aplicar(siguiente);
+            }}
+          />
+        )}
         <div className="space-y-1">
           <label htmlFor="f-desde" className={cn(ETIQUETA, "block")}>
             Programado desde
