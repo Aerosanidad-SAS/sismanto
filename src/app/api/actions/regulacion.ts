@@ -7,6 +7,7 @@ import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
 import { centroVisible } from "@/lib/auth-utils";
 import { condicionServiciosDeCentro } from "@/lib/servicios-centro";
+import { errorSiVehiculoDeOtroCentro } from "@/lib/vehiculo-centro";
 import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
 import { revalidatePath } from "next/cache";
 import { perfilFormularioServicio, toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
