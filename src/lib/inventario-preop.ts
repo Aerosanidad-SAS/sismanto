@@ -10,6 +10,8 @@ export const CATEGORIAS_INVENTARIO: readonly string[] = ["EQUIPO_CARRETERA", "EQ
 export interface ItemContable {
   categoria: string;
   cantidad_esperada: string | null;
+  /** Configuración → Preoperacional: TRUE/FALSE fuerza «es inventario»; NULL/ausente lo deduce de la categoría. */
+  es_inventario?: boolean | null;
 }
 
 /** Cantidad esperada numérica (> 0), o null si el ítem es de estado (OK / Falla) y no de conteo. */
@@ -20,7 +22,8 @@ export function cantidadEsperada(raw: string | null | undefined): number | null 
 }
 
 export function esItemDeInventario(it: ItemContable): boolean {
-  return CATEGORIAS_INVENTARIO.includes(it.categoria) && cantidadEsperada(it.cantidad_esperada) !== null;
+  const esInventario = it.es_inventario ?? CATEGORIAS_INVENTARIO.includes(it.categoria);
+  return esInventario && cantidadEsperada(it.cantidad_esperada) !== null;
 }
 
 /** Cuántas unidades faltan (0 si está completo, no es inventario o no hay respuesta). */

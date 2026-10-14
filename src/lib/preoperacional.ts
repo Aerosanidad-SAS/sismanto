@@ -25,6 +25,7 @@ export interface ItemCatalogo {
   categoria?: string;
   /** «OK» (ítem de estado) o el número esperado (ítem de conteo). */
   cantidad_esperada?: string | null;
+  es_inventario?: boolean | null;
   /** Gravedad si el ítem falla (checklist_items.severidad_falla). Sin ella toda falla cuenta como MEDIA. */
   severidad_falla?: SeveridadFalla | null;
 }
@@ -73,7 +74,7 @@ export function itemsEvaluados(catalogo: ItemCatalogo[], resultados: ResultadoIt
     // Un equipo contado que no está completo es un FALTANTE (novedad leve, no falla): no saca el vehículo de servicio.
     const faltan =
       c?.categoria && r.estado !== "NO_APLICA"
-        ? unidadesFaltantes({ categoria: c.categoria, cantidad_esperada: c.cantidad_esperada ?? null }, r.cantidadOk)
+        ? unidadesFaltantes({ categoria: c.categoria, cantidad_esperada: c.cantidad_esperada ?? null, es_inventario: c.es_inventario }, r.cantidadOk)
         : 0;
     const esperadas = c?.cantidad_esperada ? Number(c.cantidad_esperada) : undefined;
     return {

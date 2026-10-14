@@ -9,6 +9,7 @@ import { CargaMasivaTab } from "./carga-masiva-tab";
 import { ServiciosTab } from "./servicios-tab";
 import { ClientesTab, type ClienteRow } from "./clientes-tab";
 import { MarcaTab } from "./marca-tab";
+import { PreoperacionalTab } from "./preoperacional-tab";
 import type { OperationalCenter, Supplier } from "@/types";
 
 interface ConfiguracionTabsProps {
@@ -30,6 +31,8 @@ const tabItems = [
   { id: "carga", label: "Carga Masiva" },
   { id: "marca", label: "Marca" },
 ];
+/** Solo el ADMIN edita la lista maestra del preoperacional (las políticas RLS también lo exigen). */
+const TAB_PREOPERACIONAL = { id: "preoperacional", label: "Preoperacional" };
 
 export function ConfiguracionTabs({
   vehicles,
@@ -40,8 +43,9 @@ export function ConfiguracionTabs({
   logoUrl,
   esAdmin,
 }: ConfiguracionTabsProps) {
+  const tabs = esAdmin ? [...tabItems, TAB_PREOPERACIONAL] : tabItems;
   const [tab, setTab] = useTabParam(
-    tabItems.map((t) => t.id),
+    tabs.map((t) => t.id),
     "vehiculos"
   );
 
@@ -49,7 +53,7 @@ export function ConfiguracionTabs({
     <Tabs value={tab} onValueChange={setTab}>
       {/* En móvil las 7 pestañas no caben: la barra se desplaza en horizontal en vez de cortarse. */}
       <TabsList className="mb-4 flex h-auto w-full justify-start overflow-x-auto">
-        {tabItems.map((t) => (
+        {tabs.map((t) => (
           <TabsTrigger key={t.id} value={t.id} className="shrink-0 px-4 py-2">
             {t.label}
           </TabsTrigger>
@@ -83,6 +87,12 @@ export function ConfiguracionTabs({
       <TabsContent value="marca">
         <MarcaTab logoUrl={logoUrl} puedeEditar={esAdmin} />
       </TabsContent>
+
+      {esAdmin && (
+        <TabsContent value="preoperacional">
+          <PreoperacionalTab />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }

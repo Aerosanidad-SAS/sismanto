@@ -23,6 +23,10 @@ export interface ChecklistItem {
   activo: boolean;
   /** NULL = aplica a todos los tipos de vehículo (migración 096). */
   tipos_vehiculo?: string[] | null;
+  /** Migración 131: grupo configurable. Sin grupo, el ítem se agrupa por su `categoria`. */
+  group_id?: number | null;
+  checklist_groups?: { nombre: string; orden: number; activo: boolean } | null;
+  es_inventario?: boolean | null;
 }
 
 export interface ChecklistItemState {
@@ -33,11 +37,19 @@ export interface ChecklistItemState {
 
 export type ChecklistState = Record<number, ChecklistItemState>;
 
-/** Agrupa por categoría conservando el orden de llegada. */
+/** Agrupa por grupo configurable (o por categoría si el ítem no tiene), en el orden de los grupos y luego el de los ítems. */
 export function agruparPorCategoria(items: ChecklistItem[]): [string, ChecklistItem[]][] {
-  const m = new Map<string, ChecklistItem[]>();
-  for (const it of items) m.set(it.categoria, [...(m.get(it.categoria) ?? []), it]);
-  return Array.from(m.entries());
+  const m = new Map<string, { orden: number; items: ChecklistItem[] }>();
+  for (const it of items) {
+    const nombre = it.checklist_groups?.nombre ?? it.categoria;
+    // Primero los grupos configurados; los ítems sin grupo (categoría de siempre) van después, con su propia escala de orden.
+    const g = m.get(nombre) ?? { orden: it.checklist_groups?.orden ?? 100000 + it.orden, items: [] };
+    g.items.push(it);
+    m.set(nombre, g);
+  }
+  return Array.from(m.entries())
+    .sort((a, b) => a[1].orden - b[1].orden)
+    .map(([nombre, g]) => [nombre, g.items.sort((x, y) => x.orden - y.orden)]);
 }
 
 /** Convierte el estado de pantalla al payload de las acciones; lo no tocado cuenta como OK. */

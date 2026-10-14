@@ -20,3 +20,11 @@ test("el ítem de documentos del catálogo se reconoce; las luces internas lleva
   assert.match(detalleItem("Luces Internas") ?? "", /cabina/);
   assert.equal(detalleItem("Luces estacionarias"), null);
 });
+
+test("tieneReglaPorNombre: los ítems con regla en el portal no se renombran", async () => {
+  const { tieneReglaPorNombre } = await import("./documentos-preop");
+  assert.equal(tieneReglaPorNombre("Sticker Visible"), true);
+  assert.equal(tieneReglaPorNombre("Radio Base"), true);
+  assert.equal(tieneReglaPorNombre("Documento SOAT vigente"), true);
+  assert.equal(tieneReglaPorNombre("Sirena"), false);
+});
