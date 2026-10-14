@@ -22,9 +22,12 @@ export function vigenciaDocumento(fecha: string | null | undefined, hoy: string)
   return { dias, nivel: "ok", texto: `Faltan ${plural(dias)}` };
 }
 
-/** El ítem del catálogo «Documentos (SOAT - Tecnicomecánica)» no se responde OK/Falla: se confirma leyendo los vencimientos. */
+/**
+ * Los ítems de documentos del catálogo («Documento SOAT vigente», «Documento técnico-mecánica vigente» y el antiguo
+ * «Documentos (SOAT - Tecnicomecánica)») no se responden OK/Falla: se confirman leyendo los vencimientos.
+ */
 export function esItemDocumentos(descripcion: string): boolean {
-  return /soat/i.test(descripcion);
+  return /^documentos?\b.*(soat|t[eé]cnico)/i.test(descripcion.trim());
 }
 
 /**
