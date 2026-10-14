@@ -30,6 +30,20 @@ export async function getChecklistItemsActivos(lista: "PREOPERACIONAL" | "DOTACI
   const supabase = createClient();
   // `severidad_falla` (094) decide qué falla es CRÍTICA y saca el vehículo de servicio: si no se pide aquí, el motor de
   // alertas la recibe vacía y toda falla queda como MEDIA.
+  // Con la migración 131 el ítem trae su grupo configurable; un grupo desactivado oculta sus ítems.
+  const conGrupo = await supabase
+    .from("checklist_items")
+    .select(
+      "id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo, severidad_falla, group_id, es_inventario, checklist_groups(nombre, orden, activo)"
+    )
+    .eq("activo", true)
+    .eq("lista", lista)
+    .order("orden", { ascending: true });
+  if (!conGrupo.error) {
+    return ((conGrupo.data ?? []) as any[]).filter((it) => it.checklist_groups?.activo !== false);
+  }
+  console.error("[checklist] consulta con grupos falló (¿migración 131 sin aplicar?), se usa la de siempre:", conGrupo.error.message);
+
   const { data, error } = await supabase
     .from("checklist_items")
     .select("id, categoria, descripcion, cantidad_esperada, orden, activo, tipos_vehiculo, severidad_falla")
@@ -121,7 +135,11 @@ export async function submitDailyCheck(data: {
   const fecha = hoyOvem();
 
   const catalogo = await getChecklistItemsActivos("PREOPERACIONAL");
-  const errorChecklist = validarPreoperacional(catalogo, row.items ?? []);
+  // Si el ADMIN desactivó o eliminó un ítem mientras el OVEM llenaba la lista, esa respuesta se ignora en vez de rechazar todo el
+  // envío (en el celular, sin señal, sería peor que perder una respuesta). Los ítems que FALTAN sí se siguen exigiendo.
+  const idsActivos = new Set((catalogo as Array<{ id: number }>).map((c) => c.id));
+  const itemsEnviados = (row.items ?? []).filter((it) => idsActivos.has(it.checklistItemId));
+  const errorChecklist = validarPreoperacional(catalogo, itemsEnviados);
   if (errorChecklist) return { error: errorChecklist };
 
   // El km solo se queda igual o aumenta frente a TODO lo registrado (odómetro, tanqueos, preoperacionales).
@@ -180,8 +198,8 @@ export async function submitDailyCheck(data: {
   // checklist_ok lo recalcula el trigger trg_actualizar_checklist_ok (migración 005) al escribir los ítems.
   // El estado que se guarda es el evaluado: un equipo contado incompleto queda OK con su cantidad (faltante), igual que
   // en la novedad; así lo guardado y lo reportado no se contradicen aunque llegue FALLA de un borrador o un cliente viejo.
-  const evaluados = itemsEvaluados(catalogo as ItemCatalogo[], row.items ?? []);
-  const payload = (row.items ?? []).map((it, i) => ({
+  const evaluados = itemsEvaluados(catalogo as ItemCatalogo[], itemsEnviados);
+  const payload = itemsEnviados.map((it, i) => ({
     daily_check_id: checkRow.id,
     checklist_item_id: it.checklistItemId,
     estado: evaluados[i].estado,

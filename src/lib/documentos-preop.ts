@@ -31,6 +31,14 @@ export function esItemDocumentos(descripcion: string): boolean {
 }
 
 /**
+ * Ítems cuyo NOMBRE activa una regla del portal OVEM (se oculta «Sticker Visible», «Radio Base» solo en AIRPLAN, los documentos
+ * se confirman leyendo). Configuración no deja renombrarlos: si cambiara el texto, la regla dejaría de aplicar sin avisar.
+ */
+export function tieneReglaPorNombre(descripcion: string): boolean {
+  return esItemDocumentos(descripcion) || ["sticker visible", "radio base"].includes(descripcion.trim().toLowerCase());
+}
+
+/**
  * Qué piezas cubre un ítem que agrupa varias, para mostrarlo al lado del nombre.
  * shortcut: vive en código; pasar a una columna del catálogo si crece más allá de un par de ítems.
  */

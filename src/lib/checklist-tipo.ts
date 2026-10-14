@@ -13,3 +13,28 @@ export function aplicaAlTipo(tiposDelItem: readonly string[] | null | undefined,
   if (!tipoVehiculo) return true;
   return tiposDelItem.includes(tipoVehiculo);
 }
+
+/** Tipos de vehículo que Configuración trata como «medicina domiciliaria» (la lista de automóvil o van). */
+export const TIPOS_DOMICILIARIA: readonly string[] = ["DOMI", "VAN", "ADMIN"];
+
+export interface AplicaA {
+  ambulancia: boolean;
+  domiciliaria: boolean;
+}
+
+/** `tipos_vehiculo` de la base → casillas de Configuración. Vacío o NULL = aplica a todos. */
+export function aplicaDesdeTipos(tipos: readonly string[] | null | undefined): AplicaA {
+  if (!tipos || tipos.length === 0) return { ambulancia: true, domiciliaria: true };
+  return {
+    ambulancia: tipos.some((t) => TIPOS_AMBULANCIA.includes(t)),
+    domiciliaria: tipos.some((t) => TIPOS_DOMICILIARIA.includes(t)),
+  };
+}
+
+/** Casillas de Configuración → `tipos_vehiculo`. Las dos marcadas = NULL (todos). Ninguna marcada no es válida: devuelve undefined. */
+export function tiposDesdeAplica(a: AplicaA): string[] | null | undefined {
+  if (a.ambulancia && a.domiciliaria) return null;
+  if (a.ambulancia) return [...TIPOS_AMBULANCIA];
+  if (a.domiciliaria) return [...TIPOS_DOMICILIARIA];
+  return undefined;
+}

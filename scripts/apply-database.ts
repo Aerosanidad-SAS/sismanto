@@ -154,6 +154,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "128_corregir_lectura_km.sql",                   file: "scripts/migrations/128_corregir_lectura_km.sql" },
   { name: "129_checklist_luces_catalogo.sql",              file: "scripts/migrations/129_checklist_luces_catalogo.sql" },
   { name: "130_checklist_luces_rojas_internas.sql",       file: "scripts/migrations/130_checklist_luces_rojas_internas.sql" },
+  { name: "131_checklist_grupos.sql",                      file: "scripts/migrations/131_checklist_grupos.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
