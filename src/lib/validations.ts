@@ -185,6 +185,13 @@ const userRoleEnum = z.enum([
   "GERENCIAL",
   "MANTENIMIENTO",
   "COORDINACION",
+  // Roles de la integración SISRES (migración 035) y de soporte (076): sin ellos no se podían crear ni editar esos usuarios.
+  "ANALISTA",
+  "MEDICO",
+  "AUXILIAR_ENFERMERIA",
+  "VISTA",
+  "TECNICO",
+  "AEROPUERTO",
 ]);
 
 export const createUserAsAdminSchema = z.object({
