@@ -7,6 +7,7 @@ import { auditar } from "@/lib/auditoria";
 import { enmascararIdentificador } from "@/lib/auditoria-lista";
 import { validarClaveNueva } from "@/lib/usuarios-carga";
 import { generarClaveTemporal } from "@/lib/clave-temporal";
+import { datosPersonalesSchema, filaExtra, nombreCompletoDe, tieneDatos, type DatosPersonalesUsuario } from "@/lib/usuarios-sisres";
 import { revalidatePath } from "next/cache";
 import { type UserRole, getDefaultRoute } from "@/lib/auth-utils";
 import {
@@ -241,10 +242,24 @@ export async function createUserAsAdmin(data: {
   ciudad?: string;
   operationalCenterId?: number | null;
   roleCodigo: UserRole;
+  /** Datos personales de SISRES (migración 133). Solo los guarda un ADMIN: son sensibles (RH, nacimiento, celular). */
+  datosPersonales?: DatosPersonalesUsuario;
 }) {
   const caller = await requireRole(["ADMIN", "ANALISTA"]);
-  const parsed = createUserAsAdminSchema.safeParse(data);
+  const { datosPersonales, ...resto } = data;
+  const parsed = createUserAsAdminSchema.safeParse(resto);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  // Se validan ANTES de crear la cuenta de Auth: un dato malo no debe dejar un usuario a medias.
+  let extras: DatosPersonalesUsuario | null = null;
+  if (datosPersonales && caller.role_codigo === "ADMIN" && tieneDatos(datosPersonales)) {
+    const d = datosPersonalesSchema.safeParse(datosPersonales);
+    if (!d.success) return { error: d.error.issues[0]?.message ?? "Datos personales inválidos" };
+    extras = d.data as DatosPersonalesUsuario;
+  }
+  // Con nombres y apellidos por separado, el nombre completo sale de ellos (como en SISRES).
+  const nombreDePartes = extras && extras.primerNombre && extras.primerApellido ? nombreCompletoDe(extras) : "";
+  if (nombreDePartes) parsed.data.nombreCompleto = nombreDePartes;
 
   // Igual que SISRES (includes/insertar_usuarios.php): solo un ADMIN puede
   // crear otro ADMIN — ANALISTA tiene paridad de creación de usuarios, pero
@@ -282,6 +297,18 @@ export async function createUserAsAdmin(data: {
   });
 
   if (profileError) return { error: profileError.message };
+
+  if (extras) {
+    const { error: extraError } = await (admin as any)
+      .from("user_profile_extra")
+      .upsert(filaExtra(newUser.user.id, extras), { onConflict: "user_id" });
+    if (extraError) {
+      console.error("[usuarios] no se guardaron los datos personales:", extraError.code, extraError.message);
+      await auditar("INSERTAR", "usuarios", newUser.user.id, `Usuario creado con rol ${parsed.data.roleCodigo} (sin datos personales: error)`);
+      revalidatePath("/admin/usuarios");
+      return { error: "El usuario se creó, pero no se pudieron guardar sus datos personales. Complétalos con «Datos personales» en su fila." };
+    }
+  }
   await auditar("INSERTAR", "usuarios", newUser.user.id, `Usuario creado con rol ${parsed.data.roleCodigo}`);
   revalidatePath("/admin/usuarios");
   return { success: true };

@@ -2,6 +2,30 @@
 
 Lo genera `npm run release` a partir de los archivos de `changelog/unreleased/`. No se edita a mano (ver `changelog/README.md`).
 
+## v0.8.0 — 2026-10-14
+
+Migraciones incluidas: 129, 130, 131, 132, 133.
+
+### Funcionalidades
+
+- **configuracion** — Configuración tiene una pestaña «Preoperacional» (solo administrador) para crear y ordenar grupos, agregar o eliminar ítems de la lista de chequeo y elegir a qué vehículos aplica cada uno (ambulancia o medicina domiciliaria); el preoperacional del OVEM sigue esa lista. _Roles: ADMIN, OVEM. Migración: 131._
+- **ovem** — En el preoperacional el SOAT y la técnico-mecánica muestran cuántos días faltan para vencer, se confirman con un botón de «leí los vencimientos» y avisan en pantalla si faltan 5 días o menos; las luces internas muestran cuáles son. _Roles: OVEM._
+- **ovem** — El preoperacional se llena en una tabla (ítem, OK, Falla, observación): un toque en OK responde y Falla u Observación abren una hoja para describir; el SOAT y la técnico-mecánica se confirman leyendo sus vencimientos. _Roles: OVEM._
+- **servicios** — En Servicios se puede buscar por el número del servicio, y si cierras el formulario con Escape o tocando fuera con datos sin guardar, el sistema te pregunta antes de descartarlos; además «Guardar y crear otro» ya no deja el paciente del servicio anterior. _Roles: REGULACION, ADMIN, ANALISTA, COORDINACION, MEDICO, AUXILIAR_ENFERMERIA._
+- **usuarios** — SISMANTO ya tiene dónde guardar todos los datos de usuario de SISRES (tipo de documento, nombres y apellidos por separado, fecha de nacimiento, RH, celular, departamento y fecha de registro), visibles solo para el propio usuario y el administrador. _Roles: ADMIN. Migración: 133._
+- **usuarios** — En Administración → Usuarios, al crear un usuario el administrador puede registrar los datos que pedía SISRES (primer y segundo nombre, primer y segundo apellido, tipo de documento, fecha de nacimiento, RH, celular y departamento), y los edita después con «Datos personales» en el menú de cada usuario. _Roles: ADMIN._
+
+### Correcciones
+
+- **administracion** — Al editar o crear un usuario con rol Analista, Médico, Auxiliar de enfermería, Vista, Técnico o Personal de aeropuerto ya no sale «Invalid enum value»: la validación solo conocía seis roles. _Roles: ADMIN._
+- **infra** — Se corrige un error de sintaxis que impedía que las migraciones de la base de datos se aplicaran al integrar cambios, y el CI ahora revisa la sintaxis de los scripts para que no se repita. _Roles: ninguno._
+- **ovem** — En el preoperacional las luces laterales blancas son 4 (2 por lado) y las luces estacionarias se responden solo OK o Falla. _Roles: OVEM. Migración: 129._
+- **ovem** — En el preoperacional las luces laterales rojas son 4 (2 por lado) y las luces internas son 3. _Roles: OVEM. Migración: 130._
+- **ovem** — En el preoperacional la observación de cada ítem se abre con un botón (ya no aparece un campo que empuja la lista), el conteo tiene el botón «Todos» y se quitó el texto «Esperado». _Roles: OVEM._
+- **proveedores** — En Proveedores la lista arranca mostrando solo los activos (los más de mil registros inactivos heredados de SISRES ya no estorban; se ven eligiendo «Estado: INACTIVO» o «todas»), y volver a cargar datos desde SISRES ya no reactiva lo que se desactivó en SISMANTO. _Roles: ADMIN, REGULACION, ANALISTA, COORDINACION._
+- **seguridad** — Se cierran dos puertas de seguridad en la base de datos: nadie sin sesión puede escribir en ninguna tabla aunque una regla futura lo permitiera, y las migraciones ya no convierten en administrador a ningún correo por defecto. No cambia nada de lo que ven los usuarios. _Roles: todos. Migración: 132._
+- **seguridad** — Registrar o editar un paciente ahora comprueba el rol también en el servidor y responde «Sin permisos» con un mensaje claro, en vez de depender solo de la base de datos. _Roles: VISTA, COORDINACION, GERENCIAL._
+
 ## v0.7.0 — 2026-10-13
 
 Migraciones incluidas: 125, 126, 127, 128.

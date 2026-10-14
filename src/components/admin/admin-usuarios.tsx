@@ -30,10 +30,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck } from "lucide-react";
+import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck, Contact } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
+import { CamposDatosPersonales, DialogDatosPersonales } from "@/components/admin/datos-personales-usuario";
+import { DATOS_PERSONALES_VACIOS, nombreCompletoDe, type DatosPersonalesUsuario } from "@/lib/usuarios-sisres";
 
 // Radix Select no admite value="" — valor centinela para "sin centro".
 const SIN_CENTRO = "__none__";
@@ -55,6 +57,10 @@ interface AdminUsuariosProps {
   users: Usuario[];
   roles: { id: number; codigo: string; nombre: string }[];
   centros: { id: number; nombre: string }[];
+  /** Datos personales de SISRES por `user_id` (solo se cargan para un ADMIN). */
+  extras?: Record<string, DatosPersonalesUsuario>;
+  /** Solo un ADMIN ve y edita los datos personales: RH, nacimiento y celular son sensibles. */
+  puedeDatosPersonales?: boolean;
 }
 
 interface CamposPerfil {
@@ -166,7 +172,7 @@ function CamposPerfilUsuario({
   );
 }
 
-export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
+export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPersonales = false }: AdminUsuariosProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,6 +182,9 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nuevo, setNuevo] = useState<CamposPerfil>(PERFIL_VACIO);
+  const [datosNuevo, setDatosNuevo] = useState<DatosPersonalesUsuario>(DATOS_PERSONALES_VACIOS);
+  // «Datos personales» de un usuario existente (diálogo aparte, solo ADMIN).
+  const [datosDe, setDatosDe] = useState<Usuario | null>(null);
 
   // Fila en edición en línea (user_id) — una a la vez.
   const [editando, setEditando] = useState<string | null>(null);
@@ -204,14 +213,18 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
     setLoading(true);
     setError(null);
     setSuccess(null);
+    // Con primer nombre y primer apellido, el nombre completo sale de las cuatro partes (como en SISRES).
+    const nombreDePartes =
+      puedeDatosPersonales && datosNuevo.primerNombre.trim() && datosNuevo.primerApellido.trim() ? nombreCompletoDe(datosNuevo) : "";
     const result = await createUserAsAdmin({
       email,
       password,
-      nombreCompleto: nuevo.nombreCompleto,
+      nombreCompleto: nombreDePartes || nuevo.nombreCompleto,
       cedula: nuevo.cedula,
       ciudad: nuevo.ciudad,
       operationalCenterId: aCentroId(nuevo.centroId),
       roleCodigo: nuevo.roleCodigo,
+      datosPersonales: puedeDatosPersonales ? datosNuevo : undefined,
     });
     if (result?.error) setError(result.error);
     else {
@@ -220,6 +233,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
       setEmail("");
       setPassword("");
       setNuevo(PERFIL_VACIO);
+      setDatosNuevo(DATOS_PERSONALES_VACIOS);
       router.refresh();
     }
     setLoading(false);
@@ -459,6 +473,16 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                               <Pencil className="h-4 w-4" aria-hidden="true" />
                               Editar datos
                             </DropdownMenu.Item>
+                            {puedeDatosPersonales && (
+                              <DropdownMenu.Item
+                                disabled={loading || editando !== null}
+                                onSelect={() => setDatosDe(u)}
+                                className="flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                              >
+                                <Contact className="h-4 w-4" aria-hidden="true" />
+                                Datos personales
+                              </DropdownMenu.Item>
+                            )}
                             <DropdownMenu.Item
                               disabled={loading || editando !== null}
                               onSelect={() => setReseteo({ usuario: u, clave: null })}
@@ -531,8 +555,19 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
         </DialogContent>
       </Dialog>
 
+      <DialogDatosPersonales
+        usuario={datosDe}
+        inicial={datosDe ? extras[datosDe.user_id] ?? DATOS_PERSONALES_VACIOS : DATOS_PERSONALES_VACIOS}
+        onClose={() => setDatosDe(null)}
+        onSaved={(mensaje) => {
+          setDatosDe(null);
+          setSuccess(mensaje);
+          router.refresh();
+        }}
+      />
+
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Crear usuario</DialogTitle>
             <p className="text-sm text-gray-500">
@@ -561,6 +596,16 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
               />
             </div>
             <CamposPerfilUsuario valores={nuevo} onChange={setNuevo} roles={roles} centros={centros} />
+            {puedeDatosPersonales && (
+              <fieldset className="space-y-3 rounded-md border p-3">
+                <legend className="px-1 text-sm font-medium">Datos personales (de SISRES)</legend>
+                <p className="text-xs text-muted-foreground">
+                  Opcionales. Con primer nombre y primer apellido, el nombre completo se arma con las cuatro partes. Solo el
+                  administrador los ve.
+                </p>
+                <CamposDatosPersonales valores={datosNuevo} onChange={setDatosNuevo} prefijoId="dp-nuevo" />
+              </fieldset>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowCreate(false)}>
                 Cancelar
