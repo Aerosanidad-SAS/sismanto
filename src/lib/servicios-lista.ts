@@ -79,13 +79,15 @@ export interface FiltrosServicios {
   origen?: string;
   destino?: string;
   cedula?: string;
+  /** Número del servicio (el ID que muestra la tabla). Coincidencia exacta. */
+  numero?: string;
   /** «Sin gestionar»: servicios en PROGRAMADO/CURSO cuya hora programada pasó hace más de esta cantidad de `sinGestionarUnidad`. */
   sinGestionar?: string;
   sinGestionarUnidad?: string;
 }
 
 const CLAVES: (keyof FiltrosServicios)[] = [
-  "ciudad", "desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula", "sinGestionar", "sinGestionarUnidad",
+  "ciudad", "desde", "hasta", "tipo", "etapa", "cliente", "origen", "destino", "cedula", "numero", "sinGestionar", "sinGestionarUnidad",
 ];
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -103,6 +105,7 @@ export function leerFiltros(params: Record<string, string | string[] | undefined
     if (k === "ciudad" && !prefijoCiudad(s)) continue;
     if (k === "sinGestionar" && !/^[1-9]\d{0,3}$/.test(s)) continue;
     if (k === "sinGestionarUnidad" && !esUnidadSinGestionar(s)) continue;
+    if (k === "numero" && !/^[1-9]\d{0,9}$/.test(s)) continue;
     filtros[k] = s.slice(0, 120);
   }
   const p = Number(Array.isArray(params.pagina) ? params.pagina[0] : params.pagina);

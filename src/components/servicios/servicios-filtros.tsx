@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { TIPOS_SERVICIO } from "./servicios-tabla";
 
 const TODOS = "__todos__";
-const AVANZADOS = ["cliente", "origen", "destino", "cedula", "sinGestionar"] as const;
+const AVANZADOS = ["cliente", "origen", "destino", "cedula", "numero", "sinGestionar"] as const;
 
 const ETIQUETA = "text-[11px] font-medium leading-none text-muted-foreground";
 
@@ -145,6 +145,19 @@ export function ServiciosFiltros({
               className="h-8 w-40 text-sm"
               value={f.cedula ?? ""}
               onChange={(e) => set("cedula", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="f-numero" className={cn(ETIQUETA, "block")}>
+              Número
+            </label>
+            <Input
+              id="f-numero"
+              inputMode="numeric"
+              placeholder="N.º de servicio"
+              className="h-8 w-36 text-sm"
+              value={f.numero ?? ""}
+              onChange={(e) => set("numero", e.target.value)}
             />
           </div>
           <div className="space-y-1">
