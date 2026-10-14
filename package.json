@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "check:nombres": "node scripts/check-nombres-sin-definir.mjs",
+    "check:scripts": "node scripts/check-scripts-sintaxis.mjs",
     "test": "node scripts/run-tests.mjs",
     "db:apply": "tsx scripts/apply-database.ts",
     "db:seed-role-users": "tsx scripts/seed-role-test-users.ts",

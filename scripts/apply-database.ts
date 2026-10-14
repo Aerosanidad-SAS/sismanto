@@ -370,8 +370,7 @@ async function ensureAdminProfile(client: pg.Client) {
   // cuenta en auth.users, en cada merge a dev/staging. Si no hay ADMIN_SETUP_EMAIL no se promueve a nadie.
   const adminEmail = process.env.ADMIN_SETUP_EMAIL?.trim();
   if (!adminEmail) {
-    console.log("
-  · ADMIN_SETUP_EMAIL no está definido: no se crea ni restablece ningún perfil ADMIN.");
+    console.log("  · ADMIN_SETUP_EMAIL no está definido: no se crea ni restablece ningún perfil ADMIN.");
     return;
   }
 
