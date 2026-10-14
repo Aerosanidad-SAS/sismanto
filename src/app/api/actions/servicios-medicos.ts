@@ -229,6 +229,8 @@ function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centro: 
   if (filtros.origen) q = q.eq("ciudad_origen", filtros.origen);
   if (filtros.destino) q = q.eq("ciudad_destino", filtros.destino);
   if (filtros.cedula) q = q.ilike("cedula_paciente", `%${filtros.cedula.replace(/[%_\\]/g, "")}%`);
+  // Número exacto del servicio (el ID de la tabla). `leerFiltros` ya garantiza que es un entero positivo.
+  if (filtros.numero) q = q.eq("id", Number(filtros.numero));
   // Como SISRES: el rango es sobre la fecha programada, en hora de Colombia.
   if (filtros.desde) q = q.gte("fecha_hora_programacion", `${filtros.desde}T00:00:00-05:00`);
   if (filtros.hasta) q = q.lte("fecha_hora_programacion", `${filtros.hasta}T23:59:59.999-05:00`);
