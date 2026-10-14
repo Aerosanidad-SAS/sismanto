@@ -156,6 +156,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "130_checklist_luces_rojas_internas.sql",       file: "scripts/migrations/130_checklist_luces_rojas_internas.sql" },
   { name: "131_checklist_grupos.sql",                      file: "scripts/migrations/131_checklist_grupos.sql" },
   { name: "132_anon_sin_escritura.sql",                    file: "scripts/migrations/132_anon_sin_escritura.sql" },
+  { name: "133_user_profile_extra.sql",                    file: "scripts/migrations/133_user_profile_extra.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
