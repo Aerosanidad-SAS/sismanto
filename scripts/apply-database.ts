@@ -148,6 +148,15 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "123_regulacion_clientes_y_prestadores.sql",          file: "scripts/migrations/123_regulacion_clientes_y_prestadores.sql" },
   { name: "123_servicios_cierre_automatico.sql",           file: "scripts/migrations/123_servicios_cierre_automatico.sql" },
   { name: "124_servicios_lectura_por_centro.sql",          file: "scripts/migrations/124_servicios_lectura_por_centro.sql" },
+  { name: "125_higiene_funciones_seguridad.sql",          file: "scripts/migrations/125_higiene_funciones_seguridad.sql" },
+  { name: "126_flota_escritura_por_centro.sql",           file: "scripts/migrations/126_flota_escritura_por_centro.sql" },
+  { name: "127_servicios_lectura_por_ciudad.sql",          file: "scripts/migrations/127_servicios_lectura_por_ciudad.sql" },
+  { name: "128_corregir_lectura_km.sql",                   file: "scripts/migrations/128_corregir_lectura_km.sql" },
+  { name: "129_checklist_luces_catalogo.sql",              file: "scripts/migrations/129_checklist_luces_catalogo.sql" },
+  { name: "130_checklist_luces_rojas_internas.sql",       file: "scripts/migrations/130_checklist_luces_rojas_internas.sql" },
+  { name: "131_checklist_grupos.sql",                      file: "scripts/migrations/131_checklist_grupos.sql" },
+  { name: "132_anon_sin_escritura.sql",                    file: "scripts/migrations/132_anon_sin_escritura.sql" },
+  { name: "133_user_profile_extra.sql",                    file: "scripts/migrations/133_user_profile_extra.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
@@ -358,8 +367,13 @@ Cómo obtenerla (Supabase):
 }
 
 async function ensureAdminProfile(client: pg.Client) {
-  const adminEmail =
-    process.env.ADMIN_SETUP_EMAIL?.trim() || "innovizar@aerosanidadsas.com";
+  // Sin correo por defecto (auditoría 14/10/2026): un valor fijo aquí convertía en ADMIN a cualquiera que lograra crear esa
+  // cuenta en auth.users, en cada merge a dev/staging. Si no hay ADMIN_SETUP_EMAIL no se promueve a nadie.
+  const adminEmail = process.env.ADMIN_SETUP_EMAIL?.trim();
+  if (!adminEmail) {
+    console.log("  · ADMIN_SETUP_EMAIL no está definido: no se crea ni restablece ningún perfil ADMIN.");
+    return;
+  }
 
   const r = await client.query(
     `

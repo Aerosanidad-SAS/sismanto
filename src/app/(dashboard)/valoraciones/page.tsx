@@ -11,11 +11,12 @@ export const metadata = { title: "Valoraciones" };
 
 const ROLES_EDICION = ["ADMIN", "MEDICO", "ANALISTA"];
 
-export default async function ValoracionesPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function ValoracionesPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole(["ADMIN", "MEDICO", "ANALISTA", "VISTA"]);
   const { q, pagina } = leerBusquedaValoraciones(searchParams);
   const [profile, { valoraciones, total, error: errorLista }, resumen, aerolineas] = await Promise.all([

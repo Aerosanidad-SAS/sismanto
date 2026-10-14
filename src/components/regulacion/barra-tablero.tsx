@@ -2,22 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { IncidentForm } from "@/components/dashboard/incident-form";
+import { ReportarNovedadDialog } from "@/components/novedades/reportar-novedad-dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 const INTERVALO_REFRESCO_MS = 30_000;
@@ -36,7 +22,6 @@ export function BarraTablero({ vehiculos, reportadoPor }: BarraTableroProps) {
   const router = useRouter();
   const [ultima, setUltima] = useState<Date | null>(null);
   const [novedadAbierta, setNovedadAbierta] = useState(false);
-  const [vehiculoId, setVehiculoId] = useState("");
 
   useEffect(() => {
     // Al montar, los datos ya vienen frescos del servidor: se muestra esa hora desde el primer momento
@@ -81,42 +66,12 @@ export function BarraTablero({ vehiculos, reportadoPor }: BarraTableroProps) {
         Reportar novedad
       </Button>
 
-      <Dialog open={novedadAbierta} onOpenChange={setNovedadAbierta}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reportar novedad</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Vehículo *</Label>
-              <Select value={vehiculoId} onValueChange={setVehiculoId}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecciona la placa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vehiculos.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.placa}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {vehiculoId && (
-              <IncidentForm
-                vehicleId={vehiculoId}
-                afectaOperatividad={false}
-                reportadoPorDefault={reportadoPor}
-                onSuccess={() => {
-                  setNovedadAbierta(false);
-                  setVehiculoId("");
-                  router.refresh();
-                }}
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ReportarNovedadDialog
+        abierto={novedadAbierta}
+        onAbiertoChange={setNovedadAbierta}
+        vehiculos={vehiculos}
+        reportadoPor={reportadoPor}
+      />
     </div>
   );
 }

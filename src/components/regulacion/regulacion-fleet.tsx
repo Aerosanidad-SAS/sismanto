@@ -130,7 +130,8 @@ function VehicleTile({
           variant="outline"
           size="sm"
           className={cn(
-            "h-9 flex-1 min-w-[6.5rem] px-2",
+            // El texto largo («Marcar fuera de servicio») pasa a dos líneas dentro del botón en vez de desbordarse sobre la tarjeta vecina.
+            "h-auto min-h-9 flex-1 min-w-[6.5rem] whitespace-normal px-2 py-1 text-center leading-tight",
             v.estado_actual === "OPERATIVO"
               ? "border-warning/60 text-foreground hover:bg-warning-soft"
               : "border-success/60 text-foreground hover:bg-success-soft"
@@ -172,7 +173,7 @@ export function RegulacionFleet({
   const [dialogMsg, setDialogMsg] = useState<{ tipo: "error" | "info"; texto: string } | null>(null);
   const [unassignAssignmentId, setUnassignAssignmentId] = useState<number | null>(null);
   const [confirmFds, setConfirmFds] = useState<{ id: string; placa: string } | null>(null);
-  const [aviso, setAviso] = useState<{ texto: string; deshacer: () => void } | null>(null);
+  const [aviso, setAviso] = useState<{ texto: string; deshacer?: () => void } | null>(null);
   const hoy = hoyBogota();
 
   const USERS_POR_ROL: Record<Rol, TripulacionUser[]> = {
@@ -274,6 +275,8 @@ export function RegulacionFleet({
     setLoading(true);
     setDialogMsg(null);
     let fallo: string | null = null;
+    let reasignados = 0;
+    const liberados = new Set<string>();
     // Secuencial: cada asignación desactiva la anterior del mismo rol y reasigna servicios no iniciados.
     for (const rol of rolesConCambio) {
       const result = await asignarTripulacion(assigningVehicle, crew[rol], rol, hoy);
@@ -281,9 +284,23 @@ export function RegulacionFleet({
         fallo = `${ROL_LABEL[rol]}: ${result.error}`;
         break;
       }
+      reasignados += "reasignados" in result ? result.reasignados ?? 0 : 0;
+      if ("liberados" in result) result.liberados?.forEach((placa) => liberados.add(placa));
     }
     if (fallo) setDialogMsg({ tipo: "error", texto: fallo });
-    else cerrarAsignar();
+    else {
+      cerrarAsignar();
+      // DEU-01: antes los servicios PROGRAMADO sin iniciar se reasignaban en silencio, sin decir cuántos.
+      const avisos: string[] = [];
+      if (reasignados > 0) {
+        avisos.push(`Los ${reasignados} servicio${reasignados === 1 ? "" : "s"} PROGRAMADO sin iniciar de este vehículo pasaron a la nueva tripulación.`);
+      }
+      // Una persona no puede estar en dos vehículos: avisar de dónde quedó libre su puesto.
+      if (liberados.size > 0) {
+        avisos.push(`Quedó libre su puesto en ${[...liberados].join(", ")}: una persona solo puede estar en un vehículo.`);
+      }
+      if (avisos.length > 0) setAviso({ texto: avisos.join(" ") });
+    }
     // Si falló a medias, lo ya guardado debe verse reflejado.
     router.refresh();
     setLoading(false);
@@ -393,10 +410,12 @@ export function RegulacionFleet({
           className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted p-3 text-sm"
         >
           <span>{aviso.texto}</span>
-          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={aviso.deshacer}>
-            <Undo2 className="mr-1 h-4 w-4" aria-hidden />
-            Deshacer
-          </Button>
+          {aviso.deshacer && (
+            <Button type="button" variant="outline" size="sm" disabled={loading} onClick={aviso.deshacer}>
+              <Undo2 className="mr-1 h-4 w-4" aria-hidden />
+              Deshacer
+            </Button>
+          )}
         </div>
       )}
 

@@ -5,10 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { GestionTickets } from "@/components/soporte/gestion-tickets";
 
 interface Props {
-  searchParams: { estado?: string; categoria?: string; prioridad?: string; buscar?: string; desde?: string; hasta?: string; mios?: string };
+  searchParams: Promise<{ estado?: string; categoria?: string; prioridad?: string; buscar?: string; desde?: string; hasta?: string; mios?: string }>;
 }
 
-export default async function GestionTicketsPage({ searchParams }: Props) {
+export default async function GestionTicketsPage(props: Props) {
+  const searchParams = await props.searchParams;
   // Solo gestores (misma lista que es_gestor_tickets() en la base).
   const profile = await requireRole(["ADMIN", "ANALISTA", "COORDINACION", "TECNICO"]);
 

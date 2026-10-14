@@ -36,3 +36,16 @@ describe("leerFiltros (sin gestionar)", () => {
     assert.equal(leerFiltros({ sinGestionarUnidad: "HOUR" }).filtros.sinGestionarUnidad, undefined);
   });
 });
+
+describe("leerFiltros (número de servicio)", () => {
+  it("acepta un entero positivo y lo conserva en la URL", () => {
+    const { filtros } = leerFiltros({ numero: " 71767 " });
+    assert.equal(filtros.numero, "71767");
+    assert.match(filtrosAQuery(filtros), /numero=71767/);
+  });
+  it("descarta lo que no es un número entero positivo", () => {
+    for (const malo of ["abc", "0", "-5", "12.5", "1e3", "12 34", "99999999999"]) {
+      assert.equal(leerFiltros({ numero: malo }).filtros.numero, undefined, malo);
+    }
+  });
+});

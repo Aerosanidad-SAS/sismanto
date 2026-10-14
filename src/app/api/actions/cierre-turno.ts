@@ -16,6 +16,7 @@ import {
   type VehiculoProgramadoCierre,
 } from "@/lib/cierre-turno";
 import { hoyBogota, sumarDias } from "@/lib/fechas";
+import { ultimoKmHastaFecha } from "@/lib/kilometraje-servidor";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "./auth";
@@ -69,20 +70,27 @@ export async function getContextoCierre(vehicleId: string): Promise<ContextoCier
 }
 
 async function leerEstado(supabase: any, userId: string, vehicleId: string, hoy: string) {
-  const [preop, cierre, enCurso, ultimoLog, vehiculo] = await Promise.all([
+  const [preop, cierre, enCurso, ultimoLog, vehiculo, ultimoTodasFuentes] = await Promise.all([
     supabase.from("daily_checks").select("id, kilometraje_inicial").eq("user_id", userId).eq("vehicle_id", vehicleId).eq("fecha", hoy).maybeSingle(),
     supabase.from("ovem_cierres_turno").select("id, cerrado_at").eq("user_id", userId).eq("vehicle_id", vehicleId).eq("fecha", hoy).maybeSingle(),
     supabase.from("medical_services").select("id", { count: "exact", head: true }).eq("vehicle_id", vehicleId).eq("etapa", "CURSO"),
     supabase.from("mileage_logs").select("lectura_kilometraje").eq("vehicle_id", vehicleId).order("lectura_kilometraje", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("vehicles").select("km_actual").eq("id", vehicleId).maybeSingle(),
+    // Tanqueos y preoperacionales también cuentan: un cierre no puede quedar por debajo de un tanqueo de hoy.
+    // `undefined` = no se pudo leer; cerrarTurno no cierra a ciegas.
+    ultimoKmHastaFecha(vehicleId, hoy).catch((e: unknown) => {
+      console.error("[cierre-turno] no se pudo leer el historial de km:", e instanceof Error ? e.message : e);
+      return undefined;
+    }),
   ]);
   const kmInicial = preop.data?.kilometraje_inicial;
-  const candidatos = [ultimoLog.data?.lectura_kilometraje, vehiculo.data?.km_actual]
+  const candidatos = [ultimoLog.data?.lectura_kilometraje, vehiculo.data?.km_actual, ultimoTodasFuentes]
     .map((n) => (n === null || n === undefined ? NaN : Number(n)))
     .filter((n) => Number.isFinite(n));
   return {
     kmInicialHoy: kmInicial === null || kmInicial === undefined ? null : Number(kmInicial),
     ultimoKm: candidatos.length > 0 ? Math.max(...candidatos) : null,
+    historialIlegible: ultimoTodasFuentes === undefined,
     cerradoAt: (cierre.data?.cerrado_at as string | undefined) ?? null,
     bloqueoEstado: {
       tienePreoperacionalHoy: Boolean(preop.data),
@@ -145,6 +153,9 @@ export async function cerrarTurno(data: DatosCierreTurno) {
 
   const bloqueo = bloqueoCierre(estado.bloqueoEstado);
   if (bloqueo) return { error: bloqueo };
+  if (estado.historialIlegible) {
+    return { error: "No se pudo verificar el kilometraje contra el historial del vehículo. Inténtalo de nuevo en un momento." };
+  }
 
   const errorEntrada = validarCierre(
     {

@@ -106,6 +106,9 @@ export function PrestadoresDirectorio({ filas, puedeEditar }: { filas: Fila[]; p
         filas={filas}
         columnas={COLUMNAS}
         filtros={FILTROS}
+        // La migración de SISRES trajo ~1.300 filas inactivas (personas y registros administrativos): por defecto no estorban.
+        // «Estado: todas» o «INACTIVO» las muestra.
+        seleccionInicial={{ estado: "ACTIVO" }}
         vacio="Todavía no hay prestadores cargados (llegan con la migración de datos de SISRES)."
         accion={
           puedeEditar

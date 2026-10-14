@@ -18,6 +18,7 @@ import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 import { MisServicios } from "@/components/servicios/mis-servicios";
 import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { centroVisible } from "@/lib/auth-utils";
+import { ciudadDeCentro } from "@/lib/servicios-centro";
 import { ciudadRegistroDePerfil, leerFiltros } from "@/lib/servicios-lista";
 import { ServiciosFiltros } from "@/components/servicios/servicios-filtros";
 import { ServiciosPaginacion } from "@/components/servicios/servicios-paginacion";
@@ -47,14 +48,18 @@ async function getVehiculosActivos() {
   }
 }
 
-export default async function ServiciosPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function ServiciosPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const hoyIso = hoyBogota();
   const { filtros, pagina } = leerFiltros(searchParams);
   const profile = await getProfile();
+  // Con centro asignado (Regulación, Coordinación…) la lista es de su ciudad y nada más: sin selector ni resumen de la otra.
+  const centroDelPerfil = centroVisible(profile);
+  const ciudadFija = centroDelPerfil ? ciudadDeCentro(centroDelPerfil.codigo) : null;
   const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
   const [
     { servicios, total, error: errorLista },
@@ -127,6 +132,9 @@ export default async function ServiciosPage({
         <AvisosServicios etapasVisibles={etapasVisibles} />
       </div>
 
+      {/* Lo primero que se ve: cómo va el día. Después, los filtros y la lista. */}
+      <ResumenOperativo inicial={resumenHoy} ciudad={filtros.ciudad ?? ""} />
+
       {mostrarMisServicios && (
         <div>
           <h2 className="text-xl mb-3">{profile?.role_codigo === "ADMIN" ? "Servicios programados y en curso" : "Mis servicios asignados"}</h2>
@@ -139,6 +147,7 @@ export default async function ServiciosPage({
           <ServiciosFiltros
             key={JSON.stringify(filtros)}
             inicial={filtros}
+            ciudadFija={ciudadFija !== null}
             clientes={opciones.clientes}
             origenes={opciones.origenes}
             destinos={opciones.destinos}
@@ -170,7 +179,7 @@ export default async function ServiciosPage({
         </CardContent>
       </Card>
 
-      <ResumenOperativo inicial={resumenHoy} ciudad={filtros.ciudad ?? ""} />
+      <ResumenOperativo inicial={resumenHoy} ciudad={ciudadFija?.clave ?? filtros.ciudad ?? ""} />
     </div>
   );
 }

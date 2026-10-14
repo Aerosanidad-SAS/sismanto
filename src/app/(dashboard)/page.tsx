@@ -279,25 +279,26 @@ async function getCoordinacionSectionData() {
   }
 }
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: {
-    inicio?: string;
-    fin?: string;
-    tipoCosto?: string;
-    costoCentro?: string;
-    costoPlacas?: string;
-    costoBusqueda?: string;
-    dispInicio?: string;
-    dispFin?: string;
-    dispCentro?: string;
-    gInicio?: string;
-    gFin?: string;
-    gCentro?: string;
-    ciudad?: string;
-  };
-}) {
+export default async function DashboardPage(
+  props: {
+    searchParams: Promise<{
+      inicio?: string;
+      fin?: string;
+      tipoCosto?: string;
+      costoCentro?: string;
+      costoPlacas?: string;
+      costoBusqueda?: string;
+      dispInicio?: string;
+      dispFin?: string;
+      dispCentro?: string;
+      gInicio?: string;
+      gFin?: string;
+      gCentro?: string;
+      ciudad?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   // COORDINACION tiene su propio inicio (resumen de servicios de su CRA, flota del día, informes): no carga
   // costos, disponibilidad ni biomédicos del tablero ejecutivo.
   if ((await getProfile())?.role_codigo === "COORDINACION") {

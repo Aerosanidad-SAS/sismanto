@@ -29,10 +29,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Check, X, KeyRound } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck, Contact } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
+import { CamposDatosPersonales, DialogDatosPersonales } from "@/components/admin/datos-personales-usuario";
+import { DATOS_PERSONALES_VACIOS, nombreCompletoDe, type DatosPersonalesUsuario } from "@/lib/usuarios-sisres";
 
 // Radix Select no admite value="" — valor centinela para "sin centro".
 const SIN_CENTRO = "__none__";
@@ -54,6 +57,10 @@ interface AdminUsuariosProps {
   users: Usuario[];
   roles: { id: number; codigo: string; nombre: string }[];
   centros: { id: number; nombre: string }[];
+  /** Datos personales de SISRES por `user_id` (solo se cargan para un ADMIN). */
+  extras?: Record<string, DatosPersonalesUsuario>;
+  /** Solo un ADMIN ve y edita los datos personales: RH, nacimiento y celular son sensibles. */
+  puedeDatosPersonales?: boolean;
 }
 
 interface CamposPerfil {
@@ -165,7 +172,7 @@ function CamposPerfilUsuario({
   );
 }
 
-export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
+export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPersonales = false }: AdminUsuariosProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +182,9 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nuevo, setNuevo] = useState<CamposPerfil>(PERFIL_VACIO);
+  const [datosNuevo, setDatosNuevo] = useState<DatosPersonalesUsuario>(DATOS_PERSONALES_VACIOS);
+  // «Datos personales» de un usuario existente (diálogo aparte, solo ADMIN).
+  const [datosDe, setDatosDe] = useState<Usuario | null>(null);
 
   // Fila en edición en línea (user_id) — una a la vez.
   const [editando, setEditando] = useState<string | null>(null);
@@ -203,14 +213,18 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
     setLoading(true);
     setError(null);
     setSuccess(null);
+    // Con primer nombre y primer apellido, el nombre completo sale de las cuatro partes (como en SISRES).
+    const nombreDePartes =
+      puedeDatosPersonales && datosNuevo.primerNombre.trim() && datosNuevo.primerApellido.trim() ? nombreCompletoDe(datosNuevo) : "";
     const result = await createUserAsAdmin({
       email,
       password,
-      nombreCompleto: nuevo.nombreCompleto,
+      nombreCompleto: nombreDePartes || nuevo.nombreCompleto,
       cedula: nuevo.cedula,
       ciudad: nuevo.ciudad,
       operationalCenterId: aCentroId(nuevo.centroId),
       roleCodigo: nuevo.roleCodigo,
+      datosPersonales: puedeDatosPersonales ? datosNuevo : undefined,
     });
     if (result?.error) setError(result.error);
     else {
@@ -219,6 +233,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
       setEmail("");
       setPassword("");
       setNuevo(PERFIL_VACIO);
+      setDatosNuevo(DATOS_PERSONALES_VACIOS);
       router.refresh();
     }
     setLoading(false);
@@ -295,7 +310,8 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
               {success}
             </div>
           )}
-          <Table>
+          {/* Cada columna mide lo que mide su contenido más largo (nada se corta ni se trunca); si no cabe en la pantalla, la tabla se desplaza en horizontal y «Acciones» queda fija a la derecha. */}
+          <Table className="min-w-max whitespace-nowrap">
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -305,7 +321,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                 <TableHead>Centro</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead className="sticky right-0 bg-muted text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -325,19 +341,17 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                           value={edicion.nombreCompleto}
                           onChange={(e) => setCampo("nombreCompleto", e.target.value)}
                           onKeyDown={teclas}
-                          className="h-8 w-40"
+                          className="h-8 w-56"
                           autoFocus
                         />
                       </TableCell>
-                      <TableCell className="max-w-[12rem] truncate" title={u.email ?? undefined}>
-                        {u.email || "—"}
-                      </TableCell>
+                      <TableCell>{u.email || "—"}</TableCell>
                       <TableCell>
                         <Input
                           value={edicion.cedula}
                           onChange={(e) => setCampo("cedula", e.target.value)}
                           onKeyDown={teclas}
-                          className="h-8 w-28"
+                          className="h-8 w-36"
                         />
                       </TableCell>
                       <TableCell>
@@ -345,12 +359,12 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                           value={edicion.ciudad}
                           onChange={(e) => setCampo("ciudad", e.target.value)}
                           onKeyDown={teclas}
-                          className="h-8 w-28"
+                          className="h-8 w-36"
                         />
                       </TableCell>
                       <TableCell>
                         <Select value={edicion.centroId} onValueChange={(v) => setCampo("centroId", v)}>
-                          <SelectTrigger className="h-8 w-36">
+                          <SelectTrigger className="h-8 w-44">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -368,7 +382,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                           value={edicion.roleCodigo}
                           onValueChange={(v) => setCampo("roleCodigo", v as UserRole)}
                         >
-                          <SelectTrigger className="h-8 w-40">
+                          <SelectTrigger className="h-8 w-52">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -385,7 +399,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                           {u.activo ? "Activo" : "Deshabilitado"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
+                      <TableCell className="sticky right-0 bg-muted text-right">
                         <Button
                           size="sm"
                           onClick={handleSaveEdit}
@@ -413,9 +427,7 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                 return (
                   <TableRow key={u.user_id}>
                     <TableCell className="font-medium">{u.nombre_completo || "—"}</TableCell>
-                    <TableCell className="max-w-[12rem] truncate" title={u.email ?? undefined}>
-                      {u.email || "—"}
-                    </TableCell>
+                    <TableCell>{u.email || "—"}</TableCell>
                     <TableCell>{u.cedula || "—"}</TableCell>
                     <TableCell>{u.ciudad || "—"}</TableCell>
                     <TableCell>
@@ -438,36 +450,62 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
                         {u.activo ? "Activo" : "Deshabilitado"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => abrirEdicion(u)}
-                        disabled={loading || editando !== null}
-                        className="px-2"
-                      >
-                        <Pencil className="h-4 w-4 mr-1" />
-                        Editar
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setReseteo({ usuario: u, clave: null })}
-                        disabled={loading || editando !== null}
-                        className="px-2"
-                      >
-                        <KeyRound className="h-4 w-4 mr-1" />
-                        Restablecer clave
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleActive(u.user_id, !u.activo)}
-                        disabled={loading}
-                        className={cn("px-2", u.activo ? "text-red-600" : "text-green-600")}
-                      >
-                        {u.activo ? "Deshabilitar" : "Habilitar"}
-                      </Button>
+                    <TableCell className="sticky right-0 bg-card text-right">
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger
+                          aria-label={`Acciones de ${u.nombre_completo || u.email || "usuario"}`}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 text-sm text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent"
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content
+                            align="end"
+                            sideOffset={4}
+                            className="z-50 min-w-[12rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+                          >
+                            <DropdownMenu.Item
+                              disabled={loading || editando !== null}
+                              onSelect={() => abrirEdicion(u)}
+                              className="flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                            >
+                              <Pencil className="h-4 w-4" aria-hidden="true" />
+                              Editar datos
+                            </DropdownMenu.Item>
+                            {puedeDatosPersonales && (
+                              <DropdownMenu.Item
+                                disabled={loading || editando !== null}
+                                onSelect={() => setDatosDe(u)}
+                                className="flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                              >
+                                <Contact className="h-4 w-4" aria-hidden="true" />
+                                Datos personales
+                              </DropdownMenu.Item>
+                            )}
+                            <DropdownMenu.Item
+                              disabled={loading || editando !== null}
+                              onSelect={() => setReseteo({ usuario: u, clave: null })}
+                              className="flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                            >
+                              <KeyRound className="h-4 w-4" aria-hidden="true" />
+                              Restablecer clave
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                            <DropdownMenu.Item
+                              disabled={loading}
+                              onSelect={() => handleToggleActive(u.user_id, !u.activo)}
+                              className={cn(
+                                "flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm font-medium outline-none focus:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                                u.activo ? "text-destructive focus:text-destructive" : "text-green-700 focus:text-green-700"
+                              )}
+                            >
+                              {u.activo ? <UserX className="h-4 w-4" aria-hidden="true" /> : <UserCheck className="h-4 w-4" aria-hidden="true" />}
+                              {u.activo ? "Deshabilitar" : "Habilitar"}
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu.Root>
                     </TableCell>
                   </TableRow>
                 );
@@ -517,8 +555,19 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
         </DialogContent>
       </Dialog>
 
+      <DialogDatosPersonales
+        usuario={datosDe}
+        inicial={datosDe ? extras[datosDe.user_id] ?? DATOS_PERSONALES_VACIOS : DATOS_PERSONALES_VACIOS}
+        onClose={() => setDatosDe(null)}
+        onSaved={(mensaje) => {
+          setDatosDe(null);
+          setSuccess(mensaje);
+          router.refresh();
+        }}
+      />
+
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Crear usuario</DialogTitle>
             <p className="text-sm text-gray-500">
@@ -547,6 +596,16 @@ export function AdminUsuarios({ users, roles, centros }: AdminUsuariosProps) {
               />
             </div>
             <CamposPerfilUsuario valores={nuevo} onChange={setNuevo} roles={roles} centros={centros} />
+            {puedeDatosPersonales && (
+              <fieldset className="space-y-3 rounded-md border p-3">
+                <legend className="px-1 text-sm font-medium">Datos personales (de SISRES)</legend>
+                <p className="text-xs text-muted-foreground">
+                  Opcionales. Con primer nombre y primer apellido, el nombre completo se arma con las cuatro partes. Solo el
+                  administrador los ve.
+                </p>
+                <CamposDatosPersonales valores={datosNuevo} onChange={setDatosNuevo} prefijoId="dp-nuevo" />
+              </fieldset>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowCreate(false)}>
                 Cancelar

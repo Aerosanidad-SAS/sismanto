@@ -9,11 +9,12 @@ import { CIUDADES_SERVICIO, prefijoCiudad } from "@/lib/servicios-lista";
 
 export const metadata = { title: "Estadísticas" };
 
-export default async function EstadisticasPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function EstadisticasPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole(["ADMIN", "GERENCIAL", "ANALISTA", "COORDINACION"]);
   const hoyIso = hoyBogota();
   const pedida = Array.isArray(searchParams.ciudad) ? searchParams.ciudad[0] : searchParams.ciudad;

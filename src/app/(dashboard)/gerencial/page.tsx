@@ -95,11 +95,12 @@ async function getDatosGerenciales() {
   };
 }
 
-export default async function GerencialPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function GerencialPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const uno = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const pedida = uno(searchParams.ciudad);
   const ciudad = prefijoCiudad(pedida) ? (pedida as string) : "";

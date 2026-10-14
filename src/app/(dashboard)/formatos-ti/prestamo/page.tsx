@@ -5,11 +5,12 @@ import { FormatosPaginacion } from "@/components/formatos-ti/formatos-paginacion
 import { PrestamoTabla } from "@/components/formatos-ti/prestamo-tabla";
 import { ROLES_FORMATOS_TI, paramPagina, paramTexto } from "@/lib/formatos-ti/comun";
 
-export default async function PrestamoPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function PrestamoPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole([...ROLES_FORMATOS_TI]);
   const estado = paramTexto(searchParams, "estado");
   const filtros = {

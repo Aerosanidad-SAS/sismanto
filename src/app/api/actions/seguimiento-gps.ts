@@ -60,7 +60,7 @@ export async function getSeguimientoServicio(id: number): Promise<EstadoSeguimie
 
 /** Posición para el enlace público del paciente (sin sesión). Solo placa y posición: ningún dato del paciente. */
 export async function getSeguimientoPublico(token: string): Promise<EstadoSeguimiento | { error: string }> {
-  const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "sin-ip";
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "sin-ip";
   if (!permitirIntento(`seguimiento-publico:${ip}`, 120, 60 * 60_000)) return { error: "Demasiadas consultas. Espere unos minutos." };
   if (!esTokenSeguimiento(token) || !process.env.SUPABASE_SERVICE_ROLE_KEY) return { error: "Enlace inválido o vencido" };
   const { data } = await createAdminClient()
@@ -74,8 +74,8 @@ export async function getSeguimientoPublico(token: string): Promise<EstadoSeguim
   return { placa: s.vehicles?.placa ?? null, etapa: s.etapa, posicion, aviso };
 }
 
-function origenSitio(): string {
-  const h = headers();
+async function origenSitio(): Promise<string> {
+  const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   return `${proto}://${host}`;
@@ -117,7 +117,7 @@ export async function enviarUbicacionAlPaciente(id: number) {
       .eq("id", s.id);
     if (error) return { error: error.message };
   }
-  const enlace = `${origenSitio()}/seguimiento/${token}`;
+  const enlace = `${await origenSitio()}/seguimiento/${token}`;
 
   const canales: string[] = [];
   const telefono = s.patients?.celular ? sanitizarTelefono(s.patients.celular) : null;

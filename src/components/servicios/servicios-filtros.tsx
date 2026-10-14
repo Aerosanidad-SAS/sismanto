@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { TIPOS_SERVICIO } from "./servicios-tabla";
 
 const TODOS = "__todos__";
-const AVANZADOS = ["cliente", "origen", "destino", "cedula", "sinGestionar"] as const;
+const AVANZADOS = ["cliente", "origen", "destino", "cedula", "numero", "sinGestionar"] as const;
 
 const ETIQUETA = "text-[11px] font-medium leading-none text-muted-foreground";
 
@@ -24,11 +24,14 @@ export function ServiciosFiltros({
   clientes,
   origenes,
   destinos,
+  ciudadFija = false,
 }: {
   inicial: FiltrosServicios;
   clientes: string[];
   origenes: string[];
   destinos: string[];
+  /** Quien está limitado a su centro solo ve su ciudad: no se le ofrece el selector Ambas/Bogotá/Medellín. */
+  ciudadFija?: boolean;
 }) {
   const router = useRouter();
   const [f, setF] = useState<FiltrosServicios>(inicial);
@@ -64,14 +67,16 @@ export function ServiciosFiltros({
       }}
     >
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-        <FiltroCiudad
-          valor={f.ciudad ?? ""}
-          onChange={(clave) => {
-            const siguiente = { ...f, ciudad: clave };
-            setF(siguiente);
-            aplicar(siguiente);
-          }}
-        />
+        {!ciudadFija && (
+          <FiltroCiudad
+            valor={f.ciudad ?? ""}
+            onChange={(clave) => {
+              const siguiente = { ...f, ciudad: clave };
+              setF(siguiente);
+              aplicar(siguiente);
+            }}
+          />
+        )}
         <div className="space-y-1">
           <label htmlFor="f-desde" className={cn(ETIQUETA, "block")}>
             Programado desde
@@ -140,6 +145,19 @@ export function ServiciosFiltros({
               className="h-8 w-40 text-sm"
               value={f.cedula ?? ""}
               onChange={(e) => set("cedula", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="f-numero" className={cn(ETIQUETA, "block")}>
+              Número
+            </label>
+            <Input
+              id="f-numero"
+              inputMode="numeric"
+              placeholder="N.º de servicio"
+              className="h-8 w-36 text-sm"
+              value={f.numero ?? ""}
+              onChange={(e) => set("numero", e.target.value)}
             />
           </div>
           <div className="space-y-1">

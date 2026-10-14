@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
 import { centroVisible } from "@/lib/auth-utils";
+import { condicionServiciosDeCentro } from "@/lib/servicios-centro";
+import { errorSiVehiculoDeOtroCentro } from "@/lib/vehiculo-centro";
 import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
 import { revalidatePath } from "next/cache";
 import { perfilFormularioServicio, toggleVehicleStatusSchema, vehicleAssignmentSchema } from "@/lib/validations";
@@ -20,6 +22,9 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
+
+  const otroCentro = await errorSiVehiculoDeOtroCentro(supabase, profile, parsed.data.vehicleId);
+  if (otroCentro) return { error: otroCentro };
 
   // Leer estado anterior para el historial
   const { data: vehicleActual } = await supabase
@@ -78,13 +83,15 @@ async function reasignarServiciosNoIniciados(
   vehicleId: string,
   rol: keyof typeof CAMPO_TRIPULACION,
   userId: string | null
-) {
-  await supabase
+): Promise<number> {
+  const { data } = await supabase
     .from("medical_services")
     .update({ [CAMPO_TRIPULACION[rol]]: userId, updated_at: new Date().toISOString() })
     .eq("vehicle_id", vehicleId)
     .eq("etapa", "PROGRAMADO")
-    .is("fecha_hora_inicio_desplazamiento", null);
+    .is("fecha_hora_inicio_desplazamiento", null)
+    .select("id");
+  return (data ?? []).length;
 }
 
 /**
@@ -145,11 +152,44 @@ export async function asignarTripulacion(
   });
 
   if (error) return { error: error.message };
-  await reasignarServiciosNoIniciados(supabase, parsed.data.vehicleId, parsed.data.rol, parsed.data.userId);
-  await auditar("MODIFICAR", "regulacion", parsed.data.vehicleId, `Tripulación asignada (rol ${parsed.data.rol})`);
+
+  // Una persona no está en dos vehículos a la vez: pasa a este y deja libre su puesto en los anteriores.
+  // Se hace después de insertar para que, si el insert falla, no pierda el puesto que ya tenía.
+  const liberados = await liberarOtrosVehiculos(supabase, parsed.data.userId, parsed.data.vehicleId);
+
+  const reasignados = await reasignarServiciosNoIniciados(supabase, parsed.data.vehicleId, parsed.data.rol, parsed.data.userId);
+  await auditar(
+    "MODIFICAR",
+    "regulacion",
+    parsed.data.vehicleId,
+    `Tripulación asignada (rol ${parsed.data.rol}); servicios reasignados: ${reasignados}` +
+      (liberados.length > 0 ? `; liberado de: ${liberados.join(", ")}` : "")
+  );
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
-  return { success: true };
+  return { success: true, reasignados, liberados };
+}
+
+/** Desactiva las asignaciones activas de esa persona en vehículos distintos de `vehicleId`; devuelve las placas afectadas. */
+async function liberarOtrosVehiculos(supabase: ReturnType<typeof createClient>, userId: string, vehicleId: string): Promise<string[]> {
+  const { data: previas } = await supabase
+    .from("vehicle_assignments")
+    .select("id, vehicle_id")
+    .eq("user_id", userId)
+    .eq("activo", true)
+    .neq("vehicle_id", vehicleId);
+  const filas = (previas ?? []) as { id: number; vehicle_id: string }[];
+  if (filas.length === 0) return [];
+
+  // `as never`: el cliente Supabase infiere `never` para los payloads de update en todo el repo (ver CLAUDE.md).
+  const { error } = await supabase.from("vehicle_assignments").update({ activo: false } as never).in("id", filas.map((f) => f.id));
+  if (error) return [];
+
+  const { data: vehiculos } = await supabase
+    .from("vehicles")
+    .select("placa")
+    .in("id", [...new Set(filas.map((f) => f.vehicle_id))]);
+  return ((vehiculos ?? []) as { placa: string }[]).map((v) => v.placa).sort();
 }
 
 /**
@@ -420,7 +460,7 @@ export async function getTableroRegulacion() {
     .or(`and(etapa.in.(PROGRAMADO,CURSO),fecha_hora_programacion.gte.${desde}T00:00:00-05:00),fecha_hora_programacion.gte.${hoy}T00:00:00-05:00,fecha_hora_registro.gte.${hoy}T00:00:00-05:00`)
     .order("fecha_hora_programacion", { ascending: true, nullsFirst: false })
     .limit(300);
-  if (centro) serviciosQuery = serviciosQuery.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+  if (centro) serviciosQuery = serviciosQuery.or(condicionServiciosDeCentro(centro));
   const { data: servicios } = await serviciosQuery;
 
   let antiguosQuery = supabase
@@ -428,7 +468,7 @@ export async function getTableroRegulacion() {
     .select("id", { count: "exact", head: true })
     .in("etapa", ["PROGRAMADO", "CURSO"])
     .lt("fecha_hora_programacion", `${desde}T00:00:00-05:00`);
-  if (centro) antiguosQuery = antiguosQuery.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+  if (centro) antiguosQuery = antiguosQuery.or(condicionServiciosDeCentro(centro));
   const { count: antiguosSinCerrar } = await antiguosQuery;
 
   const ids = new Set<string>();

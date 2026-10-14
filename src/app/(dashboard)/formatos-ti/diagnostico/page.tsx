@@ -5,11 +5,12 @@ import { DiagnosticoTabla } from "@/components/formatos-ti/diagnostico-tabla";
 import { FormatosPaginacion } from "@/components/formatos-ti/formatos-paginacion";
 import { ROLES_FORMATOS_TI, paramPagina, paramTexto } from "@/lib/formatos-ti/comun";
 
-export default async function DiagnosticoPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function DiagnosticoPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole([...ROLES_FORMATOS_TI]);
   const tipo = paramTexto(searchParams, "tipo");
   const filtros = {

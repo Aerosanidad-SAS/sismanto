@@ -83,19 +83,20 @@ async function fetchMantenimientos(searchParams: {
   }
 }
 
-export default async function MantenimientosPage({
-  searchParams,
-}: {
-  searchParams: {
-    mPlaca?: string;
-    mDesde?: string;
-    mHasta?: string;
-    mCat?: string;
-    mTipo?: string;
-    mProv?: string;
-    mFac?: string;
-  };
-}) {
+export default async function MantenimientosPage(
+  props: {
+    searchParams: Promise<{
+      mPlaca?: string;
+      mDesde?: string;
+      mHasta?: string;
+      mCat?: string;
+      mTipo?: string;
+      mProv?: string;
+      mFac?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireRole(["ADMIN", "MANTENIMIENTO", "ANALISTA"]);
   const [mantenimientos, categories] = await Promise.all([
     fetchMantenimientos(searchParams),

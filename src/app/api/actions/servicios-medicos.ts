@@ -8,6 +8,7 @@ import { CAMPOS_PASO_SERVICIO } from "@/lib/estado-servicio";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
+import { ciudadDeCentro, condicionServiciosDeCentro } from "@/lib/servicios-centro";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
@@ -18,6 +19,16 @@ import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
 import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
+import { errorDeCambioEtapa } from "@/lib/servicios-etapas";
+import {
+  ETAPAS_QUE_CHOCAN,
+  filtroRecursos,
+  motivosDeChoque,
+  ventanaChoque,
+  type RecursosServicio,
+  type ServicioEnChoque,
+} from "@/lib/servicios-choque";
+import { filaDeActualizacion } from "@/lib/servicios-actualizacion";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -183,11 +194,11 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
     .order("fecha_hora_registro", { ascending: false })
     .limit(500);
 
-  // Servicios de su centro, más los que no tienen centro (históricos de
-  // antes de la migración 059, o registrados sin vehículo por alguien sin
-  // centro asignado): ocultarlos los dejaría invisibles para todo Regulación.
+  // Servicios de su centro, más los que no tienen centro (históricos de antes de la migración 059, o registrados sin
+  // vehículo por alguien sin centro asignado) que no sean de otra ciudad: ocultarlos todos los dejaría invisibles para
+  // Regulación, pero verlos todos le mostraba los de Bogotá a Medellín (ver `servicios-centro.ts`).
   const centro = centroVisible(await getProfile());
-  if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+  if (centro) query = query.or(condicionServiciosDeCentro(centro));
 
   if (filtro?.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtro.etapa)) {
     query = query.eq("etapa", filtro.etapa);
@@ -205,17 +216,21 @@ const ROLES_LISTA_SERVICIOS: UserRole[] = ["ADMIN", "REGULACION", "MEDICO", "AUX
 
 // Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este
 // repo (ver CLAUDE.md), y el builder solo recibe filtros encadenados.
-function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centroId: number | null) {
+function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centro: { id: number; codigo: string } | null) {
   let q = query;
-  if (centroId) q = q.or(`operational_center_id.eq.${centroId},operational_center_id.is.null`);
+  if (centro) q = q.or(condicionServiciosDeCentro(centro));
   if (filtros.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtros.etapa)) q = q.eq("etapa", filtros.etapa);
   if (filtros.tipo) q = q.eq("tipo_servicio", filtros.tipo);
   if (filtros.cliente) q = q.eq("cliente", filtros.cliente);
-  const prefijo = prefijoCiudad(filtros.ciudad);
+  // Quien está limitado a su centro solo ve su ciudad (ya lo hace la condición de centro de arriba): el selector
+  // Ambas/Bogotá/Medellín no se lo cambia, ni lo ve.
+  const prefijo = centro && ciudadDeCentro(centro.codigo) ? null : prefijoCiudad(filtros.ciudad);
   if (prefijo) q = q.ilike("ciudad_registro", `${prefijo}%`);
   if (filtros.origen) q = q.eq("ciudad_origen", filtros.origen);
   if (filtros.destino) q = q.eq("ciudad_destino", filtros.destino);
   if (filtros.cedula) q = q.ilike("cedula_paciente", `%${filtros.cedula.replace(/[%_\\]/g, "")}%`);
+  // Número exacto del servicio (el ID de la tabla). `leerFiltros` ya garantiza que es un entero positivo.
+  if (filtros.numero) q = q.eq("id", Number(filtros.numero));
   // Como SISRES: el rango es sobre la fecha programada, en hora de Colombia.
   if (filtros.desde) q = q.gte("fecha_hora_programacion", `${filtros.desde}T00:00:00-05:00`);
   if (filtros.hasta) q = q.lte("fecha_hora_programacion", `${filtros.hasta}T23:59:59.999-05:00`);
@@ -241,7 +256,7 @@ export async function buscarServicios(filtros: FiltrosServicios, pagina: number)
     .order("id", { ascending: false })
     .range(desde, desde + SERVICIOS_POR_PAGINA - 1);
 
-  const { data, count, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile)?.id ?? null);
+  const { data, count, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile));
   if (error) return { servicios: [], total: 0, error: error.message as string };
   return { servicios: data ?? [], total: count ?? 0 };
 }
@@ -255,7 +270,7 @@ export async function getOpcionesFiltroServicios() {
     .select("cliente, ciudad_origen, ciudad_destino")
     .order("fecha_hora_registro", { ascending: false })
     .limit(5000);
-  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile)?.id ?? null);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile));
   const distintos = (campo: string) =>
     Array.from(new Set(((data ?? []) as Record<string, string | null>[]).map((r) => r[campo]).filter(Boolean) as string[])).sort(
       (a, b) => a.localeCompare(b, "es")
@@ -278,7 +293,7 @@ export async function exportarServicios(filtros: FiltrosServicios) {
       .order("fecha_hora_registro", { ascending: false })
       .order("id", { ascending: false })
       .range(desde, desde + LOTE - 1);
-    const { data, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile)?.id ?? null);
+    const { data, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile));
     if (error) return { error: error.message as string };
     filas.push(...((data ?? []) as Record<string, unknown>[]));
     if (!data || data.length < LOTE) break;
@@ -320,7 +335,7 @@ export async function getServiciosParaAvisos() {
     .lte("fecha_hora_programacion", en60)
     .order("fecha_hora_programacion", { ascending: true })
     .limit(500);
-  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile)?.id ?? null);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile));
   return (data ?? []) as {
     id: number;
     etapa: string;
@@ -339,7 +354,40 @@ function normalizarCiudadRegistro(datos: { ciudad_registro?: string }): string |
   return null;
 }
 
-export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string) {
+/**
+ * Servicios abiertos que chocan con el que se va a guardar: misma ventana de tiempo y el mismo vehículo o la misma
+ * persona de la tripulación. Sin fecha de programación o sin ningún recurso asignado no hay con qué chocar.
+ */
+async function buscarChoques(
+  supabase: ReturnType<typeof createClient>,
+  fila: Record<string, unknown>,
+  excluirId?: number
+): Promise<ServicioEnChoque[]> {
+  const nuevo = fila as RecursosServicio & { fecha_hora_programacion?: string | null };
+  const ventana = nuevo.fecha_hora_programacion ? ventanaChoque(nuevo.fecha_hora_programacion) : null;
+  const filtro = filtroRecursos(nuevo);
+  if (!ventana || !filtro) return [];
+
+  let consulta = supabase
+    .from("medical_services")
+    .select("id, nombre_completo, fecha_hora_programacion, vehicle_id, ovem_user_id, medico_user_id, auxiliar_user_id")
+    .in("etapa", [...ETAPAS_QUE_CHOCAN])
+    .gte("fecha_hora_programacion", ventana.desde)
+    .lte("fecha_hora_programacion", ventana.hasta)
+    .or(filtro)
+    .limit(10);
+  if (excluirId) consulta = consulta.neq("id", excluirId);
+  const { data } = await consulta;
+
+  return ((data ?? []) as (RecursosServicio & { id: number; nombre_completo: string; fecha_hora_programacion: string })[]).map((o) => ({
+    id: o.id,
+    nombre_completo: o.nombre_completo,
+    fecha_hora_programacion: o.fecha_hora_programacion,
+    motivos: motivosDeChoque(nuevo, o),
+  }));
+}
+
+export async function crearServicioMedico(formData: MedicalServiceFormData, etapaInicial: string, confirmarChoque = false) {
   const parsed = medicalServiceSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const errorCiudad = normalizarCiudadRegistro(parsed.data);
@@ -363,6 +411,11 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
     return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
   }
+  // Aviso (no bloqueo) si otro servicio abierto usa el mismo vehículo o tripulante a esa hora: Regulación lo confirma.
+  if (!confirmarChoque && (ETAPAS_QUE_CHOCAN as readonly string[]).includes(etapa)) {
+    const choque = await buscarChoques(supabase, fila);
+    if (choque.length > 0) return { choque };
+  }
 
   const { data, error } = await supabase
     .from("medical_services")
@@ -381,7 +434,7 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   return { success: true, data };
 }
 
-export async function actualizarServicioMedico(id: number, formData: MedicalServiceFormData) {
+export async function actualizarServicioMedico(id: number, formData: MedicalServiceFormData, confirmarChoque = false) {
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
 
@@ -404,19 +457,26 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
     const falta = mensajeFaltantesParaFinalizar(parsed.data.tipo_servicio, parsed.data);
     if (falta) return { error: falta };
   }
+  const rol = (await getProfile())?.role_codigo;
+  const esMedicoAux = rol === "MEDICO" || rol === "AUXILIAR_ENFERMERIA";
   const fila = aFilaServicio(parsed.data);
   // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
   // asignado a un servicio — tampoco al editar uno que ya lo tenía.
-  if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
+  if (!esMedicoAux && fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
     return { error: "Ese vehículo tiene una solicitud de NO APTO pendiente de aval — no se le puede asignar un servicio." };
+  }
+  // Mismo aviso que al crear; el servicio que se edita no choca consigo mismo.
+  if (!confirmarChoque && actual && (ETAPAS_QUE_CHOCAN as readonly string[]).includes(actual.etapa)) {
+    const choque = await buscarChoques(supabase, fila, idParsed.data);
+    if (choque.length > 0) return { choque };
   }
   // Solo el vehículo redefine el centro al editar: sin vehículo se conserva
   // el que ya tenía, no el de quien edita.
-  const centro = fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
+  const centro = !esMedicoAux && fila.vehicle_id ? await centroDelServicio(supabase, fila.vehicle_id, null) : null;
   const { data, error } = await supabase
     .from("medical_services")
     .update({
-      ...fila,
+      ...filaDeActualizacion(fila, esMedicoAux),
       ...(centro !== null ? { operational_center_id: centro } : {}),
       updated_at: new Date().toISOString(),
     })
@@ -440,15 +500,20 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
  * el UPDATE incluye la etapa actual esperada en el WHERE, así dos usuarios
  * simultáneos no pisan la transición del otro. No valida una transición
  * específica (ver nota arriba de PLANTILLA_POR_ETAPA) — cualquier etapa
- * destino válida es aceptada, igual que en SISRES.
+ * destino válida es aceptada, con dos reglas de Regulación (QA 2026-10-10, E1/E2, ver `servicios-etapas`): las etapas
+ * negativas piden `motivo` (queda en la bitácora) y sacar un servicio de FINALIZADO o CANCELADO solo lo hace un ADMIN.
  */
-export async function cambiarEtapaServicio(id: number, etapaActual: string, etapaNueva: string) {
+export async function cambiarEtapaServicio(id: number, etapaActual: string, etapaNueva: string, motivo?: string) {
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
 
   const actual = ETAPAS_SERVICIO.find((e) => e === etapaActual);
   const nueva = ETAPAS_SERVICIO.find((e) => e === etapaNueva);
   if (!actual || !nueva) return { error: "Etapa inválida" };
+
+  const perfil = await getProfile();
+  const errorEtapa = errorDeCambioEtapa(actual, nueva, perfil?.role_codigo, motivo);
+  if (errorEtapa) return { error: errorEtapa };
 
   const supabase = createClient();
   // Como en SISRES: no se finaliza un servicio sin la llegada y salida de cada tramo que su tipo exige (ensuciaría los
@@ -480,7 +545,7 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
     return { error: `El servicio ya no está en ${actual}. Puede que otro usuario ya lo haya actualizado.` };
   }
   await notificarEtapaServicio(supabase, data[0].id, nueva, data[0].tipo_servicio, data[0].patient_id);
-  await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}`);
+  await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}${motivo?.trim() ? `. Motivo: ${motivo.trim()}` : ""}`);
   revalidatePath("/servicios");
   return { success: true };
 }

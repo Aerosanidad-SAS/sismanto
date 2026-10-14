@@ -1,24 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { aplicaAlTipo } from "./checklist-tipo";
+import { aplicaDesdeTipos, tiposDesdeAplica } from "./checklist-tipo";
 
-const SOLO_AMBULANCIA = ["AMBULANCIA_TAB", "AMBULANCIA_TAM"];
-
-test("ítem sin tipos aplica a todos", () => {
-  for (const t of ["AMBULANCIA_TAB", "AMBULANCIA_TAM", "DOMI", "VAN", "ADMIN", null]) {
-    assert.equal(aplicaAlTipo(null, t), true);
-    assert.equal(aplicaAlTipo([], t), true);
-  }
+test("aplicaDesdeTipos: NULL o vacío aplica a las dos familias", () => {
+  assert.deepEqual(aplicaDesdeTipos(null), { ambulancia: true, domiciliaria: true });
+  assert.deepEqual(aplicaDesdeTipos([]), { ambulancia: true, domiciliaria: true });
 });
 
-test("ítem exclusivo de ambulancia: aplica a TAB y TAM, no a DOMI, VAN ni ADMIN", () => {
-  assert.equal(aplicaAlTipo(SOLO_AMBULANCIA, "AMBULANCIA_TAB"), true);
-  assert.equal(aplicaAlTipo(SOLO_AMBULANCIA, "AMBULANCIA_TAM"), true);
-  for (const t of ["DOMI", "VAN", "ADMIN"]) assert.equal(aplicaAlTipo(SOLO_AMBULANCIA, t), false);
+test("aplicaDesdeTipos: solo ambulancia o solo domiciliaria", () => {
+  assert.deepEqual(aplicaDesdeTipos(["AMBULANCIA_TAB", "AMBULANCIA_TAM"]), { ambulancia: true, domiciliaria: false });
+  assert.deepEqual(aplicaDesdeTipos(["DOMI", "VAN"]), { ambulancia: false, domiciliaria: true });
 });
 
-test("vehículo sin tipo responde la lista completa", () => {
-  assert.equal(aplicaAlTipo(SOLO_AMBULANCIA, null), true);
-  assert.equal(aplicaAlTipo(SOLO_AMBULANCIA, undefined), true);
+test("tiposDesdeAplica es la inversa; ninguna familia no es válido", () => {
+  assert.equal(tiposDesdeAplica({ ambulancia: true, domiciliaria: true }), null);
+  assert.deepEqual(tiposDesdeAplica({ ambulancia: true, domiciliaria: false }), ["AMBULANCIA_TAB", "AMBULANCIA_TAM"]);
+  assert.deepEqual(tiposDesdeAplica({ ambulancia: false, domiciliaria: true }), ["DOMI", "VAN", "ADMIN"]);
+  assert.equal(tiposDesdeAplica({ ambulancia: false, domiciliaria: false }), undefined);
 });

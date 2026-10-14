@@ -6,6 +6,7 @@
  * Antes solo se guardaban los ítems que el OVEM tocaba: un preoperacional con 1 de 96 ítems quedaba como "OK".
  */
 
+import { unidadesFaltantes } from "@/lib/inventario-preop";
 import type { ItemEvaluado, SeveridadFalla } from "@/lib/preoperacional-alertas";
 
 export type EstadoItemPreoperacional = "OK" | "FALLA" | "NO_APLICA";
@@ -13,12 +14,18 @@ export type EstadoItemPreoperacional = "OK" | "FALLA" | "NO_APLICA";
 export interface ResultadoItemPreoperacional {
   checklistItemId: number;
   estado: EstadoItemPreoperacional;
+  /** Ítems de conteo: cuántas unidades hay. */
+  cantidadOk?: number;
   observacion?: string;
 }
 
 export interface ItemCatalogo {
   id: number;
   descripcion: string;
+  categoria?: string;
+  /** «OK» (ítem de estado) o el número esperado (ítem de conteo). */
+  cantidad_esperada?: string | null;
+  es_inventario?: boolean | null;
   /** Gravedad si el ítem falla (checklist_items.severidad_falla). Sin ella toda falla cuenta como MEDIA. */
   severidad_falla?: SeveridadFalla | null;
 }
@@ -64,11 +71,18 @@ export function itemsEvaluados(catalogo: ItemCatalogo[], resultados: ResultadoIt
   const porId = new Map(catalogo.map((c) => [c.id, c]));
   return resultados.map((r) => {
     const c = porId.get(r.checklistItemId);
+    // Un equipo contado que no está completo es un FALTANTE (novedad leve, no falla): no saca el vehículo de servicio.
+    const faltan =
+      c?.categoria && r.estado !== "NO_APLICA"
+        ? unidadesFaltantes({ categoria: c.categoria, cantidad_esperada: c.cantidad_esperada ?? null, es_inventario: c.es_inventario }, r.cantidadOk)
+        : 0;
+    const esperadas = c?.cantidad_esperada ? Number(c.cantidad_esperada) : undefined;
     return {
       descripcion: c?.descripcion ?? `Ítem ${r.checklistItemId}`,
-      estado: r.estado,
+      estado: faltan > 0 ? ("OK" as const) : r.estado,
       observacion: r.observacion,
       severidadFalla: c?.severidad_falla ?? null,
+      faltante: faltan > 0 && esperadas ? { hay: esperadas - faltan, esperadas } : undefined,
     };
   });
 }

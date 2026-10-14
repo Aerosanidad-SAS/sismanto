@@ -68,7 +68,11 @@ import {
   getUrlBoletaSalida,
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
+import { toast } from "@/components/ui/toaster";
+import { errorDeCambioEtapa, esEtapaCerrada, esEtapaNegativa, MOTIVO_MAX, puedeReabrir } from "@/lib/servicios-etapas";
 import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
+import { textoChoque, type ServicioEnChoque } from "@/lib/servicios-choque";
+import { CAMPOS_CLINICOS_MEDICO_AUX as CAMPOS_CLINICOS_LISTA } from "@/lib/servicios-actualizacion";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 // Casi todos los servicios nacen programados: las demás etapas solo se eligen al registrar uno que ya ocurrió.
@@ -242,17 +246,7 @@ const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p
 // móvil, tripulación, ruta, facturación...) queda bloqueado, igual que
 // editarServicio.php en SISRES (Ronda 2, pregunta 4: "$esMedicoAux" bloquea
 // campos de logística con readonly/campo-bloqueado, no oculta secciones).
-const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>([
-  "cie_codigo",
-  "requiere_aislamiento",
-  "finalidad_traslado",
-  "acepta_ips",
-  "novedad_servicio",
-  "observaciones",
-  "motivo_externo",
-  "motivo_interno",
-  "estado_servicio",
-]);
+const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>(CAMPOS_CLINICOS_LISTA);
 
 export function ServiciosTabla({
   servicios,
@@ -290,7 +284,12 @@ export function ServiciosTabla({
   const [yaOcurrido, setYaOcurrido] = useState(false);
   const [creadoMsg, setCreadoMsg] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ titulo: string; mensaje: string } | null>(null);
+  // Otro servicio abierto usa el mismo vehículo o tripulante a esa hora: se pide confirmar antes de guardar.
+  const [choque, setChoque] = useState<{ lista: ServicioEnChoque[]; values: MedicalServiceFormData; crearOtro: boolean } | null>(null);
   const [porEliminar, setPorEliminar] = useState<ServicioRow | null>(null);
+  // Cambio a una etapa negativa en espera del motivo (y la confirmación) de quien lo hace.
+  const [porEtapa, setPorEtapa] = useState<{ servicio: ServicioRow; etapaNueva: string } | null>(null);
+  const [motivoEtapa, setMotivoEtapa] = useState("");
   const [menuId, setMenuId] = useState<number | null>(null);
   const inicioFormRef = useRef<HTMLDivElement>(null);
   // Umbral de servicios estancados configurado por el ADMIN (migración 103).
@@ -300,6 +299,9 @@ export function ServiciosTabla({
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
 
   const [cieLabel, setCieLabel] = useState("");
+  // Escape o un clic fuera cierran el formulario: si hay cambios sin guardar se pide confirmación (QA, defecto menor).
+  const [confirmarCierre, setConfirmarCierre] = useState(false);
+  const hayCambios = formState.isDirty;
 
   const tipoSeleccionado = watch("tipo_servicio");
   const vehiculoSeleccionado = watch("vehicle_id");
@@ -362,6 +364,8 @@ export function ServiciosTabla({
   const campoBloqueado = (name: keyof MedicalServiceFormData) =>
     soloLecturaLogistica && !CAMPOS_CLINICOS_MEDICO_AUX.has(name);
   const puedeCambiarEtapaLibre = puedeEditar && !esMedicoAux;
+  // Un servicio FINALIZADO o CANCELADO solo lo reabre un ADMIN (QA 2026-10-10, E2): al resto no se le ofrece el menú.
+  const puedeMoverEtapa = (s: ServicioRow) => puedeCambiarEtapaLibre && (!esEtapaCerrada(s.etapa) || puedeReabrir(viewerRole));
 
   // Candado de servicios FINALIZADO (Daniel, 2026-07-29): solo
   // ADMIN/ANALISTA/REGULACION puede volver a tocarlo — la migración 055
@@ -417,6 +421,9 @@ export function ServiciosTabla({
     const ubicacionDefault = resolverCiudad(ciudadDefault);
     reset({
       tipo_servicio: "",
+      // Sin estos dos, «Guardar y crear otro» dejaba el paciente (y su nombre) del servicio anterior.
+      nombre_completo: "",
+      patient_id: undefined,
       departamento_origen: ubicacionDefault?.departamento ?? "",
       ciudad_origen: ubicacionDefault?.ciudad ?? "",
       ciudad_registro: ciudadRegistroDefault ?? "",
@@ -535,14 +542,18 @@ export function ServiciosTabla({
     if (primero) enfocarCampo(primero);
   };
 
-  const onSubmit = async (values: MedicalServiceFormData, crearOtro = false) => {
+  const onSubmit = async (values: MedicalServiceFormData, crearOtro = false, confirmarChoque = false) => {
     setGuardando(true);
     setError(null);
     setCreadoMsg(null);
     const res = editando
-      ? await actualizarServicioMedico(editando.id, values)
-      : await crearServicioMedico(values, etapaInicial);
+      ? await actualizarServicioMedico(editando.id, values, confirmarChoque)
+      : await crearServicioMedico(values, etapaInicial, confirmarChoque);
     setGuardando(false);
+    if ("choque" in res && res.choque) {
+      setChoque({ lista: res.choque, values, crearOtro });
+      return;
+    }
     if (res.error) {
       setError(res.error);
       return;
@@ -565,12 +576,35 @@ export function ServiciosTabla({
   }));
   const mensajeError = (name: string) => listaErrores.find((e) => e.name === name)?.message;
 
-  const handleEtapa = async (servicio: ServicioRow, etapaNueva: string) => {
+  const aplicarEtapa = async (servicio: ServicioRow, etapaNueva: string, motivo?: string) => {
     setBusyId(servicio.id);
-    const res = await cambiarEtapaServicio(servicio.id, servicio.etapa, etapaNueva);
+    const res = await cambiarEtapaServicio(servicio.id, servicio.etapa, etapaNueva, motivo);
     setBusyId(null);
-    if (res.error) setAviso({ titulo: "No se pudo cambiar la etapa", mensaje: res.error });
-    else router.refresh();
+    if (res.error) {
+      setAviso({ titulo: "No se pudo cambiar la etapa", mensaje: res.error });
+      return;
+    }
+    // CURSO y FINALIZADO ya los anuncia AvisosServicios al refrescar; aquí se confirman las demás (p. ej. cancelar, que no avisaba nada).
+    if (etapaNueva !== "CURSO" && etapaNueva !== "FINALIZADO") toast.success(`Servicio #${servicio.id}: ${servicio.etapa} → ${etapaNueva}`);
+    router.refresh();
+  };
+
+  // Las etapas negativas no se aplican de un clic: primero se pide el motivo y se confirma.
+  const handleEtapa = (servicio: ServicioRow, etapaNueva: string) => {
+    if (esEtapaNegativa(etapaNueva)) {
+      setMotivoEtapa("");
+      setPorEtapa({ servicio, etapaNueva });
+      return;
+    }
+    return aplicarEtapa(servicio, etapaNueva);
+  };
+
+  const errorMotivoEtapa = porEtapa ? errorDeCambioEtapa(porEtapa.servicio.etapa, porEtapa.etapaNueva, viewerRole, motivoEtapa) : null;
+  const confirmarEtapaNegativa = async () => {
+    if (!porEtapa || errorMotivoEtapa) return;
+    const { servicio, etapaNueva } = porEtapa;
+    setPorEtapa(null);
+    await aplicarEtapa(servicio, etapaNueva, motivoEtapa.trim());
   };
 
   // Borrado físico — igual que SISRES (delete.php, tabla=servicios: DELETE
@@ -715,7 +749,7 @@ export function ServiciosTabla({
                         <Play className="h-4 w-4" aria-hidden="true" /> Marcar en curso
                       </button>
                     )}
-                    {puedeCambiarEtapaLibre && (
+                    {puedeMoverEtapa(s) && (
                       <>
                         <p className="px-2 pt-2 text-xs text-muted-foreground">Cambiar etapa a</p>
                         {ETAPAS_DESTINO(s.etapa).map((etapa) => (
@@ -852,7 +886,7 @@ export function ServiciosTabla({
                           <Play className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       )}
-                      {puedeCambiarEtapaLibre && (
+                      {puedeMoverEtapa(s) && (
                         <Select
                           disabled={busyId === s.id}
                           onValueChange={(v) => handleEtapa(s, v)}
@@ -929,6 +963,38 @@ export function ServiciosTabla({
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={choque !== null} onOpenChange={(abierto) => !abierto && setChoque(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ya hay un servicio a esa hora</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Este servicio comparte vehículo o tripulación con otro que sigue abierto a una hora muy cercana:</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  {choque &&
+                    textoChoque(choque.lista, (iso) => aTextoLocalColombia(iso).replace("T", " ")).map((linea) => (
+                      <li key={linea}>{linea}</li>
+                    ))}
+                </ul>
+                <p>¿Quieres guardarlo de todos modos?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Revisar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const pendiente = choque;
+                setChoque(null);
+                if (pendiente) void onSubmit(pendiente.values, pendiente.crearOtro, true);
+              }}
+            >
+              Guardar de todos modos
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={aviso !== null} onOpenChange={(abierto) => !abierto && setAviso(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -941,7 +1007,73 @@ export function ServiciosTabla({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={porEtapa !== null} onOpenChange={(abierto) => !abierto && setPorEtapa(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {porEtapa ? `Pasar el servicio #${porEtapa.servicio.id} a ${porEtapa.etapaNueva}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Quedará en la bitácora con tu nombre y este motivo. Escríbelo para poder confirmar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="motivo-etapa">Motivo</Label>
+            <Textarea
+              id="motivo-etapa"
+              value={motivoEtapa}
+              onChange={(e) => setMotivoEtapa(e.target.value)}
+              maxLength={MOTIVO_MAX}
+              rows={3}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              {motivoEtapa.trim().length}/{MOTIVO_MAX}
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPorEtapa(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmarEtapaNegativa} disabled={errorMotivoEtapa !== null}>
+              {porEtapa ? `Pasar a ${porEtapa.etapaNueva}` : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={confirmarCierre} onOpenChange={setConfirmarCierre}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Descartar los cambios?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Escribiste datos en el formulario que todavía no se guardan. Si lo cierras ahora se pierden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmarCierre(false);
+                setDialogOpen(false);
+              }}
+            >
+              Descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(abierto) => {
+          if (!abierto && hayCambios && !guardando) {
+            setConfirmarCierre(true);
+            return;
+          }
+          setDialogOpen(abierto);
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editando ? `Editar servicio #${editando.id}` : "Nuevo servicio"}</DialogTitle>

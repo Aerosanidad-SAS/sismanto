@@ -300,8 +300,16 @@ function sqlInsert(tabla: string, columnas: string[], cantidad: number): string 
   return `INSERT INTO ${tabla} (${columnas.join(",")}) VALUES ${valores}`;
 }
 
-const actualizar = (columnas: string[], excluir: string[]) =>
-  columnas.filter((c) => !excluir.includes(c)).map((c) => `${c} = EXCLUDED.${c}`).join(", ");
+const actualizar = (columnas: string[], excluir: string[], soloDesactivar?: { tabla: string; columnas: string[] }) =>
+  columnas
+    .filter((c) => !excluir.includes(c))
+    // `soloDesactivar`: la carga puede apagar una fila pero NUNCA prenderla. Así lo que alguien desactivó en SISMANTO
+    // (p. ej. proveedores que no son prestadores) no revive al volver a correr el ETL. Reactivar es una decisión manual.
+    // Dentro de ON CONFLICT la fila existente se nombra con la tabla; sin calificar, la columna sería ambigua con EXCLUDED.
+    .map((c) =>
+      soloDesactivar?.columnas.includes(c) ? `${c} = ${soloDesactivar.tabla}.${c} AND EXCLUDED.${c}` : `${c} = EXCLUDED.${c}`
+    )
+    .join(", ");
 
 /**
  * Inserta de a TAMANO_LOTE filas. Si un lote falla, se reintenta fila por fila
@@ -483,7 +491,7 @@ async function cargarProveedores(client: pg.Client, dir: string) {
   });
   await enTransaccion(client, "medical_providers", async () => {
     const ok = await upsertLote(client, "medical_providers", columnas,
-      `ON CONFLICT (sisres_id) DO UPDATE SET ${actualizar(columnas, ["sisres_id"])}, updated_at = NOW()`, carga);
+      `ON CONFLICT (sisres_id) DO UPDATE SET ${actualizar(columnas, ["sisres_id"], { tabla: "medical_providers", columnas: ["activo"] })}, updated_at = NOW()`, carga);
     console.log(`   ✔ medical_providers: ${ok}/${filas.length}`);
   });
 }

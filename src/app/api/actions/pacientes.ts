@@ -3,13 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { revalidatePath } from "next/cache";
-import type { PatientFormData } from "@/lib/validations";
-import { patientSchema } from "@/lib/validations";
+import type { PacienteGuardado, PatientFormData } from "@/lib/validations";
+import { patientSchema, patientSchemaEdicion } from "@/lib/validations";
 import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
 import { camposFaltantes, mensajeFaltantes } from "@/lib/campos-obligatorios";
 import { z } from "zod";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
-import { cedulaPacienteValida, CEDULA_PACIENTE_MIN, puedeDesactivarPaciente } from "@/lib/pacientes-reglas";
+import { cedulaPacienteValida, CEDULA_PACIENTE_MIN, puedeDesactivarPaciente, puedeEscribirPaciente } from "@/lib/pacientes-reglas";
 import { EXPORT_PACIENTES_MAX_FILAS, ROLES_EXPORTAR_PACIENTES, type PacienteExport } from "@/lib/pacientes-export";
 import {
   COLUMNAS_BUSQUEDA_PACIENTES,
@@ -116,6 +116,8 @@ export async function buscarPacientesTypeahead(busqueda: string): Promise<Pacien
 }
 
 export async function crearPaciente(formData: PatientFormData) {
+  const perfil = await getProfile();
+  if (!puedeEscribirPaciente(perfil?.role_codigo)) return { error: "Sin permisos para registrar pacientes" };
   const parsed = patientSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   // Regla de SISRES (insertarPacientes.php). Solo al registrar: editar un paciente histórico con documento corto no debe fallar.
@@ -155,16 +157,21 @@ export async function crearPaciente(formData: PatientFormData) {
 }
 
 export async function actualizarPaciente(id: number, formData: PatientFormData) {
+  const perfil = await getProfile();
+  if (!puedeEscribirPaciente(perfil?.role_codigo)) return { error: "Sin permisos para editar pacientes" };
   const idParsed = z.number().int().positive().safeParse(id);
   if (!idParsed.success) return { error: "ID inválido" };
 
-  const parsed = patientSchema.safeParse(formData);
+  const supabase = createClient();
+  // Lo que el paciente ya tiene guardado: documento, celular y apellido que no cambian no se vuelven a exigir (históricos de SISRES).
+  const { data: guardado } = await supabase.from("patients").select("cedula, apellido1, celular").eq("id", idParsed.data).maybeSingle();
+  const original = (guardado ?? { cedula: "", apellido1: "", celular: null }) as PacienteGuardado;
+  const parsed = patientSchemaEdicion(original).safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   // Campos opcionales que el administrador volvió obligatorios (migración 101).
   const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
   if (faltan) return { error: faltan };
 
-  const supabase = createClient();
   const { error } = await supabase
     .from("patients")
     .update({

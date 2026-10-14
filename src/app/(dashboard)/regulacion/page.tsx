@@ -21,7 +21,8 @@ import { getPreoperacionalHoy } from "@/app/api/actions/preoperacional-pendiente
 import { CierresTurnoHoyCard } from "@/components/regulacion/cierres-turno-hoy";
 import { getCierresDeTurnoHoy } from "@/app/api/actions/cierre-turno";
 import { HelpTrigger } from "@/components/ui/help-trigger";
-import { veSoloSuCentro } from "@/lib/auth-utils";
+import { centroVisible, veSoloSuCentro } from "@/lib/auth-utils";
+import { ciudadDeCentro } from "@/lib/servicios-centro";
 import { FiltroCiudadUrl } from "@/components/servicios/filtro-ciudad";
 import { prefijoCiudad } from "@/lib/servicios-lista";
 
@@ -33,17 +34,21 @@ const ROLES_PERMITIDOS = ["ADMIN", "REGULACION", "ANALISTA"];
 // se sube el tope por defecto de la función (60 s es el máximo de Hobby).
 export const maxDuration = 60;
 
-export default async function RegulacionPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function RegulacionPage(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const pedida = Array.isArray(searchParams.ciudad) ? searchParams.ciudad[0] : searchParams.ciudad;
-  const prefijoDeCiudad = prefijoCiudad(pedida);
   const profile = await getProfile();
   if (!profile || !ROLES_PERMITIDOS.includes(profile.role_codigo)) {
     redirect("/");
   }
+  // Con centro asignado (Regulación) la sala es de su ciudad y nada más: las consultas ya la recortan y el selector sobra.
+  const centro = centroVisible(profile);
+  const ciudadFija = centro ? ciudadDeCentro(centro.codigo) : null;
+  const prefijoDeCiudad = ciudadFija ? null : prefijoCiudad(pedida);
 
   const diaPedido = Array.isArray(searchParams.dia) ? searchParams.dia[0] : searchParams.dia;
   const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto, cierresTurno] = await Promise.all([
@@ -83,7 +88,7 @@ export default async function RegulacionPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <FiltroCiudadUrl />
+          {!ciudadFija && <FiltroCiudadUrl />}
           {/* Alertas sonoras 60/30/15 min y avisos de servicio: antes solo estaban en /servicios. */}
           <AvisosServicios etapasVisibles={etapasVisibles} />
           <BarraTablero

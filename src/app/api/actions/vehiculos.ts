@@ -13,6 +13,8 @@ import {
 } from "@/lib/validations";
 import { z } from "zod";
 import { requireRole } from "@/app/api/actions/auth";
+import { centroVisible } from "@/lib/auth-utils";
+import { errorSiVehiculoDeOtroCentro } from "@/lib/vehiculo-centro";
 
 const fechaKmRegex = z
   .string()
@@ -26,12 +28,14 @@ const registrarKmVehSchema = z.object({
 });
 
 export async function registrarKilometrajeVehiculo(input: z.infer<typeof registrarKmVehSchema>) {
-  await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
   const parsed = registrarKmVehSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const { vehicleId: vid, fecha: fechaVal, lecturaKilometraje: kmVal } = parsed.data;
   const supabase = createClient();
+  const otroCentro = await errorSiVehiculoDeOtroCentro(supabase, profile, vid);
+  if (otroCentro) return { error: otroCentro };
 
   const { data: ultimo } = await supabase
     .from("mileage_logs")
@@ -135,7 +139,7 @@ export async function crearVehiculo(formData: VehicleFormData) {
 }
 
 export async function actualizarVehiculo(id: string, formData: VehicleFormData) {
-  await requireRole(["ADMIN", "ANALISTA", "REGULACION"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "REGULACION"]);
   const idParsed = z.string().uuid("ID de vehículo inválido").safeParse(id);
   if (!idParsed.success) return { error: idParsed.error.issues[0]?.message ?? "Datos inválidos" };
 
@@ -144,6 +148,13 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
 
   const supabase = createClient();
   const fd = parsed.data;
+
+  const otroCentro = await errorSiVehiculoDeOtroCentro(supabase, profile, idParsed.data);
+  if (otroCentro) return { error: otroCentro };
+  const centroPropio = centroVisible(profile);
+  if (centroPropio && fd.centro_operativo_id !== centroPropio.id) {
+    return { error: "No puedes cambiar el centro operativo de un vehículo." };
+  }
 
   const { data: centro } = await supabase
     .from("operational_centers")
@@ -174,9 +185,14 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
       notas: fd.notas || null,
       vencimiento_soat: fd.vencimiento_soat || null,
       vencimiento_tecnicomecanica: fd.vencimiento_tecnicomecanica || null,
-      costo_soat_anual: fd.costo_soat_anual ?? null,
-      costo_tecnomecanica_anual: fd.costo_tecnomecanica_anual ?? null,
-      costo_poliza_anual: fd.costo_poliza_anual ?? null,
+      // Los costos anuales no los toca quien está limitado a su centro (Regulación).
+      ...(centroPropio
+        ? {}
+        : {
+            costo_soat_anual: fd.costo_soat_anual ?? null,
+            costo_tecnomecanica_anual: fd.costo_tecnomecanica_anual ?? null,
+            costo_poliza_anual: fd.costo_poliza_anual ?? null,
+          }),
       centro_operativo: centro?.codigo || "OTRO",
       centro_operativo_id: fd.centro_operativo_id,
       updated_at: new Date().toISOString(),
@@ -192,12 +208,14 @@ export async function actualizarVehiculo(id: string, formData: VehicleFormData) 
 }
 
 export async function actualizarEspecificacionesVehiculo(formData: VehicleSpecsFormData) {
-  await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
   const parsed = vehicleSpecsSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
   const fd = parsed.data;
+  const otroCentro = await errorSiVehiculoDeOtroCentro(supabase, profile, fd.vehicleId);
+  if (otroCentro) return { error: otroCentro };
   const { error } = await supabase
     .from("vehicles")
     .update({
@@ -224,12 +242,18 @@ export async function actualizarEspecificacionesVehiculo(formData: VehicleSpecsF
 }
 
 export async function actualizarInformacionGeneralVehiculo(formData: VehicleGeneralFormData) {
-  await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
+  const profile = await requireRole(["ADMIN", "ANALISTA", "REGULACION", "MANTENIMIENTO"]);
   const parsed = vehicleGeneralSchema.safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
   const fd = parsed.data;
+  const otroCentro = await errorSiVehiculoDeOtroCentro(supabase, profile, fd.vehicleId);
+  if (otroCentro) return { error: otroCentro };
+  const centroPropio = centroVisible(profile);
+  if (centroPropio && fd.centro_operativo_id !== centroPropio.id) {
+    return { error: "No puedes cambiar el centro operativo de un vehículo." };
+  }
   const { data: centro } = await supabase
     .from("operational_centers")
     .select("codigo")
@@ -249,9 +273,14 @@ export async function actualizarInformacionGeneralVehiculo(formData: VehicleGene
       vencimiento_soat: fd.vencimiento_soat || null,
       vencimiento_rtm: fd.vencimiento_rtm || null,
       vencimiento_tecnicomecanica: fd.vencimiento_tecnicomecanica || null,
-      costo_soat_anual: fd.costo_soat_anual ?? null,
-      costo_tecnomecanica_anual: fd.costo_tecnomecanica_anual ?? null,
-      costo_poliza_anual: fd.costo_poliza_anual ?? null,
+      // Los costos anuales no los toca quien está limitado a su centro (Regulación).
+      ...(centroPropio
+        ? {}
+        : {
+            costo_soat_anual: fd.costo_soat_anual ?? null,
+            costo_tecnomecanica_anual: fd.costo_tecnomecanica_anual ?? null,
+            costo_poliza_anual: fd.costo_poliza_anual ?? null,
+          }),
       updated_at: new Date().toISOString(),
     })
     .eq("id", fd.vehicleId);
