@@ -117,7 +117,7 @@ Si producción no tiene `schema_migrations` (caso B):
 
 ## 5. Otra trampa: `db:apply` promueve a un ADMIN
 
-Al terminar, `db:apply` ejecuta `ensureAdminProfile`: busca en `auth.users` el correo `ADMIN_SETUP_EMAIL` (si no está definido, **`innovizar@aerosanidadsas.com`**) y, si existe, le **crea o restablece** el perfil con rol ADMIN, activo y nombre «Administrador». En producción, define `ADMIN_SETUP_EMAIL` con el correo del administrador real (variable del entorno `Production`) o confirma que aceptas ese valor por defecto.
+Al terminar, `db:apply` ejecuta `ensureAdminProfile`: si `ADMIN_SETUP_EMAIL` está definido, busca en `auth.users` ese correo y, si existe, le **crea o restablece** el perfil con rol ADMIN, activo y nombre «Administrador». **Si no está definido no hace nada** (desde la auditoría del 14/10/2026 ya no hay un correo por defecto: antes convertía en ADMIN a quien lograra crear esa cuenta). En producción, define `ADMIN_SETUP_EMAIL` con el correo del administrador real (variable del entorno `Production`) solo si necesitas promover a alguien.
 
 ---
 
