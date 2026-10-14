@@ -18,6 +18,7 @@ export function DirectorioTabla({
   filtros = [],
   vacio,
   accion,
+  seleccionInicial,
 }: {
   filas: Fila[];
   columnas: { campo: string; titulo: string }[];
@@ -25,9 +26,11 @@ export function DirectorioTabla({
   vacio: string;
   /** Contenido de una última columna por fila (p. ej. «Editar»), para quien puede modificar. */
   accion?: (fila: Fila) => ReactNode;
+  /** Valor con el que arrancan los filtros (p. ej. `{ estado: "ACTIVO" }`). El usuario puede cambiarlo o quitarlo. */
+  seleccionInicial?: Record<string, string>;
 }) {
   const [q, setQ] = useState("");
-  const [sel, setSel] = useState<Record<string, string>>({});
+  const [sel, setSel] = useState<Record<string, string>>(seleccionInicial ?? {});
   const [pagina, setPagina] = useState(1);
 
   const opciones = useMemo(
