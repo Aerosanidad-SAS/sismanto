@@ -299,6 +299,9 @@ export function ServiciosTabla({
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
 
   const [cieLabel, setCieLabel] = useState("");
+  // Escape o un clic fuera cierran el formulario: si hay cambios sin guardar se pide confirmación (QA, defecto menor).
+  const [confirmarCierre, setConfirmarCierre] = useState(false);
+  const hayCambios = formState.isDirty;
 
   const tipoSeleccionado = watch("tipo_servicio");
   const vehiculoSeleccionado = watch("vehicle_id");
@@ -418,6 +421,9 @@ export function ServiciosTabla({
     const ubicacionDefault = resolverCiudad(ciudadDefault);
     reset({
       tipo_servicio: "",
+      // Sin estos dos, «Guardar y crear otro» dejaba el paciente (y su nombre) del servicio anterior.
+      nombre_completo: "",
+      patient_id: undefined,
       departamento_origen: ubicacionDefault?.departamento ?? "",
       ciudad_origen: ubicacionDefault?.ciudad ?? "",
       ciudad_registro: ciudadRegistroDefault ?? "",
@@ -1036,7 +1042,38 @@ export function ServiciosTabla({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <AlertDialog open={confirmarCierre} onOpenChange={setConfirmarCierre}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Descartar los cambios?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Escribiste datos en el formulario que todavía no se guardan. Si lo cierras ahora se pierden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmarCierre(false);
+                setDialogOpen(false);
+              }}
+            >
+              Descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(abierto) => {
+          if (!abierto && hayCambios && !guardando) {
+            setConfirmarCierre(true);
+            return;
+          }
+          setDialogOpen(abierto);
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editando ? `Editar servicio #${editando.id}` : "Nuevo servicio"}</DialogTitle>

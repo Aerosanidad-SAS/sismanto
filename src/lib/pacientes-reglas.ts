@@ -17,3 +17,14 @@ export const ROLES_DESACTIVAR_PACIENTE: readonly string[] = ["ADMIN"];
 export function puedeDesactivarPaciente(rol: string | null | undefined): boolean {
   return Boolean(rol) && ROLES_DESACTIVAR_PACIENTE.includes(rol as string);
 }
+
+/**
+ * Quién puede crear y editar pacientes. Es EXACTAMENTE la lista de las políticas `patients_insert` y `patients_update`
+ * de la base: la acción la valida también (SEC-07 de PARIDAD_REGULACION.md: no confiar solo en la RLS, y fallar con un
+ * mensaje claro en vez de «0 filas» o un error de política). Si cambia una, cambia la otra.
+ */
+export const ROLES_ESCRIBIR_PACIENTE: readonly string[] = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA"];
+
+export function puedeEscribirPaciente(rol: string | null | undefined): boolean {
+  return Boolean(rol) && ROLES_ESCRIBIR_PACIENTE.includes(rol as string);
+}
