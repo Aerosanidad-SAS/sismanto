@@ -40,7 +40,7 @@ Leyenda de estado: ✅ existe en SISMANTO · 🟡 existe a medias · ❌ no exis
 | ✔ | # | Capacidad en SISRES | SISMANTO | Cómo se verifica | Prio |
 |---|---|---|---|---|---|
 | ☐ | SRV-01 | Abre el listado de servicios | ✅ | | B |
-| ☐ | SRV-02 | Solo ve los servicios de **su ciudad** | 🟡 recorte por **centro operativo**: en la aplicación y, desde la migración 124 (#235), también en la base para los servicios que tienen centro. Los 41.514 servicios del histórico (de 41.523) no tienen centro y se ven en todos los centros | Con `regulacion.mde` no deben verse servicios de Bogotá asignados a otro centro. Falta decidir cómo asignar centro al histórico (p. ej. por ciudad de registro) | B |
+| ☐ | SRV-02 | Solo ve los servicios de **su ciudad** | ✅ de los servicios con centro, los de su centro; de los 41.514 sin centro (histórico), solo los de la **ciudad de registro** de su centro. En la aplicación desde #266 y en la base desde la migración 127 (#272). Los 3 sin centro ni ciudad solo los ve ADMIN/ANALISTA/VISTA/GERENCIAL | Probado con transacción revertida (14/10): `regulacion.mde` ve 11.231 y `regulacion.bgt` 30.316, sin cruces. Falta verlo en pantalla con un usuario real de cada ciudad | B |
 | ☐ | SRV-03 | Filtra por rango de fecha programada | ✅ | | B |
 | ☐ | SRV-04 | Filtra por tipo de servicio | ✅ | | B |
 | ☐ | SRV-05 | Filtra por estado/etapa | ✅ | | B |
@@ -106,7 +106,7 @@ Leyenda de estado: ✅ existe en SISMANTO · 🟡 existe a medias · ❌ no exis
 | ✔ | # | Capacidad en SISRES | SISMANTO | Cómo se verifica | Prio |
 |---|---|---|---|---|---|
 | ☐ | SRE-01 | Abre un servicio para editar | ✅ | | B |
-| ☐ | SRE-02 | Cambiar el id en la URL a un servicio de otra ciudad da 403 | 🟡 no hay pantalla por id (salvo el seguimiento); el recorte está en la base desde la 124 para los servicios con centro (ver SEC-01) | Ver SEC-01 | B |
+| ☐ | SRE-02 | Cambiar el id en la URL a un servicio de otra ciudad da 403 | ✅ no hay pantalla por id (salvo el seguimiento); la lectura, el cambio y el borrado de servicios de otro centro/ciudad los impide la base (migraciones 124 y 127) | Ver SRV-02 | B |
 | ☐ | SRE-04..09 | Edita paciente, tipo, móvil, turno, tiempos, direcciones, tripulación, cierre, etapa y estado | ✅ | | B |
 | ☐ | SRE-10 | Sube, ve y descarga la **boleta de salida** | ✅ subir y ver | Falta "descargar"; verifica el tamaño y los formatos aceptados | B |
 | ☐ | SRE-11 | Avisa al abrir si al servicio le falta la boleta | ✅ | | P |
@@ -184,13 +184,13 @@ Pruébalos escribiendo la URL a mano con la sesión de Regulación.
 
 | ✔ | # | Qué se espera | SISMANTO | Prio |
 |---|---|---|---|---|
-| ☐ | SEC-01 | No ver servicios de otro centro, ni siquiera cambiando la URL | 🟡 en la base desde la migración 124 (#235) para los servicios con centro; el histórico (41.514 de 41.523) no tiene centro y se ve en todos los centros | B |
+| ☐ | SEC-01 | No ver servicios de otro centro, ni siquiera cambiando la URL | ✅ en la base: centro desde la migración 124 (#235) y ciudad de registro del histórico sin centro desde la 127 (#272) | B |
 | ☐ | SEC-02 | No abrir Mantenimientos, Equipos, KPIs, Combustible, Estadísticas, Comunicaciones ni Valoraciones | ✅ verificado el 08/10/2026: las páginas fuera de su alcance tienen guarda de rol (`requireRole` o redirección) | B |
 | ☐ | SEC-03 | No ver el resumen operativo de otras ciudades | ✅ corregido en el PR #10 | B |
 | ☐ | SEC-04 | No eliminar servicios, pacientes, clientes, proveedores ni vehículos | ✅ servicios: solo ADMIN (base); pacientes y clientes: solo ADMIN (#231, #232); vehículos: solo ADMIN y ANALISTA. En proveedores puede marcar «inactivo» desde el formulario, como en SISRES | B |
 | ☐ | SEC-05 | Que quede registro de quién creó, editó o borró qué (log del sistema) | ✅ `/auditoria` registra la mayoría de las escrituras; #237 sumó eliminar vehículo, kilometraje, combustible y plan de mantenimiento | B |
-| ☐ | SEC-06 | Correos del sistema funcionando (tickets, recuperación de contraseña) | 🟡 el envío por SMTP (HostGator) o Graph está en el código (#227); falta configurar las variables en Vercel | B |
-| ☐ | SEC-07 | Las acciones de servidor deben validar el rol, no confiar solo en la base | 🟡 clientes, prestadores, desactivar pacientes e incidentes validan el rol en la acción; crear y editar pacientes siguen confiando en la base (RLS) | B |
+| ☐ | SEC-06 | Correos del sistema funcionando (tickets, recuperación de contraseña) | ✅ SMTP activo (Titan); configurable desde Administración → Configuración general (#251). **Aviso:** los vencimientos biomédicos mandan a diario un correo con los 673 vencidos heredados de SISRES (decidir resumen semanal o limpiar fechas) | B |
+| ☐ | SEC-07 | Las acciones de servidor deben validar el rol, no confiar solo en la base | ✅ clientes, prestadores, desactivar pacientes, incidentes y, con #287, crear y editar pacientes validan el rol en la acción (lista igual a la de la RLS, fijada por una prueba) | B |
 
 ## 12. Deuda encontrada leyendo el código (arréglalas si tocas esa pantalla)
 
