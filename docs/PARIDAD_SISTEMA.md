@@ -1,5 +1,11 @@
 # Paridad de sistema: SISRES → SISMANTO (todo lo que no cubre PARIDAD_REGULACION.md)
 
+> **Desactualizado (14/10/2026).** Este documento se escribió el 24/09/2026. Desde entonces ya existen en SISMANTO los módulos
+> que aquí figuran como «❌ completo»: Tickets/Soporte (migraciones 065–067), Captación aeroportuaria (080), catálogo de aeropuertos
+> y aerolíneas (069) y Formatos TI (070–074). Úsalo como fuente de **qué se comparó**, no del **estado actual**: para eso,
+> `PARIDAD_REGULACION.md` (al día) y `CHANGELOG.md`. Pendiente: que León vuelva a auditar cada sección.
+
+
 **Para:** León (yo) · **Alcance:** módulos completos y funcionalidades
 transversales de SISRES que `PARIDAD_REGULACION.md` (David, rol Regulación)
 no cubre o cubre solo de refilón. Mismo criterio y formato que ese
