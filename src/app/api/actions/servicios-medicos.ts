@@ -320,6 +320,36 @@ export async function getMovilesEnServicio(): Promise<string[]> {
   return idsUnicos(((data ?? []) as { vehicle_id: string | null }[]).map((r) => r.vehicle_id));
 }
 
+/**
+ * Sugerencias para «Asesor quien solicita»: los nombres ya usados en servicios que empiezan por lo que se escribe,
+ * dentro de lo que ve quien pregunta (mismo alcance por centro que la lista), los más recientes primero. El asesor es
+ * texto libre —17 mil valores distintos en 37 mil servicios— así que se sugiere, no se obliga. Mínimo 2 letras.
+ */
+export async function sugerirAsesores(texto: string): Promise<string[]> {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const q = z.string().trim().min(2).max(60).safeParse(texto);
+  if (!q.success) return [];
+  const supabase = createClient();
+  const query = supabase
+    .from("medical_services")
+    .select("asesor")
+    .ilike("asesor", `${q.data.replace(/[%_\\]/g, "")}%`)
+    .order("fecha_hora_registro", { ascending: false, nullsFirst: false })
+    .limit(300);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile));
+  const vistos = new Set<string>();
+  const salida: string[] = [];
+  for (const fila of (data ?? []) as { asesor: string | null }[]) {
+    const nombre = (fila.asesor ?? "").trim().replace(/\s+/g, " ");
+    const clave = nombre.toLocaleUpperCase("es");
+    if (!nombre || vistos.has(clave)) continue;
+    vistos.add(clave);
+    salida.push(nombre);
+    if (salida.length >= 10) break;
+  }
+  return salida;
+}
+
 /** Valores reales para los desplegables de cliente y ciudades (distintos, ordenados). */
 export async function getOpcionesFiltroServicios() {
   const profile = await requireRole(ROLES_LISTA_SERVICIOS);
