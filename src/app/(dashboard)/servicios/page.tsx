@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   buscarServicios,
+  getMovilesEnServicio,
   getOpcionesFiltroServicios,
   getServiciosMedicos,
 } from "@/app/api/actions/servicios-medicos";
@@ -74,6 +75,7 @@ export default async function ServiciosPage(
     opcionesCampos,
     epsOptions,
     camposPacienteObligatorios,
+    movilesOcupados,
   ] =
     await Promise.all([
       buscarServicios(filtros, pagina),
@@ -90,6 +92,8 @@ export default async function ServiciosPage(
       // Para crear un paciente nuevo sin salir del formulario de servicio.
       getEpsCatalog(),
       getCamposObligatoriosModulo("pacientes"),
+      // Móviles con servicio en curso: verde (libre) o rojo (ocupado) en el selector de móvil del formulario.
+      getMovilesEnServicio().catch(() => [] as string[]),
     ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const etapasVisibles = Object.fromEntries((servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa]));
@@ -162,6 +166,7 @@ export default async function ServiciosPage(
             acciones={<ExportarServicios filtros={filtros} />}
             servicios={servicios as any}
             vehiculos={vehiculos}
+            movilesOcupados={movilesOcupados}
             clientes={clientes.map((c) => c.nombre)}
             viewerRole={profile?.role_codigo}
             viewerNombreCompleto={profile?.nombre_completo ?? profile?.email ?? null}

@@ -199,13 +199,17 @@ async function conPacienteYMovil(
 ) {
   if (filas.length === 0) return [];
   const pacienteIds = camposPaciente ? idsUnicos(filas.map((f) => f.patient_id as number | null)) : [];
+  // `id` siempre, una sola vez (la lista de campos del Excel ya lo trae): sin columnas repetidas en el select.
+  const selectPaciente = camposPaciente
+    ? Array.from(new Set(["id", ...camposPaciente.split(",").map((c) => c.trim()).filter(Boolean)])).join(", ")
+    : "";
   const movilIds = idsUnicos(filas.map((f) => f.vehicle_id as string | null));
   const db = supabase as any;
 
   const [pacientes, moviles] = await Promise.all([
     Promise.all(
       trozos(pacienteIds, 200).map(async (ids) => {
-        const { data, error } = await db.from("patients").select(`id, ${camposPaciente}`).in("id", ids);
+        const { data, error } = await db.from("patients").select(selectPaciente).in("id", ids);
         if (error) console.error("[servicios] no se pudieron leer los pacientes de la página:", error.code, error.message);
         return (data ?? []) as { id: number }[];
       })
@@ -227,7 +231,7 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
   let query = supabase
     .from("medical_services")
     .select("*")
-    .order("fecha_hora_registro", { ascending: false })
+    .order("fecha_hora_registro", { ascending: false, nullsFirst: false })
     .limit(500);
 
   // Servicios de su centro, más los que no tienen centro (históricos de antes de la migración 059, o registrados sin
@@ -279,6 +283,8 @@ function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centro: 
   return q;
 }
 
+// Orden: lo último registrado primero. `nullsFirst: false` porque en Postgres un DESC pone los NULL arriba, y hay servicios
+// importados sin fecha de registro (190 al 15/10/2026) que tapaban a los recién creados: el regulador subía un servicio y no lo veía.
 /** Una página de servicios con el total, para la lista paginada de 100. */
 export async function buscarServicios(filtros: FiltrosServicios, pagina: number) {
   const profile = await requireRole(ROLES_LISTA_SERVICIOS);
@@ -288,13 +294,30 @@ export async function buscarServicios(filtros: FiltrosServicios, pagina: number)
   const query = supabase
     .from("medical_services")
     .select("*", { count: "exact" })
-    .order("fecha_hora_registro", { ascending: false })
+    .order("fecha_hora_registro", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false })
     .range(desde, desde + SERVICIOS_POR_PAGINA - 1);
 
   const { data, count, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile));
   if (error) return { servicios: [], total: 0, error: error.message as string };
   return { servicios: await conPacienteYMovil(supabase, (data ?? []) as Record<string, unknown>[]), total: count ?? 0 };
+}
+
+/**
+ * Móviles que ahora mismo tienen un servicio en curso (los que no están libres), dentro de lo que ve quien pregunta.
+ * Para marcar en verde o en rojo el selector de móvil del formulario de servicio.
+ */
+export async function getMovilesEnServicio(): Promise<string[]> {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const query = supabase
+    .from("medical_services")
+    .select("vehicle_id")
+    .eq("etapa", "CURSO")
+    .not("vehicle_id", "is", null)
+    .limit(1000);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile));
+  return idsUnicos(((data ?? []) as { vehicle_id: string | null }[]).map((r) => r.vehicle_id));
 }
 
 /** Valores reales para los desplegables de cliente y ciudades (distintos, ordenados). */
@@ -326,7 +349,7 @@ export async function exportarServicios(filtros: FiltrosServicios) {
     const query = supabase
       .from("medical_services")
       .select("*")
-      .order("fecha_hora_registro", { ascending: false })
+      .order("fecha_hora_registro", { ascending: false, nullsFirst: false })
       .order("id", { ascending: false })
       .range(desde, desde + LOTE - 1);
     const { data, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile));

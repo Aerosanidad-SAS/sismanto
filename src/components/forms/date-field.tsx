@@ -9,6 +9,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { hoyBogota } from "@/lib/fechas";
+import { aplicarMascaraFecha } from "@/lib/mascara-fecha";
 
 const FORMATO_VISIBLE = "dd/MM/yyyy";
 const FORMATO_ISO = "yyyy-MM-dd";
@@ -35,6 +37,8 @@ export interface DateFieldProps {
   inputClassName?: string;
   /** Alto de 32 px (input y botón del calendario) para franjas de filtros densas. */
   compact?: boolean;
+  /** Calendario con lista de mes y de año (desde 1900): para fechas de nacimiento, lejanas en el tiempo. */
+  selectorAnio?: boolean;
 }
 
 /**
@@ -44,7 +48,7 @@ export interface DateFieldProps {
  * escribir la fecha como elegirla en el calendario. El valor que entra/sale
  * sigue siendo ISO "yyyy-MM-dd" — no cambia nada del lado de Zod/BD.
  */
-export function DateField({ value, onChange, id, disabled, placeholder = "dd/mm/aaaa", max, min, className, inputClassName, compact }: DateFieldProps) {
+export function DateField({ value, onChange, id, disabled, placeholder = "dd/mm/aaaa", max, min, className, inputClassName, compact, selectorAnio }: DateFieldProps) {
   const fechaSeleccionada = aFecha(value);
   const [texto, setTexto] = React.useState(fechaSeleccionada ? format(fechaSeleccionada, FORMATO_VISIBLE) : "");
   const [open, setOpen] = React.useState(false);
@@ -76,7 +80,12 @@ export function DateField({ value, onChange, id, disabled, placeholder = "dd/mm/
         value={texto}
         placeholder={placeholder}
         disabled={disabled}
-        onChange={(e) => setTexto(e.target.value)}
+        onChange={(e) => {
+          // Con solo números, las barras se ponen solas; al completar los 10 caracteres se confirma sin esperar al blur.
+          const t = aplicarMascaraFecha(e.target.value);
+          setTexto(t);
+          if (t.length === 10) confirmarTexto(t);
+        }}
         onBlur={(e) => confirmarTexto(e.target.value)}
         className={cn("flex-1", compact && "h-8 min-w-0 px-2 text-sm", inputClassName)}
         inputMode="numeric"
@@ -93,6 +102,19 @@ export function DateField({ value, onChange, id, disabled, placeholder = "dd/mm/
             selected={fechaSeleccionada}
             defaultMonth={fechaSeleccionada}
             locale={es}
+            {...(selectorAnio
+              ? {
+                  captionLayout: "dropdown-buttons" as const,
+                  fromYear: 1900,
+                  toYear: Number((max ?? hoyBogota()).slice(0, 4)),
+                  classNames: {
+                    caption_dropdowns: "flex items-center gap-1",
+                    dropdown: "rounded-md border bg-background px-1 py-0.5 text-sm",
+                    vhidden: "hidden",
+                    caption_label: "hidden",
+                  },
+                }
+              : {})}
             disabled={[
               ...(maxFecha ? [{ after: maxFecha }] : []),
               ...(minFecha ? [{ before: minFecha }] : []),
