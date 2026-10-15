@@ -29,6 +29,7 @@ import {
   type ServicioEnChoque,
 } from "@/lib/servicios-choque";
 import { filaDeActualizacion } from "@/lib/servicios-actualizacion";
+import { idsUnicos, trozos, unirPacienteYMovil } from "@/lib/servicios-relaciones";
 import {
   EXPORT_MAX_FILAS,
   SERVICIOS_POR_PAGINA,
@@ -186,11 +187,46 @@ async function centroDelServicio(
   return centroDelUsuario;
 }
 
+/**
+ * Agrega paciente y móvil a una página de servicios con dos consultas `in` de las filas ya recortadas, en vez de
+ * embeberlos en la consulta principal (ver `servicios-relaciones.ts`: embebidos, un regulador de Bogotá tardaba 10 s
+ * y la lista no cargaba). `camposPaciente: null` = sin datos de paciente.
+ */
+async function conPacienteYMovil(
+  supabase: ReturnType<typeof createClient>,
+  filas: Record<string, unknown>[],
+  camposPaciente: string | null = "cedula, nombre1, apellido1"
+) {
+  if (filas.length === 0) return [];
+  const pacienteIds = camposPaciente ? idsUnicos(filas.map((f) => f.patient_id as number | null)) : [];
+  const movilIds = idsUnicos(filas.map((f) => f.vehicle_id as string | null));
+  const db = supabase as any;
+
+  const [pacientes, moviles] = await Promise.all([
+    Promise.all(
+      trozos(pacienteIds, 200).map(async (ids) => {
+        const { data, error } = await db.from("patients").select(`id, ${camposPaciente}`).in("id", ids);
+        if (error) console.error("[servicios] no se pudieron leer los pacientes de la página:", error.code, error.message);
+        return (data ?? []) as { id: number }[];
+      })
+    ).then((r) => r.flat()),
+    Promise.all(
+      trozos(movilIds, 200).map(async (ids) => {
+        const { data, error } = await db.from("vehicles").select("id, placa").in("id", ids);
+        if (error) console.error("[servicios] no se pudieron leer los móviles de la página:", error.code, error.message);
+        return (data ?? []) as { id: string; placa: string }[];
+      })
+    ).then((r) => r.flat()),
+  ]);
+
+  return unirPacienteYMovil(filas as { patient_id?: number | null; vehicle_id?: string | null }[], pacientes, moviles, camposPaciente !== null);
+}
+
 export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: string; hasta?: string }) {
   const supabase = createClient();
   let query = supabase
     .from("medical_services")
-    .select("*, patients(cedula, nombre1, apellido1), vehicles(placa)")
+    .select("*")
     .order("fecha_hora_registro", { ascending: false })
     .limit(500);
 
@@ -207,7 +243,7 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
   if (filtro?.hasta) query = query.lte("fecha_hora_registro", filtro.hasta);
 
   const { data } = await query;
-  return data || [];
+  return conPacienteYMovil(supabase, (data ?? []) as Record<string, unknown>[]);
 }
 
 // ── Lista de servicios con filtros de SISRES (mostrarServicios.php) ────────
@@ -251,14 +287,14 @@ export async function buscarServicios(filtros: FiltrosServicios, pagina: number)
 
   const query = supabase
     .from("medical_services")
-    .select("*, patients(cedula, nombre1, apellido1), vehicles(placa)", { count: "exact" })
+    .select("*", { count: "exact" })
     .order("fecha_hora_registro", { ascending: false })
     .order("id", { ascending: false })
     .range(desde, desde + SERVICIOS_POR_PAGINA - 1);
 
   const { data, count, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile));
   if (error) return { servicios: [], total: 0, error: error.message as string };
-  return { servicios: data ?? [], total: count ?? 0 };
+  return { servicios: await conPacienteYMovil(supabase, (data ?? []) as Record<string, unknown>[]), total: count ?? 0 };
 }
 
 /** Valores reales para los desplegables de cliente y ciudades (distintos, ordenados). */
@@ -289,13 +325,18 @@ export async function exportarServicios(filtros: FiltrosServicios) {
   for (let desde = 0; desde < EXPORT_MAX_FILAS; desde += LOTE) {
     const query = supabase
       .from("medical_services")
-      .select(conPaciente ? `*, vehicles(placa), patients(${CAMPOS_PACIENTE_EN_SERVICIO})` : "*, vehicles(placa)")
+      .select("*")
       .order("fecha_hora_registro", { ascending: false })
       .order("id", { ascending: false })
       .range(desde, desde + LOTE - 1);
     const { data, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile));
     if (error) return { error: error.message as string };
-    filas.push(...((data ?? []) as Record<string, unknown>[]));
+    filas.push(
+      ...((await conPacienteYMovil(supabase, (data ?? []) as Record<string, unknown>[], conPaciente ? CAMPOS_PACIENTE_EN_SERVICIO : null)) as Record<
+        string,
+        unknown
+      >[])
+    );
     if (!data || data.length < LOTE) break;
   }
   // Quién sacó datos de servicios (pacientes, diagnósticos) a un archivo y cuántas filas: solo la cuenta, no el contenido.
