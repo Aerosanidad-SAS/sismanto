@@ -1262,6 +1262,12 @@ export function ServiciosTabla({
                         ].filter(Boolean).join(" · ") || "sin nadie asignado — armar en Regulación"}
                       </p>
                     )}
+                    {vehiculoSeleccionado && !tripulacionVehiculoActual?.ovem && (
+                      <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
+                        Este móvil no tiene OVEM armado hoy: el servicio no le aparecerá a ningún conductor hasta que Regulación arme la
+                        tripulación (se le asigna solo al armarla).
+                      </p>
+                    )}
                   </div>
                 )}
                 {requiereMedicoIndependiente && (

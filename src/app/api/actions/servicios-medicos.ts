@@ -199,13 +199,17 @@ async function conPacienteYMovil(
 ) {
   if (filas.length === 0) return [];
   const pacienteIds = camposPaciente ? idsUnicos(filas.map((f) => f.patient_id as number | null)) : [];
+  // `id` siempre, una sola vez (la lista de campos del Excel ya lo trae): sin columnas repetidas en el select.
+  const selectPaciente = camposPaciente
+    ? Array.from(new Set(["id", ...camposPaciente.split(",").map((c) => c.trim()).filter(Boolean)])).join(", ")
+    : "";
   const movilIds = idsUnicos(filas.map((f) => f.vehicle_id as string | null));
   const db = supabase as any;
 
   const [pacientes, moviles] = await Promise.all([
     Promise.all(
       trozos(pacienteIds, 200).map(async (ids) => {
-        const { data, error } = await db.from("patients").select(`id, ${camposPaciente}`).in("id", ids);
+        const { data, error } = await db.from("patients").select(selectPaciente).in("id", ids);
         if (error) console.error("[servicios] no se pudieron leer los pacientes de la página:", error.code, error.message);
         return (data ?? []) as { id: number }[];
       })
