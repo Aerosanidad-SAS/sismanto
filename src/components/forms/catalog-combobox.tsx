@@ -48,6 +48,13 @@ export function CatalogCombobox({
     setSearch("");
   };
 
+  // El valor escrito a mano va como una opción normal de la lista, NO dentro de <CommandEmpty>: un <CommandItem> dentro del
+  // «vacío» se registra, con lo que la lista deja de estar vacía, el «vacío» se desmonta, el ítem se desregistra y vuelta a
+  // empezar: render infinito y pantalla «No pudimos cargar esta pantalla» al escribir cualquier texto sin coincidencias.
+  const escrito = search.trim();
+  const hayIgual = options.some((o) => o.toLowerCase() === escrito.toLowerCase());
+  const ofrecerEscrito = allowCustom && escrito !== "" && !hayIgual;
+
   return (
     <Popover
       open={open}
@@ -76,22 +83,19 @@ export function CatalogCombobox({
         <Command shouldFilter={false}>
           <CommandInput placeholder="Buscar…" value={search} onValueChange={setSearch} />
           <CommandList>
-            <CommandEmpty>
-              {allowCustom && search.trim() ? (
+            <CommandEmpty>Sin coincidencias</CommandEmpty>
+            <CommandGroup>
+              {ofrecerEscrito && (
                 <CommandItem
-                  value={`__custom__${search.trim()}`}
+                  value={`__custom__${escrito}`}
                   onSelect={() => {
-                    onChange(search.trim());
+                    onChange(escrito);
                     close();
                   }}
                 >
-                  Usar &quot;{search.trim()}&quot;
+                  Usar &quot;{escrito}&quot;
                 </CommandItem>
-              ) : (
-                "Sin coincidencias"
               )}
-            </CommandEmpty>
-            <CommandGroup>
               {filtered.map((opt) => (
                 <CommandItem
                   key={opt}
