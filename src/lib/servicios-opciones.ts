@@ -8,7 +8,19 @@ import {
   TURNO_OPCIONES,
 } from "@/lib/validations";
 
-// Opciones administrables de 7 selects del formulario de servicios (migración 091), portado de
+// Soporte que necesita el paciente. Los 7 valores más usados del histórico de SISRES (12 valores cubren el 96 % de
+// 37 mil servicios); lo demás se escribe a mano. El administrador puede cambiar la lista (migración 134).
+const SOPORTE_OPCIONES = [
+  "NO REQUIERE",
+  "OXIGENO A 1 LITRO",
+  "OXIGENO A 2 LITROS",
+  "OXIGENO A 3 LITROS",
+  "OXIGENO A NECESIDAD",
+  "MOVILIDAD REDUCIDA",
+  "VIGILANCIA MEDICA",
+] as const;
+
+// Opciones administrables de 8 selects del formulario de servicios (migraciones 091 y 134), portado de
 // includes/servicioCamposConfig.php de SISRES. Puro (sin base de datos): lo usan la acción, la
 // pantalla de configuración y el formulario.
 
@@ -20,6 +32,7 @@ export const CAMPOS_OPCIONES_SERVICIO = [
   { campo: "metodo_pago", etiqueta: "Método de pago", fabrica: METODO_PAGO_OPCIONES },
   { campo: "motivo_externo", etiqueta: "Motivo externo (no efectivo)", fabrica: MOTIVO_EXTERNO_OPCIONES },
   { campo: "motivo_interno", etiqueta: "Motivo interno (no efectivo)", fabrica: MOTIVO_INTERNO_OPCIONES },
+  { campo: "soporte", etiqueta: "Soporte", fabrica: SOPORTE_OPCIONES },
 ] as const;
 
 export type CampoOpcionesServicio = (typeof CAMPOS_OPCIONES_SERVICIO)[number]["campo"];
