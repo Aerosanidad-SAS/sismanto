@@ -21,7 +21,7 @@ import {
   SEXO_OPCIONES,
   RH_OPCIONES,
 } from "@/lib/validations";
-import { conAsterisco } from "@/lib/campos-obligatorios";
+import { conAsterisco, esCiudadBogota, obligatoriosPaciente } from "@/lib/campos-obligatorios";
 import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { crearPaciente, actualizarPaciente } from "@/app/api/actions/pacientes";
 
@@ -60,13 +60,10 @@ export interface PacienteRow {
 // aparte más abajo). Ciudad va en cascada por departamento, igual que
 // registroPacientes.php en SISRES (PARIDAD_REGULACION.md, PAC-06).
 const CAMPOS_OPCIONALES: { name: keyof PatientFormData; label: string; type?: string }[] = [
-  { name: "nombre2", label: "Segundo nombre" },
-  { name: "apellido2", label: "Segundo apellido" },
   { name: "celular", label: "Celular" },
   { name: "correo", label: "Correo", type: "email" },
   { name: "direccion", label: "Dirección" },
   { name: "barrio", label: "Barrio" },
-  { name: "localidad", label: "Localidad" },
 ];
 
 interface PacienteFormDialogProps {
@@ -76,6 +73,8 @@ interface PacienteFormDialogProps {
   editando: PacienteRow | null;
   /** Documento con el que arranca un paciente nuevo (por ejemplo, el que la persona ya buscó). */
   cedulaInicial?: string;
+  /** Departamento y ciudad con los que arranca un paciente nuevo: los del CRA de quien lo registra. Se pueden cambiar. */
+  ubicacionInicial?: { departamento: string; ciudad: string } | null;
   /** Catálogo real de EPS (tabla `eps`, migración 058) — mismo select cerrado que SISRES. */
   epsOptions: string[];
   /** Campos opcionales que el administrador volvió obligatorios (migración 101): se marcan con *. */
@@ -90,11 +89,13 @@ export function PacienteFormDialog({
   onOpenChange,
   editando,
   cedulaInicial,
+  ubicacionInicial = null,
   epsOptions,
   obligatorios = [],
   onGuardado,
 }: PacienteFormDialogProps) {
-  const etq = (etiqueta: string, campo: string) => conAsterisco(etiqueta, campo, obligatorios);
+  const departamentoInicial = ubicacionInicial?.departamento ?? "";
+  const ciudadInicial = ubicacionInicial?.ciudad ?? "";
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -115,7 +116,7 @@ export function PacienteFormDialog({
     if (!open) return;
     setError(null);
     if (!editando) {
-      reset({ tipo_documento: "", cedula: cedulaInicial ?? "" } as unknown as PatientFormData);
+      reset({ tipo_documento: "", cedula: cedulaInicial ?? "", departamento: departamentoInicial, ciudad: ciudadInicial } as unknown as PatientFormData);
       return;
     }
     // Pacientes históricos con ciudad en texto libre y sin departamento:
@@ -142,7 +143,7 @@ export function PacienteFormDialog({
       celular: editando.celular ?? "",
       correo: editando.correo ?? "",
     });
-  }, [open, editando, cedulaInicial, reset]);
+  }, [open, editando, cedulaInicial, departamentoInicial, ciudadInicial, reset]);
 
   const tipoDocumentoSeleccionado = watch("tipo_documento");
   const sexoSeleccionado = watch("sexo");
@@ -150,6 +151,10 @@ export function PacienteFormDialog({
   const departamentoSeleccionado = watch("departamento");
   const ciudadSeleccionada = watch("ciudad");
   const epsSeleccionada = watch("eps");
+  // «Localidad» es de Bogotá: solo se muestra (y solo se exige) cuando la ciudad es Bogotá.
+  const mostrarLocalidad = esCiudadBogota(ciudadSeleccionada);
+  const etq = (etiqueta: string, campo: string) =>
+    conAsterisco(etiqueta, campo, obligatoriosPaciente(obligatorios, ciudadSeleccionada));
   // Ciudad en cascada: solo las del departamento ya elegido (mismo criterio
   // que servicios-tabla.tsx). Si cambia el departamento, se limpia la ciudad
   // para no dejar una que ya no corresponde.
@@ -157,6 +162,11 @@ export function PacienteFormDialog({
   const handleDepartamento = (v: string) => {
     setValue("departamento", v);
     setValue("ciudad", "");
+    setValue("localidad", "");
+  };
+  const handleCiudad = (v: string) => {
+    setValue("ciudad", v);
+    if (!esCiudadBogota(v)) setValue("localidad", "");
   };
   const edadCalculada = calcularEdadNumero(watch("fecha_nacimiento"));
   const esMenorDeEdad = edadCalculada !== null && edadCalculada < 18;
@@ -206,6 +216,8 @@ export function PacienteFormDialog({
                 id="fecha_nacimiento_primero"
                 value={watch("fecha_nacimiento") ?? ""}
                 onChange={(v) => setValue("fecha_nacimiento", v)}
+                max={hoyBogota()}
+                selectorAnio
               />
               <p className="text-xs text-muted-foreground">
                 {esMenorDeEdad
@@ -242,8 +254,16 @@ export function PacienteFormDialog({
               <Input id="nombre1" {...register("nombre1")} />
             </div>
             <div className="space-y-1">
+              <Label htmlFor="nombre2">{etq("Segundo nombre", "nombre2")}</Label>
+              <Input id="nombre2" {...register("nombre2")} />
+            </div>
+            <div className="space-y-1">
               <Label htmlFor="apellido1">Primer apellido *</Label>
               <Input id="apellido1" {...register("apellido1")} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="apellido2">{etq("Segundo apellido", "apellido2")}</Label>
+              <Input id="apellido2" {...register("apellido2")} />
             </div>
             <div className="space-y-1">
               <Label>{etq("Sexo", "sexo")}</Label>
@@ -301,7 +321,7 @@ export function PacienteFormDialog({
                 id="ciudad"
                 options={ciudadesDisponibles as string[]}
                 value={ciudadSeleccionada ?? ""}
-                onChange={(v) => setValue("ciudad", v)}
+                onChange={handleCiudad}
                 placeholder={departamentoSeleccionado ? "Escribe para buscar la ciudad…" : "Primero elige el departamento"}
                 allowCustom={false}
                 disabled={!departamentoSeleccionado}
@@ -324,6 +344,12 @@ export function PacienteFormDialog({
                 <Input id={campo.name} type={campo.type ?? "text"} {...register(campo.name)} />
               </div>
             ))}
+            {mostrarLocalidad && (
+              <div className="space-y-1">
+                <Label htmlFor="localidad">{etq("Localidad", "localidad")}</Label>
+                <Input id="localidad" {...register("localidad")} />
+              </div>
+            )}
           </div>
 
           {(error || Object.values(formState.errors)[0]?.message) && (
