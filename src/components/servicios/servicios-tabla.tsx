@@ -73,6 +73,7 @@ import {
   getCatalogoCie,
   subirBoletaSalida,
   getUrlBoletaSalida,
+  sugerirAsesores,
 } from "@/app/api/actions/servicios-medicos";
 import type { PacienteTypeahead } from "@/app/api/actions/pacientes";
 import { toast } from "@/components/ui/toaster";
@@ -316,6 +317,22 @@ export function ServiciosTabla({
   const tipoSeleccionado = watch("tipo_servicio");
   const vehiculoSeleccionado = watch("vehicle_id");
   const turnoSeleccionado = watch("turno_programacion");
+  const soporteSeleccionado = watch("soporte");
+  // Sugerencias de «Asesor quien solicita»: lo ya usado en otros servicios, buscado al escribir (con espera de 250 ms).
+  const [asesoresSugeridos, setAsesoresSugeridos] = useState<string[]>([]);
+  const esperaAsesor = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pedirAsesores = (texto: string) => {
+    if (esperaAsesor.current) clearTimeout(esperaAsesor.current);
+    if (texto.trim().length < 2) {
+      setAsesoresSugeridos([]);
+      return;
+    }
+    esperaAsesor.current = setTimeout(() => {
+      sugerirAsesores(texto)
+        .then(setAsesoresSugeridos)
+        .catch(() => setAsesoresSugeridos([]));
+    }, 250);
+  };
   const ciudadRegistroSeleccionada = watch("ciudad_registro");
   const cieSeleccionado = watch("cie_codigo");
   const aislamientoSeleccionado = watch("requiere_aislamiento");
@@ -1331,13 +1348,41 @@ export function ServiciosTabla({
                 {paraPerfil(CAMPOS_PROGRAMACION, perfil).filter((c) => c.name !== "fecha_hora_programacion").map((campo) => (
                   <div key={campo.name} className="space-y-1">
                     <Label htmlFor={campo.name}>{campo.label}</Label>
-                    <Input
-                      id={campo.name}
-                      type={campo.type ?? "text"}
-                      placeholder={campo.placeholder}
-                      disabled={campoBloqueado(campo.name)}
-                      {...register(campo.name)}
-                    />
+                    {campo.name === "soporte" ? (
+                      <CatalogCombobox
+                        id="soporte"
+                        options={opcionesConValorActual(opciones.soporte, soporteSeleccionado)}
+                        value={soporteSeleccionado ?? ""}
+                        onChange={(v) => setValue("soporte", v, { shouldDirty: true })}
+                        placeholder="Selecciona o escribe el soporte…"
+                        allowCustom
+                        disabled={campoBloqueado("soporte")}
+                      />
+                    ) : campo.name === "asesor" ? (
+                      <>
+                        <Input
+                          id="asesor"
+                          list="asesores-sugeridos"
+                          autoComplete="off"
+                          placeholder={campo.placeholder}
+                          disabled={campoBloqueado("asesor")}
+                          {...register("asesor", { onChange: (e) => pedirAsesores(e.target.value) })}
+                        />
+                        <datalist id="asesores-sugeridos">
+                          {asesoresSugeridos.map((a) => (
+                            <option key={a} value={a} />
+                          ))}
+                        </datalist>
+                      </>
+                    ) : (
+                      <Input
+                        id={campo.name}
+                        type={campo.type ?? "text"}
+                        placeholder={campo.placeholder}
+                        disabled={campoBloqueado(campo.name)}
+                        {...register(campo.name)}
+                      />
+                    )}
                   </div>
                 ))}
                 {perfil === "TRASLADO" && (
