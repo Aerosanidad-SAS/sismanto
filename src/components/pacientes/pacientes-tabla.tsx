@@ -45,9 +45,19 @@ interface PacientesTablaProps {
   busqueda: string;
   /** Campos opcionales que el administrador volvió obligatorios (migración 101): se marcan con *. */
   obligatorios?: string[];
+  /** Departamento y ciudad con los que arranca un paciente nuevo: los del CRA de quien lo registra. */
+  ubicacionInicial?: { departamento: string; ciudad: string } | null;
 }
 
-export function PacientesTabla({ pacientes, puedeEditar, puedeDesactivar, epsOptions, busqueda, obligatorios = [] }: PacientesTablaProps) {
+export function PacientesTabla({
+  pacientes,
+  puedeEditar,
+  puedeDesactivar,
+  epsOptions,
+  busqueda,
+  obligatorios = [],
+  ubicacionInicial = null,
+}: PacientesTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<PacienteRow | null>(null);
@@ -150,6 +160,7 @@ export function PacientesTabla({ pacientes, puedeEditar, puedeDesactivar, epsOpt
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editando={editando}
+        ubicacionInicial={ubicacionInicial}
         epsOptions={epsOptions}
         obligatorios={obligatorios}
         onGuardado={() => router.refresh()}

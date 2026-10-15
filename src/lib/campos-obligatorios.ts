@@ -79,3 +79,19 @@ export function mensajeFaltantes(faltantes: readonly string[]): string | null {
 export function conAsterisco(etiqueta: string, campo: string, obligatorios: readonly string[]): string {
   return obligatorios.includes(campo) ? `${etiqueta} *` : etiqueta;
 }
+
+const sinTildes = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+
+/** ¿La ciudad del paciente es Bogotá? («Bogotá D.C.» del catálogo, o «Bogota» escrito a mano). */
+export function esCiudadBogota(ciudad: string | null | undefined): boolean {
+  const c = sinTildes(ciudad ?? "");
+  return c === "bogota" || c.startsWith("bogota ");
+}
+
+/**
+ * Campos obligatorios de un paciente según su ciudad: «Localidad» es de Bogotá (las localidades de la ciudad), así que
+ * solo se exige —y solo se muestra— cuando la ciudad es Bogotá. Revisión inicial 2026-10-15.
+ */
+export function obligatoriosPaciente(obligatorios: readonly string[], ciudad: string | null | undefined): string[] {
+  return esCiudadBogota(ciudad) ? [...obligatorios] : obligatorios.filter((c) => c !== "localidad");
+}

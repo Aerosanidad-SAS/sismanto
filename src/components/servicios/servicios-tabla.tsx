@@ -39,7 +39,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ciudadRegistroCanonica, fechaHora24, horasEstancado, OPCIONES_CIUDAD_REGISTRO } from "@/lib/servicios-lista";
+import {
+  ciudadRegistroCanonica,
+  fechaHora24,
+  horasEstancado,
+  OPCIONES_CIUDAD_REGISTRO,
+  ubicacionPacientePorCiudadRegistro,
+} from "@/lib/servicios-lista";
 import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
@@ -1768,6 +1774,7 @@ export function ServiciosTabla({
         open={pacienteNuevoAbierto}
         onOpenChange={setPacienteNuevoAbierto}
         editando={null}
+        ubicacionInicial={ubicacionPacientePorCiudadRegistro(ciudadRegistroDefault)}
         epsOptions={epsOptions}
         obligatorios={camposPacienteObligatorios}
         onGuardado={(creado) => {
