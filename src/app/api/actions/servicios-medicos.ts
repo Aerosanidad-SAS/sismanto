@@ -297,6 +297,23 @@ export async function buscarServicios(filtros: FiltrosServicios, pagina: number)
   return { servicios: await conPacienteYMovil(supabase, (data ?? []) as Record<string, unknown>[]), total: count ?? 0 };
 }
 
+/**
+ * Móviles que ahora mismo tienen un servicio en curso (los que no están libres), dentro de lo que ve quien pregunta.
+ * Para marcar en verde o en rojo el selector de móvil del formulario de servicio.
+ */
+export async function getMovilesEnServicio(): Promise<string[]> {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const query = supabase
+    .from("medical_services")
+    .select("vehicle_id")
+    .eq("etapa", "CURSO")
+    .not("vehicle_id", "is", null)
+    .limit(1000);
+  const { data } = await aplicarFiltrosServicios(query, {}, centroVisible(profile));
+  return idsUnicos(((data ?? []) as { vehicle_id: string | null }[]).map((r) => r.vehicle_id));
+}
+
 /** Valores reales para los desplegables de cliente y ciudades (distintos, ordenados). */
 export async function getOpcionesFiltroServicios() {
   const profile = await requireRole(ROLES_LISTA_SERVICIOS);
