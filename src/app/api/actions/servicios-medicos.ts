@@ -227,7 +227,7 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
   let query = supabase
     .from("medical_services")
     .select("*")
-    .order("fecha_hora_registro", { ascending: false })
+    .order("fecha_hora_registro", { ascending: false, nullsFirst: false })
     .limit(500);
 
   // Servicios de su centro, más los que no tienen centro (históricos de antes de la migración 059, o registrados sin
@@ -279,6 +279,8 @@ function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centro: 
   return q;
 }
 
+// Orden: lo último registrado primero. `nullsFirst: false` porque en Postgres un DESC pone los NULL arriba, y hay servicios
+// importados sin fecha de registro (190 al 15/10/2026) que tapaban a los recién creados: el regulador subía un servicio y no lo veía.
 /** Una página de servicios con el total, para la lista paginada de 100. */
 export async function buscarServicios(filtros: FiltrosServicios, pagina: number) {
   const profile = await requireRole(ROLES_LISTA_SERVICIOS);
@@ -288,7 +290,7 @@ export async function buscarServicios(filtros: FiltrosServicios, pagina: number)
   const query = supabase
     .from("medical_services")
     .select("*", { count: "exact" })
-    .order("fecha_hora_registro", { ascending: false })
+    .order("fecha_hora_registro", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false })
     .range(desde, desde + SERVICIOS_POR_PAGINA - 1);
 
@@ -343,7 +345,7 @@ export async function exportarServicios(filtros: FiltrosServicios) {
     const query = supabase
       .from("medical_services")
       .select("*")
-      .order("fecha_hora_registro", { ascending: false })
+      .order("fecha_hora_registro", { ascending: false, nullsFirst: false })
       .order("id", { ascending: false })
       .range(desde, desde + LOTE - 1);
     const { data, error } = await aplicarFiltrosServicios(query, filtros, centroVisible(profile));
