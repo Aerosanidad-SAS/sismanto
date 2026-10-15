@@ -247,3 +247,22 @@ export function fechaHora24(iso: string | null | undefined, conSegundos = false)
   const s = d.toLocaleString("sv-SE", { timeZone: "America/Bogota" });
   return conSegundos ? s : s.slice(0, 16);
 }
+
+/** Departamento y ciudad (como están en el catálogo de pacientes) de cada CRA. */
+const UBICACION_PACIENTE_POR_CIUDAD: Record<CiudadServicio, { departamento: string; ciudad: string }> = {
+  medellin: { departamento: "Antioquia", ciudad: "Medellín" },
+  bogota: { departamento: "Bogotá D.C.", ciudad: "Bogotá D.C." },
+};
+
+/**
+ * Lo que se propone como departamento y ciudad al registrar un paciente nuevo: el del CRA de quien lo registra
+ * (Regulación Medellín → Antioquia / Medellín). Se puede cambiar. `ciudadRegistro` es la de `ciudadRegistroDePerfil`.
+ * null si no se sabe (p. ej. un ADMIN sin centro).
+ */
+export function ubicacionPacientePorCiudadRegistro(
+  ciudadRegistro: string | null | undefined
+): { departamento: string; ciudad: string } | null {
+  const texto = (ciudadRegistro ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const clave = CIUDADES_SERVICIO.find((c) => texto.startsWith(c.prefijo))?.clave;
+  return clave ? { ...UBICACION_PACIENTE_POR_CIUDAD[clave] } : null;
+}

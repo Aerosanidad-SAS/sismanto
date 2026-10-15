@@ -39,7 +39,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ciudadRegistroCanonica, fechaHora24, horasEstancado, OPCIONES_CIUDAD_REGISTRO } from "@/lib/servicios-lista";
+import {
+  ciudadRegistroCanonica,
+  fechaHora24,
+  horasEstancado,
+  OPCIONES_CIUDAD_REGISTRO,
+  ubicacionPacientePorCiudadRegistro,
+} from "@/lib/servicios-lista";
 import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
@@ -47,6 +53,7 @@ import { AsyncCombobox } from "@/components/forms/async-combobox";
 import { PatientSearchCombobox, nombreCompletoDe } from "@/components/forms/patient-search-combobox";
 import { PacienteFormDialog } from "@/components/pacientes/paciente-form-dialog";
 import { DateTimeField } from "@/components/forms/date-time-field";
+import { movilesPorDisponibilidad, turnoPorFechaHora } from "@/lib/turno-servicio";
 import { DEPARTAMENTOS_COLOMBIA, MUNICIPIOS_POR_DEPARTAMENTO, resolverCiudad } from "@/lib/colombia-geo";
 import { PRESTADORES_SISRES } from "@/lib/catalogos-sisres";
 import {
@@ -207,6 +214,8 @@ type PersonaTripulacion = { user_id: string; nombre_completo: string | null; ema
 interface ServiciosTablaProps {
   servicios: ServicioRow[];
   vehiculos: { id: string; placa: string }[];
+  /** Ids de los móviles con un servicio en curso: se marcan en rojo y van al final del selector (los libres, en verde, primero). */
+  movilesOcupados?: string[];
   clientes: string[];
   puedeEditar: boolean;
   /** Médicos activos disponibles para asignar directo a un servicio (sin vehículo/OVEM) — típico de Medicina Domiciliaria con prestador externo. */
@@ -251,6 +260,7 @@ const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>(CAMPOS_
 export function ServiciosTabla({
   servicios,
   vehiculos,
+  movilesOcupados = [],
   clientes,
   puedeEditar,
   medicosDisponibles,
@@ -1225,13 +1235,24 @@ export function ServiciosTabla({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Sin asignar</SelectItem>
-                        {vehiculos.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            {v.placa}
-                          </SelectItem>
-                        ))}
+                        {movilesPorDisponibilidad(vehiculos, new Set(movilesOcupados)).map((v) => {
+                          const ocupado = movilesOcupados.includes(v.id);
+                          return (
+                            <SelectItem key={v.id} value={v.id}>
+                              <span className="flex items-center gap-2">
+                                <span
+                                  aria-hidden
+                                  className={`inline-block h-2.5 w-2.5 rounded-full ${ocupado ? "bg-red-500" : "bg-green-500"}`}
+                                />
+                                {v.placa}
+                                <span className="text-xs text-muted-foreground">{ocupado ? "en servicio" : "libre"}</span>
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">Verde: libre · Rojo: con un servicio en curso.</p>
                     {vehiculoSeleccionado && (
                       <p className="text-xs text-muted-foreground">
                         Tripulación de hoy: {[
@@ -1270,7 +1291,14 @@ export function ServiciosTabla({
                   <DateTimeField
                     id="fecha_hora_programacion"
                     value={watch("fecha_hora_programacion") ?? ""}
-                    onChange={(v) => setValue("fecha_hora_programacion", v)}
+                    onChange={(v) => {
+                      setValue("fecha_hora_programacion", v);
+                      // El turno se propone según la hora (06:00–17:59 diurno, el resto nocturno); se puede cambiar.
+                      const turno = turnoPorFechaHora(v);
+                      if (turno && opciones.turno_programacion.includes(turno) && !campoBloqueado("turno_programacion")) {
+                        setValue("turno_programacion", turno);
+                      }
+                    }}
                     disabled={campoBloqueado("fecha_hora_programacion")}
                   />
                 </div>
@@ -1292,6 +1320,7 @@ export function ServiciosTabla({
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">Se propone según la hora: de 6:00 a 17:59, diurno; el resto, nocturno.</p>
                 </div>
                 {paraPerfil(CAMPOS_PROGRAMACION, perfil).filter((c) => c.name !== "fecha_hora_programacion").map((campo) => (
                   <div key={campo.name} className="space-y-1">
@@ -1768,6 +1797,7 @@ export function ServiciosTabla({
         open={pacienteNuevoAbierto}
         onOpenChange={setPacienteNuevoAbierto}
         editando={null}
+        ubicacionInicial={ubicacionPacientePorCiudadRegistro(ciudadRegistroDefault)}
         epsOptions={epsOptions}
         obligatorios={camposPacienteObligatorios}
         onGuardado={(creado) => {

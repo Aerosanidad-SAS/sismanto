@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import type { PacienteGuardado, PatientFormData } from "@/lib/validations";
 import { patientSchema, patientSchemaEdicion } from "@/lib/validations";
 import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
-import { camposFaltantes, mensajeFaltantes } from "@/lib/campos-obligatorios";
+import { camposFaltantes, mensajeFaltantes, obligatoriosPaciente } from "@/lib/campos-obligatorios";
 import { z } from "zod";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { cedulaPacienteValida, CEDULA_PACIENTE_MIN, puedeDesactivarPaciente, puedeEscribirPaciente } from "@/lib/pacientes-reglas";
@@ -125,7 +125,7 @@ export async function crearPaciente(formData: PatientFormData) {
     return { error: `El número de documento debe tener mínimo ${CEDULA_PACIENTE_MIN} caracteres` };
   }
   // Campos opcionales que el administrador volvió obligatorios (migración 101).
-  const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
+  const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, obligatoriosPaciente(await getCamposObligatoriosModulo("pacientes"), parsed.data.ciudad)));
   if (faltan) return { error: faltan };
 
   const supabase = createClient();
@@ -169,7 +169,7 @@ export async function actualizarPaciente(id: number, formData: PatientFormData) 
   const parsed = patientSchemaEdicion(original).safeParse(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   // Campos opcionales que el administrador volvió obligatorios (migración 101).
-  const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, await getCamposObligatoriosModulo("pacientes")));
+  const faltan = mensajeFaltantes(camposFaltantes("pacientes", parsed.data, obligatoriosPaciente(await getCamposObligatoriosModulo("pacientes"), parsed.data.ciudad)));
   if (faltan) return { error: faltan };
 
   const { error } = await supabase

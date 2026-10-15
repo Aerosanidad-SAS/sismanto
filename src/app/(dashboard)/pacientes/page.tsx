@@ -9,6 +9,7 @@ import { ExportarPacientes } from "@/components/pacientes/exportar-pacientes";
 import { PacientesPaginacion } from "@/components/pacientes/pacientes-paginacion";
 import { ROLES_EXPORTAR_PACIENTES } from "@/lib/pacientes-export";
 import { leerBusquedaPacientes } from "@/lib/pacientes-lista";
+import { ciudadRegistroDePerfil, ubicacionPacientePorCiudadRegistro } from "@/lib/servicios-lista";
 import { puedeDesactivarPaciente } from "@/lib/pacientes-reglas";
 
 export const metadata = { title: "Pacientes" };
@@ -97,6 +98,7 @@ export default async function PacientesPage(
             epsOptions={epsOptions}
             busqueda={q}
             obligatorios={obligatorios}
+            ubicacionInicial={ubicacionPacientePorCiudadRegistro(ciudadRegistroDePerfil(profile))}
           />
           <PacientesPaginacion q={q} pagina={pagina} total={total} />
         </CardContent>
