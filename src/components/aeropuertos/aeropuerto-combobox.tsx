@@ -58,6 +58,9 @@ export function AeropuertoCombobox({
     setBusqueda("");
   };
   const escrito = busqueda.trim();
+  // Igual que en CatalogCombobox: un <CommandItem> dentro de <CommandEmpty> provoca un render infinito. Se ofrece aparte,
+  // como opción de la lista, cuando ya se buscó y no hubo coincidencias.
+  const ofrecerEscrito = escrito.length >= AEROPUERTOS_MIN_CARACTERES && !buscando && resultados.length === 0;
 
   return (
     <Popover
@@ -85,11 +88,14 @@ export function AeropuertoCombobox({
           <CommandInput placeholder="Buscar aeropuerto…" value={busqueda} onValueChange={setBusqueda} />
           <CommandList>
             <CommandEmpty>
-              {escrito.length < AEROPUERTOS_MIN_CARACTERES ? (
-                `Escribe al menos ${AEROPUERTOS_MIN_CARACTERES} letras`
-              ) : buscando ? (
-                "Buscando…"
-              ) : (
+              {escrito.length < AEROPUERTOS_MIN_CARACTERES
+                ? `Escribe al menos ${AEROPUERTOS_MIN_CARACTERES} letras`
+                : buscando
+                  ? "Buscando…"
+                  : null}
+            </CommandEmpty>
+            <CommandGroup>
+              {ofrecerEscrito && (
                 <CommandItem
                   value={`__custom__${escrito}`}
                   onSelect={() => {
@@ -100,8 +106,6 @@ export function AeropuertoCombobox({
                   Sin coincidencias: usar &quot;{escrito}&quot;
                 </CommandItem>
               )}
-            </CommandEmpty>
-            <CommandGroup>
               {resultados.map((a) => {
                 const etiqueta = etiquetaAeropuerto(a);
                 return (
