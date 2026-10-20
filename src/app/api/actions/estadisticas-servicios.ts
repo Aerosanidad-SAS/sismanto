@@ -6,6 +6,7 @@ import { getProfile } from "@/app/api/actions/auth";
 import { centroVisible } from "@/lib/auth-utils";
 import { leerTodo } from "@/lib/leer-todo";
 import { prefijoCiudad } from "@/lib/servicios-lista";
+import { condicionServiciosDeCentro } from "@/lib/servicios-centro";
 
 export interface EstadisticasServicios {
   total: number;
@@ -288,7 +289,7 @@ export async function getResumenOperativoDiario(params: {
       .gte("fecha_hora_registro", desdeIso)
       .lt("fecha_hora_registro", hastaExclusivoIso)
       .is("cierre_automatico_at", null);
-    if (centro) query = query.or(`operational_center_id.eq.${centro.id},operational_center_id.is.null`);
+    if (centro) query = query.or(condicionServiciosDeCentro(centro));
     return query.order("id").range(d, h);
   });
 
