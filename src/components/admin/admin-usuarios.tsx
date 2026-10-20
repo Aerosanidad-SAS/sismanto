@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive, restablecerClaveUsuario } from "@/app/api/actions/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,11 +30,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck, Contact } from "lucide-react";
+import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck, Contact, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
 import { CamposDatosPersonales, DialogDatosPersonales } from "@/components/admin/datos-personales-usuario";
+import {
+  filtrarYOrdenar,
+  hayFiltrosUsuarios,
+  siguienteOrden,
+  type ColumnaUsuario,
+  type FiltrosColumna,
+  type OrdenUsuarios,
+} from "@/lib/usuarios-tabla";
 import { DATOS_PERSONALES_VACIOS, nombreCompletoDe, type DatosPersonalesUsuario } from "@/lib/usuarios-sisres";
 
 // Radix Select no admite value="" — valor centinela para "sin centro".
@@ -195,6 +203,48 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
 
   const nombreCentro = new Map(centros.map((c) => [c.id, c.nombre]));
 
+  const [busqueda, setBusqueda] = useState("");
+  const [filtros, setFiltros] = useState<FiltrosColumna>({});
+  const [orden, setOrden] = useState<OrdenUsuarios | null>(null);
+  const hayFiltros = hayFiltrosUsuarios(busqueda, filtros);
+
+  // Se busca, filtra y ordena sobre el texto que la tabla muestra (el centro sin asignar se lee «Sin centro» o «Todos»).
+  const visibles = useMemo(() => {
+    const filas = users.map((u) => ({
+      u,
+      texto: {
+        nombre: u.nombre_completo ?? "",
+        email: u.email ?? "",
+        cedula: u.cedula ?? "",
+        ciudad: u.ciudad ?? "",
+        centro: (u.operational_center_id ? nombreCentro.get(u.operational_center_id) : null) ?? (veSoloSuCentro(u.role_codigo) ? "Sin centro" : "Todos"),
+        rol: u.role_nombre || u.role_codigo,
+        estado: u.activo ? "Activo" : "Deshabilitado",
+      },
+    }));
+    const res = filtrarYOrdenar(filas, busqueda, filtros, orden);
+    // La fila en edición no se oculta aunque deje de cumplir los filtros: así Guardar/Cancelar siempre se ven.
+    return editando && !res.some((f) => f.u.user_id === editando)
+      ? [...filas.filter((f) => f.u.user_id === editando), ...res]
+      : res;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nombreCentro se rehace en cada render a partir de `centros`
+  }, [users, centros, busqueda, filtros, orden, editando]);
+
+  const limpiarFiltros = () => {
+    setBusqueda("");
+    setFiltros({});
+  };
+
+  const COLUMNAS: { clave: ColumnaUsuario; titulo: string }[] = [
+    { clave: "nombre", titulo: "Nombre" },
+    { clave: "email", titulo: "Email" },
+    { clave: "cedula", titulo: "Cédula" },
+    { clave: "ciudad", titulo: "Ciudad" },
+    { clave: "centro", titulo: "Centro" },
+    { clave: "rol", titulo: "Rol" },
+    { clave: "estado", titulo: "Estado" },
+  ];
+
   const handleRestablecer = async () => {
     if (!reseteo) return;
     setLoading(true);
@@ -310,22 +360,75 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
               {success}
             </div>
           )}
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="relative min-w-0 flex-1 basis-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input
+                type="search"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Nombre, correo, cédula o rol"
+                aria-label="Buscar usuarios por nombre, correo, cédula o rol"
+                className="h-touch pl-9"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+              {hayFiltros ? `${visibles.length} de ${users.length} usuarios` : `${users.length} usuarios`}
+            </p>
+            {hayFiltros && (
+              <Button variant="outline" onClick={limpiarFiltros} className="min-h-touch">
+                <X className="mr-2 h-4 w-4" aria-hidden="true" />
+                Limpiar filtros
+              </Button>
+            )}
+          </div>
           {/* Cada columna mide lo que mide su contenido más largo (nada se corta ni se trunca); si no cabe en la pantalla, la tabla se desplaza en horizontal y «Acciones» queda fija a la derecha. */}
           <Table className="min-w-max whitespace-nowrap">
             <TableHeader>
               <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Cédula</TableHead>
-                <TableHead>Ciudad</TableHead>
-                <TableHead>Centro</TableHead>
-                <TableHead>Rol</TableHead>
-                <TableHead>Estado</TableHead>
+                {COLUMNAS.map(({ clave, titulo }) => {
+                  const activa = orden?.columna === clave ? orden.dir : null;
+                  const Icono = activa === "asc" ? ArrowUp : activa === "desc" ? ArrowDown : ArrowUpDown;
+                  return (
+                    <TableHead key={clave} aria-sort={activa === "asc" ? "ascending" : activa === "desc" ? "descending" : undefined} className="p-0">
+                      <button
+                        type="button"
+                        onClick={() => setOrden(siguienteOrden(orden, clave))}
+                        className="flex h-touch w-full items-center gap-1.5 px-4 text-left uppercase tracking-wide hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      >
+                        {titulo}
+                        <Icono className={cn("h-3.5 w-3.5 shrink-0", !activa && "opacity-40")} aria-hidden="true" />
+                      </button>
+                    </TableHead>
+                  );
+                })}
                 <TableHead className="sticky right-0 bg-muted text-right">Acciones</TableHead>
+              </TableRow>
+              <TableRow>
+                {COLUMNAS.map(({ clave, titulo }) => (
+                  <TableCell key={clave} className="px-2 py-1">
+                    <Input
+                      type="search"
+                      value={filtros[clave] ?? ""}
+                      onChange={(e) => setFiltros((prev) => ({ ...prev, [clave]: e.target.value }))}
+                      aria-label={`Filtrar por ${titulo.toLowerCase()}`}
+                      placeholder="Filtrar"
+                      className="h-touch min-w-[7rem] text-sm font-normal normal-case tracking-normal"
+                    />
+                  </TableCell>
+                ))}
+                <TableCell className="sticky right-0 bg-muted p-0" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => {
+              {visibles.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={COLUMNAS.length + 1} className="py-8 text-center text-muted-foreground">
+                    Ningún usuario coincide con la búsqueda o los filtros.
+                  </TableCell>
+                </TableRow>
+              )}
+              {visibles.map(({ u }) => {
                 const centro = u.operational_center_id ? nombreCentro.get(u.operational_center_id) : null;
                 if (editando === u.user_id) {
                   // Enter guarda y Escape cancela desde los campos de texto (no desde
