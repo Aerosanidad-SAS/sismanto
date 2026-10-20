@@ -3,7 +3,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive, restablecerClaveUsuario } from "@/app/api/actions/auth";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,10 +30,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck, Contact, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck, Contact, Search, Upload, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
+import { UsuariosCargaMasiva } from "@/components/admin/usuarios-carga-masiva";
+import { HelpTrigger } from "@/components/ui/help-trigger";
 import { CamposDatosPersonales, DialogDatosPersonales } from "@/components/admin/datos-personales-usuario";
 import {
   filtrarYOrdenar,
@@ -187,6 +189,8 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
   const [success, setSuccess] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showCarga, setShowCarga] = useState(false);
+  const [cargaOcupada, setCargaOcupada] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nuevo, setNuevo] = useState<CamposPerfil>(PERFIL_VACIO);
@@ -339,17 +343,23 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Usuarios</CardTitle>
-            <CardDescription>Lista de usuarios del sistema</CardDescription>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 p-4">
+          <CardTitle className="flex items-center gap-2">
+            Usuarios
+            <HelpTrigger text="Crear, editar, deshabilitar usuarios y cambiar su rol. Con «Carga masiva» subes la plantilla de usuarios y ves qué pasaría antes de crearlos." />
+          </CardTitle>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setShowCarga(true)} size="sm" variant="outline" className="min-h-touch">
+              <Upload className="mr-2 h-4 w-4" aria-hidden="true" />
+              Carga masiva
+            </Button>
+            <Button onClick={() => setShowCreate(true)} size="sm" className="min-h-touch">
+              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+              Crear usuario
+            </Button>
           </div>
-          <Button onClick={() => setShowCreate(true)} size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Crear usuario
-          </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 pt-0">
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
               {error}
@@ -668,6 +678,15 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
           router.refresh();
         }}
       />
+
+      <Dialog open={showCarga} onOpenChange={(abierto) => (abierto || !cargaOcupada) && setShowCarga(abierto)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Carga masiva de usuarios</DialogTitle>
+          </DialogHeader>
+          <UsuariosCargaMasiva onCargando={setCargaOcupada} />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
