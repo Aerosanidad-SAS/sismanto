@@ -16,6 +16,15 @@ import { comprimirFoto } from "@/lib/comprimir-imagen";
 import { MENSAJE_EXPLICACION, MIN_FOTOS_DOCUMENTOS, MIN_FOTOS_HECHOS } from "@/lib/siniestro-datos";
 import type { TipoFotoSiniestro } from "@/lib/siniestro-fotos";
 import { cn } from "@/lib/utils";
+import {
+  borradorTieneTexto,
+  claveBorradorSiniestro,
+  fechaHoraAIso,
+  leerBorradorSiniestro,
+  serializarBorradorSiniestro,
+  type BorradorSiniestro,
+  type ResultadoNoApto,
+} from "@/lib/siniestro-envio";
 import { roadAccidentSchema } from "@/lib/validations";
 import { SiniestroFotosSelector, type FotoLocal } from "./siniestro-fotos-selector";
 
@@ -101,7 +110,36 @@ function Excepcion({
   );
 }
 
-export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string; placa: string; onDone: () => void }) {
+function leerLocal(clave: string): string | null {
+  try {
+    return localStorage.getItem(clave);
+  } catch {
+    return null;
+  }
+}
+function escribirLocal(clave: string, valor: string | null) {
+  try {
+    if (valor === null) localStorage.removeItem(clave);
+    else localStorage.setItem(clave, valor);
+  } catch {
+    /* almacenamiento bloqueado: se pierde el borrador, no lo que está en pantalla */
+  }
+}
+
+const MENSAJE_SIN_SENAL =
+  "No se pudo confirmar el envío: revisa tu señal. Puede que el reporte sí haya llegado: antes de reintentar, mira en Novedades si ya aparece el siniestro. Lo que escribiste sigue aquí y guardado en este teléfono.";
+
+export function SiniestroForm({
+  userId,
+  vehicleId,
+  placa,
+  onDone,
+}: {
+  userId: string;
+  vehicleId: string;
+  placa: string;
+  onDone: (r: ResultadoNoApto) => void;
+}) {
   const router = useRouter();
   const [fechaHora, setFechaHora] = useState(ahoraLocal);
   const [lugar, setLugar] = useState("");
@@ -137,10 +175,72 @@ export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string;
   // Tras crear el reporte se guarda el id: reintentar la subida de fotos nunca vuelve a crear el siniestro.
   const [accidentId, setAccidentId] = useState<number | null>(null);
   const [progreso, setProgreso] = useState<string | null>(null);
+  /** Lo que respondió el servidor sobre el NO APTO; se conserva por si el cierre llega tras reintentar las fotos. */
+  const resultadoNoApto = useRef<ResultadoNoApto>({ solicitudNoApto: false, noAptoFallo: false });
+  const [borradorCargado, setBorradorCargado] = useState(false);
+  const [borradorRestaurado, setBorradorRestaurado] = useState(false);
+  /** Texto del borrador tal como se restauró: mientras no cambie no se reescribe, así abrir el formulario no renueva su vigencia. */
+  const textoRestaurado = useRef<string | null>(null);
+  const claveBorrador = claveBorradorSiniestro(userId, vehicleId);
 
   const todas = useRef<FotoLocal[]>([]);
   todas.current = [...hechos, ...documentos];
   useEffect(() => () => todas.current.forEach((f) => URL.revokeObjectURL(f.preview)), []);
+
+  const borradorActual: BorradorSiniestro = {
+    fechaHora, lugar, descripcion, pacienteABordo, hayLesionados, lesionadosDetalle, hayTerceros,
+    terceroPlaca, terceroNombre, terceroCedula, terceroTelefono, terceroAseguradora, sinTerceroMotivo,
+    abogadoNombre, abogadoTelefono, abogadoCedula, abogadoCorreo, sinAbogado, sinAbogadoMotivo,
+    sinDocumentos, sinDocumentosMotivo, intervinoAutoridad, numeroIpat, vehiculoOperativo,
+  };
+
+  // Se lee tras montar (no en el render del servidor). Sin conexión es justo cuando más sirve: el borrador viene del teléfono.
+  useEffect(() => {
+    const b = leerBorradorSiniestro(leerLocal(claveBorrador), Date.now());
+    if (b) {
+      if (b.fechaHora !== undefined) setFechaHora(b.fechaHora);
+      if (b.lugar !== undefined) setLugar(b.lugar);
+      if (b.descripcion !== undefined) setDescripcion(b.descripcion);
+      if (b.pacienteABordo !== undefined) setPacienteABordo(b.pacienteABordo);
+      if (b.hayLesionados !== undefined) setHayLesionados(b.hayLesionados);
+      if (b.lesionadosDetalle !== undefined) setLesionadosDetalle(b.lesionadosDetalle);
+      if (b.hayTerceros !== undefined) setHayTerceros(b.hayTerceros);
+      if (b.terceroPlaca !== undefined) setTerceroPlaca(b.terceroPlaca);
+      if (b.terceroNombre !== undefined) setTerceroNombre(b.terceroNombre);
+      if (b.terceroCedula !== undefined) setTerceroCedula(b.terceroCedula);
+      if (b.terceroTelefono !== undefined) setTerceroTelefono(b.terceroTelefono);
+      if (b.terceroAseguradora !== undefined) setTerceroAseguradora(b.terceroAseguradora);
+      if (b.sinTerceroMotivo !== undefined) setSinTerceroMotivo(b.sinTerceroMotivo);
+      if (b.abogadoNombre !== undefined) setAbogadoNombre(b.abogadoNombre);
+      if (b.abogadoTelefono !== undefined) setAbogadoTelefono(b.abogadoTelefono);
+      if (b.abogadoCedula !== undefined) setAbogadoCedula(b.abogadoCedula);
+      if (b.abogadoCorreo !== undefined) setAbogadoCorreo(b.abogadoCorreo);
+      if (b.sinAbogado !== undefined) setSinAbogado(b.sinAbogado);
+      if (b.sinAbogadoMotivo !== undefined) setSinAbogadoMotivo(b.sinAbogadoMotivo);
+      if (b.sinDocumentos !== undefined) setSinDocumentos(b.sinDocumentos);
+      if (b.sinDocumentosMotivo !== undefined) setSinDocumentosMotivo(b.sinDocumentosMotivo);
+      if (b.intervinoAutoridad !== undefined) setIntervinoAutoridad(b.intervinoAutoridad);
+      if (b.numeroIpat !== undefined) setNumeroIpat(b.numeroIpat);
+      if (b.vehiculoOperativo !== undefined) setVehiculoOperativo(b.vehiculoOperativo);
+      textoRestaurado.current = serializarBorradorSiniestro({ ...borradorActual, ...b }, 0);
+      setBorradorRestaurado(true);
+    }
+    setBorradorCargado(true);
+    // Solo al montar (o al cambiar de vehículo, que remonta el formulario).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Guarda mientras se escribe. Una vez creado el siniestro el borrador sobra: reenviarlo lo duplicaría.
+  const textoBorrador = serializarBorradorSiniestro(borradorActual, 0);
+  useEffect(() => {
+    if (!borradorCargado || accidentId !== null) return;
+    if (textoBorrador === textoRestaurado.current) return;
+    escribirLocal(claveBorrador, borradorTieneTexto(borradorActual) ? serializarBorradorSiniestro(borradorActual, Date.now()) : null);
+    // La comparación solo evita reescribir antes del primer cambio; después, volver al estado restaurado también hay que guardarlo.
+    textoRestaurado.current = null;
+    // `textoBorrador` resume todos los campos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [borradorCargado, accidentId, claveBorrador, textoBorrador]);
 
   const creado = accidentId !== null;
   const bloqueado = loading || creado;
@@ -188,12 +288,18 @@ export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string;
       const [tipo, f] = cola[i];
       setProgreso(`Subiendo foto ${i + 1} de ${cola.length}…`);
       marcar(f.id, { estado: "SUBIENDO", error: undefined });
-      const r = await registrarFotoSiniestro(id, tipo, f.file);
-      if (r.error) {
+      try {
+        const r = await registrarFotoSiniestro(id, tipo, f.file);
+        if (r.error) {
+          fallidas++;
+          marcar(f.id, { estado: "ERROR", error: r.error });
+        } else {
+          marcar(f.id, { estado: "SUBIDA" });
+        }
+      } catch {
+        // Sin señal a mitad de la subida: la foto queda marcada para reintentar, el reporte ya existe.
         fallidas++;
-        marcar(f.id, { estado: "ERROR", error: r.error });
-      } else {
-        marcar(f.id, { estado: "SUBIDA" });
+        marcar(f.id, { estado: "ERROR", error: "Sin conexión" });
       }
     }
     setProgreso(null);
@@ -201,8 +307,9 @@ export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string;
   };
 
   const terminar = () => {
+    escribirLocal(claveBorrador, null);
     router.refresh();
-    onDone();
+    onDone(resultadoNoApto.current);
   };
 
   const mensajeFaltantes = (n: number) =>
@@ -230,8 +337,8 @@ export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string;
     setError(null);
     const payload = {
       vehicleId,
-      // El servidor corre en UTC: se envía con zona para no correr la hora 5 h.
-      fechaHora: new Date(fechaHora).toISOString(),
+      // El servidor corre en UTC: se envía con zona para no correr la hora 5 h. Vacía o inválida se rechaza más abajo.
+      fechaHora: fechaHoraAIso(fechaHora) ?? "",
       lugar,
       descripcion,
       pacienteABordo,
@@ -257,6 +364,12 @@ export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string;
       vehiculoOperativo,
     };
 
+    if (!payload.fechaHora) {
+      setErrores({ fechaHora: "Indica la fecha y la hora del siniestro." });
+      setError("Revisa los campos marcados: todos son obligatorios para que la reclamación quede respaldada.");
+      return;
+    }
+
     // Mismo esquema que el servidor: los errores aparecen junto a cada campo antes de enviar nada.
     const check = roadAccidentSchema.safeParse(payload);
     if (!check.success) {
@@ -272,15 +385,26 @@ export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string;
     setErrores({});
 
     setLoading(true);
-    const result = await reportRoadAccident(payload);
+    let result: Awaited<ReturnType<typeof reportRoadAccident>>;
+    try {
+      result = await reportRoadAccident(payload);
+    } catch {
+      // Sin señal (o la sesión venció): antes el botón se quedaba en «Enviando…» para siempre y no decía nada.
+      setLoading(false);
+      setError(MENSAJE_SIN_SENAL);
+      return;
+    }
     if ("error" in result && result.error) {
       setLoading(false);
       setError(result.error);
       return;
     }
-    const id = (result as { accidentId: number }).accidentId;
-    setAccidentId(id);
-    const fallidas = await subirPendientes(id);
+    const ok = result as { accidentId: number; solicitudNoApto: boolean; noAptoFallo: boolean };
+    resultadoNoApto.current = { solicitudNoApto: ok.solicitudNoApto, noAptoFallo: ok.noAptoFallo };
+    // El reporte ya existe: el borrador se borra ahora para que ni un reintento ni una recarga lo vuelvan a enviar.
+    escribirLocal(claveBorrador, null);
+    setAccidentId(ok.accidentId);
+    const fallidas = await subirPendientes(ok.accidentId);
     setLoading(false);
     if (fallidas > 0) {
       setError(mensajeFaltantes(fallidas));
@@ -304,6 +428,11 @@ export function SiniestroForm({ vehicleId, placa, onDone }: { vehicleId: string;
       </CardHeader>
       <CardContent>
         <form onSubmit={enviar} noValidate className="space-y-5">
+          {borradorRestaurado && !creado && (
+            <p role="status" className="rounded border border-info bg-info-soft p-2 text-sm text-foreground">
+              Recuperamos lo que habías escrito en este teléfono. Las fotos hay que volver a elegirlas.
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Fecha y hora" required error={err("fechaHora")}>
               <Input type="datetime-local" value={fechaHora} onChange={(e) => setFechaHora(e.target.value)} disabled={bloqueado} />

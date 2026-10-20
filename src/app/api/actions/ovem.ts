@@ -513,7 +513,8 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
 
   // Siniestro con lesionados o con el vehículo no operativo: solicitud de NO APTO con aval (bloqueo provisional).
   let solicitudNoApto = false;
-  if (profile.role_codigo === "OVEM" && siniestroPideNoApto(row)) {
+  const pideNoApto = profile.role_codigo === "OVEM" && siniestroPideNoApto(row);
+  if (pideNoApto) {
     const sol = await crearSolicitudNoApto({
       vehicleId: row.vehicleId,
       motivo: "Siniestro vial en " + row.lugar + ". " + (row.hayLesionados ? "Con lesionados. " : "") + (!row.vehiculoOperativo ? "El vehículo no está operativo. " : "") + row.descripcion,
@@ -521,10 +522,11 @@ export async function reportRoadAccident(data: RoadAccidentFormData) {
       incidentId: incident.id as number,
     });
     solicitudNoApto = !("error" in sol && sol.error);
+    if (!solicitudNoApto) console.error("[siniestro] no se pudo registrar la solicitud de NO APTO:", "error" in sol ? sol.error : "sin detalle");
   }
 
   revalidatePath("/ovem");
   revalidatePath("/novedades");
   revalidatePath("/regulacion");
-  return { success: true, incidentId: incident.id as number, accidentId: (accident as { id: number }).id, solicitudNoApto };
+  return { success: true, incidentId: incident.id as number, accidentId: (accident as { id: number }).id, solicitudNoApto, noAptoFallo: pideNoApto && !solicitudNoApto };
 }
