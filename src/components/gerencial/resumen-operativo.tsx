@@ -1,8 +1,7 @@
 "use client";
 
 import { hoyBogota } from "@/lib/fechas";
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useId, useState } from "react";
 import { DateField } from "@/components/forms/date-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,66 +39,31 @@ function hoyIso() {
   return hoyBogota();
 }
 
-/** Fila compacta de tipo de servicio — mismo dato en los 3 niveles (consolidado y cada ciudad). */
-function FilaPorTipo({ porTipo }: { porTipo: ResumenOperativoBucket["porTipo"] }) {
+/** Tipo de servicio: asignados / atendidos. Va plegado: es detalle, no lo primero que se necesita. */
+function FilaPorTipo({ titulo, porTipo }: { titulo: string; porTipo: ResumenOperativoBucket["porTipo"] }) {
   return (
-    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-      {porTipo.map((t) => (
-        <div key={t.tipo} className="rounded-md border bg-muted/30 px-2 py-1.5 text-center">
-          <p className="truncate text-[10px] text-muted-foreground">{t.tipo}</p>
-          <p className="text-sm font-semibold">
-            {t.asignados}
-            <span className="font-normal text-muted-foreground"> / {t.atendidos}</span>
-          </p>
+    <p className="text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">{titulo}:</span>{" "}
+      {porTipo.map((t) => `${t.tipo} ${t.asignados}/${t.atendidos}`).join(" · ")}
+    </p>
+  );
+}
+
+/** Una línea por ciudad (o el consolidado): siete contadores con su estado; en celular se parte en dos líneas. */
+function LineaResumen({ titulo, bucket }: { titulo: string; bucket: ResumenOperativoBucket }) {
+  return (
+    <div role="group" aria-label={titulo} className="grid grid-cols-4 items-center gap-1.5 lg:grid-cols-[7rem_repeat(7,minmax(0,1fr))]">
+      <p className="col-span-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground lg:col-span-1">{titulo}</p>
+      {TARJETAS.map(({ key, label, icon: Icon, bg, fg }) => (
+        <div key={key} className={cn("flex items-center gap-1.5 rounded-md px-2 py-1", bg)}>
+          <Icon className={cn("hidden h-3.5 w-3.5 shrink-0 sm:block", fg)} aria-hidden="true" />
+          <div className="min-w-0 leading-none">
+            <p className={cn("text-base font-bold", fg)}>{bucket[key]}</p>
+            <p className="text-[11px] text-muted-foreground">{label}</p>
+          </div>
         </div>
       ))}
     </div>
-  );
-}
-
-/** Bloque grande (consolidado) — números destacados, para la fila de arriba. */
-function BloqueConsolidado({ titulo, bucket }: { titulo: string; bucket: ResumenOperativoBucket }) {
-  return (
-    <div>
-      <p className="mb-2 text-sm font-semibold">{titulo}</p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-        {TARJETAS.map(({ key, label, icon: Icon, bg, fg }) => (
-          <div key={key} className={cn("rounded-lg p-3 text-center", bg)}>
-            <Icon className={cn("mx-auto mb-1 h-4 w-4", fg)} />
-            <p className={cn("text-2xl font-bold leading-tight", fg)}>{bucket[key]}</p>
-            <p className="text-[11px] text-muted-foreground">{label}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2">
-        <FilaPorTipo porTipo={bucket.porTipo} />
-      </div>
-    </div>
-  );
-}
-
-/** Bloque compacto por ciudad — icono + etiqueta + número en una sola línea, para ahorrar espacio vertical. */
-function BloqueCiudad({ ciudad, bucket }: { ciudad: string; bucket: ResumenOperativoBucket }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">{ciudad}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {TARJETAS.map(({ key, label, icon: Icon, bg, fg }) => (
-            <div key={key} className={cn("flex items-center gap-2 rounded-lg px-2.5 py-2", bg)}>
-              <Icon className={cn("h-4 w-4 shrink-0", fg)} />
-              <div className="min-w-0 leading-tight">
-                <p className="truncate text-[10px] text-muted-foreground">{label}</p>
-                <p className={cn("text-lg font-bold", fg)}>{bucket[key]}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <FilaPorTipo porTipo={bucket.porTipo} />
-      </CardContent>
-    </Card>
   );
 }
 
@@ -115,6 +79,7 @@ export function ResumenOperativo({
   /** "bogota" | "medellin": muestra solo esa ciudad. Vacío = las dos, con el consolidado. */
   ciudad?: string;
 }) {
+  const idBase = useId();
   const [modo, setModo] = useState<ModoFecha>(modoInicial);
   const [desde, setDesde] = useState(hoyIso());
   const [hasta, setHasta] = useState(hoyIso());
@@ -131,9 +96,11 @@ export function ResumenOperativo({
 
   const cargar = async (d: string, h: string) => {
     setCargando(true);
-    const r = await getResumenOperativoDiario({ desde: d, hasta: h });
-    setDatos(r);
-    setCargando(false);
+    try {
+      setDatos(await getResumenOperativoDiario({ desde: d, hasta: h }));
+    } finally {
+      setCargando(false);
+    }
   };
 
   const elegirHoy = () => {
@@ -146,73 +113,62 @@ export function ResumenOperativo({
 
   const filtrar = () => cargar(desde, hasta);
 
+  const lineas = deLaCiudad
+    ? [{ titulo: deLaCiudad.ciudad, bucket: deLaCiudad }]
+    : [
+        { titulo: "Consolidado", bucket: datos.consolidado },
+        ...datos.porCiudad.map((c) => ({ titulo: c.ciudad, bucket: c })),
+      ];
+
   return (
-    <Card>
-      <CardHeader className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <LayoutGrid className="h-5 w-5 text-primary" />
-            <CardTitle>Resumen operativo</CardTitle>
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex gap-0.5 rounded-md border p-0.5">
-              <Button
-                type="button"
-                size="sm"
-                variant={modo === "hoy" ? "default" : "ghost"}
-                className="h-8"
-                onClick={elegirHoy}
-                disabled={cargando}
-              >
-                Hoy
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={modo === "rango" ? "default" : "ghost"}
-                className="h-8"
-                onClick={() => setModo("rango")}
-                disabled={cargando}
-              >
-                Rango
-              </Button>
-            </div>
-            {modo === "rango" && (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Desde</label>
-                  <DateField value={desde} onChange={setDesde} inputClassName="h-9 w-28" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Hasta</label>
-                  <DateField value={hasta} onChange={setHasta} inputClassName="h-9 w-28" />
-                </div>
-                <Button size="sm" onClick={filtrar} disabled={cargando}>
-                  {cargando ? "Filtrando..." : "Filtrar"}
-                </Button>
-              </>
-            )}
-          </div>
+    <section aria-label="Resumen operativo" className="space-y-2 rounded-xl border border-border bg-card p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <LayoutGrid className="h-4 w-4 text-primary" aria-hidden="true" />
+          <h2 className="text-sm font-semibold uppercase tracking-wide">Resumen operativo</h2>
+          <span className="text-xs text-muted-foreground">{modo === "hoy" ? "Hoy" : `${desde} a ${hasta}`}</span>
         </div>
-        <CardDescription>
-          {modo === "hoy" ? "Servicios de hoy" : `Servicios entre ${desde} y ${hasta}`} —{" "}
-          {deLaCiudad ? deLaCiudad.ciudad : "Bogotá y Medellín por separado, con el consolidado de ambas arriba."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {deLaCiudad ? (
-          <BloqueConsolidado titulo={deLaCiudad.ciudad} bucket={deLaCiudad} />
-        ) : (
-          <>
-            <BloqueConsolidado titulo="Consolidado — Bogotá + Medellín" bucket={datos.consolidado} />
-            <div className="grid gap-3 md:grid-cols-2">
-              {datos.porCiudad.map((c) => (
-                <BloqueCiudad key={c.ciudad} ciudad={c.ciudad} bucket={c} />
-              ))}
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex gap-0.5 rounded-md border p-0.5">
+            <Button type="button" size="sm" variant={modo === "hoy" ? "default" : "ghost"} className="min-h-touch" onClick={elegirHoy} disabled={cargando}>
+              Hoy
+            </Button>
+            <Button type="button" size="sm" variant={modo === "rango" ? "default" : "ghost"} className="min-h-touch" onClick={() => setModo("rango")} disabled={cargando}>
+              Rango
+            </Button>
+          </div>
+          {modo === "rango" && (
+            <>
+              <div className="space-y-1">
+                <label htmlFor={`${idBase}-desde`} className="text-xs text-muted-foreground">Desde</label>
+                <DateField id={`${idBase}-desde`} value={desde} onChange={setDesde} inputClassName="h-touch w-28" />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor={`${idBase}-hasta`} className="text-xs text-muted-foreground">Hasta</label>
+                <DateField id={`${idBase}-hasta`} value={hasta} onChange={setHasta} inputClassName="h-touch w-28" />
+              </div>
+              <Button size="sm" className="min-h-touch" onClick={filtrar} disabled={cargando}>
+                {cargando ? "Filtrando..." : "Filtrar"}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="space-y-1.5" aria-busy={cargando} aria-live="polite">
+        {lineas.map((l) => (
+          <LineaResumen key={l.titulo} titulo={l.titulo} bucket={l.bucket} />
+        ))}
+      </div>
+      <details className="text-xs">
+        <summary className="inline-flex min-h-touch cursor-pointer items-center text-muted-foreground hover:text-foreground">
+          Por tipo de servicio (asignados / atendidos)
+        </summary>
+        <div className="space-y-1 pb-1">
+          {lineas.map((l) => (
+            <FilaPorTipo key={l.titulo} titulo={l.titulo} porTipo={l.bucket.porTipo} />
+          ))}
+        </div>
+      </details>
+    </section>
   );
 }

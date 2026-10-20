@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut, type UserProfile, type UserRole } from "@/app/api/actions/auth";
+import { limpiarBorradoresSiniestro } from "@/lib/siniestro-envio";
 import { getCompanyBranding } from "@/app/api/actions/company-settings";
 import { Button } from "@/components/ui/button";
 import { RoleSwitcher, RoleSwitchBanner } from "@/components/dev/role-switcher";
@@ -416,7 +417,17 @@ export function DashboardShell({
         >
           <CampanaAlertas colapsado={showCollapsedChrome} onNavegar={() => setMobileNavOpen(false)} />
           <RoleSwitcher collapsed={showCollapsedChrome} />
-          <form action={signOut}>
+          <form
+            action={signOut}
+            onSubmit={() => {
+              // El borrador de un siniestro trae cédulas y teléfonos de terceros: no se queda en un teléfono compartido.
+              try {
+                limpiarBorradoresSiniestro(localStorage, Date.now(), false);
+              } catch {
+                /* sin localStorage */
+              }
+            }}
+          >
             <button
               type="submit"
               title={showCollapsedChrome ? "Cerrar sesión" : undefined}

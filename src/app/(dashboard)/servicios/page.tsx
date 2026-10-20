@@ -118,26 +118,20 @@ export default async function ServiciosPage(
     // En pantallas grandes, -mx-4 recorta el relleno de 32 px del layout a 16 px (la lista necesita ancho).
     // Bajo lg no se recorta: el relleno ya es de 16 px y el contenido no debe quedar pegado al borde.
     <div className="space-y-4 lg:-mx-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-3xl">Servicios registrados</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Despacho y seguimiento de traslados y servicios asistenciales.
-            {profile?.role_codigo === "ADMIN" && (
-              <>
-                {" "}
-                <Link href="/servicios/configuracion" className="underline">
-                  Configurar opciones del formulario
-                </Link>
-              </>
-            )}
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h1 className="text-xl">Servicios registrados</h1>
+          {profile?.role_codigo === "ADMIN" && (
+            <Link href="/servicios/configuracion" className="text-sm text-muted-foreground underline">
+              Configurar opciones del formulario
+            </Link>
+          )}
         </div>
         <AvisosServicios etapasVisibles={etapasVisibles} />
       </div>
 
-      {/* Lo primero que se ve: cómo va el día. Después, los filtros y la lista. */}
-      <ResumenOperativo inicial={resumenHoy} ciudad={filtros.ciudad ?? ""} />
+      {/* Compacto: la lista de servicios es lo que se viene a ver. Con centro asignado solo muestra su ciudad. */}
+      <ResumenOperativo inicial={resumenHoy} ciudad={ciudadFija?.clave ?? filtros.ciudad ?? ""} />
 
       {mostrarMisServicios && (
         <div>
@@ -184,7 +178,6 @@ export default async function ServiciosPage(
         </CardContent>
       </Card>
 
-      <ResumenOperativo inicial={resumenHoy} ciudad={ciudadFija?.clave ?? filtros.ciudad ?? ""} />
     </div>
   );
 }

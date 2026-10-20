@@ -12,7 +12,7 @@ import { ciudadDeCentro, condicionServiciosDeCentro } from "@/lib/servicios-cent
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
-import { hoyBogota } from "@/lib/fechas";
+import { hoyBogota, sumarDias } from "@/lib/fechas";
 import { tipoImagenPorContenido } from "@/lib/imagen-contenido";
 import { CAMPOS_PACIENTE_EN_SERVICIO, celdasPacienteEnServicio, exportaDatosPaciente, type PacienteExport } from "@/lib/pacientes-export";
 import { tieneNoAptoPendiente } from "@/app/api/actions/solicitudes-no-apto";
@@ -320,19 +320,29 @@ export async function getMovilesEnServicio(): Promise<string[]> {
   return idsUnicos(((data ?? []) as { vehicle_id: string | null }[]).map((r) => r.vehicle_id));
 }
 
+/** Ventana de las sugerencias de asesor (ver `sugerirAsesores`). */
+const DIAS_SUGERENCIAS_ASESOR = 180;
+
 /**
  * Sugerencias para «Asesor quien solicita»: los nombres ya usados en servicios que empiezan por lo que se escribe,
  * dentro de lo que ve quien pregunta (mismo alcance por centro que la lista), los más recientes primero. El asesor es
  * texto libre —17 mil valores distintos en 37 mil servicios— así que se sugiere, no se obliga. Mínimo 2 letras.
+ *
+ * Solo mira los últimos 180 días: un `ILIKE` sobre las 41 mil filas tardaba ~2 s por tecleo para un
+ * regulador de Bogotá (el mismo tipo de consulta que causó el timeout de la lista); con la ventana, la fecha usa su índice
+ * y baja a ~80 ms. De paso deja fuera las fechas de registro futuras (error del ETL).
  */
 export async function sugerirAsesores(texto: string): Promise<string[]> {
   const profile = await requireRole(ROLES_LISTA_SERVICIOS);
   const q = z.string().trim().min(2).max(60).safeParse(texto);
   if (!q.success) return [];
   const supabase = createClient();
+  const hoy = hoyBogota();
   const query = supabase
     .from("medical_services")
     .select("asesor")
+    .gte("fecha_hora_registro", `${sumarDias(hoy, -DIAS_SUGERENCIAS_ASESOR)}T00:00:00-05:00`)
+    .lte("fecha_hora_registro", `${sumarDias(hoy, 1)}T23:59:59-05:00`)
     .ilike("asesor", `${q.data.replace(/[%_\\]/g, "")}%`)
     .order("fecha_hora_registro", { ascending: false, nullsFirst: false })
     .limit(300);

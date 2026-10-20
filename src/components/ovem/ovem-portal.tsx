@@ -61,6 +61,7 @@ import {
   textoResumen,
   type RespuestasChecklist,
 } from "@/lib/ovem-portal";
+import { avisoSiniestroReportado, limpiarBorradoresSiniestro } from "@/lib/siniestro-envio";
 import { CierreTurnoForm } from "./cierre-turno-form";
 import { CierresTurnoConsulta } from "./cierres-turno-consulta";
 import { CombustibleForm } from "./combustible-form";
@@ -155,6 +156,7 @@ function limpiarBorradoresViejos(hoy: string) {
       if (k) claves.push(k);
     }
     for (const k of borradoresVencidos(claves, hoy)) localStorage.removeItem(k);
+    limpiarBorradoresSiniestro(localStorage, Date.now(), true);
   } catch {
     /* sin localStorage */
   }
@@ -205,6 +207,8 @@ export function OvemPortal({
   const [success, setSuccess] = useState<string | null>(null);
   /** Confirmación que sobrevive al volver al menú (tanqueo, siniestro). */
   const [aviso, setAviso] = useState<string | null>(null);
+  /** El aviso es una advertencia (p. ej. el NO APTO no se pudo registrar), no una confirmación. */
+  const [avisoAlerta, setAvisoAlerta] = useState(false);
   const [checkItemsState, setCheckItemsState] = useState<RespuestasChecklist>({});
   /** Ya se intentó enviar con ítems sin responder: se resaltan. */
   const [resaltarPendientes, setResaltarPendientes] = useState(false);
@@ -551,6 +555,7 @@ export function OvemPortal({
 
   const abrir = (f: Exclude<Flow, null>) => {
     setAviso(null);
+    setAvisoAlerta(false);
     setFlow(f);
   };
 
@@ -641,7 +646,13 @@ export function OvemPortal({
     return (
       <div className="space-y-6">
         {aviso && (
-          <p className="rounded-lg border border-success bg-success-soft p-3 text-sm text-foreground" role="status">
+          <p
+            className={cn(
+              "rounded-lg border p-3 text-sm text-foreground",
+              avisoAlerta ? "border-warning bg-warning-soft font-medium" : "border-success bg-success-soft"
+            )}
+            role={avisoAlerta ? "alert" : "status"}
+          >
             {aviso}
           </p>
         )}
@@ -828,11 +839,15 @@ export function OvemPortal({
 
       {vehicleId && selectedVehicle && flow === "siniestro" && (
         <SiniestroForm
+          // Al cambiar de vehículo se remonta: si no, lo escrito para uno se guardaría bajo la clave del otro.
+          key={vehicleId}
+          userId={userId}
           vehicleId={vehicleId}
           placa={selectedVehicle.placa}
-          onDone={() => {
+          onDone={(r) => {
             setFlow(null);
-            setAviso(`Siniestro de ${selectedVehicle.placa} reportado. Regulación ya lo ve en novedades.`);
+            setAviso(avisoSiniestroReportado(selectedVehicle.placa, r));
+            setAvisoAlerta(r.noAptoFallo);
           }}
         />
       )}
