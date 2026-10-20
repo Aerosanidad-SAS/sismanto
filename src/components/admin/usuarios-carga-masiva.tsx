@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { AlertTriangle, CheckCircle2, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import { cargarUsuarios, type ReporteUsuarios, type UsuarioCreado } from "@/app/api/actions/usuarios-carga";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { esFilaDeGuia, FILAS_POR_LOTE_USUARIOS, type FilaUsuarioCruda } from "@/lib/usuarios-carga";
 
 /** La fila 1 es el encabezado; la guía (fila 2) y la marca «↓ datos desde aquí» (fila 3) se reconocen por su contenido, no por su posición. */
@@ -42,13 +41,16 @@ function leerFilas(wb: XLSX.WorkBook): FilaUsuarioCruda[] | null {
 }
 
 /** Administración → Usuarios → carga masiva desde la plantilla (vista previa, luego confirmar por lotes). */
-export function UsuariosCargaMasiva() {
+export function UsuariosCargaMasiva({ onCargando }: { onCargando?: (cargando: boolean) => void }) {
   const [filas, setFilas] = useState<FilaUsuarioCruda[] | null>(null);
   const [nombre, setNombre] = useState("");
   const [reporte, setReporte] = useState<ReporteUsuarios | null>(null);
   const [cargando, setCargando] = useState(false);
   const [progreso, setProgreso] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
+
+  // El diálogo que me contiene no se debe cerrar a media carga: se avisa al padre.
+  useEffect(() => onCargando?.(cargando), [cargando, onCargando]);
 
   const elegir = async (file: File | undefined) => {
     setReporte(null);
@@ -124,17 +126,12 @@ export function UsuariosCargaMasiva() {
     ]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" aria-hidden /> Carga masiva de usuarios
-        </CardTitle>
-        <CardDescription>
-          Sube la plantilla de usuarios. Primero ves qué pasaría; nada se crea hasta que confirmes. Cada persona entra con su cédula (o su código de 6
-          números) y la clave inicial, y el sistema le obliga a cambiarla en el primer ingreso. Los usuarios que ya existen no se tocan.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Sube la plantilla de usuarios. Primero ves qué pasaría; nada se crea hasta que confirmes. Cada persona entra con su cédula (o su código de 6
+        números) y la clave inicial, y el sistema le obliga a cambiarla en el primer ingreso. Los usuarios que ya existen no se tocan.
+      </p>
+      <div className="space-y-4">
         <input type="file" accept=".xlsx" onChange={(e) => elegir(e.target.files?.[0])} className="block text-sm" />
         {aviso && (
           <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
@@ -229,7 +226,7 @@ export function UsuariosCargaMasiva() {
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
