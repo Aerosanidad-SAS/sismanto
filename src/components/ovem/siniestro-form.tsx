@@ -307,7 +307,6 @@ export function SiniestroForm({
   };
 
   const terminar = () => {
-    escribirLocal(claveBorrador, null);
     router.refresh();
     onDone(resultadoNoApto.current);
   };
