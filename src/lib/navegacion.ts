@@ -87,18 +87,18 @@ export const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     label: "Operación",
     items: [
       {
-        name: "Servicios",
-        href: "/servicios",
-        icon: Ambulance,
-        roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA", "COORDINACION"],
-        hint: "Servicios registrados: filtros, registro, etapas, exportación y avisos sonoros.",
-      },
-      {
         name: "Sala de control",
         href: "/regulacion",
         icon: Radio,
         roles: ["ADMIN", "REGULACION", "ANALISTA"],
         hint: "Servicios del día, flota disponible, tripulación y vencimientos del centro.",
+      },
+      {
+        name: "Servicios",
+        href: "/servicios",
+        icon: Ambulance,
+        roles: ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA", "COORDINACION"],
+        hint: "Servicios registrados: filtros, registro, etapas, exportación y avisos sonoros.",
       },
       {
         name: "Cotizador de rutas",
