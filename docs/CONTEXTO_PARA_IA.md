@@ -10,7 +10,7 @@
 |------|--------|
 | Framework | Next.js 14 (App Router), TypeScript, Tailwind |
 | Backend / datos | Supabase (Postgres + Auth + RLS) |
-| Repo remoto | `https://github.com/daniel891025/aeromanto` · rama principal `main` |
+| Repo remoto | `https://github.com/Aerosanidad-SAS/sismanto` · ramas `dev` → `staging` → `main` (producción) |
 | Documentación larga | [README.md](../README.md) (setup, env, tablas) · [PRD.md](../PRD.md) (requisitos y roadmap) |
 
 **Variables de entorno:** `.env.local` en la raíz (ver `README.md`). Mínimo: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
@@ -80,7 +80,7 @@ Rutas bajo `src/app/(dashboard)/`. El menú lateral filtra por rol en `src/app/(
 
 ### Base de datos (SQL manual en Supabase)
 
-- Scripts en `scripts/migrations/` (numerados). **El deploy de Next no ejecuta SQL:** cada migración nueva debe correrse en el **SQL Editor** de Supabase (staging/prod según corresponda).
+- Scripts en `scripts/migrations/` (numerados), registrados en `scripts/apply-database.ts`. En `dev`/`staging` los aplica `.github/workflows/db-migrate.yml` al mergear el PR; no se corren a mano contra esa base compartida. Producción la maneja Daniel a mano (ver `ENTORNOS.md`).
 - **008** — `scripts/migrations/008_fleet_vencimientos_checklist.sql`: vencimientos SOAT/RTM/técnico, estados FDS, perfil eléctrico en placas indicadas, checklist OVEM. *Si ya se aplicó en tu proyecto, indícalo en chats nuevos para no repetir.*
 - **013** — `scripts/migrations/013_coordinacion_role_access.sql`: rol `COORDINACION` + políticas de lectura operativa.
 - **014** — `scripts/migrations/014_training_module.sql`: tablas/políticas del módulo de capacitaciones y evaluaciones.
@@ -89,9 +89,11 @@ Rutas bajo `src/app/(dashboard)/`. El menú lateral filtra por rol en `src/app/(
 
 ## Flujo Git y deploy (resumen)
 
-1. `git pull` en `main` (o tu rama).
-2. Cambios → `git add` / `git commit` / `git push` (idealmente rama + PR si el equipo lo pide).
-3. **Vercel** (u otro): build al mergear; no sustituye ejecutar migraciones SQL en Supabase.
+Todo cambio entra por Pull Request; nadie hace push directo a `dev`, `staging` ni `main`.
+
+1. Partir de `origin/dev` actualizado: `feat/<nombre>-<tema>` o `fix/<nombre>-<tema>`.
+2. PR hacia `dev` (CI + revisión Aegis + una aprobación) → PR `dev` → `staging` (QA) → PR `staging` → `main` (producción).
+3. `dev` y `staging` se despliegan con `.github/workflows/deploy.yml`; las migraciones, con `db-migrate.yml`. Detalle en `CLAUDE.md` y `ENTORNOS.md`.
 
 ---
 
