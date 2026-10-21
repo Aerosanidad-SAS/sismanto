@@ -58,6 +58,8 @@ export default async function AdminUsuariosPage() {
         centros={centros || []}
         extras={extras}
         puedeDatosPersonales={puedeDatosPersonales}
+        esAdmin={profile.role_codigo === "ADMIN"}
+        yoUserId={profile.user_id}
       />
     </div>
   );

@@ -3,6 +3,8 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive, restablecerClaveUsuario } from "@/app/api/actions/auth";
+import { eliminarUsuario, cambiarCorreoUsuario } from "@/app/api/actions/usuarios-gestion";
+import { confirmacionEliminarValida, textoConfirmacionEliminar, validarCorreoNuevo } from "@/lib/usuarios-gestion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -30,7 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck, Contact, Search, Upload, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Plus, Pencil, Check, X, KeyRound, MoreHorizontal, UserX, UserCheck, Contact, Search, Upload, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import type { UserRole } from "@/app/api/actions/auth";
 import { veSoloSuCentro } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
@@ -71,6 +74,10 @@ interface AdminUsuariosProps {
   extras?: Record<string, DatosPersonalesUsuario>;
   /** Solo un ADMIN ve y edita los datos personales: RH, nacimiento y celular son sensibles. */
   puedeDatosPersonales?: boolean;
+  /** Solo un ADMIN elimina usuarios y cambia correos (identidad de inicio de sesión). */
+  esAdmin?: boolean;
+  /** `user_id` de quien mira la pantalla: nadie se elimina a sí mismo. */
+  yoUserId?: string;
 }
 
 interface CamposPerfil {
@@ -182,7 +189,7 @@ function CamposPerfilUsuario({
   );
 }
 
-export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPersonales = false }: AdminUsuariosProps) {
+export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPersonales = false, esAdmin = false, yoUserId }: AdminUsuariosProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +208,13 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
   // Fila en edición en línea (user_id) — una a la vez.
   const [editando, setEditando] = useState<string | null>(null);
   const [edicion, setEdicion] = useState<CamposPerfil>(PERFIL_VACIO);
+  const [edicionEmail, setEdicionEmail] = useState("");
+  // Cambiar el correo cambia con qué entra la persona: se confirma antes de guardar.
+  const [confirmarCorreo, setConfirmarCorreo] = useState(false);
+  // Eliminar: se escribe el correo (o ELIMINAR) para confirmar.
+  const [porEliminar, setPorEliminar] = useState<Usuario | null>(null);
+  const [confirmacion, setConfirmacion] = useState("");
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
 
   // Restablecer clave: primero se confirma y luego se muestra la clave temporal (una sola vez).
   const [reseteo, setReseteo] = useState<{ usuario: Usuario; clave: string | null } | null>(null);
@@ -296,6 +310,7 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
   const abrirEdicion = (u: Usuario) => {
     setError(null);
     setSuccess(null);
+    setEdicionEmail(u.email ?? "");
     setEdicion({
       nombreCompleto: u.nombre_completo ?? "",
       cedula: u.cedula ?? "",
@@ -309,9 +324,19 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
   const setCampo = <K extends keyof CamposPerfil>(campo: K, valor: CamposPerfil[K]) =>
     setEdicion((prev) => ({ ...prev, [campo]: valor }));
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = async (correoConfirmado = false) => {
     if (!editando || !edicion.nombreCompleto.trim()) return;
     const usuario = users.find((u) => u.user_id === editando);
+    const correoCambio = esAdmin && edicionEmail.trim().toLowerCase() !== (usuario?.email ?? "").trim().toLowerCase();
+    if (correoCambio && !correoConfirmado) {
+      const v = validarCorreoNuevo(edicionEmail, usuario?.email);
+      if (!v.ok) {
+        setError(v.error);
+        return;
+      }
+      setConfirmarCorreo(true);
+      return;
+    }
     setLoading(true);
     setError(null);
     const result = await updateUserAsAdmin({
@@ -322,10 +347,38 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
       operationalCenterId: aCentroId(edicion.centroId),
       roleCodigo: edicion.roleCodigo,
     });
-    if (result?.error) setError(result.error);
+    if (result?.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+    // El correo va al final: si falla, los datos ya quedaron guardados y el mensaje lo dice.
+    if (correoCambio) {
+      const r = await cambiarCorreoUsuario(editando, edicionEmail);
+      if ("error" in r && r.error) {
+        setError(`Los datos se guardaron, pero el correo no cambió: ${r.error}`);
+        setEditando(null);
+        router.refresh();
+        setLoading(false);
+        return;
+      }
+    }
+    setSuccess(`Usuario ${correoCambio ? edicionEmail.trim().toLowerCase() : usuario?.email ?? ""} actualizado`);
+    setEditando(null);
+    router.refresh();
+    setLoading(false);
+  };
+
+  const handleEliminar = async () => {
+    if (!porEliminar) return;
+    setLoading(true);
+    setError(null);
+    setErrorEliminar(null);
+    const r = await eliminarUsuario(porEliminar.user_id, confirmacion);
+    if ("error" in r && r.error) setErrorEliminar(r.error);
     else {
-      setSuccess(`Usuario ${usuario?.email ?? ""} actualizado`);
-      setEditando(null);
+      setSuccess(`Usuario ${porEliminar.email ?? porEliminar.nombre_completo ?? ""} eliminado`);
+      setPorEliminar(null);
       router.refresh();
     }
     setLoading(false);
@@ -458,7 +511,20 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
                           autoFocus
                         />
                       </TableCell>
-                      <TableCell>{u.email || "—"}</TableCell>
+                      <TableCell>
+                        {esAdmin ? (
+                          <Input
+                            type="email"
+                            value={edicionEmail}
+                            onChange={(e) => setEdicionEmail(e.target.value)}
+                            onKeyDown={teclas}
+                            aria-label="Correo"
+                            className="h-8 w-60"
+                          />
+                        ) : (
+                          u.email || "—"
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Input
                           value={edicion.cedula}
@@ -515,7 +581,7 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
                       <TableCell className="sticky right-0 bg-muted text-right">
                         <Button
                           size="sm"
-                          onClick={handleSaveEdit}
+                          onClick={() => handleSaveEdit()}
                           disabled={loading || !edicion.nombreCompleto.trim()}
                           className="px-2"
                         >
@@ -616,6 +682,20 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
                               {u.activo ? <UserX className="h-4 w-4" aria-hidden="true" /> : <UserCheck className="h-4 w-4" aria-hidden="true" />}
                               {u.activo ? "Deshabilitar" : "Habilitar"}
                             </DropdownMenu.Item>
+                            {esAdmin && (
+                              <DropdownMenu.Item
+                                disabled={loading || editando !== null || u.user_id === yoUserId}
+                                onSelect={() => {
+                                  setConfirmacion("");
+                                  setErrorEliminar(null);
+                                  setPorEliminar(u);
+                                }}
+                                className="flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm font-medium text-destructive outline-none focus:bg-accent focus:text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                              >
+                                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                {u.user_id === yoUserId ? "Eliminar (no tu propio usuario)" : "Eliminar"}
+                              </DropdownMenu.Item>
+                            )}
                           </DropdownMenu.Content>
                         </DropdownMenu.Portal>
                       </DropdownMenu.Root>
@@ -678,6 +758,74 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
           router.refresh();
         }}
       />
+
+      <Dialog open={confirmarCorreo} onOpenChange={setConfirmarCorreo}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cambiar el correo de acceso</DialogTitle>
+            <DialogDescription className="sr-only">Confirma el cambio del correo con el que la persona inicia sesión.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>
+              De <strong>{users.find((u) => u.user_id === editando)?.email || "(sin correo)"}</strong> a <strong>{edicionEmail.trim().toLowerCase()}</strong>.
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              <li>El correo es con lo que la persona inicia sesión: desde ahora debe entrar con el nuevo (con su cédula sigue entrando igual).</li>
+              <li>Si el correo nuevo está mal escrito o no es suyo, no podrá recuperar su clave por correo: revísalo antes de guardar.</li>
+              <li>Si tiene la sesión abierta, sigue hasta que venza; avísale del cambio.</li>
+            </ul>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setConfirmarCorreo(false)}>
+                Revisar
+              </Button>
+              <Button
+                onClick={() => {
+                  setConfirmarCorreo(false);
+                  handleSaveEdit(true);
+                }}
+              >
+                Cambiar correo y guardar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={porEliminar !== null} onOpenChange={(abierto) => !abierto && !loading && setPorEliminar(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar usuario</DialogTitle>
+            <DialogDescription className="sr-only">Confirma la eliminación definitiva escribiendo el correo del usuario.</DialogDescription>
+          </DialogHeader>
+          {porEliminar && (
+            <div className="space-y-3 text-sm">
+              <p>
+                Vas a eliminar a <strong>{porEliminar.nombre_completo || "(sin nombre)"}</strong> ({porEliminar.email || "sin correo"}). Se borra su cuenta y no se puede deshacer.
+                Si ya tiene servicios, preoperacionales u otro historial, el sistema no lo permite: usa «Deshabilitar».
+              </p>
+              <div>
+                <Label htmlFor="confirmar-eliminar">
+                  Para confirmar escribe <span className="font-mono">{textoConfirmacionEliminar(porEliminar.email)}</span>
+                </Label>
+                <Input id="confirmar-eliminar" value={confirmacion} onChange={(e) => setConfirmacion(e.target.value)} autoComplete="off" className="mt-1" />
+              </div>
+              {errorEliminar && (
+                <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+                  {errorEliminar}
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setPorEliminar(null)} disabled={loading}>
+                  Cancelar
+                </Button>
+                <Button variant="destructive" onClick={handleEliminar} disabled={loading || !confirmacionEliminarValida(confirmacion, porEliminar.email)}>
+                  {loading ? "Eliminando..." : "Eliminar definitivamente"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showCarga} onOpenChange={(abierto) => (abierto || !cargaOcupada) && setShowCarga(abierto)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
