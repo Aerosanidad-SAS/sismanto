@@ -134,6 +134,12 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
           <p className="text-center text-muted-foreground">
             {modoAdmin ? "No hay servicios programados ni en curso en este momento." : "No tienes servicios asignados en este momento."}
           </p>
+          {!modoAdmin && (
+            // Los servicios llegan por la tripulación del móvil (migración 053): si Regulación no te armó en el móvil, no aparece nada.
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              ¿Esperabas uno? Pídele a Regulación que revise que estés en la tripulación del móvil de hoy.
+            </p>
+          )}
         </CardContent>
       </Card>
     );
