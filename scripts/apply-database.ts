@@ -159,6 +159,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "133_user_profile_extra.sql",                    file: "scripts/migrations/133_user_profile_extra.sql" },
   { name: "134_servicio_opciones_soporte.sql",            file: "scripts/migrations/134_servicio_opciones_soporte.sql" },
   { name: "135_rbac_pacientes_valoraciones_por_servicio.sql", file: "scripts/migrations/135_rbac_pacientes_valoraciones_por_servicio.sql" },
+  { name: "136_usuario_tiene_historial.sql", file: "scripts/migrations/136_usuario_tiene_historial.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
