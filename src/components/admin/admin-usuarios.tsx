@@ -4,6 +4,7 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createUserAsAdmin, updateUserAsAdmin, toggleUserActive, restablecerClaveUsuario } from "@/app/api/actions/auth";
 import { eliminarUsuario, cambiarCorreoUsuario } from "@/app/api/actions/usuarios-gestion";
+import { validarClaveNueva } from "@/lib/usuarios-carga";
 import { confirmacionEliminarValida, textoConfirmacionEliminar, validarCorreoNuevo } from "@/lib/usuarios-gestion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -217,7 +218,13 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
 
   // Restablecer clave: primero se confirma y luego se muestra la clave temporal (una sola vez).
-  const [reseteo, setReseteo] = useState<{ usuario: Usuario; clave: string | null } | null>(null);
+  const [reseteo, setReseteo] = useState<{ usuario: Usuario; clave: string | null; hecho?: boolean } | null>(null);
+  // Restablecer: clave temporal generada, o una clave que escribe el ADMIN.
+  const [modoClave, setModoClave] = useState<"temporal" | "escribir">("temporal");
+  const [claveEscrita, setClaveEscrita] = useState("");
+  const [claveConfirma, setClaveConfirma] = useState("");
+  const [obligarCambio, setObligarCambio] = useState(true);
+  const [errorClave, setErrorClave] = useState<string | null>(null);
 
   const nombreCentro = new Map(centros.map((c) => [c.id, c.nombre]));
 
@@ -265,14 +272,29 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
 
   const handleRestablecer = async () => {
     if (!reseteo) return;
+    setErrorClave(null);
+    if (modoClave === "escribir") {
+      const falla = validarClaveNueva(claveEscrita, claveConfirma, reseteo.usuario.cedula, null);
+      if (falla) {
+        setErrorClave(falla);
+        return;
+      }
+    }
     setLoading(true);
     setError(null);
-    const result = await restablecerClaveUsuario(reseteo.usuario.user_id);
+    const result = await restablecerClaveUsuario(
+      reseteo.usuario.user_id,
+      modoClave === "escribir" ? { claveNueva: claveEscrita, obligarCambio } : undefined
+    );
     if ("error" in result && result.error) {
-      setError(result.error);
-      setReseteo(null);
+      // El error se muestra dentro del diálogo, junto a lo que se escribió: así se corrige sin perderlo.
+      setErrorClave(result.error);
     } else if ("claveTemporal" in result && result.claveTemporal) {
       setReseteo({ usuario: reseteo.usuario, clave: result.claveTemporal });
+    } else {
+      setClaveEscrita("");
+      setClaveConfirma("");
+      setReseteo({ usuario: reseteo.usuario, clave: null, hecho: true });
     }
     setLoading(false);
   };
@@ -664,7 +686,14 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
                             )}
                             <DropdownMenu.Item
                               disabled={loading || editando !== null}
-                              onSelect={() => setReseteo({ usuario: u, clave: null })}
+                              onSelect={() => {
+                                setModoClave("temporal");
+                                setClaveEscrita("");
+                                setClaveConfirma("");
+                                setObligarCambio(true);
+                                setErrorClave(null);
+                                setReseteo({ usuario: u, clave: null });
+                              }}
                               className="flex min-h-touch cursor-pointer select-none items-center gap-2 rounded-sm px-3 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                             >
                               <KeyRound className="h-4 w-4" aria-hidden="true" />
@@ -713,19 +742,61 @@ export function AdminUsuarios({ users, roles, centros, extras = {}, puedeDatosPe
           <DialogHeader>
             <DialogTitle>Restablecer clave</DialogTitle>
           </DialogHeader>
-          {reseteo && !reseteo.clave && (
+          <DialogDescription className="sr-only">Cambia la clave del usuario: genera una temporal o escribe una.</DialogDescription>
+          {reseteo && !reseteo.clave && !reseteo.hecho && (
             <div className="space-y-4">
               <p className="text-sm">
-                Se le pondrá una clave temporal a <strong>{reseteo.usuario.nombre_completo || reseteo.usuario.email}</strong>. La que tenía deja de
-                servir y el sistema le pedirá elegir una nueva al entrar.
+                Cambiar la clave de <strong>{reseteo.usuario.nombre_completo || reseteo.usuario.email}</strong>. La que tenía deja de servir.
               </p>
+              <fieldset className="space-y-2">
+                <legend className="sr-only">Cómo se define la clave</legend>
+                <label className="flex min-h-touch cursor-pointer items-center gap-2 text-sm">
+                  <input type="radio" name="modo-clave" checked={modoClave === "temporal"} onChange={() => setModoClave("temporal")} />
+                  Generar una clave temporal (el sistema le pide elegir una nueva al entrar)
+                </label>
+                <label className="flex min-h-touch cursor-pointer items-center gap-2 text-sm">
+                  <input type="radio" name="modo-clave" checked={modoClave === "escribir"} onChange={() => setModoClave("escribir")} />
+                  Escribir una clave
+                </label>
+              </fieldset>
+              {modoClave === "escribir" && (
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="clave-nueva">Clave nueva (mínimo 8 caracteres)</Label>
+                    <Input id="clave-nueva" type="password" autoComplete="new-password" value={claveEscrita} onChange={(e) => setClaveEscrita(e.target.value)} className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="clave-confirma">Repite la clave</Label>
+                    <Input id="clave-confirma" type="password" autoComplete="new-password" value={claveConfirma} onChange={(e) => setClaveConfirma(e.target.value)} className="mt-1" />
+                  </div>
+                  <label className="flex min-h-touch cursor-pointer items-center gap-2 text-sm">
+                    <input type="checkbox" checked={obligarCambio} onChange={(e) => setObligarCambio(e.target.checked)} />
+                    Pedirle que la cambie al entrar
+                  </label>
+                </div>
+              )}
+              {errorClave && (
+                <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  {errorClave}
+                </p>
+              )}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setReseteo(null)} disabled={loading}>
                   Cancelar
                 </Button>
-                <Button onClick={handleRestablecer} disabled={loading}>
-                  {loading ? "Restableciendo..." : "Restablecer"}
+                <Button onClick={handleRestablecer} disabled={loading || (modoClave === "escribir" && !claveEscrita)}>
+                  {loading ? "Guardando..." : modoClave === "escribir" ? "Cambiar clave" : "Generar clave temporal"}
                 </Button>
+              </div>
+            </div>
+          )}
+          {reseteo?.hecho && (
+            <div className="space-y-4">
+              <p className="text-sm">
+                Listo: la clave de <strong>{reseteo.usuario.nombre_completo || reseteo.usuario.email}</strong> ya cambió. Entrégasela por un canal privado.
+              </p>
+              <div className="flex justify-end">
+                <Button onClick={() => setReseteo(null)}>Listo</Button>
               </div>
             </div>
           )}
