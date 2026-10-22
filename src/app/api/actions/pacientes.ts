@@ -149,6 +149,9 @@ export async function crearPaciente(formData: PatientFormData) {
     })
     .select()
     .single();
+  // El chequeo de arriba solo ve los pacientes que el usuario puede leer (migración 135). Si la cédula existe pero es de
+  // otra ciudad, la restricción única de la base lo atrapa aquí, y el mensaje crudo no le dice nada útil al regulador.
+  if (error?.code === "23505") return { error: "Ya existe un paciente con ese documento" };
   if (error) return { error: error.message };
   // Se identifica por id, no por cédula ni nombre: la bitácora no debe copiar datos personales.
   await auditar("INSERTAR", "pacientes", data.id, "Paciente creado");
