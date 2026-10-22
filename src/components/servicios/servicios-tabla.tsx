@@ -279,6 +279,11 @@ export function ServiciosTabla({
 }: ServiciosTablaProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
+  // En escritorio, editar un servicio se hace en su misma fila de la tabla (id del servicio); en celular y al crear, en el modal.
+  const [filaEnEdicion, setFilaEnEdicion] = useState<number | null>(null);
+  const edicionEnFila = filaEnEdicion !== null;
+  // Lo que se quería abrir cuando había cambios sin guardar: se abre al confirmar el descarte.
+  const [pendiente, setPendiente] = useState<ServicioRow | "nuevo" | null>(null);
   const [editando, setEditando] = useState<ServicioRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -306,8 +311,10 @@ export function ServiciosTabla({
   // Umbral de servicios estancados configurado por el ADMIN (migración 103).
   const umbralesEstancado = useUmbralesEstancado();
 
-  const { register, handleSubmit, reset, setValue, watch, formState } =
+  const { register, handleSubmit, reset, setValue: setValueForm, watch, formState } =
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
+  // Todo valor puesto desde un combobox/select cuenta como cambio: sin esto, «¿Descartar los cambios?» no se pedía.
+  const setValue: typeof setValueForm = (name, value, opts) => setValueForm(name, value, { shouldDirty: true, ...opts });
 
   const [cieLabel, setCieLabel] = useState("");
   // Escape o un clic fuera cierran el formulario: si hay cambios sin guardar se pide confirmación (QA, defecto menor).
@@ -433,6 +440,7 @@ export function ServiciosTabla({
   };
 
   const prepararNuevo = () => {
+    setFilaEnEdicion(null);
     setEditando(null);
     setError(null);
     setCreadoMsg(null);
@@ -468,7 +476,12 @@ export function ServiciosTabla({
     } as MedicalServiceFormData);
   };
 
-  const abrirNuevo = () => {
+  const abrirNuevo = (forzar = false) => {
+    if (!forzar && edicionEnFila && hayCambios) {
+      setPendiente("nuevo");
+      setConfirmarCierre(true);
+      return;
+    }
     prepararNuevo();
     setDialogOpen(true);
   };
@@ -491,7 +504,41 @@ export function ServiciosTabla({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const abrirEdicion = (s: ServicioRow) => {
+  const cerrarFormulario = () => {
+    setDialogOpen(false);
+    setFilaEnEdicion(null);
+  };
+
+  // La fila editada puede salir de la página (filtros, paginación, refresco): se cierra la edición.
+  useEffect(() => {
+    if (filaEnEdicion !== null && !servicios.some((x) => x.id === filaEnEdicion)) setFilaEnEdicion(null);
+  }, [servicios, filaEnEdicion]);
+
+  // Al cerrar la edición en la fila, el foco vuelve a su botón «Editar» (el panel se desmonta y el foco caería en el body).
+  const ultimaFilaEditada = useRef<number | null>(null);
+  useEffect(() => {
+    if (filaEnEdicion !== null) {
+      ultimaFilaEditada.current = filaEnEdicion;
+      return;
+    }
+    if (ultimaFilaEditada.current === null) return;
+    document.querySelector<HTMLElement>(`[data-editar="${ultimaFilaEditada.current}"]`)?.focus();
+    ultimaFilaEditada.current = null;
+  }, [filaEnEdicion]);
+  // Cancelar / cerrar: con cambios sin guardar se pide confirmación, igual que al cerrar el modal.
+  const solicitarCierre = () => {
+    if (hayCambios && !guardando) setConfirmarCierre(true);
+    else cerrarFormulario();
+  };
+
+  const abrirEdicion = (s: ServicioRow, forzar = false) => {
+    // Otra fila ya se está editando con cambios sin guardar: primero se pregunta si se descartan.
+    if (!forzar && edicionEnFila && filaEnEdicion !== s.id && hayCambios) {
+      setPendiente(s);
+      setConfirmarCierre(true);
+      return;
+    }
+    const enEscritorio = window.matchMedia("(min-width: 768px)").matches;
     setEditando(s);
     setError(null);
     setCedulaBusqueda(s.patients?.cedula ? `${s.patients.cedula} — ${s.nombre_completo}` : "");
@@ -551,8 +598,22 @@ export function ServiciosTabla({
       estado_servicio: str("estado_servicio"),
       ciudad_registro: str("ciudad_registro"),
     });
-    setDialogOpen(true);
+    if (enEscritorio) setFilaEnEdicion(s.id);
+    else {
+      setFilaEnEdicion(null);
+      setDialogOpen(true);
+    }
   };
+
+  // Al abrir la edición en la fila, la lleva a la vista y le da el foco (lectores de pantalla anuncian el título).
+  useEffect(() => {
+    if (filaEnEdicion === null) return;
+    const barra = document.getElementById(`edicion-servicio-${filaEnEdicion}`);
+    barra?.focus({ preventScroll: true });
+    // Solo vertical: el desplazamiento horizontal de la tabla vuelve al inicio para que la fila se vea desde su borde izquierdo.
+    barra?.closest("div.overflow-auto")?.scrollTo({ left: 0 });
+    barra?.closest("tr")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [filaEnEdicion]);
 
   const enfocarCampo = (name: string) => {
     const el = document.getElementById(name);
@@ -593,7 +654,7 @@ export function ServiciosTabla({
       inicioFormRef.current?.scrollIntoView({ block: "start" });
       return;
     }
-    setDialogOpen(false);
+    cerrarFormulario();
   };
 
   const listaErrores = Object.entries(formState.errors).map(([name, e]) => ({
@@ -711,412 +772,30 @@ export function ServiciosTabla({
 
   const cedulaDe = (s: ServicioRow) => s.patients?.cedula ?? (s.cedula_paciente as string | null) ?? "sin enlace";
 
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">{barra}</div>
-        <div className="flex flex-wrap items-center gap-2">
-          {acciones}
-          {puedeEditar && <Button onClick={abrirNuevo}>Nuevo servicio</Button>}
-        </div>
-      </div>
-
-      {/* Móvil (bajo md): tarjetas con placa, paciente y estado; las acciones van en un menú. */}
-      <ul className="space-y-2 md:hidden" aria-label="Servicios registrados">
-        {filtrados.length === 0 && (
-          <li className="rounded-md border p-4 text-center text-sm text-muted-foreground">Sin servicios registrados</li>
+  // El mismo formulario sirve al modal (crear, y editar en celular) y a la fila de la tabla (editar en escritorio).
+  const botonesFormulario = (
+      <DialogFooter className="gap-2 sm:gap-0">
+        <Button type="button" variant="outline" onClick={solicitarCierre}>
+          Cancelar
+        </Button>
+        {!editando && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={guardando}
+            onClick={handleSubmit((v) => onSubmit(v, true), onInvalid)}
+          >
+            Guardar y crear otro
+          </Button>
         )}
-        {filtrados.map((s) => (
-          <li key={s.id} className="rounded-md border bg-card p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs tabular-nums text-muted-foreground">#{s.id}</span>
-                  {insigniasEtapa(s)}
-                </div>
-                <p className="text-sm leading-tight">
-                  <span className="font-medium">{s.nombre_completo}</span>{" "}
-                  <span className="text-xs text-muted-foreground">{cedulaDe(s)}</span>
-                </p>
-              </div>
-              {puedeEditar && (
-                <Popover open={menuId === s.id} onOpenChange={(abierto) => setMenuId(abierto ? s.id : null)}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label={`Acciones del servicio ${s.id}`}>
-                      <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-56 p-1">
-                    {puedeEditarServicio(s) ? (
-                      <button
-                        type="button"
-                        className={ITEM_MENU_MOVIL}
-                        onClick={() => {
-                          setMenuId(null);
-                          abrirEdicion(s);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" aria-hidden="true" /> Editar
-                      </button>
-                    ) : (
-                      <p className="flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground">
-                        <Lock className="h-4 w-4" aria-hidden="true" /> Finalizado: bloqueado
-                      </p>
-                    )}
-                    {puedeCambiarEtapaLibre && s.etapa === "PROGRAMADO" && (
-                      <button
-                        type="button"
-                        className={ITEM_MENU_MOVIL}
-                        disabled={busyId === s.id}
-                        onClick={() => {
-                          setMenuId(null);
-                          handleEtapa(s, "CURSO");
-                        }}
-                      >
-                        <Play className="h-4 w-4" aria-hidden="true" /> Marcar en curso
-                      </button>
-                    )}
-                    {puedeMoverEtapa(s) && (
-                      <>
-                        <p className="px-2 pt-2 text-xs text-muted-foreground">Cambiar etapa a</p>
-                        {ETAPAS_DESTINO(s.etapa).map((etapa) => (
-                          <button
-                            key={etapa}
-                            type="button"
-                            className={ITEM_MENU_MOVIL}
-                            disabled={busyId === s.id}
-                            onClick={() => {
-                              setMenuId(null);
-                              handleEtapa(s, etapa);
-                            }}
-                          >
-                            <ArrowRightLeft className="h-4 w-4" aria-hidden="true" /> {etapa}
-                          </button>
-                        ))}
-                      </>
-                    )}
-                    {puedeEliminar && (
-                      <button
-                        type="button"
-                        className={`${ITEM_MENU_MOVIL} text-destructive`}
-                        disabled={busyId === s.id}
-                        onClick={() => {
-                          setMenuId(null);
-                          setPorEliminar(s);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" /> Eliminar
-                      </button>
-                    )}
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
-            <div className="mt-2 space-y-0.5 text-sm leading-tight">
-              <p>
-                <span className="text-muted-foreground">Programado: </span>
-                {fechaHora24(s.fecha_hora_programacion as string | null) || "—"}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Tipo: </span>
-                {s.tipo_servicio}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Móvil: </span>
-                {movilDe(s)}
-                {s.imagen_boleta_salida && (
-                  <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <FileCheck className="h-3 w-3" aria-hidden="true" /> Con boleta
-                  </span>
-                )}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Ruta: </span>
-                {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
+        <Button type="submit" disabled={guardando}>
+          {guardando ? "Guardando…" : "Guardar"}
+        </Button>
+      </DialogFooter>
+  );
 
-      {/* Escritorio (md en adelante): tabla. */}
-      <div className="hidden overflow-x-auto md:block">
-        <Table className="[&_td]:px-3 [&_td]:py-1.5 [&_th]:h-9 [&_th]:px-3">
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Etapa</TableHead>
-              <TableHead>Paciente</TableHead>
-              <TableHead>
-                Programado
-                <span className="block text-xs font-normal">y fecha de registro</span>
-              </TableHead>
-              <TableHead>Tipo / móvil</TableHead>
-              <TableHead>Origen → Destino</TableHead>
-              {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtrados.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={6 + (puedeEditar ? 1 : 0)}
-                  className="text-center text-muted-foreground"
-                >
-                  Sin servicios registrados
-                </TableCell>
-              </TableRow>
-            )}
-            {filtrados.map((s) => (
-              <TableRow key={s.id}>
-                <TableCell className="w-12 !px-2 text-xs tabular-nums text-muted-foreground">{s.id}</TableCell>
-                <TableCell>
-                  <div className="flex flex-nowrap items-center gap-1">{insigniasEtapa(s)}</div>
-                </TableCell>
-                <TableCell className="min-w-[10.5rem]">
-                  <div className="text-sm leading-tight">
-                    <span className="font-medium">{s.nombre_completo}</span>{" "}
-                    <span className="text-xs text-muted-foreground">{cedulaDe(s)}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="whitespace-nowrap tabular-nums">
-                  <div className="text-sm leading-tight">{fechaHora24(s.fecha_hora_programacion as string | null) || "—"}</div>
-                  <div className="text-xs leading-tight text-muted-foreground">
-                    Registro {fechaHora24(s.fecha_hora_registro)}
-                  </div>
-                </TableCell>
-                <TableCell className="max-w-44">
-                  <p className="break-words text-sm leading-tight">{s.tipo_servicio}</p>
-                  <p className="text-xs leading-tight text-muted-foreground">Móvil {movilDe(s)}</p>
-                  {s.imagen_boleta_salida && (
-                    <p className="mt-0.5 flex items-center gap-1 text-xs leading-tight text-muted-foreground">
-                      <FileCheck className="h-3 w-3" aria-hidden="true" /> Con boleta de salida
-                    </p>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm leading-tight">
-                  {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
-                </TableCell>
-                {puedeEditar && (
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-2">
-                      {puedeCambiarEtapaLibre && s.etapa === "PROGRAMADO" && (
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9"
-                          title="Marcar en curso"
-                          aria-label={`Marcar en curso el servicio ${s.id}`}
-                          disabled={busyId === s.id}
-                          onClick={() => handleEtapa(s, "CURSO")}
-                        >
-                          <Play className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                      )}
-                      {puedeMoverEtapa(s) && (
-                        <Select
-                          disabled={busyId === s.id}
-                          onValueChange={(v) => handleEtapa(s, v)}
-                          value=""
-                        >
-                          <SelectTrigger
-                            className="h-9 w-9 justify-center p-0 [&>svg:last-child]:hidden"
-                            title="Cambiar etapa"
-                            aria-label="Cambiar etapa"
-                          >
-                            <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ETAPAS_DESTINO(s.etapa).map((etapa) => (
-                              <SelectItem key={etapa} value={etapa}>
-                                {etapa}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                      {puedeEditarServicio(s) ? (
-                        <Button variant="outline" size="icon" className="h-9 w-9" title="Editar" aria-label="Editar servicio" onClick={() => abrirEdicion(s)}>
-                          <Pencil className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                      ) : (
-                        <span className="inline-flex h-9 w-9 items-center justify-center text-muted-foreground">
-                          <Lock className="h-4 w-4" aria-hidden="true" />
-                          <span className="sr-only">Finalizado: bloqueado</span>
-                        </span>
-                      )}
-                      {puedeEliminar && (
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9 text-destructive hover:text-destructive"
-                          title="Eliminar"
-                          aria-label="Eliminar servicio"
-                          disabled={busyId === s.id}
-                          onClick={() => setPorEliminar(s)}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <AlertDialog open={porEliminar !== null} onOpenChange={(abierto) => !abierto && setPorEliminar(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar el servicio #{porEliminar?.id}</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se borra el registro de {porEliminar?.nombre_completo} y no se puede recuperar. ¿Quieres continuar?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                const objetivo = porEliminar;
-                setPorEliminar(null);
-                if (objetivo) handleEliminar(objetivo);
-              }}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={choque !== null} onOpenChange={(abierto) => !abierto && setChoque(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Ya hay un servicio a esa hora</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>Este servicio comparte vehículo o tripulación con otro que sigue abierto a una hora muy cercana:</p>
-                <ul className="list-disc space-y-1 pl-5">
-                  {choque &&
-                    textoChoque(choque.lista, (iso) => aTextoLocalColombia(iso).replace("T", " ")).map((linea) => (
-                      <li key={linea}>{linea}</li>
-                    ))}
-                </ul>
-                <p>¿Quieres guardarlo de todos modos?</p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Revisar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                const pendiente = choque;
-                setChoque(null);
-                if (pendiente) void onSubmit(pendiente.values, pendiente.crearOtro, true);
-              }}
-            >
-              Guardar de todos modos
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={aviso !== null} onOpenChange={(abierto) => !abierto && setAviso(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{aviso?.titulo}</AlertDialogTitle>
-            <AlertDialogDescription>{aviso?.mensaje}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setAviso(null)}>Entendido</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <Dialog open={porEtapa !== null} onOpenChange={(abierto) => !abierto && setPorEtapa(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {porEtapa ? `Pasar el servicio #${porEtapa.servicio.id} a ${porEtapa.etapaNueva}` : ""}
-            </DialogTitle>
-            <DialogDescription>
-              Quedará en la bitácora con tu nombre y este motivo. Escríbelo para poder confirmar.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1">
-            <Label htmlFor="motivo-etapa">Motivo</Label>
-            <Textarea
-              id="motivo-etapa"
-              value={motivoEtapa}
-              onChange={(e) => setMotivoEtapa(e.target.value)}
-              maxLength={MOTIVO_MAX}
-              rows={3}
-              autoFocus
-            />
-            <p className="text-xs text-muted-foreground">
-              {motivoEtapa.trim().length}/{MOTIVO_MAX}
-            </p>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setPorEtapa(null)}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={confirmarEtapaNegativa} disabled={errorMotivoEtapa !== null}>
-              {porEtapa ? `Pasar a ${porEtapa.etapaNueva}` : "Confirmar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={confirmarCierre} onOpenChange={setConfirmarCierre}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Descartar los cambios?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Escribiste datos en el formulario que todavía no se guardan. Si lo cierras ahora se pierden.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setConfirmarCierre(false);
-                setDialogOpen(false);
-              }}
-            >
-              Descartar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <Dialog
-        open={dialogOpen}
-        onOpenChange={(abierto) => {
-          if (!abierto && hayCambios && !guardando) {
-            setConfirmarCierre(true);
-            return;
-          }
-          setDialogOpen(abierto);
-        }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{editando ? `Editar servicio #${editando.id}` : "Nuevo servicio"}</DialogTitle>
-            <DialogDescription>
-              Los tiempos (oportunidad, origen, intermedia, destino y total) se calculan
-              automáticamente a partir de las fechas de llegada/salida.
-              {editando?.etapa === "FINALIZADO" && (
-                <span className="mt-1 block rounded-md bg-warning-soft px-2 py-1 font-medium text-warning-foreground">
-                  Este servicio ya está FINALIZADO — cualquier cambio que guardes queda registrado
-                  en el log de auditoría (quién, cuándo, qué valores tenía antes y después).
-                </span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit((v) => onSubmit(v), onInvalid)} className="space-y-6" noValidate>
+  const formulario = (
+    <form onSubmit={handleSubmit((v) => onSubmit(v), onInvalid)} className={edicionEnFila ? "space-y-3" : "space-y-6"} noValidate>
             <div ref={inicioFormRef} className="space-y-3">
               {creadoMsg && (
                 <p role="status" className="rounded-md bg-success-soft px-3 py-2 text-sm font-medium text-success">
@@ -1141,6 +820,9 @@ export function ServiciosTabla({
                 </div>
               )}
             </div>
+      {edicionEnFila && botonesFormulario}
+      {/* En la fila, las secciones van una al lado de la otra y se recorren con el scroll horizontal. */}
+      <div className={edicionEnFila ? "flex items-start gap-4 overflow-x-auto pb-3 [&>section]:w-[34rem] [&>section]:max-w-[85vw] [&>section]:shrink-0" : "space-y-6"}>
             <section className="space-y-1 rounded-md border bg-muted/30 p-3">
               <Label htmlFor="tipo_servicio">Tipo de servicio *</Label>
               <CatalogCombobox
@@ -1813,32 +1495,460 @@ export function ServiciosTabla({
                 )}
               </section>
             )}
-
+      </div>
             {error && (
               <p role="alert" className="text-sm text-destructive">
                 {error}
               </p>
             )}
+      {!edicionEnFila && botonesFormulario}
+    </form>
+  );
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancelar
-              </Button>
-              {!editando && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={guardando}
-                  onClick={handleSubmit((v) => onSubmit(v, true), onInvalid)}
-                >
-                  Guardar y crear otro
-                </Button>
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">{barra}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {acciones}
+          {puedeEditar && <Button onClick={() => abrirNuevo()}>Nuevo servicio</Button>}
+        </div>
+      </div>
+
+      {/* Móvil (bajo md): tarjetas con placa, paciente y estado; las acciones van en un menú. */}
+      <ul className="space-y-2 md:hidden" aria-label="Servicios registrados">
+        {filtrados.length === 0 && (
+          <li className="rounded-md border p-4 text-center text-sm text-muted-foreground">Sin servicios registrados</li>
+        )}
+        {filtrados.map((s) => (
+          <li key={s.id} className="rounded-md border bg-card p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs tabular-nums text-muted-foreground">#{s.id}</span>
+                  {insigniasEtapa(s)}
+                </div>
+                <p className="text-sm leading-tight">
+                  <span className="font-medium">{s.nombre_completo}</span>{" "}
+                  <span className="text-xs text-muted-foreground">{cedulaDe(s)}</span>
+                </p>
+              </div>
+              {puedeEditar && (
+                <Popover open={menuId === s.id} onOpenChange={(abierto) => setMenuId(abierto ? s.id : null)}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label={`Acciones del servicio ${s.id}`}>
+                      <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56 p-1">
+                    {puedeEditarServicio(s) ? (
+                      <button
+                        type="button"
+                        className={ITEM_MENU_MOVIL}
+                        onClick={() => {
+                          setMenuId(null);
+                          abrirEdicion(s);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden="true" /> Editar
+                      </button>
+                    ) : (
+                      <p className="flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground">
+                        <Lock className="h-4 w-4" aria-hidden="true" /> Finalizado: bloqueado
+                      </p>
+                    )}
+                    {puedeCambiarEtapaLibre && s.etapa === "PROGRAMADO" && (
+                      <button
+                        type="button"
+                        className={ITEM_MENU_MOVIL}
+                        disabled={busyId === s.id}
+                        onClick={() => {
+                          setMenuId(null);
+                          handleEtapa(s, "CURSO");
+                        }}
+                      >
+                        <Play className="h-4 w-4" aria-hidden="true" /> Marcar en curso
+                      </button>
+                    )}
+                    {puedeMoverEtapa(s) && (
+                      <>
+                        <p className="px-2 pt-2 text-xs text-muted-foreground">Cambiar etapa a</p>
+                        {ETAPAS_DESTINO(s.etapa).map((etapa) => (
+                          <button
+                            key={etapa}
+                            type="button"
+                            className={ITEM_MENU_MOVIL}
+                            disabled={busyId === s.id}
+                            onClick={() => {
+                              setMenuId(null);
+                              handleEtapa(s, etapa);
+                            }}
+                          >
+                            <ArrowRightLeft className="h-4 w-4" aria-hidden="true" /> {etapa}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {puedeEliminar && (
+                      <button
+                        type="button"
+                        className={`${ITEM_MENU_MOVIL} text-destructive`}
+                        disabled={busyId === s.id}
+                        onClick={() => {
+                          setMenuId(null);
+                          setPorEliminar(s);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" /> Eliminar
+                      </button>
+                    )}
+                  </PopoverContent>
+                </Popover>
               )}
-              <Button type="submit" disabled={guardando}>
-                {guardando ? "Guardando…" : "Guardar"}
-              </Button>
-            </DialogFooter>
-          </form>
+            </div>
+            <div className="mt-2 space-y-0.5 text-sm leading-tight">
+              <p>
+                <span className="text-muted-foreground">Programado: </span>
+                {fechaHora24(s.fecha_hora_programacion as string | null) || "—"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Tipo: </span>
+                {s.tipo_servicio}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Móvil: </span>
+                {movilDe(s)}
+                {s.imagen_boleta_salida && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <FileCheck className="h-3 w-3" aria-hidden="true" /> Con boleta
+                  </span>
+                )}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Ruta: </span>
+                {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Escritorio (md en adelante): tabla. */}
+      <div className="hidden overflow-x-auto [container-type:inline-size] md:block">
+        <Table className="[&_td]:px-3 [&_td]:py-1.5 [&_th]:h-9 [&_th]:px-3">
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Etapa</TableHead>
+              <TableHead>Paciente</TableHead>
+              <TableHead>
+                Programado
+                <span className="block text-xs font-normal">y fecha de registro</span>
+              </TableHead>
+              <TableHead>Tipo / móvil</TableHead>
+              <TableHead>Origen → Destino</TableHead>
+              {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtrados.length === 0 && (
+              <TableRow>
+                <TableCell
+                  colSpan={6 + (puedeEditar ? 1 : 0)}
+                  className="text-center text-muted-foreground"
+                >
+                  Sin servicios registrados
+                </TableCell>
+              </TableRow>
+            )}
+            {filtrados.map((s) =>
+              filaEnEdicion === s.id ? (
+                <TableRow key={s.id} className="bg-muted/30 hover:bg-muted/30">
+                  <TableCell colSpan={6 + (puedeEditar ? 1 : 0)} className="!p-0">
+                    {/* sticky + 100cqw: el panel mide lo que mide la zona visible de la tabla (aunque la tabla sea más ancha) y el desplazamiento horizontal queda dentro del formulario. */}
+                    <div className="sticky left-0 w-[calc(100cqw-2px)] max-w-full space-y-3 p-3" role="region" aria-labelledby={`edicion-titulo-${s.id}`}>
+                      <div
+                        id={`edicion-servicio-${s.id}`}
+                        tabIndex={-1}
+                        className="outline-none"
+                      >
+                        <h3 id={`edicion-titulo-${s.id}`} className="text-sm font-semibold">
+                          Editando servicio #{s.id} — {s.nombre_completo}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Desplázate a la derecha para ver todos los datos. Los tiempos se calculan solos a partir de las fechas de llegada/salida.
+                        </p>
+                        {s.etapa === "FINALIZADO" && (
+                          <p className="mt-1 rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
+                            Este servicio ya está FINALIZADO — cualquier cambio que guardes queda registrado en el log de auditoría (quién, cuándo, qué valores tenía antes y después).
+                          </p>
+                        )}
+                      </div>
+                      {formulario}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+              <TableRow key={s.id}>
+                <TableCell className="w-12 !px-2 text-xs tabular-nums text-muted-foreground">{s.id}</TableCell>
+                <TableCell>
+                  <div className="flex flex-nowrap items-center gap-1">{insigniasEtapa(s)}</div>
+                </TableCell>
+                <TableCell className="min-w-[10.5rem]">
+                  <div className="text-sm leading-tight">
+                    <span className="font-medium">{s.nombre_completo}</span>{" "}
+                    <span className="text-xs text-muted-foreground">{cedulaDe(s)}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">
+                  <div className="text-sm leading-tight">{fechaHora24(s.fecha_hora_programacion as string | null) || "—"}</div>
+                  <div className="text-xs leading-tight text-muted-foreground">
+                    Registro {fechaHora24(s.fecha_hora_registro)}
+                  </div>
+                </TableCell>
+                <TableCell className="max-w-44">
+                  <p className="break-words text-sm leading-tight">{s.tipo_servicio}</p>
+                  <p className="text-xs leading-tight text-muted-foreground">Móvil {movilDe(s)}</p>
+                  {s.imagen_boleta_salida && (
+                    <p className="mt-0.5 flex items-center gap-1 text-xs leading-tight text-muted-foreground">
+                      <FileCheck className="h-3 w-3" aria-hidden="true" /> Con boleta de salida
+                    </p>
+                  )}
+                </TableCell>
+                <TableCell className="text-sm leading-tight">
+                  {(s.ciudad_origen ?? "—") + " → " + (s.ciudad_destino ?? "—")}
+                </TableCell>
+                {puedeEditar && (
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-2">
+                      {puedeCambiarEtapaLibre && s.etapa === "PROGRAMADO" && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          title="Marcar en curso"
+                          aria-label={`Marcar en curso el servicio ${s.id}`}
+                          disabled={busyId === s.id}
+                          onClick={() => handleEtapa(s, "CURSO")}
+                        >
+                          <Play className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      )}
+                      {puedeMoverEtapa(s) && (
+                        <Select
+                          disabled={busyId === s.id}
+                          onValueChange={(v) => handleEtapa(s, v)}
+                          value=""
+                        >
+                          <SelectTrigger
+                            className="h-9 w-9 justify-center p-0 [&>svg:last-child]:hidden"
+                            title="Cambiar etapa"
+                            aria-label="Cambiar etapa"
+                          >
+                            <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ETAPAS_DESTINO(s.etapa).map((etapa) => (
+                              <SelectItem key={etapa} value={etapa}>
+                                {etapa}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {puedeEditarServicio(s) ? (
+                        <Button variant="outline" size="icon" className="h-9 w-9" title="Editar" aria-label="Editar servicio" data-editar={s.id} onClick={() => abrirEdicion(s)}>
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      ) : (
+                        <span className="inline-flex h-9 w-9 items-center justify-center text-muted-foreground">
+                          <Lock className="h-4 w-4" aria-hidden="true" />
+                          <span className="sr-only">Finalizado: bloqueado</span>
+                        </span>
+                      )}
+                      {puedeEliminar && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 text-destructive hover:text-destructive"
+                          title="Eliminar"
+                          aria-label="Eliminar servicio"
+                          disabled={busyId === s.id}
+                          onClick={() => setPorEliminar(s)}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                )}
+              </TableRow>
+              )
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <AlertDialog open={porEliminar !== null} onOpenChange={(abierto) => !abierto && setPorEliminar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar el servicio #{porEliminar?.id}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borra el registro de {porEliminar?.nombre_completo} y no se puede recuperar. ¿Quieres continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const objetivo = porEliminar;
+                setPorEliminar(null);
+                if (objetivo) handleEliminar(objetivo);
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={choque !== null} onOpenChange={(abierto) => !abierto && setChoque(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ya hay un servicio a esa hora</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Este servicio comparte vehículo o tripulación con otro que sigue abierto a una hora muy cercana:</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  {choque &&
+                    textoChoque(choque.lista, (iso) => aTextoLocalColombia(iso).replace("T", " ")).map((linea) => (
+                      <li key={linea}>{linea}</li>
+                    ))}
+                </ul>
+                <p>¿Quieres guardarlo de todos modos?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Revisar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const pendiente = choque;
+                setChoque(null);
+                if (pendiente) void onSubmit(pendiente.values, pendiente.crearOtro, true);
+              }}
+            >
+              Guardar de todos modos
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={aviso !== null} onOpenChange={(abierto) => !abierto && setAviso(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{aviso?.titulo}</AlertDialogTitle>
+            <AlertDialogDescription>{aviso?.mensaje}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setAviso(null)}>Entendido</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={porEtapa !== null} onOpenChange={(abierto) => !abierto && setPorEtapa(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {porEtapa ? `Pasar el servicio #${porEtapa.servicio.id} a ${porEtapa.etapaNueva}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Quedará en la bitácora con tu nombre y este motivo. Escríbelo para poder confirmar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="motivo-etapa">Motivo</Label>
+            <Textarea
+              id="motivo-etapa"
+              value={motivoEtapa}
+              onChange={(e) => setMotivoEtapa(e.target.value)}
+              maxLength={MOTIVO_MAX}
+              rows={3}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              {motivoEtapa.trim().length}/{MOTIVO_MAX}
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPorEtapa(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmarEtapaNegativa} disabled={errorMotivoEtapa !== null}>
+              {porEtapa ? `Pasar a ${porEtapa.etapaNueva}` : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={confirmarCierre}
+        onOpenChange={(abierto) => {
+          setConfirmarCierre(abierto);
+          if (!abierto) setPendiente(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Descartar los cambios?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Escribiste datos en el formulario que todavía no se guardan. Si lo cierras ahora se pierden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmarCierre(false);
+                cerrarFormulario();
+                const siguiente = pendiente;
+                setPendiente(null);
+                if (siguiente === "nuevo") abrirNuevo(true);
+                else if (siguiente) abrirEdicion(siguiente, true);
+              }}
+            >
+              Descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(abierto) => {
+          if (!abierto && hayCambios && !guardando) {
+            setConfirmarCierre(true);
+            return;
+          }
+          setDialogOpen(abierto);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{editando ? `Editar servicio #${editando.id}` : "Nuevo servicio"}</DialogTitle>
+            <DialogDescription>
+              Los tiempos (oportunidad, origen, intermedia, destino y total) se calculan
+              automáticamente a partir de las fechas de llegada/salida.
+              {editando?.etapa === "FINALIZADO" && (
+                <span className="mt-1 block rounded-md bg-warning-soft px-2 py-1 font-medium text-warning-foreground">
+                  Este servicio ya está FINALIZADO — cualquier cambio que guardes queda registrado
+                  en el log de auditoría (quién, cuándo, qué valores tenía antes y después).
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {formulario}
         </DialogContent>
       </Dialog>
 

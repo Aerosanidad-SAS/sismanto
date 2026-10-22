@@ -394,7 +394,7 @@ export async function toggleUserActive(userId: string, activo: boolean) {
  * contraseña?» (los conductores de la carga masiva sin correo). La clave se devuelve una sola vez, para que quien
  * restablece se la entregue por un canal privado; nunca se guarda en claro.
  */
-export async function restablecerClaveUsuario(userId: string) {
+export async function restablecerClaveUsuario(userId: string, opciones?: { claveNueva?: string; obligarCambio?: boolean }) {
   const caller = await requireRole(["ADMIN", "ANALISTA"]);
   const parsed = toggleUserActiveSchema.shape.userId.safeParse(userId);
   if (!parsed.success) return { error: "ID de usuario inválido" };
@@ -403,7 +403,7 @@ export async function restablecerClaveUsuario(userId: string) {
   const admin = createAdminClient() as any;
   const { data: perfil } = await admin
     .from("user_profiles")
-    .select("user_id, nombre_completo, roles!inner(codigo)")
+    .select("user_id, nombre_completo, cedula, roles!inner(codigo)")
     .eq("user_id", parsed.data)
     .maybeSingle();
   if (!perfil) return { error: "Usuario no encontrado" };
@@ -412,17 +412,34 @@ export async function restablecerClaveUsuario(userId: string) {
     return { error: "Solo un Administrador puede restablecer la clave de otro Administrador" };
   }
 
-  const claveTemporal = generarClaveTemporal();
+  // Clave elegida por el administrador (la teclea y la confirma en el diálogo) o clave temporal generada.
+  const elegida = opciones?.claveNueva;
+  if (elegida !== undefined) {
+    const falla = validarClaveNueva(elegida, elegida, perfil.cedula ?? null, null);
+    if (falla) return { error: falla };
+    if (elegida.length > 72) return { error: "La clave es demasiado larga (máximo 72 caracteres)." };
+  }
+  const claveTemporal = elegida ?? generarClaveTemporal();
+  // Una clave generada siempre se cambia al entrar (quien la restablece la conoce); una elegida, solo si se pide.
+  const debeCambiar = elegida === undefined || opciones?.obligarCambio !== false;
   // Primero la marca y después la clave: si la segunda falla, lo peor es que la persona deba cambiar su clave actual.
   const { error: errMarca } = await admin
     .from("user_profiles")
-    .update({ debe_cambiar_password: true, updated_at: new Date().toISOString() })
+    .update({ debe_cambiar_password: debeCambiar, updated_at: new Date().toISOString() })
     .eq("user_id", parsed.data);
   if (errMarca) return { error: errMarca.message };
   const { error: errClave } = await admin.auth.admin.updateUserById(parsed.data, { password: claveTemporal });
   if (errClave) return { error: errClave.message };
 
-  await auditar("MODIFICAR", "usuarios", parsed.data, "Clave restablecida por administración (clave temporal; debe cambiarla al entrar)");
+  await auditar(
+    "MODIFICAR",
+    "usuarios",
+    parsed.data,
+    elegida === undefined
+      ? "Clave restablecida por administración (clave temporal; debe cambiarla al entrar)"
+      : `Clave cambiada por administración (clave elegida; ${debeCambiar ? "debe cambiarla al entrar" : "sin obligar a cambiarla"})`
+  );
   revalidatePath("/admin/usuarios");
-  return { success: true as const, claveTemporal };
+  // La clave elegida no se devuelve: quien la escribió ya la conoce.
+  return elegida === undefined ? { success: true as const, claveTemporal } : { success: true as const, claveTemporal: null };
 }

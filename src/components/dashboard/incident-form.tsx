@@ -86,13 +86,14 @@ export function IncidentForm({
     setError(null);
 
     try {
-      const result = await createIncident(data);
+      // `defaultValues` solo toma el vehículo al montarse: si OVEM lo cambia dentro del flujo, `data.vehicleId` sería el anterior.
+      const result = await createIncident({ ...data, vehicleId });
       if (result.error) {
         setError(result.error);
       } else {
         if (pedirNoApto) {
           const incidentId = (result.data as { id?: number } | undefined)?.id;
-          const sol = await crearSolicitudNoApto({ vehicleId: data.vehicleId, motivo: data.descripcion, origen: "REPORTE_OVEM", incidentId });
+          const sol = await crearSolicitudNoApto({ vehicleId, motivo: data.descripcion, origen: "REPORTE_OVEM", incidentId });
           if ("error" in sol && sol.error) {
             setError("La novedad quedó reportada, pero la solicitud de NO APTO no se envió: " + sol.error);
             return;

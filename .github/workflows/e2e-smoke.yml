@@ -1,0 +1,77 @@
+# E2E smoke: pruebas de solo lectura con Playwright contra la app local, construida en el runner, con la base de staging.
+# No crea ni modifica datos. Si faltan los secretos (por ejemplo en un PR de un fork) el job termina en verde sin correr.
+# Todavía NO es un check requerido para mergear: se activa como requerido cuando el smoke esté estable.
+name: E2E smoke
+
+on:
+  pull_request:
+    branches: [dev, staging, main]
+
+concurrency:
+  group: e2e-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      E2E_ADMIN_USER: ${{ secrets.E2E_ADMIN_USER }}
+      E2E_ADMIN_PASS: ${{ secrets.E2E_ADMIN_PASS }}
+      E2E_REGULACION_MDE_USER: ${{ secrets.E2E_REGULACION_MDE_USER }}
+      E2E_REGULACION_MDE_PASS: ${{ secrets.E2E_REGULACION_MDE_PASS }}
+      E2E_REGULACION_BOG_USER: ${{ secrets.E2E_REGULACION_BOG_USER }}
+      E2E_REGULACION_BOG_PASS: ${{ secrets.E2E_REGULACION_BOG_PASS }}
+      E2E_OVEM_MDE_USER: ${{ secrets.E2E_OVEM_MDE_USER }}
+      E2E_OVEM_MDE_PASS: ${{ secrets.E2E_OVEM_MDE_PASS }}
+      E2E_OVEM_BOG_USER: ${{ secrets.E2E_OVEM_BOG_USER }}
+      E2E_OVEM_BOG_PASS: ${{ secrets.E2E_OVEM_BOG_PASS }}
+      CI: "true"
+    steps:
+      - name: ¿Hay secretos para el E2E?
+        id: secretos
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]; then
+            echo "Sin secretos E2E (PR de un fork o secretos aún no creados): se omite."
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secretos.outputs.hay == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secretos.outputs.hay == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+        if: steps.secretos.outputs.hay == 'true'
+      - run: npx playwright install --with-deps chromium
+        if: steps.secretos.outputs.hay == 'true'
+      - run: npm run build
+        if: steps.secretos.outputs.hay == 'true'
+      - name: Arrancar la app local
+        if: steps.secretos.outputs.hay == 'true'
+        run: |
+          npm run start > next-start.log 2>&1 &
+          # Sin dependencias extra: espera hasta 120 s a que /login responda y falla si la app no arrancó.
+          for i in $(seq 1 60); do
+            curl -fsS -o /dev/null http://localhost:3000/login && exit 0
+            sleep 2
+          done
+          echo "La app no respondió en 120 s"; tail -50 next-start.log; exit 1
+      - run: npm run e2e:smoke
+        if: steps.secretos.outputs.hay == 'true'
+      - name: Subir reporte y trazas
+        if: always() && steps.secretos.outputs.hay == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-report
+          path: |
+            playwright-report/
+            test-results/
+            next-start.log
+          retention-days: 7
