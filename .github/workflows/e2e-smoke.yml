@@ -57,7 +57,12 @@ jobs:
         if: steps.secretos.outputs.hay == 'true'
         run: |
           npm run start > next-start.log 2>&1 &
-          npx --yes wait-on http://localhost:3000/login --timeout 120000
+          # Sin dependencias extra: espera hasta 120 s a que /login responda y falla si la app no arrancó.
+          for i in $(seq 1 60); do
+            curl -fsS -o /dev/null http://localhost:3000/login && exit 0
+            sleep 2
+          done
+          echo "La app no respondió en 120 s"; tail -50 next-start.log; exit 1
       - run: npm run e2e:smoke
         if: steps.secretos.outputs.hay == 'true'
       - name: Subir reporte y trazas

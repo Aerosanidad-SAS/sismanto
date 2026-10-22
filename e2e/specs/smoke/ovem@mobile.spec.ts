@@ -28,7 +28,8 @@ for (const clave of ["OVEM_MDE", "OVEM_BOG"] as RolClave[]) {
     test(`O-02/O-03: el selector de vehículo solo ofrece ${propio}`, async ({ page }) => {
       await page.goto("/ovem");
       await page.getByRole("button", { name: /^Iniciar preoperacional/ }).first().click();
-      await page.locator("main button").nth(1).click();
+      // Su nombre accesible es la etiqueta «Vehículo»; el texto visible cambia según haya vehículo del día o no.
+      await page.getByRole("button", { name: "Vehículo", exact: true }).click();
 
       const opciones = page.locator("[cmdk-item]");
       await expect(opciones.first()).toBeVisible();
