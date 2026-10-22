@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { getProfile, requireRole } from "./auth";
 import { centroVisible } from "@/lib/auth-utils";
-import { condicionServiciosDeCentro } from "@/lib/servicios-centro";
+import { condicionServiciosVisibles } from "@/lib/servicios-centro-servidor";
 import { errorSiVehiculoDeOtroCentro } from "@/lib/vehiculo-centro";
 import { diasHasta, documentosVehiculo, fechaBogota, type DocumentoVehiculo } from "@/lib/vencimientos";
 import { revalidatePath } from "next/cache";
@@ -449,6 +449,7 @@ export async function getTableroRegulacion() {
   await requireRole(["ADMIN", "ANALISTA", "REGULACION"]);
   const supabase = createClient();
   const centro = centroVisible(await getProfile());
+  const condicionCentro = centro ? await condicionServiciosVisibles(centro.id, centro.codigo) : null;
   const hoy = fechaBogota(new Date());
 
   // Servicios: los abiertos de hoy y de los últimos días, más los cerrados de hoy. Los abiertos más antiguos no entran
@@ -460,7 +461,7 @@ export async function getTableroRegulacion() {
     .or(`and(etapa.in.(PROGRAMADO,CURSO),fecha_hora_programacion.gte.${desde}T00:00:00-05:00),fecha_hora_programacion.gte.${hoy}T00:00:00-05:00,fecha_hora_registro.gte.${hoy}T00:00:00-05:00`)
     .order("fecha_hora_programacion", { ascending: true, nullsFirst: false })
     .limit(300);
-  if (centro) serviciosQuery = serviciosQuery.or(condicionServiciosDeCentro(centro));
+  if (condicionCentro) serviciosQuery = serviciosQuery.or(condicionCentro);
   const { data: servicios } = await serviciosQuery;
 
   let antiguosQuery = supabase
@@ -468,7 +469,7 @@ export async function getTableroRegulacion() {
     .select("id", { count: "exact", head: true })
     .in("etapa", ["PROGRAMADO", "CURSO"])
     .lt("fecha_hora_programacion", `${desde}T00:00:00-05:00`);
-  if (centro) antiguosQuery = antiguosQuery.or(condicionServiciosDeCentro(centro));
+  if (condicionCentro) antiguosQuery = antiguosQuery.or(condicionCentro);
   const { count: antiguosSinCerrar } = await antiguosQuery;
 
   const ids = new Set<string>();
