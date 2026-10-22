@@ -6,7 +6,7 @@ import { getProfile } from "@/app/api/actions/auth";
 import { centroVisible } from "@/lib/auth-utils";
 import { leerTodo } from "@/lib/leer-todo";
 import { prefijoCiudad } from "@/lib/servicios-lista";
-import { condicionServiciosDeCentro } from "@/lib/servicios-centro";
+import { condicionServiciosVisibles } from "@/lib/servicios-centro-servidor";
 
 export interface EstadisticasServicios {
   total: number;
@@ -282,6 +282,7 @@ export async function getResumenOperativoDiario(params: {
   // Mismo alcance que la lista de servicios: Regulación cuenta lo de su centro,
   // si no, el resumen muestra cifras de servicios que ni puede abrir.
   const centro = centroVisible(await getProfile());
+  const condicionCentro = centro ? await condicionServiciosVisibles(centro.id, centro.codigo) : null;
   const filas = await leerTodo((d, h) => {
     let query = supabase
       .from("medical_services")
@@ -289,7 +290,7 @@ export async function getResumenOperativoDiario(params: {
       .gte("fecha_hora_registro", desdeIso)
       .lt("fecha_hora_registro", hastaExclusivoIso)
       .is("cierre_automatico_at", null);
-    if (centro) query = query.or(condicionServiciosDeCentro(centro));
+    if (condicionCentro) query = query.or(condicionCentro);
     return query.order("id").range(d, h);
   });
 
