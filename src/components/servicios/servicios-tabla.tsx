@@ -429,8 +429,12 @@ export function ServiciosTabla({
   };
 
   const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionPorVehiculo[vehiculoSeleccionado] : undefined;
-  // TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico. Solo avisa: un servicio no debe quedar sin poder guardarse por esto.
-  const tripulacionFaltante = rolesFaltantes(tipoSeleccionado, tripulacionVehiculoActual);
+  // TAB = OVEM + auxiliar; TAM = + médico; medicina domiciliaria = OVEM + médico (el médico puede elegirse aparte, sin móvil).
+  // Solo avisa: un servicio no debe quedar sin poder guardarse por esto. Con móvil, el OVEM ya lo avisa su propio mensaje.
+  const tripulacionFaltante = rolesFaltantes(tipoSeleccionado, {
+    ...tripulacionVehiculoActual,
+    medico: tripulacionVehiculoActual?.medico ?? (medicoIndependienteSeleccionado || undefined),
+  }).filter((r) => !(vehiculoSeleccionado && r === "OVEM"));
 
   // Los filtros se aplican en el servidor (ServiciosFiltros): la tabla muestra la página tal cual.
   const filtrados = servicios;
@@ -970,11 +974,10 @@ export function ServiciosTabla({
                         tripulación (se le asigna solo al armarla).
                       </p>
                     )}
-                    {vehiculoSeleccionado && tripulacionFaltante.filter((r) => r !== "OVEM").length > 0 && (
+                    {(vehiculoSeleccionado || perfil === "MEDICINA_DOMICILIARIA") && tripulacionFaltante.length > 0 && (
                       <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
                         {tipoSeleccionado} lleva {rolesRequeridosPorTipo(tipoSeleccionado).map((r) => ETIQUETA_ROL[r]).join(", ")}: falta{" "}
-                        {tripulacionFaltante.filter((r) => r !== "OVEM").map((r) => ETIQUETA_ROL[r]).join(" y ")} en este móvil. Puedes guardar;
-                        la persona queda en el servicio cuando Regulación la arme en el móvil.
+                        {tripulacionFaltante.map((r) => ETIQUETA_ROL[r]).join(" y ")}. Puedes guardar; completa la tripulación antes de despachar.
                       </p>
                     )}
                   </div>

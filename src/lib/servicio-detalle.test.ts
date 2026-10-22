@@ -23,8 +23,12 @@ describe("tripulación por tipo de servicio", () => {
     assert.deepEqual(rolesRequeridosPorTipo("TAB SIMPLE"), ["OVEM", "AUXILIAR_ENFERMERIA"]);
     assert.deepEqual(rolesRequeridosPorTipo("tam doble"), ["OVEM", "AUXILIAR_ENFERMERIA", "MEDICO"]);
   });
+  it("medicina domiciliaria lleva OVEM y médico", () => {
+    assert.deepEqual(rolesRequeridosPorTipo("MEDICINA DOMICILIARIA"), ["OVEM", "MEDICO"]);
+    assert.deepEqual(rolesFaltantes("MEDICINA DOMICILIARIA", { ovem: 1 }), ["MEDICO"]);
+  });
   it("los otros tipos no fijan tripulación", () => {
-    assert.deepEqual(rolesRequeridosPorTipo("MEDICINA DOMICILIARIA"), []);
+    assert.deepEqual(rolesRequeridosPorTipo("TELEMEDICINA"), []);
     assert.deepEqual(rolesRequeridosPorTipo(null), []);
   });
   it("faltantes: TAB sin auxiliar; TAM con todos no falta nadie", () => {
