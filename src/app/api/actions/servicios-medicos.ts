@@ -8,8 +8,11 @@ import { CAMPOS_PASO_SERVICIO } from "@/lib/estado-servicio";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
-import { ciudadDeCentro, condicionServiciosDeCentro } from "@/lib/servicios-centro";
+import { ciudadDeCentro } from "@/lib/servicios-centro";
+import { condicionServiciosVisibles } from "@/lib/servicios-centro-servidor";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { textoDiagnostico } from "@/lib/servicio-detalle";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
 import { hoyBogota, sumarDias } from "@/lib/fechas";
@@ -238,7 +241,7 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
   // vehículo por alguien sin centro asignado) que no sean de otra ciudad: ocultarlos todos los dejaría invisibles para
   // Regulación, pero verlos todos le mostraba los de Bogotá a Medellín (ver `servicios-centro.ts`).
   const centro = centroVisible(await getProfile());
-  if (centro) query = query.or(condicionServiciosDeCentro(centro));
+  if (centro) query = query.or(await condicionServiciosVisibles(centro.id, centro.codigo));
 
   if (filtro?.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtro.etapa)) {
     query = query.eq("etapa", filtro.etapa);
@@ -250,15 +253,68 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
   return conPacienteYMovil(supabase, (data ?? []) as Record<string, unknown>[]);
 }
 
+/**
+ * Paciente y diagnóstico de UN servicio asignado, para el detalle que abre la tripulación en «Mis servicios».
+ * El OVEM no lee `patients` (RLS: es dato clínico): la cédula se lee con la clave de servicio, pero solo después de
+ * comprobar con la sesión de la persona que el servicio es suyo (la RLS de `medical_services` deja a OVEM, médico y
+ * auxiliar ver solo los que tienen asignados; el ADMIN ve todos). Devuelve lo mínimo para atender: nombre, documento,
+ * diagnóstico y las observaciones del servicio.
+ */
+export async function getDetalleServicioTripulacion(
+  id: number
+): Promise<{ error: string } | { nombre: string; cedula: string; diagnostico: string; notas: string }> {
+  await requireRole(["ADMIN", "OVEM", "MEDICO", "AUXILIAR_ENFERMERIA"]);
+  const idParsed = z.number().int().positive().safeParse(id);
+  if (!idParsed.success) return { error: "ID inválido" };
+
+  const { data, error } = await createClient()
+    .from("medical_services")
+    .select("patient_id, nombre_completo, cedula_paciente, cie_codigo, cie_descripcion, observaciones")
+    .eq("id", idParsed.data)
+    .maybeSingle();
+  if (error) {
+    console.error("[servicios] no se pudo leer el detalle del servicio:", error.code, error.message);
+    return { error: "No se pudo cargar el detalle. Revisa tu señal e inténtalo de nuevo." };
+  }
+  const s = data as {
+    patient_id: number | null;
+    nombre_completo: string | null;
+    cedula_paciente: string | null;
+    cie_codigo: string | null;
+    cie_descripcion: string | null;
+    observaciones: string | null;
+  } | null;
+  if (!s) return { error: "Este servicio no está asignado a ti." };
+
+  const admin = createAdminClient() as any;
+  let cedula = (s.cedula_paciente ?? "").trim();
+  if (!cedula && s.patient_id) {
+    const { data: paciente } = await admin.from("patients").select("cedula").eq("id", s.patient_id).maybeSingle();
+    cedula = String(paciente?.cedula ?? "").trim();
+  }
+  let descripcion = s.cie_descripcion;
+  if (!descripcion && s.cie_codigo) {
+    const { data: cie } = await admin.from("cie10").select("descripcion").eq("codigo", s.cie_codigo).maybeSingle();
+    descripcion = cie?.descripcion ?? null;
+  }
+
+  return {
+    nombre: (s.nombre_completo ?? "").trim(),
+    cedula,
+    diagnostico: textoDiagnostico(s.cie_codigo, descripcion),
+    notas: (s.observaciones ?? "").trim(),
+  };
+}
+
 // ── Lista de servicios con filtros de SISRES (mostrarServicios.php) ────────
 
 const ROLES_LISTA_SERVICIOS: UserRole[] = ["ADMIN", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "ANALISTA", "VISTA", "COORDINACION"];
 
 // Tipado laxo a propósito: el cliente de Supabase colapsa a `never` en este
 // repo (ver CLAUDE.md), y el builder solo recibe filtros encadenados.
-function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centro: { id: number; codigo: string } | null) {
+async function aplicarFiltrosServicios(query: any, filtros: FiltrosServicios, centro: { id: number; codigo: string } | null) {
   let q = query;
-  if (centro) q = q.or(condicionServiciosDeCentro(centro));
+  if (centro) q = q.or(await condicionServiciosVisibles(centro.id, centro.codigo));
   if (filtros.etapa && (ETAPAS_SERVICIO as readonly string[]).includes(filtros.etapa)) q = q.eq("etapa", filtros.etapa);
   if (filtros.tipo) q = q.eq("tipo_servicio", filtros.tipo);
   if (filtros.cliente) q = q.eq("cliente", filtros.cliente);

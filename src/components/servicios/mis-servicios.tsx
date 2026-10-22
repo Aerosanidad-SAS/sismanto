@@ -2,11 +2,12 @@
 
 import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
-import { marcarPasoServicio, cambiarEtapaServicio } from "@/app/api/actions/servicios-medicos";
+import { marcarPasoServicio, cambiarEtapaServicio, getDetalleServicioTripulacion } from "@/app/api/actions/servicios-medicos";
+import { textoParada } from "@/lib/servicio-detalle";
 import { estadoOperativo, pasosPorTipo, type CampoPasoServicio } from "@/lib/estado-servicio";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, CheckCircle2, Circle, Clock, Navigation } from "lucide-react";
+import { MapPin, CheckCircle2, Circle, Clock, Navigation, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ServicioAsignado {
@@ -40,6 +41,13 @@ interface MisServiciosProps {
 interface Confirmacion {
   servicioId: number;
   clave: string;
+}
+
+/** Paciente y diagnóstico de un servicio, cargados al abrir su detalle (ver `getDetalleServicioTripulacion`). */
+interface DetalleServicio {
+  cargando: boolean;
+  error?: string;
+  datos?: { nombre: string; cedula: string; diagnostico: string; notas: string };
 }
 
 const MENSAJE_SIN_CONEXION =
@@ -102,6 +110,25 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
   /** El error vive pegado a la tarjeta que falló, no arriba de la lista (fuera de pantalla en el celular). */
   const [error, setError] = useState<{ servicioId: number; mensaje: string } | null>(null);
   const [confirmar, setConfirmar] = useState<Confirmacion | null>(null);
+  /** Servicio con el detalle abierto (uno a la vez: en el celular dos abiertos empujan los botones fuera de pantalla). */
+  const [abierto, setAbierto] = useState<number | null>(null);
+  const [detalles, setDetalles] = useState<Record<number, DetalleServicio>>({});
+
+  const alternarDetalle = async (id: number) => {
+    if (abierto === id) {
+      setAbierto(null);
+      return;
+    }
+    setAbierto(id);
+    if (detalles[id]?.datos) return;
+    setDetalles((d) => ({ ...d, [id]: { cargando: true } }));
+    try {
+      const r = await getDetalleServicioTripulacion(id);
+      setDetalles((d) => ({ ...d, [id]: "error" in r ? { cargando: false, error: r.error } : { cargando: false, datos: r } }));
+    } catch {
+      setDetalles((d) => ({ ...d, [id]: { cargando: false, error: MENSAJE_SIN_CONEXION } }));
+    }
+  };
 
   const activos = servicios.filter((s) => s.etapa === "PROGRAMADO" || s.etapa === "CURSO");
 
@@ -246,20 +273,61 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
                   })}
                 </div>
               )}
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
+              <button
+                type="button"
+                onClick={() => alternarDetalle(s.id)}
+                aria-expanded={abierto === s.id}
+                aria-controls={`detalle-servicio-${s.id}`}
+                className="flex min-h-11 w-full items-start justify-between gap-2 rounded-md text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <span className="min-w-0">
                   <CardTitle className="text-base">{s.tipo_servicio}</CardTitle>
                   {cuando && (
-                    <p suppressHydrationWarning className="mt-1 flex items-center gap-1 text-base font-semibold text-foreground">
+                    <span suppressHydrationWarning className="mt-1 flex items-center gap-1 text-base font-semibold text-foreground">
                       <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
                       {cuando}
-                    </p>
+                    </span>
                   )}
-                  <p className="text-sm text-muted-foreground truncate">{s.nombre_completo}</p>
-                </div>
-              </div>
+                  <span className="block truncate text-sm text-muted-foreground">{s.nombre_completo}</span>
+                  <span className="mt-1 block text-sm font-medium text-primary">
+                    {abierto === s.id ? "Ocultar paciente y diagnóstico" : "Ver paciente y diagnóstico"}
+                  </span>
+                </span>
+                {abierto === s.id ? (
+                  <ChevronUp className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                )}
+              </button>
             </CardHeader>
             <CardContent className="space-y-4">
+              {abierto === s.id && (
+                <div id={`detalle-servicio-${s.id}`} className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
+                  {detalles[s.id]?.cargando && <p className="text-muted-foreground">Cargando…</p>}
+                  {detalles[s.id]?.error && (
+                    <p role="alert" className="text-destructive">
+                      {detalles[s.id]?.error}
+                    </p>
+                  )}
+                  {detalles[s.id]?.datos && (
+                    <dl className="space-y-1 [overflow-wrap:anywhere]">
+                      {(
+                        [
+                          ["Paciente", detalles[s.id]!.datos!.nombre],
+                          ["Cédula", detalles[s.id]!.datos!.cedula],
+                          ["Diagnóstico", detalles[s.id]!.datos!.diagnostico],
+                          ["Notas de ubicación", detalles[s.id]!.datos!.notas],
+                        ] as const
+                      ).map(([rotulo, valor]) => (
+                        <div key={rotulo}>
+                          <dt className="inline text-muted-foreground">{rotulo}: </dt>
+                          <dd className="inline">{valor || <span className="text-muted-foreground">Sin registrar</span>}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </div>
+              )}
               {(s.ciudad_origen || s.direccion_origen || s.ciudad_destino || s.direccion_destino) && (
                 <div className="space-y-2 text-sm">
                   {(
@@ -276,7 +344,10 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
                           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                           <p className="[overflow-wrap:anywhere]">
                             <span className="text-muted-foreground">{p.rotulo}: </span>
-                            {p.dir || p.ciudad}
+                            {textoParada(p.dir, p.ciudad)}
+                            {!p.dir && (
+                              <span className="ml-1 rounded bg-warning-soft px-1 text-warning-foreground">sin dirección: pídela a Regulación</span>
+                            )}
                           </p>
                         </div>
                         <EnlaceRuta href={urlRuta(p.dir, p.ciudad)} parada={p.rotulo.toLowerCase()} />

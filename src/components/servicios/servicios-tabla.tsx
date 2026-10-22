@@ -46,6 +46,7 @@ import {
   OPCIONES_CIUDAD_REGISTRO,
   ubicacionPacientePorCiudadRegistro,
 } from "@/lib/servicios-lista";
+import { ETIQUETA_ROL, rolesFaltantes, rolesRequeridosPorTipo } from "@/lib/servicio-detalle";
 import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
@@ -428,6 +429,8 @@ export function ServiciosTabla({
   };
 
   const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionPorVehiculo[vehiculoSeleccionado] : undefined;
+  // TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico. Solo avisa: un servicio no debe quedar sin poder guardarse por esto.
+  const tripulacionFaltante = rolesFaltantes(tipoSeleccionado, tripulacionVehiculoActual);
 
   // Los filtros se aplican en el servidor (ServiciosFiltros): la tabla muestra la página tal cual.
   const filtrados = servicios;
@@ -965,6 +968,13 @@ export function ServiciosTabla({
                       <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
                         Este móvil no tiene OVEM armado hoy: el servicio no le aparecerá a ningún conductor hasta que Regulación arme la
                         tripulación (se le asigna solo al armarla).
+                      </p>
+                    )}
+                    {vehiculoSeleccionado && tripulacionFaltante.filter((r) => r !== "OVEM").length > 0 && (
+                      <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
+                        {tipoSeleccionado} lleva {rolesRequeridosPorTipo(tipoSeleccionado).map((r) => ETIQUETA_ROL[r]).join(", ")}: falta{" "}
+                        {tripulacionFaltante.filter((r) => r !== "OVEM").map((r) => ETIQUETA_ROL[r]).join(" y ")} en este móvil. Puedes guardar;
+                        la persona queda en el servicio cuando Regulación la arme en el móvil.
                       </p>
                     )}
                   </div>

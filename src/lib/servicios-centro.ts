@@ -24,9 +24,16 @@ export function ciudadDeCentro(codigo: string | null | undefined): { clave: "bog
 /**
  * Condición `or(...)` de PostgREST para los servicios visibles de un centro: los de ese centro, más los sin centro que no
  * son de otra ciudad. Un centro que no es de Bogotá ni de Medellín conserva la regla anterior (los sin centro, todos).
+ *
+ * `placasDeOtroCentro`: móviles de la otra CRA. Un servicio histórico sin centro lo atendió un móvil de una sola ciudad, aunque
+ * su `ciudad_registro` diga otra (48 servicios de TRG540, TRG549, LTN715… con origen en Soacha o Girardot figuraban como de
+ * Medellín): esos no se muestran. Sin móvil, manda la ciudad de registro.
  */
-export function condicionServiciosDeCentro(centro: { id: number; codigo: string }): string {
+export function condicionServiciosDeCentro(centro: { id: number; codigo: string }, placasDeOtroCentro: string[] = []): string {
   const ciudad = ciudadDeCentro(centro.codigo);
   if (!ciudad) return `operational_center_id.eq.${centro.id},operational_center_id.is.null`;
-  return `operational_center_id.eq.${centro.id},and(operational_center_id.is.null,ciudad_registro.ilike.${ciudad.prefijo}*)`;
+  // Solo placas con forma de placa: el valor entra tal cual en el filtro y `,` `(` `)` serían sintaxis de PostgREST.
+  const placas = placasDeOtroCentro.filter((p) => /^[A-Z0-9]{3,10}$/i.test(p));
+  const sinMovilAjeno = placas.length > 0 ? `,or(movil_placa.is.null,movil_placa.not.in.(${placas.join(",")}))` : "";
+  return `operational_center_id.eq.${centro.id},and(operational_center_id.is.null,ciudad_registro.ilike.${ciudad.prefijo}*${sinMovilAjeno})`;
 }
