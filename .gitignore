@@ -45,3 +45,8 @@ next-env.d.ts
 install-log.txt
 Imagen corporativa/
 ui-ux-pro-max-skill/
+
+# E2E (Playwright)
+e2e/.auth/
+playwright-report/
+test-results/
