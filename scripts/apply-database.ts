@@ -160,6 +160,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "134_servicio_opciones_soporte.sql",            file: "scripts/migrations/134_servicio_opciones_soporte.sql" },
   { name: "135_rbac_pacientes_valoraciones_por_servicio.sql", file: "scripts/migrations/135_rbac_pacientes_valoraciones_por_servicio.sql" },
   { name: "136_usuario_tiene_historial.sql", file: "scripts/migrations/136_usuario_tiene_historial.sql" },
+  { name: "137_servicios_escritura_regulacion_por_centro.sql", file: "scripts/migrations/137_servicios_escritura_regulacion_por_centro.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
