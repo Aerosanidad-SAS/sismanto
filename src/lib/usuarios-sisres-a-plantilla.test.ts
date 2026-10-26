@@ -9,6 +9,8 @@ import {
   centroDeCiudad,
   convertirUsuariosSisres,
   evaluarCarpetaDeSalida,
+  limpiarCedula,
+  resolverCedula,
   revisarColumnasSisres,
   ROLES_CON_CLAVE_PROPIA,
 } from "./usuarios-sisres-a-plantilla";
@@ -21,7 +23,8 @@ const OPC = { claveAleatoria: CLAVE };
 const fila = (o: Partial<FilaUsuario> = {}): FilaUsuario => ({
   id: "10",
   usuario: "1000000001",
-  identificacion: "1000000001",
+  // Por omisión la identificación acompaña al usuario (así no hay avisos de «no coinciden» que no vienen al caso).
+  identificacion: o.usuario ?? "1000000001",
   nombre1: "Persona",
   nombre2: "",
   apellido1: "Ficticia",
@@ -274,4 +277,71 @@ test("archivosDeCorridaAnterior reconoce lo que dejó una corrida previa y deja 
     archivosDeCorridaAnterior(["usuarios.csv", "usuarios-plantilla-01.xlsx", "usuarios-plantilla-12.xlsx", "claves-iniciales-especiales.csv", "usuarios-omitidas.csv", "notas.txt"]),
     ["usuarios-plantilla-01.xlsx", "usuarios-plantilla-12.xlsx", "claves-iniciales-especiales.csv", "usuarios-omitidas.csv"]
   );
+});
+
+test("limpiarCedula quita los puntos y comas de miles, y los espacios", () => {
+  assert.equal(limpiarCedula("1.020.458.300"), "1020458300");
+  assert.equal(limpiarCedula("1,020,458,300"), "1020458300");
+  assert.equal(limpiarCedula("20.458.300"), "20458300");
+  assert.equal(limpiarCedula(" 1 020 458 300 "), "1020458300");
+  assert.equal(limpiarCedula("123.456"), "123456");
+  assert.equal(limpiarCedula("1020458300"), "1020458300");
+  assert.equal(limpiarCedula("0012345678"), "12345678");
+});
+
+test("limpiarCedula NO le agrega un dígito a una cédula con decimal («1234567.0» no es 12345670)", () => {
+  assert.equal(limpiarCedula("1234567.0"), "1234567");
+  assert.equal(limpiarCedula("1234567.5"), "1234567");
+  assert.equal(limpiarCedula("123456.0"), "123456");
+  assert.equal(limpiarCedula("1234567,0"), "1234567");
+});
+
+test("limpiarCedula devuelve null (o algo demasiado corto) para lo que no es una cédula", () => {
+  assert.equal(limpiarCedula(""), null);
+  assert.equal(limpiarCedula(undefined), null);
+  assert.equal(limpiarCedula("ABC123"), null);
+  assert.equal(limpiarCedula("12-345"), null);
+  assert.equal(limpiarCedula("1.5"), "1");
+});
+
+test("resolverCedula: manda `usuario`; si no sirve usa `identificacion` y avisa; si no coinciden avisa", () => {
+  const ok = resolverCedula(fila({ usuario: "1.020.458.300", identificacion: "1020458300" }));
+  assert.deepEqual(ok, { cedula: "1020458300", aviso: null });
+  const decimal = resolverCedula(fila({ usuario: "1234567.0", identificacion: "1234567" }));
+  assert.deepEqual(decimal, { cedula: "1234567", aviso: null });
+  const raro = resolverCedula(fila({ usuario: "1.5", identificacion: "1020458300" }));
+  assert.equal(raro.cedula, "1020458300");
+  assert.equal(raro.aviso?.categoria, "USUARIO_NO_ES_CEDULA");
+  const distinto = resolverCedula(fila({ usuario: "123456789012", identificacion: "123456" }));
+  assert.equal(distinto.cedula, "123456789012");
+  assert.equal(distinto.aviso?.categoria, "USUARIO_DISTINTO_DE_IDENTIFICACION");
+  assert.equal(resolverCedula(fila({ usuario: "", identificacion: "" })).cedula, null);
+});
+
+test("una cédula con puntos de miles entra limpia y su clave inicial es esa cédula (password_inicial vacío)", () => {
+  const r = convertirUsuariosSisres([fila({ usuario: "1.020.458.300", identificacion: "1020458300" })], OPC);
+  assert.equal(r.plantilla[0].cedula, "1020458300");
+  assert.equal(r.plantilla[0].password_inicial, "");
+  assert.deepEqual(r.avisos, []);
+});
+
+test("un `usuario` que no es cédula («1.5») usa la identificación y queda con aviso", () => {
+  const r = convertirUsuariosSisres([fila({ usuario: "1.5", identificacion: "1020458300" })], OPC);
+  assert.equal(r.plantilla[0].cedula, "1020458300");
+  assert.equal(r.avisos[0].categoria, "USUARIO_NO_ES_CEDULA");
+});
+
+test("estadosCargados: por omisión solo el 1; se pueden sumar otros estados", () => {
+  const filas = [fila({ id: "1", usuario: "1000000001", estado: "1" }), fila({ id: "2", usuario: "1000000002", estado: "2" }), fila({ id: "3", usuario: "1000000003", estado: "0" })];
+  assert.deepEqual(convertirUsuariosSisres(filas, OPC).plantilla.map((p) => p.cedula), ["1000000001"]);
+  assert.deepEqual(convertirUsuariosSisres(filas, { ...OPC, estadosCargados: ["1", "2"] }).plantilla.map((p) => p.cedula), ["1000000001", "1000000002"]);
+});
+
+test("centrosPorCiudad: una ciudad asignada a mano le da centro a los roles que lo necesitan; sin ella se omiten", () => {
+  const f = fila({ ciudad: "CARTAGENA" });
+  assert.equal(convertirUsuariosSisres([f], OPC).omitidas[0].categoria, "SIN_CENTRO");
+  const r = convertirUsuariosSisres([f], { ...OPC, centrosPorCiudad: { Cartagena: "CTG" } });
+  assert.equal(r.plantilla[0].centro_operativo, "CTG");
+  assert.equal(centroDeCiudad("CÚCUTA", { Cucuta: "ADO" }), "ADO");
+  assert.equal(centroDeCiudad("Bogotá", { Cartagena: "CTG" }), "CRA_BOGOTA");
 });

@@ -14,6 +14,17 @@ una fila de esos roles sin `password_inicial` se rechaza).
   **no puede recuperar la clave por correo**.
 - Las cédulas de menos de 8 dígitos no pueden ser clave: reciben una clave aparte (como los roles de clave propia).
 
+## Cómo se limpia la cédula (campo `usuario` de SISRES)
+
+El convertidor deja la cédula solo con dígitos y esa misma cédula es la clave inicial:
+
+- Quita **puntos y comas de miles** (`1.020.458.300`, `1,020,458,300`) y espacios.
+- **Un punto que NO es de miles es un decimal** que dejó SISRES (`1234567.0`): la cédula es lo que está **antes** del punto. Quitarlo
+  a ciegas le agregaría un dígito (`12345670`) y la clave quedaría mal. En el archivo de octubre había 3 casos así.
+- Si el `usuario` no es una cédula (p. ej. `1.5`), se usa `identificacion` y queda como aviso. Si `usuario` e `identificacion`
+  no coinciden, manda `usuario` (con lo que se entraba a SISRES) y queda como aviso para revisar.
+- La clave queda **vacía en la plantilla** a propósito: significa «la clave es la cédula» y la vista previa de la carga lo marca así.
+
 ## Pasos
 
 1. Exportar la tabla `usuarios` de SISRES a CSV **solo con las columnas necesarias** (`id, usuario, identificacion, nombre1,
@@ -26,7 +37,11 @@ una fila de esos roles sin `password_inicial` se rechaza).
    npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta-local-fuera-del-repo>
    ```
 
-   Opcional: `--roles-clave-propia REGULACION,COORDINACION` suma roles que tampoco entran con la cédula (ver «Riesgos»).
+   Opciones:
+   - `--roles-clave-propia REGULACION,COORDINACION` suma roles que tampoco entran con la cédula (ver «Riesgos»).
+   - `--estados 1,2` estados de SISRES que se cargan (por omisión solo `1`, activo; los demás se omiten como inactivos).
+   - `--centros-por-ciudad "CARTAGENA=CTG,CÚCUTA=ADO"` centro de las ciudades que no son Bogotá ni Medellín: sin esto, los roles
+     que ven solo su centro de esas ciudades se omiten.
    Se niega a correr si la carpeta ya tiene archivos de una corrida anterior (las claves ya no coincidirían).
 4. Revisar `usuarios-omitidas.csv` (quién NO entra y por qué: cargo sin equivalente, ciudad que no es solo Bogotá o solo Medellín
    en un rol que necesita centro, inactivo, cédula fuera de 5–15 dígitos…) y `usuarios-avisos.csv` (correo repetido o inválido,

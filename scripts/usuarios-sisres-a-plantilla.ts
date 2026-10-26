@@ -5,7 +5,12 @@
  *
  * Uso:
  *   npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta> [--roles-clave-propia ROL1,ROL2]
+ *                                                  [--estados 1,2] [--centros-por-ciudad "CARTAGENA=CTG,CÚCUTA=ADO"]
  *                                                  [--aceptar-carpeta-sincronizada]
+ *
+ *   --estados             estados de SISRES que se cargan (por omisión solo 1 = activo).
+ *   --centros-por-ciudad  ciudad de SISRES = código de centro, para las que no son Bogotá ni Medellín (solo Bogotá y Medellín
+ *                         tienen regla oficial; las demás se omiten en los roles que ven solo su centro hasta que se asignen aquí).
  *
  * El CSV sale de la tabla `usuarios` de SISRES. Exporta SOLO las columnas que se usan (id, usuario, identificacion, nombre1,
  * nombre2, apellido1, apellido2, cargo, correo, ciudad, estado): este script no usa la columna de contraseñas, pero el
@@ -38,6 +43,8 @@ import {
 } from "../src/lib/usuarios-sisres-a-plantilla";
 
 const FILAS_POR_ARCHIVO = 500;
+/** Banderas que llevan un valor detrás: ese valor no es el archivo de entrada. */
+const VALORES_DE_BANDERAS = ["--salida", "--roles-clave-propia", "--estados", "--centros-por-ciudad"];
 const SOLO_DUENO = 0o600;
 
 function valorDe(args: string[], bandera: string): string | undefined {
@@ -65,7 +72,7 @@ function escribir(ruta: string, contenido: string | Buffer) {
 
 function main() {
   const args = process.argv.slice(2);
-  const archivo = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--salida" && args[i - 1] !== "--roles-clave-propia");
+  const archivo = args.find((a, i) => !a.startsWith("--") && !VALORES_DE_BANDERAS.includes(args[i - 1]));
   const salidaPedida = valorDe(args, "--salida");
   if (!archivo || !fs.existsSync(archivo) || !salidaPedida) {
     console.error("Uso: npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta fuera del repo> [--roles-clave-propia ROL1,ROL2] [--aceptar-carpeta-sincronizada]");
@@ -109,7 +116,17 @@ function main() {
   }
 
   const rolesExtra = (valorDe(args, "--roles-clave-propia") ?? "").split(",").map((r) => r.trim().toUpperCase()).filter(Boolean);
-  const r = convertirUsuariosSisres(filas, { rolesConClavePropia: rolesExtra });
+  const estados = (valorDe(args, "--estados") ?? "1").split(",").map((e) => e.trim()).filter(Boolean);
+  const centrosPorCiudad: Record<string, string> = {};
+  for (const par of (valorDe(args, "--centros-por-ciudad") ?? "").split(",").map((x) => x.trim()).filter(Boolean)) {
+    const i = par.lastIndexOf("=");
+    if (i <= 0) {
+      console.error(`--centros-por-ciudad: «${par}» no tiene la forma CIUDAD=CENTRO.`);
+      process.exit(1);
+    }
+    centrosPorCiudad[par.slice(0, i).trim()] = par.slice(i + 1).trim().toUpperCase();
+  }
+  const r = convertirUsuariosSisres(filas, { rolesConClavePropia: rolesExtra, estadosCargados: estados, centrosPorCiudad });
 
   fs.mkdirSync(salida, { recursive: true, mode: 0o700 });
   // La ruta se resolvió ANTES de crear la carpeta: si entre una cosa y otra alguien puso un enlace simbólico en el camino, la
@@ -136,7 +153,7 @@ function main() {
     path.join(salida, "usuarios-omitidas.csv"),
     aCsv(["categoria", "motivo", "id_sisres", "cedula", "cargo", "ciudad", "estado"], r.omitidas.map((o) => [o.categoria, o.motivo, o.fila.id ?? "", o.fila.usuario ?? "", o.fila.cargo ?? "", o.fila.ciudad ?? "", o.fila.estado ?? ""]))
   );
-  escribir(path.join(salida, "usuarios-avisos.csv"), aCsv(["id_sisres", "cedula", "aviso"], r.avisos.map((a) => [a.idSisres, a.cedula, a.aviso])));
+  escribir(path.join(salida, "usuarios-avisos.csv"), aCsv(["categoria", "id_sisres", "cedula", "aviso"], r.avisos.map((a) => [a.categoria, a.idSisres, a.cedula, a.aviso])));
   escribir(
     path.join(salida, "claves-iniciales-especiales.csv"),
     aCsv(["cedula", "nombre", "rol", "clave", "motivo"], r.clavesEspeciales.map((c) => [c.cedula, c.nombre, c.rol, c.clave, c.motivo]))
@@ -147,9 +164,16 @@ function main() {
   for (const p of r.plantilla) porRol.set(p.rol, (porRol.get(p.rol) ?? 0) + 1);
   const porCategoria = new Map<string, number>();
   for (const o of r.omitidas) porCategoria.set(o.categoria, (porCategoria.get(o.categoria) ?? 0) + 1);
+  const avisosPorCategoria = new Map<string, number>();
+  for (const a of r.avisos) avisosPorCategoria.set(a.categoria, (avisosPorCategoria.get(a.categoria) ?? 0) + 1);
+  // Las ciudades que dejaron a alguien sin centro: son nombres de ciudad (no datos personales) y es lo que hay que decidir.
+  const ciudadesSinCentro = new Map<string, number>();
+  for (const o of r.omitidas) if (o.categoria === "SIN_CENTRO") ciudadesSinCentro.set((o.fila.ciudad ?? "").trim() || "(vacía)", (ciudadesSinCentro.get((o.fila.ciudad ?? "").trim() || "(vacía)") ?? 0) + 1);
   console.log(`Leídas ${filas.length} filas de SISRES → a la plantilla: ${r.plantilla.length} (${archivos.length} archivo${archivos.length === 1 ? "" : "s"}), omitidas: ${r.omitidas.length}, con aviso: ${r.avisos.length}`);
   console.log("Por rol:", Object.fromEntries(porRol));
   console.log("Omitidas por categoría:", Object.fromEntries(porCategoria));
+  console.log("Avisos por categoría:", Object.fromEntries(avisosPorCategoria));
+  if (ciudadesSinCentro.size > 0) console.log("Sin centro, por ciudad:", Object.fromEntries([...ciudadesSinCentro.entries()].sort((a, b) => b[1] - a[1])));
   console.log(`Entran con la cédula como clave: ${r.plantilla.filter((p) => p.password_inicial === "").length} | con clave propia o aparte: ${r.clavesEspeciales.length}`);
   console.log(`📝 Archivos en ${salida} (solo legibles por ti)`);
   console.log("⚠️  Los .xlsx y los .csv tienen datos personales y CLAVES: no los subas a git ni los compartas, y bórralos TODOS cuando termine la carga.");

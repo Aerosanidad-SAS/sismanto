@@ -13,7 +13,7 @@
 import * as path from "path";
 import { rolParaCargoSisres } from "../../scripts/cargo-sisres-a-rol";
 import { generarClaveTemporal } from "./clave-temporal";
-import { cedulaDe, correoValido, nombreDe, type FilaUsuario } from "./etl-usuarios";
+import { correoValido, nombreDe, type FilaUsuario } from "./etl-usuarios";
 import { LARGO_MINIMO_CLAVE, ROLES_CON_CENTRO, ROLES_CON_CLAVE_PROPIA } from "./usuarios-carga";
 
 export { ROLES_CON_CLAVE_PROPIA };
@@ -55,6 +55,9 @@ export type CategoriaOmitida =
   | "CEDULA_REPETIDA"
   | "SIN_CENTRO";
 
+/** Categoría fija de cada aviso (el resumen por pantalla cuenta por esto, no por texto libre). */
+export type CategoriaAviso = "CORREO" | "CEROS_A_LA_IZQUIERDA" | "USUARIO_NO_ES_CEDULA" | "USUARIO_DISTINTO_DE_IDENTIFICACION";
+
 export interface Omitida {
   categoria: CategoriaOmitida;
   motivo: string;
@@ -66,7 +69,7 @@ export interface ResultadoConversion {
   /** Filas que no entran a la plantilla y alguien tiene que resolver (o confirmar que no van). */
   omitidas: Omitida[];
   /** Filas que sí entran, pero con algo que revisar (p. ej. un correo repetido que se reemplazó por el interno). */
-  avisos: { idSisres: string; cedula: string; aviso: string }[];
+  avisos: { categoria: CategoriaAviso; idSisres: string; cedula: string; aviso: string }[];
   clavesEspeciales: ClaveEspecial[];
 }
 
@@ -74,6 +77,10 @@ export interface OpcionesConversion {
   claveAleatoria?: () => string;
   /** Roles que no entran con la cédula como clave. Por omisión `ROLES_CON_CLAVE_PROPIA`; se pueden agregar más, nunca quitar. */
   rolesConClavePropia?: readonly string[];
+  /** Estados de SISRES que se cargan. Por omisión solo «1» (activo): lo demás se omite como inactivo. */
+  estadosCargados?: readonly string[];
+  /** Ciudad de SISRES (como viene en el CSV) → código de centro, para las que no son Bogotá ni Medellín. */
+  centrosPorCiudad?: Readonly<Record<string, string>>;
 }
 
 const sinTildes = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toUpperCase();
@@ -82,8 +89,11 @@ const sinTildes = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toUpp
  * Centro operativo de una ciudad de SISRES. Solo Bogotá y Medellín tienen regla oficial (servicios-centro.ts); cualquier
  * otro valor, o uno que nombre las dos ciudades a la vez, devuelve null y la persona queda en omitidas: no se adivina.
  */
-export function centroDeCiudad(ciudad: string | null | undefined): string | null {
+export function centroDeCiudad(ciudad: string | null | undefined, adicionales: Readonly<Record<string, string>> = {}): string | null {
   const c = sinTildes(ciudad ?? "");
+  // Una ciudad que el dueño asignó a mano a un centro manda sobre la regla general.
+  const clave = Object.keys(adicionales).find((k) => sinTildes(k).trim() === c.trim());
+  if (clave) return adicionales[clave];
   const bogota = c.includes("BOGOTA");
   const medellin = c.includes("MEDELLIN");
   if (bogota === medellin) return null;
@@ -94,6 +104,41 @@ export function centroDeCiudad(ciudad: string | null | undefined): string | null
 export function cargoDe(valor: string | undefined): number | null {
   const m = (valor ?? "").trim().match(/^([0-9]+)([.]0+)?$/);
   return m ? Number(m[1]) : null;
+}
+
+/**
+ * Cédula limpia (solo dígitos) a partir de lo que trae SISRES. Quita los puntos y las comas cuando son separadores de miles
+ * («1.020.458.300», «1,020,458,300»). Un punto que NO es de miles es el decimal que deja MySQL en un DOUBLE («1234567.0»):
+ * la cédula es lo que está ANTES del punto. Quitarlo a ciegas le agregaría un dígito a la cédula (y a la clave).
+ * Cualquier otra cosa (letras, «1.5»…) devuelve null o un valor demasiado corto que el rango de la carga rechaza.
+ */
+export function limpiarCedula(valor: string | undefined): string | null {
+  const t = (valor ?? "").trim().replace(/\s+/g, "");
+  const sinCeros = (d: string) => d.replace(/^0+/, "") || null;
+  if (/^[0-9]+$/.test(t)) return sinCeros(t);
+  if (/^[0-9]{1,3}([.,][0-9]{3})+$/.test(t)) return sinCeros(t.replace(/[.,]/g, ""));
+  const decimal = t.match(/^([0-9]+)[.,][0-9]{1,2}$/);
+  if (decimal) return sinCeros(decimal[1]);
+  return null;
+}
+
+const CEDULA_VALIDA = /^\d{5,15}$/;
+
+/**
+ * La cédula de la persona. Manda `usuario` (con lo que se entraba a SISRES), ya limpio; si no sirve (p. ej. «1.5») se usa
+ * `identificacion`. Si las dos sirven y no coinciden, se usa `usuario` y se deja el aviso para que alguien lo revise.
+ */
+export function resolverCedula(f: FilaUsuario): { cedula: string | null; aviso: { categoria: CategoriaAviso; texto: string } | null } {
+  const deUsuario = limpiarCedula(f.usuario);
+  const deIdentificacion = limpiarCedula(f.identificacion);
+  if (deUsuario && CEDULA_VALIDA.test(deUsuario)) {
+    const distinta = deIdentificacion && deIdentificacion !== deUsuario;
+    return { cedula: deUsuario, aviso: distinta ? { categoria: "USUARIO_DISTINTO_DE_IDENTIFICACION", texto: "El usuario y la identificación no coinciden: se usó el usuario" } : null };
+  }
+  if (deIdentificacion && CEDULA_VALIDA.test(deIdentificacion)) {
+    return { cedula: deIdentificacion, aviso: { categoria: "USUARIO_NO_ES_CEDULA", texto: "El usuario no era una cédula válida: se usó la identificación" } };
+  }
+  return { cedula: deUsuario ?? deIdentificacion, aviso: null };
 }
 
 /**
@@ -117,6 +162,8 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
   const claveAleatoria = opciones.claveAleatoria ?? generarClaveTemporal;
   // Las del sistema siempre cuentan: una opción solo puede sumar roles, no sacarlos.
   const clavePropia = new Set([...ROLES_CON_CLAVE_PROPIA, ...(opciones.rolesConClavePropia ?? [])]);
+  const estadosCargados = new Set(opciones.estadosCargados ?? ["1"]);
+  const centrosPorCiudad = opciones.centrosPorCiudad ?? {};
   const plantilla: FilaPlantilla[] = [];
   const omitidas: Omitida[] = [];
   const avisos: ResultadoConversion["avisos"] = [];
@@ -133,7 +180,7 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
   });
 
   for (const f of conId.sort((a, b) => Number(a.id) - Number(b.id))) {
-    if ((f.estado ?? "").trim() !== "1") {
+    if (!estadosCargados.has((f.estado ?? "").trim())) {
       omitir(f, "INACTIVO", `Inactivo en SISRES (estado ${f.estado ?? "?"})`);
       continue;
     }
@@ -143,13 +190,13 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
       omitir(f, "CARGO_SIN_EQUIVALENTE", `Cargo ${f.cargo ?? "?"} sin equivalente en SISMANTO`);
       continue;
     }
-    const cedula = cedulaDe(f);
+    const { cedula, aviso: avisoCedula } = resolverCedula(f);
     if (!cedula) {
       omitir(f, "SIN_CEDULA", "Sin cédula legible");
       continue;
     }
     // Mismo rango que valida la pantalla de carga: aquí se descarta con motivo en vez de fallar luego en la vista previa.
-    if (!/^\d{5,15}$/.test(cedula)) {
+    if (!CEDULA_VALIDA.test(cedula)) {
       omitir(f, "CEDULA_FUERA_DE_RANGO", "La cédula debe tener entre 5 y 15 dígitos");
       continue;
     }
@@ -165,23 +212,24 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
     }
 
     const ciudad = (f.ciudad ?? "").trim();
-    const centro = centroDeCiudad(ciudad);
+    const centro = centroDeCiudad(ciudad, centrosPorCiudad);
     if ((ROLES_CON_CENTRO as readonly string[]).includes(rol) && !centro) {
       omitir(f, "SIN_CENTRO", `El rol ${rol} necesita centro y la ciudad «${ciudad || "vacía"}» no corresponde a una sola de Bogotá o Medellín`);
       continue;
     }
     porCedula.set(cedula, f.id);
 
+    if (avisoCedula) avisos.push({ categoria: avisoCedula.categoria, idSisres: f.id, cedula, aviso: avisoCedula.texto });
     // SISRES guarda la cédula como número: si venía con ceros a la izquierda se perdieron, y quien la teclee con ellos no entrará.
-    const original = (f.usuario ?? f.identificacion ?? "").trim();
-    if (/^0[0-9]/.test(original)) avisos.push({ idSisres: f.id, cedula, aviso: "La cédula venía con ceros a la izquierda; se cargó sin ellos" });
+    const original = (f.usuario ?? "").trim();
+    if (/^0[0-9]+$/.test(original)) avisos.push({ categoria: "CEROS_A_LA_IZQUIERDA", idSisres: f.id, cedula, aviso: "La cédula venía con ceros a la izquierda; se cargó sin ellos" });
 
     let email = (f.correo ?? "").trim().toLowerCase();
     if (email && !correoValido(email)) {
-      avisos.push({ idSisres: f.id, cedula, aviso: "Correo inválido: entra con la cédula y un correo interno (sin recuperación por correo)" });
+      avisos.push({ categoria: "CORREO", idSisres: f.id, cedula, aviso: "Correo inválido: entra con la cédula y un correo interno (sin recuperación por correo)" });
       email = "";
     } else if (email && correosUsados.has(email)) {
-      avisos.push({ idSisres: f.id, cedula, aviso: "Correo repetido con otra persona de SISRES: entra con la cédula y un correo interno (sin recuperación por correo)" });
+      avisos.push({ categoria: "CORREO", idSisres: f.id, cedula, aviso: "Correo repetido con otra persona de SISRES: entra con la cédula y un correo interno (sin recuperación por correo)" });
       email = "";
     }
     if (email) correosUsados.add(email);
