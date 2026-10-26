@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const NINGUNO = "__ninguno__";
 const SIN_NOVEDAD = "__sin_novedad__";
+/** Cuánto dura en pantalla un aviso que Regulación tiene que leer y actuar (revisar servicios), no solo un «guardado». */
+const DURACION_AVISO_LARGO_MS = 15000;
 
 interface TrasladoPendiente extends TrasladoServicios {
   placaOrigen: string;
@@ -157,7 +159,8 @@ export function ProgramacionDiaria({ datos }: { datos: ProgramacionDelDia }) {
       const reasignados = "serviciosReasignados" in d ? d.serviciosReasignados ?? 0 : 0;
       if (reasignados > 0) toast.success(reasignados + " servicio" + (reasignados === 1 ? " sin iniciar se reasignó" : "s sin iniciar se reasignaron") + " según la programación del día.");
       const avisos = "advertencias" in d ? d.advertencias ?? [] : [];
-      if (avisos.length > 0) toast.warning(avisos.join(" "), { duration: 15000 });
+      // Más tiempo que un aviso normal: Regulación tiene que leerlo y revisar los servicios.
+      if (avisos.length > 0) toast.warning(avisos.join(" "), { duration: DURACION_AVISO_LARGO_MS });
       if (movidos.length > 0) await prepararTraslados(movidos);
       router.refresh();
     });

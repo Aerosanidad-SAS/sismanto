@@ -238,12 +238,19 @@ export async function cambiarOperadoresDelDia(vehicleId: string, fecha: string, 
 
   // Vehículos afectados ese día con los conductores que les quedan: el destino y aquellos de los que salió alguien.
   const afectados: { vehiculoId: string; conductores: string[] }[] = [{ vehiculoId: vehicleId, conductores: userIds }];
+  const avisosDeLectura: string[] = [];
   for (const origenId of Array.from(origenes)) {
-    const { data: quedan } = await supabase.from("vehicle_operacion_diaria").select("user_id").eq("vehicle_id", origenId).eq("fecha", fecha);
+    const { data: quedan, error: eQuedan } = await supabase.from("vehicle_operacion_diaria").select("user_id").eq("vehicle_id", origenId).eq("fecha", fecha).order("id");
+    if (eQuedan) {
+      // Si no se sabe quién le queda, NO se decide por él: tratarlo como «sin conductores» dejaría sus servicios sin OVEM por error.
+      console.error("[programacion] no se pudo leer quién queda en el vehículo de origen:", origenId, eQuedan.code, eQuedan.message);
+      avisosDeLectura.push("No se pudo comprobar quién queda en el vehículo del que salió el conductor: sus servicios no se tocaron. Revísalos en Servicios.");
+      continue;
+    }
     afectados.push({ vehiculoId: origenId, conductores: ((quedan ?? []) as Fila[]).map((f) => f.user_id as string) });
   }
 
-  const advertencias: string[] = [];
+  const advertencias: string[] = [...avisosDeLectura];
   let serviciosReasignados = 0;
   let serviciosSinOvem = 0;
   for (const { vehiculoId, conductores } of afectados) {
