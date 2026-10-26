@@ -3,9 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auditar } from "@/lib/auditoria";
 import { centroVisible } from "@/lib/auth-utils";
-import { hoyBogota } from "@/lib/fechas";
 import { avisarVehiculoNoApto } from "@/lib/notifications/alerta-no-apto";
-import { puedeResolver, validarDecision, validarMotivo, type DecisionNoApto, type OrigenSolicitud } from "@/lib/solicitud-no-apto";
+import { validarDecision, validarMotivo, type DecisionNoApto, type OrigenSolicitud } from "@/lib/solicitud-no-apto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProfile, requireRole } from "./auth";
@@ -112,50 +111,21 @@ export async function getSolicitudesNoAptoPendientes(): Promise<SolicitudNoApto[
  * Regulación); rechazar lo deja como estaba y exige una nota. Coordinación solo resuelve las de su centro.
  */
 export async function resolverSolicitudNoApto(id: number, decision: DecisionNoApto, nota?: string) {
-  const profile = await requireRole(["ADMIN", "COORDINACION", "MANTENIMIENTO"]);
+  await requireRole(["ADMIN", "COORDINACION", "MANTENIMIENTO"]);
   const malo = validarDecision(decision, nota);
   if (malo) return { error: malo };
 
+  // Migración 138: la solicitud, el estado del vehículo y el historial se escriben en una sola transacción dentro de la
+  // base, que también valida el rol y el centro. Antes eran tres escrituras con la sesión de quien resuelve, y la RLS de
+  // `vehicles` filtraba en silencio el UPDATE de Coordinación y Mantenimiento: la solicitud quedaba avalada y el vehículo
+  // seguía operativo.
   const supabase = createClient() as any;
-  const { data: sol } = await supabase
-    .from("vehicle_no_apto_solicitudes")
-    .select("id, vehicle_id, estado, vehicles(placa, centro_operativo, estado_actual)")
-    .eq("id", id)
-    .maybeSingle();
-  if (!sol) return { error: "No encontramos la solicitud." };
-  if (sol.estado !== "PENDIENTE") return { error: "Esta solicitud ya fue resuelta." };
-
-  const centro = centroVisible(await getProfile());
-  if (!puedeResolver(profile.role_codigo, centro?.codigo ?? null, sol.vehicles?.centro_operativo ?? null)) {
-    return { error: "Solo puedes resolver las solicitudes de tu centro." };
-  }
+  const { data, error } = await supabase.rpc("resolver_solicitud_no_apto", { p_id: id, p_decision: decision, p_nota: nota?.trim() || null });
+  if (error) return { error: error.message };
+  if (!data?.ok) return { error: (data?.error as string | undefined) ?? "No se pudo resolver la solicitud." };
 
   const aval = decision === "AVALAR";
-  const { error } = await supabase
-    .from("vehicle_no_apto_solicitudes")
-    .update({ estado: aval ? "AVALADA" : "RECHAZADA", revisado_por: profile.user_id, revisado_at: new Date().toISOString(), nota_revision: nota?.trim() || null })
-    .eq("id", id)
-    .eq("estado", "PENDIENTE");
-  if (error) return { error: error.message };
-
-  if (aval && sol.vehicles?.estado_actual !== "FUERA_DE_SERVICIO") {
-    const anterior = sol.vehicles?.estado_actual ?? null;
-    const { error: eVeh } = await supabase
-      .from("vehicles")
-      .update({ estado_actual: "FUERA_DE_SERVICIO", fds_desde: hoyBogota(), updated_at: new Date().toISOString() })
-      .eq("id", sol.vehicle_id);
-    if (eVeh) return { error: "La solicitud quedó avalada, pero no se pudo cambiar el estado del vehículo: " + eVeh.message };
-    await supabase.from("vehicle_status_history").insert({
-      vehicle_id: sol.vehicle_id,
-      estado_nuevo: "FUERA_DE_SERVICIO",
-      estado_anterior: anterior,
-      registrado_por: profile.user_id,
-      fecha_cambio: new Date().toISOString(),
-      notas: "NO APTO avalado" + (nota?.trim() ? ": " + nota.trim() : ""),
-    });
-  }
-
-  await auditar("MODIFICAR", "vehiculos", sol.vehicle_id, "Solicitud de NO APTO " + (aval ? "avalada" : "rechazada"));
+  await auditar("MODIFICAR", "vehiculos", data.vehicle_id as string, "Solicitud de NO APTO " + (aval ? "avalada" : "rechazada"));
   revalidatePath("/regulacion");
   revalidatePath("/vehiculos");
   revalidatePath("/novedades");
