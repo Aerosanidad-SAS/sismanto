@@ -64,8 +64,16 @@ function hallazgoDocumento(nombre: "SOAT" | "Técnico-mecánica", fecha: string 
   return null;
 }
 
-/** Hallazgos de un preoperacional, de más a menos grave. */
-export function hallazgosPreoperacional(items: ItemEvaluado[], vehiculo: VehiculoDocumentos, hoy: Dia): Hallazgo[] {
+/**
+ * Hallazgos de un preoperacional, de más a menos grave. `sinDocumentos` omite SOAT y técnico-mecánica: se usa cuando la
+ * ficha del vehículo no se pudo leer, para no inventar un «sin fecha de vencimiento» que no es verdad.
+ */
+export function hallazgosPreoperacional(
+  items: ItemEvaluado[],
+  vehiculo: VehiculoDocumentos,
+  hoy: Dia,
+  opciones: { sinDocumentos?: boolean } = {}
+): Hallazgo[] {
   const hallazgos: Hallazgo[] = [];
 
   for (const it of items) {
@@ -84,10 +92,12 @@ export function hallazgosPreoperacional(items: ItemEvaluado[], vehiculo: Vehicul
     hallazgos.push({ severidad, titulo: it.descripcion, detalle: it.observacion?.trim() ?? "", fds: severidad === "CRITICA", origen: "ITEM" });
   }
 
-  const soat = hallazgoDocumento("SOAT", vehiculo.vencimiento_soat, hoy);
-  if (soat) hallazgos.push(soat);
-  const rtm = hallazgoDocumento("Técnico-mecánica", vehiculo.vencimiento_tecnicomecanica || vehiculo.vencimiento_rtm, hoy);
-  if (rtm) hallazgos.push(rtm);
+  if (!opciones.sinDocumentos) {
+    const soat = hallazgoDocumento("SOAT", vehiculo.vencimiento_soat, hoy);
+    if (soat) hallazgos.push(soat);
+    const rtm = hallazgoDocumento("Técnico-mecánica", vehiculo.vencimiento_tecnicomecanica || vehiculo.vencimiento_rtm, hoy);
+    if (rtm) hallazgos.push(rtm);
+  }
 
   return hallazgos.sort((a, b) => ORDEN[a.severidad] - ORDEN[b.severidad]);
 }
@@ -115,22 +125,73 @@ export interface ResumenHallazgos {
   otros: number;
   /** Texto para mostrar al OVEM al terminar. */
   mensaje: string | null;
+  /** Algo de lo que el OVEM marcó (o de lo que el sistema debía revisar) no quedó completo para Regulación. */
+  registroIncompleto: boolean;
 }
 
 /** Qué pasó con el aviso inmediato por correo de los críticos: salió, no pudo salir, o no hubo uno nuevo (ya estaba reportado). */
 export type EstadoAviso = "ENVIADO" | "FALLO" | "YA_REPORTADO";
 
-export function resumirHallazgos(hallazgos: Hallazgo[], aviso: EstadoAviso = "ENVIADO"): ResumenHallazgos {
+/** Lo que NO se pudo hacer al registrar los hallazgos (falló el insert de la novedad, la lectura de la ficha, o el motor entero). */
+export interface HallazgosNoRegistrados {
+  criticos: number;
+  otros: number;
+  /** No se pudo leer la ficha del vehículo: el SOAT y la técnico-mecánica no se revisaron. */
+  documentosSinEvaluar?: boolean;
+}
+
+const s = (n: number) => (n === 1 ? "" : "s");
+const sePudo = (n: number) => (n === 1 ? "se pudo" : "se pudieron");
+
+export function resumirHallazgos(hallazgos: Hallazgo[], aviso: EstadoAviso = "ENVIADO", noRegistrados?: HallazgosNoRegistrados): ResumenHallazgos {
   const criticos = hallazgos.filter((h) => h.severidad === "CRITICA").length;
   const otros = hallazgos.length - criticos;
-  if (hallazgos.length === 0) return { criticos, otros, mensaje: null };
+  const fallanCriticos = Math.min(noRegistrados?.criticos ?? 0, criticos);
+  const fallanOtros = Math.min(noRegistrados?.otros ?? 0, otros);
+  const documentosSinEvaluar = noRegistrados?.documentosSinEvaluar === true;
+  const registroIncompleto = fallanCriticos + fallanOtros > 0 || documentosSinEvaluar;
+  if (hallazgos.length === 0 && !documentosSinEvaluar) return { criticos, otros, mensaje: null, registroIncompleto: false };
+
   const partes: string[] = [];
   if (criticos > 0) {
-    const n = `${criticos} hallazgo${criticos === 1 ? "" : "s"} crítico${criticos === 1 ? "" : "s"}`;
-    if (aviso === "FALLO") partes.push(`${n}: el vehículo queda FUERA DE SERVICIO. El aviso por correo NO se pudo enviar: llama ya a Regulación y no operes el vehículo`);
-    else if (aviso === "YA_REPORTADO") partes.push(`${n}: el vehículo sigue FUERA DE SERVICIO (ya estaba reportado). No lo operes`);
-    else partes.push(`${n}: el vehículo queda FUERA DE SERVICIO y se avisó a Regulación y Mantenimiento`);
+    const n = `${criticos} hallazgo${s(criticos)} crítico${s(criticos)}`;
+    if (fallanCriticos === criticos) {
+      // Sin la novedad crítica el trigger de la base no saca el vehículo de servicio: el sistema puede seguir mostrándolo operativo.
+      partes.push(`${n}: NO ${sePudo(criticos)} registrar en el sistema y el vehículo puede seguir como OPERATIVO. No lo operes y llama ya a Regulación`);
+    } else if (fallanCriticos > 0) {
+      // Los que sí quedaron registrados ya sacaron el vehículo de servicio; aun así hay que avisar de los que faltan.
+      partes.push(`${n}: ${fallanCriticos} NO ${sePudo(fallanCriticos)} registrar en el sistema; los demás sí. No operes el vehículo y llama ya a Regulación`);
+    } else if (aviso === "FALLO") {
+      partes.push(`${n}: el vehículo queda FUERA DE SERVICIO. El aviso por correo NO se pudo enviar: llama ya a Regulación y no operes el vehículo`);
+    } else if (aviso === "YA_REPORTADO") {
+      partes.push(`${n}: el vehículo sigue FUERA DE SERVICIO (ya estaba reportado). No lo operes`);
+    } else {
+      partes.push(`${n}: el vehículo queda FUERA DE SERVICIO y se avisó a Regulación y Mantenimiento`);
+    }
   }
-  if (otros > 0) partes.push(`${otros} hallazgo${otros === 1 ? "" : "s"} reportado${otros === 1 ? "" : "s"} como novedad`);
-  return { criticos, otros, mensaje: partes.join(". ") + "." };
+  if (otros > 0) {
+    const guardados = otros - fallanOtros;
+    if (fallanOtros > 0) {
+      partes.push(`${fallanOtros} hallazgo${s(fallanOtros)} no crítico${s(fallanOtros)} NO ${sePudo(fallanOtros)} registrar como novedad: avisa a Regulación`);
+      if (guardados > 0) partes.push(`${guardados} hallazgo${s(guardados)} reportado${s(guardados)} como novedad`);
+    } else {
+      partes.push(`${otros} hallazgo${s(otros)} reportado${s(otros)} como novedad`);
+    }
+  }
+  if (documentosSinEvaluar) partes.push("No se pudieron revisar el SOAT ni la técnico-mecánica del vehículo: pregunta a Regulación si están al día");
+  // Reenviar es seguro: el motor no duplica las novedades que ya están abiertas y reintenta solo las que faltan. El botón se
+  // llama así una vez enviado el primer checklist (ovem-portal.tsx).
+  if (registroIncompleto) partes.push("Para reintentar, toca «Revisar y actualizar» y envía el checklist de nuevo");
+  return { criticos, otros, mensaje: partes.join(". ") + ".", registroIncompleto };
+}
+
+/**
+ * Qué decirle al OVEM cuando el motor de hallazgos falló ENTERO y no se sabe qué alcanzó a guardarse: se arma con lo que
+ * sí se puede saber (los ítems que marcó) y se avisa que los documentos del vehículo no se revisaron. Siempre devuelve un
+ * aviso: aunque todos los ítems estén bien, el OVEM no debe leer «completado correctamente» sin que se haya revisado nada.
+ */
+export function resumenSiFallaElMotor(items: ItemEvaluado[], hoy: Dia): ResumenHallazgos {
+  const deItems = hallazgosPreoperacional(items, {}, hoy, { sinDocumentos: true });
+  const criticos = deItems.filter((h) => h.severidad === "CRITICA").length;
+  return resumirHallazgos(deItems, "FALLO", { criticos, otros: deItems.length - criticos, documentosSinEvaluar: true });
 }
