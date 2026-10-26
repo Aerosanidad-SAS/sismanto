@@ -25,6 +25,28 @@ El convertidor deja la cédula solo con dígitos y esa misma cédula es la clave
   no coinciden, manda `usuario` (con lo que se entraba a SISRES) y queda como aviso para revisar.
 - La clave queda **vacía en la plantilla** a propósito: significa «la clave es la cédula» y la vista previa de la carga lo marca así.
 
+## Mapa de sedes (ciudad de SISRES → centro)
+
+Solo Bogotá y Medellín tienen regla oficial (`src/lib/servicios-centro.ts`). Para las demás ciudades se usa
+`--centros-por-ciudad`, con el mapa que David dio (la lista de sedes) y lo que se verificó sobre qué operador administra cada
+aeropuerto (consultado el 2026-10-26; las concesiones pueden cambiar, confirmar si hay dudas):
+
+| Centro | Ciudades | Fuente |
+|---|---|---|
+| `AIRPLAN` | Montería, Rionegro, Quibdó, Corozal, Carepa, Olaya Herrera | [Airplan, «Quiénes somos»](https://airplan.aero/web/page/33/Quienes-somos): opera Rionegro, Medellín, Montería, Quibdó, Carepa y Corozal |
+| `ADO` | Cúcuta, Bucaramanga, Barrancabermeja, Valledupar, Santa Marta, Riohacha | Aeropuertos de Oriente S.A.S. administra esas seis terminales ([Portafolio](https://www.portafolio.co/negocios/skandia-compro-50-de-aeropuertos-de-oriente-532035), [Vanguardia](https://www.vanguardia.com/economia/nacional/70989-supertiendas-olimpica-y-nexus-operaran-seis-aeropuertos)) |
+| `CTG` | Cartagena | SACSA tiene la concesión del aeropuerto Rafael Núñez ([El Universal](https://www.eluniversal.com.co/economica/2011/09/27/rige-prorroga-de-concesion-a-sacsa/)); `CTG` es además su código |
+
+**Sin mapear a propósito** (no están en la lista de sedes): Los Palmitos, Itsmina, Sincelejo, Cereté, Cali y las personas sin
+ciudad. En los roles que ven solo su centro quedan en `usuarios-omitidas.csv` hasta que alguien les asigne el centro.
+
+Comando usado (el `--centros-por-ciudad` va entre comillas):
+
+```bash
+npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta> --estados 1,2 \
+  --centros-por-ciudad "MONTERIA=AIRPLAN,RIONEGRO=AIRPLAN,QUIBDO=AIRPLAN,COROZAL=AIRPLAN,CAREPA=AIRPLAN,OLAYA HERRERA=AIRPLAN,CARTAGENA=CTG,CUCUTA=ADO,BUCARAMANGA=ADO,BARRANCABERMEJA=ADO,VALLEDUPAR=ADO,SANTA MARTA=ADO,RIOHACHA=ADO"
+```
+
 ## Pasos
 
 1. Exportar la tabla `usuarios` de SISRES a CSV **solo con las columnas necesarias** (`id, usuario, identificacion, nombre1,
