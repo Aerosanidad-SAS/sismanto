@@ -16,6 +16,7 @@ import type { RoadAccidentFormData } from "@/lib/validations";
 import { catalogoSinSeveridad, itemsEvaluados, validarPreoperacional, type ItemCatalogo } from "@/lib/preoperacional";
 import { mensajeErrorGuardado } from "@/lib/errores-guardado";
 import { validarKmContraHistorial } from "@/lib/kilometraje-servidor";
+import { resumenSiFallaElMotor } from "@/lib/preoperacional-alertas";
 import { registrarHallazgosPreoperacional } from "@/lib/preoperacional-hallazgos";
 import { abogadoDeclarado, MIN_FOTOS_DOCUMENTOS, normalizarCedula, normalizarPlaca } from "@/lib/siniestro-datos";
 import { siniestroPideNoApto } from "@/lib/solicitud-no-apto";
@@ -229,6 +230,9 @@ export async function submitDailyCheck(data: {
     });
   } catch (e) {
     console.error("[preoperacional] no se pudieron registrar los hallazgos:", e instanceof Error ? e.message : e);
+    // El motor falló entero y no se sabe qué alcanzó a guardar: el OVEM no debe ver «completado correctamente» (ni cuando
+    // marcó fallas ni cuando todo está bien, porque tampoco se revisaron los documentos del vehículo).
+    hallazgos = { ...resumenSiFallaElMotor(evaluados, fecha), novedadesCreadas: 0 };
   }
 
   revalidatePath("/ovem");

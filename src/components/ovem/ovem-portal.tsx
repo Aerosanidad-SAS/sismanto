@@ -505,7 +505,8 @@ export function OvemPortal({
       if (result?.error) setError(result.error);
       else {
         const avisoServidor = result?.hallazgos?.mensaje;
-        if (avisoServidor && (result?.hallazgos?.criticos ?? 0) > 0) setError(`Checklist guardado. ${avisoServidor}`);
+        // Crítico, o algo que marcó no quedó registrado como novedad: se muestra como aviso, no como éxito en verde.
+        if (avisoServidor && ((result?.hallazgos?.criticos ?? 0) > 0 || result?.hallazgos?.registroIncompleto)) setError(`Checklist guardado. ${avisoServidor}`);
         else setSuccess(avisoServidor ? `Checklist guardado. ${avisoServidor}` : "Checklist completado correctamente");
         setDailyCheckDone(true);
         const dcId = result?.dailyCheckId ?? null;
@@ -526,7 +527,10 @@ export function OvemPortal({
           setFotosPreop((prev) => ({ ...prev, ...nuevasFotos }));
           setFotosSeleccionadas({});
           if (fallos > 0) {
-            setError(`El checklist se guardó, pero ${fallos} foto${fallos === 1 ? "" : "s"} no se pudo subir. Vuelve a intentarlo abajo.`);
+            // Se suma al aviso anterior en vez de reemplazarlo: si el checklist trajo un aviso crítico («llama ya a Regulación»)
+            // no puede desaparecer porque además falló una foto.
+            const avisoFotos = `El checklist se guardó, pero ${fallos} foto${fallos === 1 ? "" : "s"} no se pudo subir. Vuelve a intentarlo abajo.`;
+            setError((previo) => (previo ? `${previo} ${avisoFotos}` : avisoFotos));
           }
         }
         // Lo enviado pasa a ser la base: ya no hay cambios pendientes ni borrador.
