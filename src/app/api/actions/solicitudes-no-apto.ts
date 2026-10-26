@@ -121,7 +121,12 @@ export async function resolverSolicitudNoApto(id: number, decision: DecisionNoAp
   // seguía operativo.
   const supabase = createClient() as any;
   const { data, error } = await supabase.rpc("resolver_solicitud_no_apto", { p_id: id, p_decision: decision, p_nota: nota?.trim() || null });
-  if (error) return { error: error.message };
+  if (error) {
+    // Los casos de negocio (sin permiso, otro centro, ya resuelta…) vuelven dentro de `data.error`; cualquier error de la
+    // base llega aquí por algo inesperado y no se le muestra al usuario tal cual (como en correccion-km.ts).
+    console.error("[no-apto] la base rechazó la resolución:", error.code, error.message);
+    return { error: "No se pudo resolver la solicitud. Inténtalo de nuevo." };
+  }
   if (!data?.ok) return { error: (data?.error as string | undefined) ?? "No se pudo resolver la solicitud." };
 
   const aval = decision === "AVALAR";
