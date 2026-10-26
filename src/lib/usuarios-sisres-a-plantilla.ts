@@ -202,8 +202,11 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
 
 // ─── Carpeta de salida ────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Servicios que sincronizan carpetas a la nube: lo que se escriba ahí sale del equipo (cédulas y claves en claro). */
-const CARPETA_SINCRONIZADA = /onedrive|dropbox|google ?drive|icloud|nextcloud|mega(sync)?|pcloud/i;
+/**
+ * Servicios que sincronizan carpetas a la nube: lo que se escriba ahí sale del equipo (cédulas y claves en claro). Lista fácil
+ * de ampliar si aparece un caso real; la guía (docs/PASADA_USUARIOS.md) pide además revisarlo a mano.
+ */
+const CARPETA_SINCRONIZADA = /onedrive|dropbox|google ?drive|icloud|nextcloud|mega(sync)?|pcloud|proton ?drive|sync\.com|tresorit|seafile|syncthing/i;
 
 export interface EvaluacionSalida {
   dentroDelRepo: boolean;

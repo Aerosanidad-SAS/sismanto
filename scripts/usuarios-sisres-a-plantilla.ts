@@ -93,6 +93,12 @@ function main() {
       console.error(`Ya hay archivos de una corrida anterior en la salida (${previos.length}); sus claves no coincidirían con las de esta. Bórralos o usa otra carpeta.`);
       process.exit(1);
     }
+    // Una carpeta que ya existía conserva sus permisos: si otros usuarios del equipo pueden entrar, las claves quedarían a su
+    // alcance aunque cada archivo sea 0600. No se le cambian los permisos en silencio (podría ser una carpeta tuya de uso general).
+    if ((fs.statSync(salida).mode & 0o077) !== 0) {
+      console.error(`La carpeta de salida ya existe y otros usuarios del equipo pueden entrar en ella. Usa una carpeta nueva (la creo solo para ti) o restríngela tú: chmod 700 "${salida}"`);
+      process.exit(1);
+    }
   }
 
   const filas = parseCsvUsuarios(fs.readFileSync(archivo, "utf-8"));
@@ -106,6 +112,13 @@ function main() {
   const r = convertirUsuariosSisres(filas, { rolesConClavePropia: rolesExtra });
 
   fs.mkdirSync(salida, { recursive: true, mode: 0o700 });
+  // La ruta se resolvió ANTES de crear la carpeta: si entre una cosa y otra alguien puso un enlace simbólico en el camino, la
+  // ruta real ya no es la que se evaluó. Se vuelve a resolver y a evaluar con la carpeta ya creada.
+  const evaluacionFinal = evaluarCarpetaDeSalida(fs.realpathSync(salida), raiz);
+  if (evaluacionFinal.dentroDelRepo || (evaluacionFinal.sincronizada && !args.includes("--aceptar-carpeta-sincronizada"))) {
+    console.error("La carpeta de salida cambió de destino mientras se creaba (enlace simbólico): no se escribió nada. Usa una carpeta local fuera del repo.");
+    process.exit(1);
+  }
 
   // Plantilla(s): una hoja «USUARIOS» con los encabezados en la fila 1 y los datos desde la fila 2, como la lee la pantalla.
   const archivos: string[] = [];

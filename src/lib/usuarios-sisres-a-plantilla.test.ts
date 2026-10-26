@@ -264,6 +264,8 @@ test("evaluarCarpetaDeSalida: dentro del repo, la propia raíz y las carpetas si
   assert.equal(evaluarCarpetaDeSalida("/home/yo/OneDrive/Escritorio/salida", raiz).sincronizada, true);
   assert.equal(evaluarCarpetaDeSalida("/home/yo/Dropbox/x", raiz).sincronizada, true);
   assert.equal(evaluarCarpetaDeSalida("/home/yo/Google Drive/x", raiz).sincronizada, true);
+  assert.equal(evaluarCarpetaDeSalida("/home/yo/Proton Drive/x", raiz).sincronizada, true);
+  assert.equal(evaluarCarpetaDeSalida("/home/yo/Sync.com/x", raiz).sincronizada, true);
   assert.equal(evaluarCarpetaDeSalida("/tmp/salida", raiz).sincronizada, false);
 });
 
