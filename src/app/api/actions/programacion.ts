@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auditar } from "@/lib/auditoria";
-import { esDia, hoyBogota, sumarDias, type Dia } from "@/lib/fechas";
+import { esDia, hoyBogota, limitesInstante, sumarDias, type Dia } from "@/lib/fechas";
 import { centroVisible } from "@/lib/auth-utils";
 import { createClient } from "@/lib/supabase/server";
 import { resumenPorVehiculo, validarConductores, type FilaOperacion, type ResumenVehiculoDia, type TitularVigente } from "@/lib/programacion-diaria";
@@ -11,10 +11,12 @@ import {
   filasDeCambio,
   planificarCambioDelDia,
   RAZONES_CON_NOVEDAD,
+  reasignacionOvemDelDia,
   validarFiltroCambios,
   validarRazon,
   vehiculosDeOrigen,
   type CambioVehiculo,
+  type ServicioDelDia,
   type FiltroCambios,
   type RazonCambio,
   type RazonCodigo,
@@ -234,23 +236,50 @@ export async function cambiarOperadoresDelDia(vehicleId: string, fecha: string, 
     await supabase.from("vehicle_operacion_diaria").delete().eq("fecha", fecha).eq("vehicle_id", l.vehiculoOrigen).eq("user_id", l.userId);
   }
 
-  if (fecha === hoy) {
-    await sincronizarTripulacionOVEM(vehicleId, userIds, hoy, profile.user_id);
-    for (const origenId of Array.from(origenes)) {
-      const { data: quedan } = await supabase.from("vehicle_operacion_diaria").select("user_id").eq("vehicle_id", origenId).eq("fecha", fecha);
-      await sincronizarTripulacionOVEM(origenId, ((quedan ?? []) as Fila[]).map((f) => f.user_id as string), hoy, profile.user_id);
+  // Vehículos afectados ese día con los conductores que les quedan: el destino y aquellos de los que salió alguien.
+  const afectados: { vehiculoId: string; conductores: string[] }[] = [{ vehiculoId: vehicleId, conductores: userIds }];
+  for (const origenId of Array.from(origenes)) {
+    const { data: quedan } = await supabase.from("vehicle_operacion_diaria").select("user_id").eq("vehicle_id", origenId).eq("fecha", fecha);
+    afectados.push({ vehiculoId: origenId, conductores: ((quedan ?? []) as Fila[]).map((f) => f.user_id as string) });
+  }
+
+  const advertencias: string[] = [];
+  let serviciosReasignados = 0;
+  let serviciosSinOvem = 0;
+  for (const { vehiculoId, conductores } of afectados) {
+    let orden = conductores;
+    // La tripulación por rol es la de HOY; los días futuros no se sincronizan con ella, pero sus servicios sí siguen al vehículo.
+    if (fecha === hoy) {
+      const sync = await sincronizarTripulacionOVEM(vehiculoId, conductores, hoy, profile.user_id);
+      advertencias.push(...sync.avisos);
+      // Quien quedó como OVEM va primero: a él pasan los servicios que se quedaron sin dueño.
+      if (sync.principal) orden = [sync.principal, ...conductores.filter((u) => u !== sync.principal)];
     }
+    const movidos = await moverServiciosAlOvemDelDia(vehiculoId, fecha, orden);
+    serviciosReasignados += movidos.reasignados - movidos.sinOvem;
+    serviciosSinOvem += movidos.sinOvem;
+    if (movidos.sinOvem > 0) {
+      // Sin conductor ese día, sus servicios no los ve ningún OVEM: Regulación tiene que moverlos o armar la tripulación.
+      const { data: veh } = await supabase.from("vehicles").select("placa").eq("id", vehiculoId).maybeSingle();
+      advertencias.push(
+        movidos.sinOvem + " servicio" + (movidos.sinOvem === 1 ? "" : "s") + " de " + (veh?.placa ?? "un vehículo") +
+          " quedaron sin OVEM porque ya no tiene conductor ese día: asígnales conductor o muévelos a otro vehículo.",
+      );
+    }
+    if (movidos.fallo) advertencias.push("No se pudieron pasar todos los servicios sin iniciar del vehículo al OVEM del día. Revísalos en Servicios.");
   }
 
   await auditar(
     "MODIFICAR",
     "regulacion",
     vehicleId,
-    "Operadores del " + fecha + " (" + userIds.length + ")" + (plan.requiereRazon ? ", razón " + cambio!.razonCodigo : ""),
+    "Operadores del " + fecha + " (" + userIds.length + ")" + (plan.requiereRazon ? ", razón " + cambio!.razonCodigo : "") + "; servicios reasignados: " + serviciosReasignados + ", sin OVEM: " + serviciosSinOvem,
   );
   revalidatePath("/regulacion");
+  revalidatePath("/servicios");
+  revalidatePath("/ovem");
   const traslados: TrasladoServicios[] = Array.from(origenes).map((origenId) => ({ origenId, destinoId: vehicleId }));
-  return { success: true as const, traslados };
+  return { success: true as const, traslados, serviciosReasignados, serviciosSinOvem, advertencias: Array.from(new Set(advertencias)) };
 }
 
 export interface NovedadAbierta {
@@ -325,22 +354,111 @@ export async function getCambiosDeVehiculo(filtro: FiltroCambios): Promise<Cambi
   }));
 }
 
-/** Deja como OVEM vigentes del vehículo exactamente a quienes operan hoy (lo que leen «Mis servicios» y el preoperacional). */
-async function sincronizarTripulacionOVEM(vehicleId: string, userIds: string[], hoy: Dia, asignadoPor: string) {
+/**
+ * Deja como OVEM vigente del vehículo (lo que leen el formulario de servicios y «Tripulaciones de hoy») a uno de los que
+ * operan hoy. Un vehículo solo puede tener UN OVEM activo en `vehicle_assignments` (índice único de la migración 051):
+ * con dos conductores queda el que ya estaba vigente, o el primero de la lista. Antes se intentaba insertar a los dos y
+ * el segundo fallaba sin que nadie se enterara. Devuelve quién quedó como principal y los avisos de lo que no se pudo.
+ */
+async function sincronizarTripulacionOVEM(vehicleId: string, userIds: string[], hoy: Dia, asignadoPor: string): Promise<{ principal: string | null; avisos: string[] }> {
   const supabase = createClient() as any;
-  const { data } = await supabase.from("vehicle_assignments").select("id, user_id").eq("vehicle_id", vehicleId).eq("rol_en_turno", "OVEM").eq("activo", true);
-  const vigentes = (data ?? []) as Fila[];
-  for (const a of vigentes) {
-    if (!userIds.includes(a.user_id)) await supabase.from("vehicle_assignments").update({ activo: false }).eq("id", a.id);
+  const avisos: string[] = [];
+  const { data, error: eLeer } = await supabase.from("vehicle_assignments").select("id, user_id, fecha_fin").eq("vehicle_id", vehicleId).eq("rol_en_turno", "OVEM").eq("activo", true);
+  if (eLeer) {
+    console.error("[programacion] no se pudo leer la tripulación OVEM del vehículo:", vehicleId, eLeer.code, eLeer.message);
+    return { principal: userIds[0] ?? null, avisos: ["No se pudo actualizar la tripulación del vehículo (OVEM). Revísala en «Tripulaciones de hoy»."] };
   }
-  const yaEstan = new Set(vigentes.map((a) => a.user_id as string));
-  for (const user_id of userIds) {
-    if (yaEstan.has(user_id)) continue;
-    await supabase.from("vehicle_assignments").upsert(
-      { user_id, vehicle_id: vehicleId, rol_en_turno: "OVEM", fecha_inicio: hoy, fecha_fin: null, activo: true, asignado_por: asignadoPor },
+  const vigentes = (data ?? []) as Fila[];
+  // Una asignación «activa» con fecha_fin ya vencida no es vigente: no cuenta como que el conductor ya está.
+  const vencida = (a: Fila) => Boolean(a.fecha_fin) && String(a.fecha_fin).slice(0, 10) < hoy;
+  const principal = userIds.find((id) => vigentes.some((a) => a.user_id === id)) ?? userIds[0] ?? null;
+  let cambioLaTripulacion = false;
+
+  for (const a of vigentes) {
+    if (a.user_id === principal) continue; // si la del principal está vencida se reabre más abajo, no se desactiva
+    const { error } = await supabase.from("vehicle_assignments").update({ activo: false }).eq("id", a.id);
+    if (error) {
+      console.error("[programacion] no se pudo desactivar al OVEM anterior:", vehicleId, error.code, error.message);
+      avisos.push("No se pudo quitar al OVEM anterior de la tripulación del vehículo. Revísala en «Tripulaciones de hoy».");
+    } else cambioLaTripulacion = true;
+  }
+  const yaVigente = vigentes.find((a) => a.user_id === principal);
+  if (principal && yaVigente && vencida(yaVigente)) {
+    const { error } = await supabase.from("vehicle_assignments").update({ fecha_fin: null }).eq("id", yaVigente.id);
+    if (error) {
+      console.error("[programacion] no se pudo reabrir la asignación del OVEM:", vehicleId, error.code, error.message);
+      avisos.push("No se pudo dejar al conductor como OVEM de la tripulación del vehículo. Revísala en «Tripulaciones de hoy».");
+    } else cambioLaTripulacion = true;
+  } else if (principal && !yaVigente) {
+    const { error } = await supabase.from("vehicle_assignments").upsert(
+      { user_id: principal, vehicle_id: vehicleId, rol_en_turno: "OVEM", fecha_inicio: hoy, fecha_fin: null, activo: true, asignado_por: asignadoPor },
       { onConflict: "user_id,vehicle_id,fecha_inicio" },
     );
+    if (error) {
+      console.error("[programacion] no se pudo asignar al OVEM a la tripulación del vehículo:", vehicleId, error.code, error.message);
+      avisos.push("No se pudo dejar al conductor como OVEM de la tripulación del vehículo. Revísala en «Tripulaciones de hoy».");
+    } else cambioLaTripulacion = true;
   }
+  // Solo se avisa cuando la tripulación cambió: si no, sería el mismo aviso en cada guardado (por ejemplo al editar la nota).
+  if (userIds.length > 1 && cambioLaTripulacion) {
+    avisos.push("El vehículo tiene dos conductores: en «Tripulaciones de hoy» solo figura uno como OVEM y los servicios sin iniciar quedan a su nombre (un OVEM por vehículo).");
+  }
+  return { principal, avisos };
+}
+
+/**
+ * Los servicios sin iniciar de ese vehículo y de ese día siguen a los conductores del día: el servicio pertenece al
+ * vehículo (regla de Daniel, 2026-10-02), no a la persona. Solo toca los programados para `fecha`: los de otros días los
+ * decide la programación de esos días, y los viejos sin cerrar no se reasignan a quien opera hoy. Tampoco toca los que no
+ * tienen fecha de programación: no se pueden ubicar en un día y, en la práctica, son legado sin cerrar (11 en staging el
+ * 2026-10-26), que no deben pasar a quien opera hoy.
+ * `sinOvem` cuenta los que quedaron sin OVEM (cuando al vehículo no le queda ningún conductor ese día).
+ */
+async function moverServiciosAlOvemDelDia(
+  vehicleId: string,
+  fecha: Dia,
+  conductores: string[],
+): Promise<{ reasignados: number; sinOvem: number; fallo: boolean }> {
+  const supabase = createClient() as any;
+  const { desde, hastaExclusivo } = limitesInstante(fecha, fecha);
+  const { data, error } = await supabase
+    .from("medical_services")
+    .select("id, etapa, fecha_hora_inicio_desplazamiento, ovem_user_id")
+    .eq("vehicle_id", vehicleId)
+    .eq("etapa", "PROGRAMADO")
+    .is("fecha_hora_inicio_desplazamiento", null)
+    .gte("fecha_hora_programacion", desde)
+    .lt("fecha_hora_programacion", hastaExclusivo);
+  if (error) {
+    console.error("[programacion] no se pudieron leer los servicios del vehículo:", vehicleId, error.code, error.message);
+    return { reasignados: 0, sinOvem: 0, fallo: true };
+  }
+  const cambios = reasignacionOvemDelDia((data ?? []) as ServicioDelDia[], conductores);
+  if (cambios.length === 0) return { reasignados: 0, sinOvem: 0, fallo: false };
+
+  // Un UPDATE por destino (los que van a la misma persona, juntos). La condición se repite (también el vehículo) por si
+  // alguno inició o lo movió otro regulador entre la lectura y la escritura.
+  const porDestino = new Map<string | null, number[]>();
+  for (const c of cambios) porDestino.set(c.ovem, [...(porDestino.get(c.ovem) ?? []), c.id]);
+  let reasignados = 0;
+  let sinOvem = 0;
+  for (const [ovem, ids] of Array.from(porDestino.entries())) {
+    const { data: hechos, error: eMover } = await supabase
+      .from("medical_services")
+      .update({ ovem_user_id: ovem, updated_at: new Date().toISOString() })
+      .in("id", ids)
+      .eq("vehicle_id", vehicleId)
+      .eq("etapa", "PROGRAMADO")
+      .is("fecha_hora_inicio_desplazamiento", null)
+      .select("id");
+    if (eMover) console.error("[programacion] no se pudieron reasignar los servicios:", vehicleId, eMover.code, eMover.message);
+    const n = (hechos ?? []).length;
+    reasignados += n;
+    if (ovem === null) sinOvem += n;
+  }
+  // Si se movió menos de lo previsto (falló un update, o un servicio inició o cambió de vehículo entre la lectura y la
+  // escritura) hay que decirlo: lo leído ya viene recortado por la RLS, así que esto no es por servicios de otro centro.
+  return { reasignados, sinOvem, fallo: reasignados < cambios.length };
 }
 
 export interface HistorialOperacion {

@@ -142,6 +142,25 @@ export function camposTripulacionDestino(tripulacion: TripulacionVehiculo, medic
   };
 }
 
+/** Lo mínimo de un servicio para decidir a qué OVEM le toca cuando cambian los conductores del día de su vehículo. */
+export interface ServicioDelDia extends Pick<ServicioMovible, "id" | "etapa" | "fecha_hora_inicio_desplazamiento"> {
+  ovem_user_id: string | null;
+}
+
+/**
+ * Cuando Programación cambia los conductores de un vehículo para un día, los servicios sin iniciar de ese día siguen al
+ * vehículo (regla de negocio de Daniel, 2026-10-02: el servicio pertenece al VEHÍCULO, no a la persona). Si el servicio
+ * ya está a nombre de uno de los conductores del día se queda donde está; si no, pasa al principal (el primero de la
+ * lista); sin conductores queda sin OVEM. Los ya iniciados nunca se tocan. Devuelve solo los que cambian.
+ */
+export function reasignacionOvemDelDia(servicios: ServicioDelDia[], conductores: string[]): { id: number; ovem: string | null }[] {
+  const principal = conductores[0] ?? null;
+  return servicios.filter(esMovible).flatMap((s) => {
+    const nuevo = s.ovem_user_id && conductores.includes(s.ovem_user_id) ? s.ovem_user_id : principal;
+    return nuevo === s.ovem_user_id ? [] : [{ id: s.id, ovem: nuevo }];
+  });
+}
+
 // ─── Historial de cambios (lectura) ──────────────────────────────────────────────────────────────────────────────
 
 export const MAX_DIAS_HISTORIAL_CAMBIOS = 366;

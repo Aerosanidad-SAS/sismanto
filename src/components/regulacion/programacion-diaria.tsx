@@ -153,6 +153,11 @@ export function ProgramacionDiaria({ datos }: { datos: ProgramacionDelDia }) {
       if ("error" in d && d.error) { setError(d.error); return; }
       setEditando(null);
       const movidos = "traslados" in d ? d.traslados ?? [] : [];
+      // Los servicios sin iniciar de ese día siguen al vehículo: se le dice a Regulación cuántos se reasignaron y qué no se pudo hacer.
+      const reasignados = "serviciosReasignados" in d ? d.serviciosReasignados ?? 0 : 0;
+      if (reasignados > 0) toast.success(reasignados + " servicio" + (reasignados === 1 ? " sin iniciar se reasignó" : "s sin iniciar se reasignaron") + " según la programación del día.");
+      const avisos = "advertencias" in d ? d.advertencias ?? [] : [];
+      if (avisos.length > 0) toast.warning(avisos.join(" "), { duration: 15000 });
       if (movidos.length > 0) await prepararTraslados(movidos);
       router.refresh();
     });
