@@ -16,6 +16,12 @@ export const ROLES_CON_CENTRO: readonly RolCarga[] = ["REGULACION", "OVEM", "MED
 
 export const LARGO_MINIMO_CLAVE = 8;
 
+/**
+ * Roles que ven o modifican más datos: nunca entran con la cédula como clave inicial (decisión de David, 2026-10-26).
+ * La cédula no es secreta; para estos roles la fila TIENE que traer `password_inicial`.
+ */
+export const ROLES_CON_CLAVE_PROPIA: readonly string[] = ["ADMIN", "ANALISTA", "GERENCIAL"];
+
 /** Filas por llamada al confirmar: cada usuario nuevo son varias llamadas a Auth y una función serverless dura pocos segundos. */
 export const FILAS_POR_LOTE_USUARIOS = 12;
 
@@ -104,6 +110,9 @@ export function validarUsuario(d: Record<string, unknown>, centrosValidos: Reado
 
   const claveEscrita = texto(d.password_inicial);
   const password = claveEscrita ?? cedula ?? "";
+  if (rol && ROLES_CON_CLAVE_PROPIA.includes(rol) && !claveEscrita) {
+    falla("password_inicial", `El rol ${rol} necesita una clave inicial propia: escríbela aquí (la cédula no sirve de clave para este rol).`);
+  }
   if (cedula && password.length < LARGO_MINIMO_CLAVE) {
     falla("password_inicial", `La clave inicial debe tener al menos ${LARGO_MINIMO_CLAVE} caracteres${claveEscrita ? "" : " (la cédula es más corta: escribe una clave aquí)"}.`);
   }
