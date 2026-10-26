@@ -40,10 +40,15 @@ export interface UsuarioFila {
   email: string | null;
   /** null = el sistema asigna uno al azar. */
   codigo: string | null;
-  /** Clave inicial ya resuelta (la cédula si no se escribió otra). */
+  /** Clave inicial ya resuelta (la cédula si no se escribió otra). Una cuenta inactiva la ignora: el servidor le pone una al azar. */
   password: string;
-  /** true si la clave es la cédula: es adivinable, solo sirve mientras no se use. */
+  /** true si la clave es la cédula: es adivinable, solo sirve mientras no se use. Nunca es true en una cuenta inactiva. */
   passwordEsCedula: boolean;
+  /**
+   * false = la persona se crea DESACTIVADA (no puede entrar): para quien ya no trabaja pero sigue ligada a servicios
+   * históricos. La columna `activo` de la plantilla es opcional («SI» por omisión).
+   */
+  activo: boolean;
 }
 
 export interface ErrorUsuario {
@@ -96,9 +101,18 @@ export function validarUsuario(d: Record<string, unknown>, centrosValidos: Reado
   const rol = rolCrudo && (ROLES_CARGA as readonly string[]).includes(rolCrudo) ? (rolCrudo as RolCarga) : null;
   if (!rol) falla("rol", rolCrudo ? `«${texto(d.rol)}» no es un rol válido (${ROLES_CARGA.join(", ")}).` : "Falta el rol.");
 
+  // «activo» es opcional: vacío = SI. Una cuenta inactiva no entra, así que no necesita centro ni clave.
+  const activoCrudo = claveDeLista(d.activo);
+  let activo = true;
+  if (activoCrudo) {
+    if (["SI", "S", "1", "TRUE", "ACTIVO"].includes(activoCrudo)) activo = true;
+    else if (["NO", "N", "0", "FALSE", "INACTIVO"].includes(activoCrudo)) activo = false;
+    else falla("activo", `«${texto(d.activo)}» no es válido: escribe SI o NO.`);
+  }
+
   const centroCrudo = claveDeLista(d.centro_operativo);
   if (centroCrudo && !centrosValidos.has(centroCrudo)) falla("centro_operativo", `«${texto(d.centro_operativo)}» no es un centro válido (${Array.from(centrosValidos).join(", ")}).`);
-  if (rol && (ROLES_CON_CENTRO as readonly string[]).includes(rol) && !centroCrudo) {
+  if (activo && rol && (ROLES_CON_CENTRO as readonly string[]).includes(rol) && !centroCrudo) {
     falla("centro_operativo", `El rol ${rol} necesita centro operativo: define qué vehículos y servicios ve.`);
   }
 
@@ -110,10 +124,10 @@ export function validarUsuario(d: Record<string, unknown>, centrosValidos: Reado
 
   const claveEscrita = texto(d.password_inicial);
   const password = claveEscrita ?? cedula ?? "";
-  if (rol && ROLES_CON_CLAVE_PROPIA.includes(rol) && !claveEscrita) {
+  if (activo && rol && ROLES_CON_CLAVE_PROPIA.includes(rol) && !claveEscrita) {
     falla("password_inicial", `El rol ${rol} necesita una clave inicial propia: escríbela aquí (la cédula no sirve de clave para este rol).`);
   }
-  if (cedula && password.length < LARGO_MINIMO_CLAVE) {
+  if (activo && cedula && password.length < LARGO_MINIMO_CLAVE) {
     falla("password_inicial", `La clave inicial debe tener al menos ${LARGO_MINIMO_CLAVE} caracteres${claveEscrita ? "" : " (la cédula es más corta: escribe una clave aquí)"}.`);
   }
 
@@ -129,7 +143,8 @@ export function validarUsuario(d: Record<string, unknown>, centrosValidos: Reado
       email,
       codigo,
       password,
-      passwordEsCedula: !claveEscrita,
+      passwordEsCedula: activo && !claveEscrita,
+      activo,
     },
   };
 }
@@ -144,6 +159,17 @@ export function generarCodigo(usados: Set<string>, azar: () => number = Math.ran
     }
   }
   throw new Error("No se pudo generar un código de acceso libre.");
+}
+
+/**
+ * ¿Se puede ACTIVAR a esta persona? Una cuenta creada desactivada (carga de personal que ya no trabaja) puede no tener centro; un rol
+ * que ve solo su centro, activado sin él, vería toda la operación. Devuelve el motivo, o null si se puede.
+ */
+export function motivoNoPuedeActivarse(rolCodigo: string | null | undefined, centroId: number | null | undefined): string | null {
+  if (rolCodigo && (ROLES_CON_CENTRO as readonly string[]).includes(rolCodigo) && !centroId) {
+    return `El rol ${rolCodigo} necesita centro operativo: asígnaselo antes de activarlo (sin centro vería toda la operación).`;
+  }
+  return null;
 }
 
 /** La clave nueva debe ser distinta de la cédula y del código de acceso, y tener el largo mínimo. */

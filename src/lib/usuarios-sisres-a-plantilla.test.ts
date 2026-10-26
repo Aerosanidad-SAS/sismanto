@@ -48,6 +48,7 @@ test("un OVEM normal entra con la cédula como clave (password_inicial vacío) y
     email: "persona.ficticia@ejemplo.com",
     codigo_acceso: "",
     password_inicial: "",
+    activo: "SI",
   });
   assert.deepEqual(r.clavesEspeciales, []);
 });
@@ -344,4 +345,75 @@ test("centrosPorCiudad: una ciudad asignada a mano le da centro a los roles que 
   assert.equal(r.plantilla[0].centro_operativo, "CTG");
   assert.equal(centroDeCiudad("CÚCUTA", { Cucuta: "ADO" }), "ADO");
   assert.equal(centroDeCiudad("Bogotá", { Cartagena: "CTG" }), "CRA_BOGOTA");
+});
+
+test("por omisión un estado distinto de 1 se omite; con estadosInactivos se carga como persona INACTIVA", () => {
+  const filas = [fila({ id: "1", usuario: "1000000001", estado: "1" }), fila({ id: "2", usuario: "1000000002", estado: "0" })];
+  assert.deepEqual(convertirUsuariosSisres(filas, OPC).plantilla.map((p) => p.cedula), ["1000000001"]);
+  const r = convertirUsuariosSisres(filas, { ...OPC, estadosInactivos: ["0"] });
+  assert.deepEqual(r.plantilla.map((p) => [p.cedula, p.activo]), [["1000000001", "SI"], ["1000000002", "NO"]]);
+});
+
+test("una persona inactiva NUNCA queda con la cédula como clave, no va a la lista de entrega y no exige centro", () => {
+  const r = convertirUsuariosSisres([fila({ id: "2", usuario: "1000000002", estado: "0", ciudad: "Pasto", cargo: "7" })], { ...OPC, estadosInactivos: ["0"] });
+  const p = r.plantilla[0];
+  assert.equal(p.activo, "NO");
+  assert.notEqual(p.password_inicial, "");
+  assert.notEqual(p.password_inicial, p.cedula);
+  assert.equal(p.centro_operativo, "");
+  assert.deepEqual(r.clavesEspeciales, []);
+  assert.deepEqual(r.omitidas, []);
+});
+
+test("si una persona inactiva comparte cédula o correo con una activa, se queda la activa (aunque la inactiva tenga el id más bajo)", () => {
+  const r = convertirUsuariosSisres(
+    [
+      fila({ id: "1", usuario: "1000000001", estado: "0", correo: "igual@ejemplo.com", nombre1: "Vieja" }),
+      fila({ id: "9", usuario: "1000000001", estado: "1", correo: "otro@ejemplo.com", nombre1: "Nueva" }),
+      fila({ id: "2", usuario: "1000000002", estado: "0", correo: "igual@ejemplo.com" }),
+      fila({ id: "8", usuario: "1000000003", estado: "1", correo: "igual@ejemplo.com" }),
+    ],
+    { ...OPC, estadosInactivos: ["0"] }
+  );
+  // Primero las activas por id (el 8 antes que el 9) y al final las inactivas.
+  assert.deepEqual(r.plantilla.map((p) => [p.cedula, p.activo, p.email]), [
+    ["1000000003", "SI", "igual@ejemplo.com"],
+    ["1000000001", "SI", "otro@ejemplo.com"],
+    ["1000000002", "NO", ""],
+  ]);
+  assert.match(r.omitidas[0].motivo, /Cédula repetida/);
+});
+
+test("las filas inactivas también pasan el validador de la pantalla y quedan como activo = false", () => {
+  const r = convertirUsuariosSisres(
+    [fila({ id: "1", usuario: "1000000001" }), fila({ id: "2", usuario: "1234567", estado: "0", cargo: "1", ciudad: "Pasto" })],
+    { ...OPC, estadosInactivos: ["0"] }
+  );
+  for (const p of r.plantilla) {
+    const v = validarUsuario({ ...p }, CENTROS);
+    assert.ok(v.ok, `${p.rol} ${p.activo}: ${v.ok ? "" : JSON.stringify(v.errores.map((e) => e.columna))}`);
+    if (v.ok) {
+      assert.equal(v.valor.activo, p.activo === "SI");
+      assert.equal(v.valor.passwordEsCedula, p.activo === "SI" && p.password_inicial === "");
+    }
+  }
+});
+
+test("una persona inactiva siempre va sin correo (si se subiera a una versión vieja no podría recuperar la clave por correo)", () => {
+  const r = convertirUsuariosSisres([fila({ id: "2", usuario: "1000000002", estado: "0", correo: "real@ejemplo.com" })], { ...OPC, estadosInactivos: ["0"] });
+  assert.equal(r.plantilla[0].email, "");
+  assert.deepEqual(r.avisos, []);
+});
+
+test("una inactiva NO se carga si su versión activa se omitió (p. ej. sin centro): quedaría para siempre con la cuenta inactiva", () => {
+  const r = convertirUsuariosSisres(
+    [
+      fila({ id: "1", usuario: "1000000001", estado: "0" }),
+      fila({ id: "9", usuario: "1000000001", estado: "1", ciudad: "Pasto" }), // OVEM sin centro: se omite
+    ],
+    { ...OPC, estadosInactivos: ["0"] }
+  );
+  assert.deepEqual(r.plantilla, []);
+  assert.deepEqual(r.omitidas.map((o) => o.categoria).sort(), ["CEDULA_REPETIDA", "SIN_CENTRO"]);
+  assert.match(r.omitidas.find((o) => o.categoria === "CEDULA_REPETIDA")!.motivo, /ACTIVA que no se cargó/);
 });

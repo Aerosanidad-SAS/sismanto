@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { correoInterno, esFilaDeGuia, generarCodigo, validarClaveNueva, validarUsuario } from "./usuarios-carga";
+import { correoInterno, esFilaDeGuia, generarCodigo, motivoNoPuedeActivarse, validarClaveNueva, validarUsuario } from "./usuarios-carga";
 
 const CENTROS = new Set(["CRA_MEDELLIN", "CRA_BOGOTA", "AIRPLAN", "CTG", "ADO"]);
 
@@ -109,4 +109,62 @@ test("las filas de guía de la plantilla se reconocen por su contenido, no por s
   assert.ok(esFilaDeGuia(["↓ datos desde aquí (filas 1–2 son encabezado y guía; no borrar)", null]));
   assert.ok(!esFilaDeGuia(["1020458300", "Ana Pérez"]));
   assert.ok(!esFilaDeGuia(["", ""]));
+});
+
+test("la columna activo es opcional: vacío = SI; NO crea la persona desactivada y no exige centro ni clave", () => {
+  const base = { cedula: "1020458300", nombre_completo: "X Y", rol: "OVEM", centro_operativo: "CRA_BOGOTA" };
+  const vacio = validarUsuario(base, CENTROS);
+  assert.ok(vacio.ok && vacio.valor.activo === true && vacio.valor.passwordEsCedula);
+  for (const si of ["SI", "sí", "Activo", "1", "true"]) {
+    const v = validarUsuario({ ...base, activo: si }, CENTROS);
+    assert.ok(v.ok && v.valor.activo === true, si);
+  }
+  for (const no of ["NO", "no", "Inactivo", "0", "false"]) {
+    const v = validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol: "OVEM", activo: no }, CENTROS);
+    assert.ok(v.ok, `activo=${no} sin centro debe aceptarse (la cuenta no entra)`);
+    if (v.ok) {
+      assert.equal(v.valor.activo, false);
+      assert.equal(v.valor.passwordEsCedula, false);
+    }
+  }
+});
+
+test("una persona inactiva puede ser de un rol de clave propia o tener una cédula corta sin escribir clave; una activa no", () => {
+  const inactivo = validarUsuario({ cedula: "1234567", nombre_completo: "X Y", rol: "ADMIN", activo: "NO" }, CENTROS);
+  assert.ok(inactivo.ok);
+  const activo = validarUsuario({ cedula: "1234567", nombre_completo: "X Y", rol: "ADMIN" }, CENTROS);
+  assert.ok(!activo.ok);
+});
+
+test("un valor raro en activo se rechaza con su columna", () => {
+  const v = validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol: "MANTENIMIENTO", activo: "tal vez" }, CENTROS);
+  assert.ok(!v.ok);
+  if (!v.ok) assert.ok(v.errores.some((e) => e.columna === "activo"));
+});
+
+test("activo llega de Excel como número o booleano: 0 y false son NO (inactiva), 1 y true son SI, y una celda vacía es SI", () => {
+  const fila = (activo: unknown) => validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol: "MANTENIMIENTO", activo }, CENTROS);
+  for (const no of [0, false, "0", " no "]) {
+    const v = fila(no);
+    assert.ok(v.ok && v.valor.activo === false, `activo=${JSON.stringify(no)} debe ser inactivo`);
+  }
+  for (const si of [1, true, "1", " SI "]) {
+    const v = fila(si);
+    assert.ok(v.ok && v.valor.activo === true, `activo=${JSON.stringify(si)} debe ser activo`);
+  }
+  for (const vacio of [undefined, null, "", "   "]) {
+    const v = fila(vacio);
+    assert.ok(v.ok && v.valor.activo === true, `activo=${JSON.stringify(vacio)} (vacío) es SI`);
+  }
+});
+
+test("motivoNoPuedeActivarse: un rol que ve solo su centro no se activa sin centro; el resto sí", () => {
+  for (const rol of ["OVEM", "REGULACION", "MEDICO", "AUXILIAR_ENFERMERIA", "COORDINACION"]) {
+    assert.match(motivoNoPuedeActivarse(rol, null) ?? "", /necesita centro operativo/, rol);
+    assert.equal(motivoNoPuedeActivarse(rol, 0), motivoNoPuedeActivarse(rol, null), `centro 0 = sin centro (${rol})`);
+    assert.equal(motivoNoPuedeActivarse(rol, 2), null, `${rol} con centro`);
+  }
+  for (const rol of ["ADMIN", "ANALISTA", "GERENCIAL", "MANTENIMIENTO", "VISTA", "TECNICO", "AEROPUERTO"]) assert.equal(motivoNoPuedeActivarse(rol, null), null, rol);
+  assert.equal(motivoNoPuedeActivarse(null, null), null);
+  assert.equal(motivoNoPuedeActivarse(undefined, undefined), null);
 });

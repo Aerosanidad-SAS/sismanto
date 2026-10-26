@@ -5,10 +5,13 @@
  *
  * Uso:
  *   npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta> [--roles-clave-propia ROL1,ROL2]
- *                                                  [--estados 1,2] [--centros-por-ciudad "CARTAGENA=CTG,CÚCUTA=ADO"]
+ * *                                                  [--estados 1,2] [--estados-inactivos 0]
+ *                                                  [--centros-por-ciudad "CARTAGENA=CTG,CÚCUTA=ADO"]
  *                                                  [--aceptar-carpeta-sincronizada]
  *
- *   --estados             estados de SISRES que se cargan (por omisión solo 1 = activo).
+ *   --estados             estados de SISRES que se cargan como personas ACTIVAS (por omisión solo 1).
+ *   --estados-inactivos   estados de SISRES que se cargan como personas INACTIVAS: se crean desactivadas (no pueden entrar) pero
+ *                         existen, porque siguen ligadas a servicios históricos. Van en usuarios-inactivos-NN.xlsx, aparte.
  *   --centros-por-ciudad  ciudad de SISRES = código de centro, para las que no son Bogotá ni Medellín (solo Bogotá y Medellín
  *                         tienen regla oficial; las demás se omiten en los roles que ven solo su centro hasta que se asignen aquí).
  *
@@ -19,6 +22,8 @@
  * Genera en --salida:
  *   usuarios-plantilla-01.xlsx, -02.xlsx…  hoja «USUARIOS», máximo 500 filas por archivo (el límite de la pantalla).
  *                                          LLEVAN las claves en claro de ADMIN, ANALISTA, GERENCIAL y cédulas cortas.
+ *   usuarios-inactivos-01.xlsx…            las personas inactivas (columna activo = NO), SIN correo y con una clave al azar que nadie ve.
+ *                                          Subirlas SOLO cuando la carga masiva desplegada entienda la columna «activo» (PR de esta guía).
  *   usuarios-omitidas.csv                  quién NO entra y por qué (cargo sin equivalente, sin centro, repetido…).
  *   usuarios-avisos.csv                    quién entra, pero con algo que revisar (correo repetido o inválido, ceros…).
  *   claves-iniciales-especiales.csv        esas mismas claves, en una lista para entregar en persona.
@@ -44,7 +49,7 @@ import {
 
 const FILAS_POR_ARCHIVO = 500;
 /** Banderas que llevan un valor detrás: ese valor no es el archivo de entrada. */
-const VALORES_DE_BANDERAS = ["--salida", "--roles-clave-propia", "--estados", "--centros-por-ciudad"];
+const VALORES_DE_BANDERAS = ["--salida", "--roles-clave-propia", "--estados", "--estados-inactivos", "--centros-por-ciudad"];
 const SOLO_DUENO = 0o600;
 
 function valorDe(args: string[], bandera: string): string | undefined {
@@ -75,7 +80,10 @@ function main() {
   const archivo = args.find((a, i) => !a.startsWith("--") && !VALORES_DE_BANDERAS.includes(args[i - 1]));
   const salidaPedida = valorDe(args, "--salida");
   if (!archivo || !fs.existsSync(archivo) || !salidaPedida) {
-    console.error("Uso: npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta fuera del repo> [--roles-clave-propia ROL1,ROL2] [--aceptar-carpeta-sincronizada]");
+    console.error(
+      "Uso: npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta fuera del repo> [--estados 1,2] [--estados-inactivos 0] " +
+        '[--centros-por-ciudad "CIUDAD=CENTRO,…"] [--roles-clave-propia ROL1,ROL2] [--aceptar-carpeta-sincronizada]'
+    );
     process.exit(1);
   }
 
@@ -126,7 +134,8 @@ function main() {
     }
     centrosPorCiudad[par.slice(0, i).trim()] = par.slice(i + 1).trim().toUpperCase();
   }
-  const r = convertirUsuariosSisres(filas, { rolesConClavePropia: rolesExtra, estadosCargados: estados, centrosPorCiudad });
+  const estadosInactivos = (valorDe(args, "--estados-inactivos") ?? "").split(",").map((e) => e.trim()).filter(Boolean);
+  const r = convertirUsuariosSisres(filas, { rolesConClavePropia: rolesExtra, estadosCargados: estados, estadosInactivos, centrosPorCiudad });
 
   fs.mkdirSync(salida, { recursive: true, mode: 0o700 });
   // La ruta se resolvió ANTES de crear la carpeta: si entre una cosa y otra alguien puso un enlace simbólico en el camino, la
@@ -138,16 +147,24 @@ function main() {
   }
 
   // Plantilla(s): una hoja «USUARIOS» con los encabezados en la fila 1 y los datos desde la fila 2, como la lee la pantalla.
+  // Las activas y las inactivas van en archivos distintos: las inactivas solo se suben cuando la carga masiva entienda «activo».
   const archivos: string[] = [];
-  for (let i = 0; i < r.plantilla.length; i += FILAS_POR_ARCHIVO) {
-    const lote = r.plantilla.slice(i, i + FILAS_POR_ARCHIVO);
-    const hoja = XLSX.utils.aoa_to_sheet([[...COLUMNAS_PLANTILLA], ...lote.map((p) => COLUMNAS_PLANTILLA.map((c) => p[c]))]);
-    const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, "USUARIOS");
-    const nombre = `usuarios-plantilla-${String(archivos.length + 1).padStart(2, "0")}.xlsx`;
-    escribir(path.join(salida, nombre), XLSX.write(libro, { type: "buffer", bookType: "xlsx" }) as Buffer);
-    archivos.push(nombre);
-  }
+  const escribirPlantillas = (filas: typeof r.plantilla, prefijo: string) => {
+    let n = 0;
+    for (let i = 0; i < filas.length; i += FILAS_POR_ARCHIVO) {
+      const lote = filas.slice(i, i + FILAS_POR_ARCHIVO);
+      const hoja = XLSX.utils.aoa_to_sheet([[...COLUMNAS_PLANTILLA], ...lote.map((p) => COLUMNAS_PLANTILLA.map((c) => p[c]))]);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "USUARIOS");
+      const nombre = `${prefijo}-${String(++n).padStart(2, "0")}.xlsx`;
+      escribir(path.join(salida, nombre), XLSX.write(libro, { type: "buffer", bookType: "xlsx" }) as Buffer);
+      archivos.push(nombre);
+    }
+  };
+  const activas = r.plantilla.filter((p) => p.activo === "SI");
+  const inactivas = r.plantilla.filter((p) => p.activo === "NO");
+  escribirPlantillas(activas, "usuarios-plantilla");
+  escribirPlantillas(inactivas, "usuarios-inactivos");
 
   escribir(
     path.join(salida, "usuarios-omitidas.csv"),
@@ -169,12 +186,12 @@ function main() {
   // Las ciudades que dejaron a alguien sin centro: son nombres de ciudad (no datos personales) y es lo que hay que decidir.
   const ciudadesSinCentro = new Map<string, number>();
   for (const o of r.omitidas) if (o.categoria === "SIN_CENTRO") ciudadesSinCentro.set((o.fila.ciudad ?? "").trim() || "(vacía)", (ciudadesSinCentro.get((o.fila.ciudad ?? "").trim() || "(vacía)") ?? 0) + 1);
-  console.log(`Leídas ${filas.length} filas de SISRES → a la plantilla: ${r.plantilla.length} (${archivos.length} archivo${archivos.length === 1 ? "" : "s"}), omitidas: ${r.omitidas.length}, con aviso: ${r.avisos.length}`);
+  console.log(`Leídas ${filas.length} filas de SISRES → a la plantilla: ${r.plantilla.length} (${activas.length} activas + ${inactivas.length} inactivas; ${archivos.length} archivo${archivos.length === 1 ? "" : "s"}), omitidas: ${r.omitidas.length}, con aviso: ${r.avisos.length}`);
   console.log("Por rol:", Object.fromEntries(porRol));
   console.log("Omitidas por categoría:", Object.fromEntries(porCategoria));
   console.log("Avisos por categoría:", Object.fromEntries(avisosPorCategoria));
   if (ciudadesSinCentro.size > 0) console.log("Sin centro, por ciudad:", Object.fromEntries([...ciudadesSinCentro.entries()].sort((a, b) => b[1] - a[1])));
-  console.log(`Entran con la cédula como clave: ${r.plantilla.filter((p) => p.password_inicial === "").length} | con clave propia o aparte: ${r.clavesEspeciales.length}`);
+  console.log(`Activas con la cédula como clave: ${activas.filter((p) => p.password_inicial === "").length} | con clave propia o aparte: ${r.clavesEspeciales.length} | inactivas (sin poder entrar): ${inactivas.length}`);
   console.log(`📝 Archivos en ${salida} (solo legibles por ti)`);
   console.log("⚠️  Los .xlsx y los .csv tienen datos personales y CLAVES: no los subas a git ni los compartas, y bórralos TODOS cuando termine la carga.");
 }

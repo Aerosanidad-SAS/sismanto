@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireRole } from "@/app/api/actions/auth";
 import { auditar } from "@/lib/auditoria";
+import { generarClaveTemporal } from "@/lib/clave-temporal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   correoInterno,
@@ -20,11 +21,15 @@ export interface UsuarioCreado {
   rol: string;
   centro: string | null;
   codigo: string;
+  /** false = se creó desactivada (no puede entrar). */
+  activo: boolean;
 }
 
 export interface ReporteUsuarios {
   aplicado: boolean;
   nuevos: number;
+  /** De los nuevos, cuántos se crean (o se crearon) DESACTIVADOS: personas que ya no trabajan pero siguen ligadas a servicios. */
+  inactivas: number;
   /** Cédula ya registrada: no se toca. */
   existentes: { fila: number; cedula: string }[];
   errores: ErrorUsuario[];
@@ -46,7 +51,7 @@ export async function cargarUsuarios(filas: FilaUsuarioCruda[], confirmar: boole
   if (filas.length > 500) return { error: "Máximo 500 filas por archivo." };
 
   const admin = createAdminClient() as any;
-  const reporte: ReporteUsuarios = { aplicado: confirmar, nuevos: 0, existentes: [], errores: [], creados: [] };
+  const reporte: ReporteUsuarios = { aplicado: confirmar, nuevos: 0, inactivas: 0, existentes: [], errores: [], creados: [] };
   const error = (fila: number, columna: string | undefined, mensaje: string) => reporte.errores.push({ fila, columna, mensaje });
 
   const { data: centros } = await admin.from("operational_centers").select("id, codigo").eq("activo", true);
@@ -92,15 +97,18 @@ export async function cargarUsuarios(filas: FilaUsuarioCruda[], confirmar: boole
     nuevos.push(v);
   }
   reporte.nuevos = nuevos.length;
+  reporte.inactivas = nuevos.filter((n) => !n.u.activo).length;
   if (!confirmar) return reporte;
 
   // ── Creación ──────────────────────────────────────────────────────────────
   let creados = 0;
+  let inactivasCreadas = 0;
   for (const { fila, u } of nuevos) {
     const codigo = u.codigo ?? generarCodigo(codigosUsados);
     const { data: auth, error: errAuth } = await admin.auth.admin.createUser({
       email: u.email ?? correoInterno(u.cedula),
-      password: u.password,
+      // Una cuenta inactiva nunca recibe la cédula (ni nada que alguien conozca) como clave: se le pone una que nadie ve.
+      password: u.activo ? u.password : generarClaveTemporal(),
       email_confirm: true,
     });
     if (errAuth || !auth?.user) {
@@ -116,7 +124,7 @@ export async function cargarUsuarios(filas: FilaUsuarioCruda[], confirmar: boole
       cedula: u.cedula,
       ciudad: u.ciudad,
       operational_center_id: u.centro ? (centroId.get(u.centro) ?? null) : null,
-      activo: true,
+      activo: u.activo,
       codigo_acceso: codigo,
       debe_cambiar_password: true,
     });
@@ -126,12 +134,14 @@ export async function cargarUsuarios(filas: FilaUsuarioCruda[], confirmar: boole
       continue;
     }
     creados++;
-    reporte.creados.push({ cedula: u.cedula, nombre: u.nombre, rol: u.rol, centro: u.centro, codigo });
+    if (!u.activo) inactivasCreadas++;
+    reporte.creados.push({ cedula: u.cedula, nombre: u.nombre, rol: u.rol, centro: u.centro, codigo, activo: u.activo });
   }
   reporte.nuevos = creados;
+  reporte.inactivas = inactivasCreadas;
 
   if (creados > 0) {
-    await auditar("INSERTAR", "usuarios", "", `Carga masiva de usuarios: ${creados} creados, ${reporte.existentes.length} ya existían, ${reporte.errores.length} con error`);
+    await auditar("INSERTAR", "usuarios", "", `Carga masiva de usuarios: ${creados} creados (${inactivasCreadas} desactivados), ${reporte.existentes.length} ya existían, ${reporte.errores.length} con error`);
     revalidatePath("/admin/usuarios");
   }
   return reporte;

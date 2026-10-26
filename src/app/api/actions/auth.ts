@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { auditar } from "@/lib/auditoria";
 import { enmascararIdentificador } from "@/lib/auditoria-lista";
-import { validarClaveNueva } from "@/lib/usuarios-carga";
+import { motivoNoPuedeActivarse, validarClaveNueva } from "@/lib/usuarios-carga";
 import { generarClaveTemporal } from "@/lib/clave-temporal";
 import { datosPersonalesSchema, filaExtra, nombreCompletoDe, tieneDatos, type DatosPersonalesUsuario } from "@/lib/usuarios-sisres";
 import { revalidatePath } from "next/cache";
@@ -377,6 +377,16 @@ export async function toggleUserActive(userId: string, activo: boolean) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
   const supabase = createClient();
+  if (parsed.data.activo) {
+    // Una cuenta creada desactivada puede no tener centro: no se activa a un rol que ve solo su centro sin asignárselo antes.
+    const { data: perfil } = await supabase
+      .from("user_profiles")
+      .select("operational_center_id, roles!inner(codigo)")
+      .eq("user_id", parsed.data.userId)
+      .maybeSingle();
+    const motivo = motivoNoPuedeActivarse((perfil as any)?.roles?.codigo, (perfil as any)?.operational_center_id);
+    if (motivo) return { error: motivo };
+  }
   const { error } = await supabase
     .from("user_profiles")
     .update({ activo: parsed.data.activo, updated_at: new Date().toISOString() })

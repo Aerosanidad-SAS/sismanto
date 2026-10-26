@@ -25,7 +25,8 @@ function leerFilas(wb: XLSX.WorkBook): FilaUsuarioCruda[] | null {
   const ws = wb.Sheets["USUARIOS"];
   if (!ws) return null;
   const filas = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", raw: true });
-  const encabezados = (filas[0] ?? []).map((h) => String(h ?? "").replace(/\*/g, "").trim());
+  // En minúsculas: «Activo» o «ACTIVO» tienen que valer igual que «activo» (si no, la columna se ignoraría en silencio y todos quedarían activos).
+  const encabezados = (filas[0] ?? []).map((h) => String(h ?? "").replace(/\*/g, "").trim().toLowerCase());
   const salida: FilaUsuarioCruda[] = [];
   for (let i = PRIMERA_FILA_DATOS - 1; i < filas.length; i++) {
     const celdas = filas[i] ?? [];
@@ -94,7 +95,7 @@ export function UsuariosCargaMasiva({ onCargando }: { onCargando?: (cargando: bo
     // buenas. Validar por lotes de 12 no ve los repetidos que caen en lotes distintos y los daría por «ya existían».
     const omitidas = new Set([...reporte.errores.map((e) => e.fila), ...reporte.existentes.map((e) => e.fila)]);
     const porCrear = filas.filter((f) => !omitidas.has(f.fila));
-    const total: ReporteUsuarios = { aplicado: true, nuevos: 0, existentes: [...reporte.existentes], errores: [...reporte.errores], creados: [] };
+    const total: ReporteUsuarios = { aplicado: true, nuevos: 0, inactivas: 0, existentes: [...reporte.existentes], errores: [...reporte.errores], creados: [] };
     try {
       for (let i = 0; i < porCrear.length; i += FILAS_POR_LOTE_USUARIOS) {
         setProgreso(`Creando usuarios… ${Math.min(i + FILAS_POR_LOTE_USUARIOS, porCrear.length)} de ${porCrear.length}`);
@@ -104,6 +105,7 @@ export function UsuariosCargaMasiva({ onCargando }: { onCargando?: (cargando: bo
           break;
         }
         total.nuevos += r.nuevos;
+        total.inactivas += r.inactivas;
         total.existentes.push(...r.existentes);
         total.errores.push(...r.errores);
         total.creados.push(...r.creados);
@@ -121,8 +123,8 @@ export function UsuariosCargaMasiva({ onCargando }: { onCargando?: (cargando: bo
 
   const descargarCreados = (creados: UsuarioCreado[]) =>
     descargarCsv("usuarios_creados.csv", [
-      ["cedula", "nombre", "rol", "centro", "codigo_acceso"],
-      ...creados.map((c) => [c.cedula, c.nombre, c.rol, c.centro ?? "", c.codigo]),
+      ["cedula", "nombre", "rol", "centro", "codigo_acceso", "activo"],
+      ...creados.map((c) => [c.cedula, c.nombre, c.rol, c.centro ?? "", c.codigo, c.activo ? "SI" : "NO"]),
     ]);
 
   return (
@@ -160,9 +162,10 @@ export function UsuariosCargaMasiva({ onCargando }: { onCargando?: (cargando: bo
               {reporte.aplicado ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <AlertTriangle className="h-4 w-4" aria-hidden />}
               {reporte.aplicado ? "Carga aplicada." : "Vista previa: todavía no se creó nadie."}
             </p>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               {[
                 [reporte.aplicado ? "Creados" : "Se crearían", reporte.nuevos],
+                ["De ellos, desactivados (no entran)", reporte.inactivas],
                 ["Ya existían (omitidos)", reporte.existentes.length],
                 ["Con error", reporte.errores.length],
               ].map(([t, n]) => (
@@ -175,8 +178,9 @@ export function UsuariosCargaMasiva({ onCargando }: { onCargando?: (cargando: bo
 
             {!reporte.aplicado && reporte.nuevos > 0 && (
               <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                Quien no tenga `password_inicial` en la plantilla entra con su cédula como clave. Hasta su primer ingreso, cualquiera que conozca esa
-                cédula podría entrar por él: entrega el acceso el mismo día de la carga y pide que cada persona entre y elija su clave de inmediato.
+                Quien no tenga `password_inicial` en la plantilla entra con su cédula como clave (las personas desactivadas no entran). Hasta su
+                primer ingreso, cualquiera que conozca esa cédula podría entrar por él: entrega el acceso el mismo día de la carga y pide que cada
+                persona entre y elija su clave de inmediato.
               </p>
             )}
 

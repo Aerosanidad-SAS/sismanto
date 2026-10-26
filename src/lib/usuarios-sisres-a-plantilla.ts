@@ -19,7 +19,7 @@ import { LARGO_MINIMO_CLAVE, ROLES_CON_CENTRO, ROLES_CON_CLAVE_PROPIA } from "./
 export { ROLES_CON_CLAVE_PROPIA };
 
 /** Columnas de la hoja «USUARIOS» de la plantilla, en el orden en que se escriben. */
-export const COLUMNAS_PLANTILLA = ["cedula", "nombre_completo", "rol", "centro_operativo", "ciudad", "email", "codigo_acceso", "password_inicial"] as const;
+export const COLUMNAS_PLANTILLA = ["cedula", "nombre_completo", "rol", "centro_operativo", "ciudad", "email", "codigo_acceso", "password_inicial", "activo"] as const;
 
 /** Columnas que el CSV de SISRES tiene que traer para poder convertirlo (el resto se ignora). */
 export const COLUMNAS_SISRES_OBLIGATORIAS = ["id", "cargo", "estado"] as const;
@@ -32,8 +32,10 @@ export interface FilaPlantilla {
   ciudad: string;
   email: string;
   codigo_acceso: string;
-  /** Vacía = la clave inicial es la cédula. */
+  /** Vacía = la clave inicial es la cédula. En una cuenta inactiva nunca va vacía: es una clave al azar que nadie ve. */
   password_inicial: string;
+  /** «NO» = se crea desactivada (no entra): quien ya no trabaja pero sigue ligado a servicios históricos. */
+  activo: "SI" | "NO";
 }
 
 export interface ClaveEspecial {
@@ -77,8 +79,13 @@ export interface OpcionesConversion {
   claveAleatoria?: () => string;
   /** Roles que no entran con la cédula como clave. Por omisión `ROLES_CON_CLAVE_PROPIA`; se pueden agregar más, nunca quitar. */
   rolesConClavePropia?: readonly string[];
-  /** Estados de SISRES que se cargan. Por omisión solo «1» (activo): lo demás se omite como inactivo. */
+  /** Estados de SISRES que se cargan como personas ACTIVAS. Por omisión solo «1»: lo demás se omite. */
   estadosCargados?: readonly string[];
+  /**
+   * Estados de SISRES que se cargan como personas INACTIVAS (se crean desactivadas, sin poder entrar): quien ya no trabaja pero
+   * está ligado a servicios históricos tiene que existir en el sistema. Por omisión ninguno.
+   */
+  estadosInactivos?: readonly string[];
   /** Ciudad de SISRES (como viene en el CSV) → código de centro, para las que no son Bogotá ni Medellín. */
   centrosPorCiudad?: Readonly<Record<string, string>>;
 }
@@ -162,7 +169,10 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
   const claveAleatoria = opciones.claveAleatoria ?? generarClaveTemporal;
   // Las del sistema siempre cuentan: una opción solo puede sumar roles, no sacarlos.
   const clavePropia = new Set([...ROLES_CON_CLAVE_PROPIA, ...(opciones.rolesConClavePropia ?? [])]);
-  const estadosCargados = new Set(opciones.estadosCargados ?? ["1"]);
+  const estadosActivos = new Set(opciones.estadosCargados ?? ["1"]);
+  const estadosInactivos = new Set(opciones.estadosInactivos ?? []);
+  // Si un estado está en las dos listas, manda «activo».
+  const esInactiva = (f: FilaUsuario) => !estadosActivos.has((f.estado ?? "").trim()) && estadosInactivos.has((f.estado ?? "").trim());
   const centrosPorCiudad = opciones.centrosPorCiudad ?? {};
   const plantilla: FilaPlantilla[] = [];
   const omitidas: Omitida[] = [];
@@ -179,8 +189,21 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
     return valido;
   });
 
-  for (const f of conId.sort((a, b) => Number(a.id) - Number(b.id))) {
-    if (!estadosCargados.has((f.estado ?? "").trim())) {
+  // Cédulas de TODA fila activa, aunque luego se omita (sin centro, cargo sin equivalente…): una persona inactiva con esa misma cédula
+  // no se carga, porque quedaría con una cuenta inactiva y, cuando alguien resuelva su fila activa, la carga masiva la vería como «ya
+  // existe» y nunca podría entrar.
+  const cedulasDeActivas = new Set<string>();
+  for (const f of conId) {
+    if (!estadosActivos.has((f.estado ?? "").trim())) continue;
+    const { cedula } = resolverCedula(f);
+    if (cedula && CEDULA_VALIDA.test(cedula)) cedulasDeActivas.add(cedula);
+  }
+
+  // Primero las activas y luego las inactivas: si una persona inactiva comparte cédula o correo con una activa, se queda la activa.
+  const ordenadas = conId.sort((a, b) => Number(esInactiva(a)) - Number(esInactiva(b)) || Number(a.id) - Number(b.id));
+  for (const f of ordenadas) {
+    const inactiva = esInactiva(f);
+    if (!estadosActivos.has((f.estado ?? "").trim()) && !inactiva) {
       omitir(f, "INACTIVO", `Inactivo en SISRES (estado ${f.estado ?? "?"})`);
       continue;
     }
@@ -213,7 +236,13 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
 
     const ciudad = (f.ciudad ?? "").trim();
     const centro = centroDeCiudad(ciudad, centrosPorCiudad);
-    if ((ROLES_CON_CENTRO as readonly string[]).includes(rol) && !centro) {
+    if (inactiva && cedulasDeActivas.has(cedula)) {
+      omitir(f, "CEDULA_REPETIDA", "Cédula de una persona ACTIVA que no se cargó: resuélvela primero y enlaza lo histórico a esa cuenta");
+      continue;
+    }
+
+    // Una cuenta inactiva no entra, así que el centro (que limita lo que se ve) no es obligatorio.
+    if (!inactiva && (ROLES_CON_CENTRO as readonly string[]).includes(rol) && !centro) {
       omitir(f, "SIN_CENTRO", `El rol ${rol} necesita centro y la ciudad «${ciudad || "vacía"}» no corresponde a una sola de Bogotá o Medellín`);
       continue;
     }
@@ -224,7 +253,9 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
     const original = (f.usuario ?? "").trim();
     if (/^0[0-9]+$/.test(original)) avisos.push({ categoria: "CEROS_A_LA_IZQUIERDA", idSisres: f.id, cedula, aviso: "La cédula venía con ceros a la izquierda; se cargó sin ellos" });
 
-    let email = (f.correo ?? "").trim().toLowerCase();
+    // Una persona inactiva va SIN correo (la carga le crea uno interno): si ese archivo llegara a una versión de la carga que no
+    // entienda «activo», la cuenta quedaría activa y, con un correo real, podría entrar por «¿Olvidaste tu contraseña?».
+    let email = inactiva ? "" : (f.correo ?? "").trim().toLowerCase();
     if (email && !correoValido(email)) {
       avisos.push({ categoria: "CORREO", idSisres: f.id, cedula, aviso: "Correo inválido: entra con la cédula y un correo interno (sin recuperación por correo)" });
       email = "";
@@ -235,7 +266,11 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
     if (email) correosUsados.add(email);
 
     let password = "";
-    if (clavePropia.has(rol)) {
+    if (inactiva) {
+      // Nunca la cédula: si esta fila se subiera a una versión de la carga que no entienda «activo», la cuenta no quedaría
+      // abierta con una clave conocida. No va a la lista de entrega: nadie debe poder entrar con ella.
+      password = claveAleatoria();
+    } else if (clavePropia.has(rol)) {
       password = claveAleatoria();
       clavesEspeciales.push({ cedula, nombre, rol, clave: password, motivo: "ROL_CON_CLAVE_PROPIA" });
     } else if (cedula.length < LARGO_MINIMO_CLAVE) {
@@ -243,7 +278,7 @@ export function convertirUsuariosSisres(filas: FilaUsuario[], opciones: Opciones
       clavesEspeciales.push({ cedula, nombre, rol, clave: password, motivo: "CEDULA_CORTA" });
     }
 
-    plantilla.push({ cedula, nombre_completo: nombre, rol, centro_operativo: centro ?? "", ciudad, email, codigo_acceso: "", password_inicial: password });
+    plantilla.push({ cedula, nombre_completo: nombre, rol, centro_operativo: centro ?? "", ciudad, email, codigo_acceso: "", password_inicial: password, activo: inactiva ? "NO" : "SI" });
   }
   return { plantilla, omitidas, avisos, clavesEspeciales };
 }
@@ -273,7 +308,7 @@ export function evaluarCarpetaDeSalida(salidaReal: string, raizRepoReal: string)
 }
 
 /** Nombres de los archivos que escribe el convertidor: si ya existe alguno, queda de una corrida anterior (con claves que ya no coinciden). */
-export const PATRONES_SALIDA = [/^usuarios-plantilla-\d+\.xlsx$/, /^usuarios-omitidas\.csv$/, /^usuarios-avisos\.csv$/, /^claves-iniciales-especiales\.csv$/];
+export const PATRONES_SALIDA = [/^usuarios-plantilla-\d+\.xlsx$/, /^usuarios-inactivos-\d+\.xlsx$/, /^usuarios-omitidas\.csv$/, /^usuarios-avisos\.csv$/, /^claves-iniciales-especiales\.csv$/];
 
 export function archivosDeCorridaAnterior(nombres: string[]): string[] {
   return nombres.filter((n) => PATRONES_SALIDA.some((p) => p.test(n)));

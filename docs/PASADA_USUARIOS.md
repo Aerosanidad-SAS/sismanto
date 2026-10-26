@@ -14,6 +14,33 @@ una fila de esos roles sin `password_inicial` se rechaza).
   **no puede recuperar la clave por correo**.
 - Las cédulas de menos de 8 dígitos no pueden ser clave: reciben una clave aparte (como los roles de clave propia).
 
+## Personas inactivas (estado 0 en SISRES)
+
+Quien ya no trabaja pero sigue ligado a servicios históricos **tiene que existir** en SISMANTO, pero **no puede entrar**. Se cargan con
+`--estados-inactivos 0` y la columna opcional **`activo = NO`** de la plantilla (vacío = SI):
+
+- La carga masiva las crea **desactivadas** (`user_profiles.activo = false`, igual que «desactivar usuario»), sin exigirles centro ni clave.
+- **Nunca** reciben la cédula como clave: el servidor les pone una clave al azar que nadie ve (y el convertidor ya la escribe al azar
+  en el archivo, por si ese archivo llegara a una versión de la carga que no entienda `activo`).
+- Van **sin correo** (la carga les crea uno interno): si esas filas llegaran a una versión que ignora `activo`, una cuenta activa con
+  correo real podría entrar por «¿Olvidaste tu contraseña?». Costo: el correo del histórico no se carga (sigue en el CSV de SISRES);
+  al reactivar a alguien hay que escribírselo.
+- Van en **`usuarios-inactivos-NN.xlsx`**, aparte de las activas.
+- Si una persona inactiva comparte cédula con una activa, **se queda la activa** (la inactiva se omite como cédula repetida y aparece
+  en `usuarios-omitidas.csv`; si estaba ligada a servicios, hay que enlazarlos a la cuenta activa). Lo mismo si la activa se omitió
+  (p. ej. sin centro): primero se resuelve la activa.
+- Para reactivar a alguien: Administración → Usuarios → activar y **restablecer su clave** (tiene una al azar que nadie conoce).
+  `toggleUserActive` **rechaza activar** a un rol que ve solo su centro (OVEM, REGULACION, MEDICO, AUXILIAR_ENFERMERIA, COORDINACION) si
+  no tiene centro: asígnaselo antes.
+- Una persona **activa** que ya exista y llegue como inactiva se omite como «ya existe»: la carga nunca modifica a quien ya existe.
+- **Seguimiento:** desactivar es solo `user_profiles.activo = false`, sin bloqueo en Supabase Auth (es lo que ya hace «desactivar usuario»).
+  La RLS y `getProfile` dejan sin acceso a una cuenta inactiva, pero un bloqueo en Auth cerraría también la posibilidad de abrir sesión.
+
+**Orden de subida:** `usuarios-inactivos-NN.xlsx` solo se sube **después de desplegar este PR en el entorno donde se sube** (la carga
+masiva que entiende `activo`; `main`/producción lo despliega Daniel a mano, y `dev`/`staging` comparten otra base).
+Si se subiera antes, la columna se ignora y esas cuentas quedarían **activas** (con una clave al azar y sin correo real, no con la
+cédula): habría que desactivarlas a mano de inmediato.
+
 ## Cómo se limpia la cédula (campo `usuario` de SISRES)
 
 El convertidor deja la cédula solo con dígitos y esa misma cédula es la clave inicial:
@@ -43,7 +70,7 @@ ciudad. En los roles que ven solo su centro quedan en `usuarios-omitidas.csv` ha
 Comando usado (el `--centros-por-ciudad` va entre comillas):
 
 ```bash
-npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta> --estados 1,2 \
+npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta> --estados 1,2 --estados-inactivos 0 \
   --centros-por-ciudad "MONTERIA=AIRPLAN,RIONEGRO=AIRPLAN,QUIBDO=AIRPLAN,COROZAL=AIRPLAN,CAREPA=AIRPLAN,OLAYA HERRERA=AIRPLAN,CARTAGENA=CTG,CUCUTA=ADO,BUCARAMANGA=ADO,BARRANCABERMEJA=ADO,VALLEDUPAR=ADO,SANTA MARTA=ADO,RIOHACHA=ADO"
 ```
 
@@ -61,7 +88,8 @@ npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta>
 
    Opciones:
    - `--roles-clave-propia REGULACION,COORDINACION` suma roles que tampoco entran con la cédula (ver «Riesgos»).
-   - `--estados 1,2` estados de SISRES que se cargan (por omisión solo `1`, activo; los demás se omiten como inactivos).
+   - `--estados 1,2` estados de SISRES que se cargan como personas **activas** (por omisión solo `1`).
+   - `--estados-inactivos 0` estados que se cargan como personas **inactivas** (ver arriba; por omisión ninguno).
    - `--centros-por-ciudad "CARTAGENA=CTG,CÚCUTA=ADO"` centro de las ciudades que no son Bogotá ni Medellín: sin esto, los roles
      que ven solo su centro de esas ciudades se omiten.
    Se niega a correr si la carpeta ya tiene archivos de una corrida anterior (las claves ya no coincidirían).
@@ -70,6 +98,7 @@ npx tsx scripts/usuarios-sisres-a-plantilla.ts <usuarios.csv> --salida <carpeta>
    cédulas que venían con ceros a la izquierda). Resolver a mano lo que haga falta.
 5. Subir `usuarios-plantilla-01.xlsx` (y los siguientes; máximo 500 filas cada uno) en la pantalla de carga masiva con una
    sesión de ADMIN. **Mirar la vista previa** antes de confirmar. Un correo que ya exista en Auth solo falla al confirmar.
+   Después de desplegar este PR, subir igual `usuarios-inactivos-01.xlsx` y comprobar en Usuarios que quedaron **desactivadas**.
 6. Entregar en persona las claves de `claves-iniciales-especiales.csv`.
 7. **Borrar TODA la carpeta de salida** (los `.xlsx` también llevan esas claves en claro, no solo el CSV de claves).
 8. Avisar a la gente el mismo día y pedir que entren ese día (ver «Riesgos»).
