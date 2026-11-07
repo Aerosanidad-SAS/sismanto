@@ -608,6 +608,24 @@ export function ServiciosTabla({
     }
   };
 
+  // «Asignar vehículo» / «Abrir» desde la Sala de control llega como /servicios?numero=ID&editar=1: la lista viene filtrada a ese
+  // único servicio, que se abre directo en edición. El parámetro se limpia igual que `nuevo`.
+  const editarDesdeUrl = useRef(false);
+  useEffect(() => {
+    if (searchParams.get("editar") !== "1") {
+      editarDesdeUrl.current = false;
+      return;
+    }
+    if (editarDesdeUrl.current || servicios.length !== 1) return;
+    editarDesdeUrl.current = true;
+    if (puedeEditar && puedeEditarServicio(servicios[0])) abrirEdicion(servicios[0]);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("editar");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, servicios]);
+
   // Al abrir la edición en la fila, la lleva a la vista y le da el foco (lectores de pantalla anuncian el título).
   useEffect(() => {
     if (filaEnEdicion === null) return;
