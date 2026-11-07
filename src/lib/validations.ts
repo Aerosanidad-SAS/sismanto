@@ -8,7 +8,10 @@ import { errorDeDocumento, mensajeCelular, normalizarCelularColombia, normalizar
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
   vehicleId: z.string({ required_error: 'Selecciona un vehículo' }).uuid('Selecciona un vehículo'),
-  fecha: z.date({ required_error: 'Selecciona la fecha', invalid_type_error: 'Selecciona la fecha' }).max(new Date(), 'No puede ser fecha futura'),
+  // Se compara al validar, no al cargar el módulo: un `new Date()` en la definición se congelaba y rechazaba la fecha de hoy.
+  fecha: z
+    .date({ required_error: 'Selecciona la fecha', invalid_type_error: 'Selecciona la fecha' })
+    .refine((d) => d.getTime() <= Date.now(), 'No puede ser fecha futura'),
   kilometrajeActual: z
     .number({ required_error: 'Ingresa el kilometraje', invalid_type_error: 'Ingresa el kilometraje' })
     .int('El kilometraje debe ser un número entero')
