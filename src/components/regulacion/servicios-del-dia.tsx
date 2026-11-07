@@ -243,7 +243,7 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
                     <TableCell className="whitespace-nowrap text-right align-top">
                       {/* Lleva a Servicios filtrado por este número, donde se edita y se asigna el vehículo. */}
                       <Button asChild size="sm" variant={sinAsignar ? "default" : "outline"}>
-                        <Link href={`/servicios?numero=${s.id}`} aria-label={`${sinAsignar ? "Asignar vehículo al" : "Abrir el"} servicio ${s.id}`}>
+                        <Link href={`/servicios?numero=${s.id}&editar=1`} aria-label={`${sinAsignar ? "Asignar vehículo al" : "Abrir el"} servicio ${s.id}`}>
                           {sinAsignar ? "Asignar vehículo" : "Abrir"}
                         </Link>
                       </Button>
