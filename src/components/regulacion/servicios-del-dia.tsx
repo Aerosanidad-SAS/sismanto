@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HelpTrigger } from "@/components/ui/help-trigger";
-import { textoRetraso } from "@/lib/servicios-abiertos";
+import { textoRetraso, VENTANA_ABIERTOS_DIAS } from "@/lib/servicios-abiertos";
 import {
   Table,
   TableBody,
@@ -131,7 +131,8 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
       {antiguosSinCerrar > 0 && (
         <div role="status" className="mx-6 mb-2 rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-foreground">
           Hay <strong>{antiguosSinCerrar}</strong> servicios abiertos de hace más de 3 días que no se muestran aquí. Revísalos y ciérralos en{" "}
-          <Link href="/servicios" className="font-medium underline">
+          {/* Lleva a Servicios ya filtrado por «Sin gestionar hace más de 3 días» (misma ventana que usa esta tabla). */}
+          <Link href={`/servicios?sinGestionar=${VENTANA_ABIERTOS_DIAS}&sinGestionarUnidad=dia`} className="font-medium underline">
             Servicios
           </Link>
           .
