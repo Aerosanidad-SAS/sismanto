@@ -106,12 +106,18 @@ function Proximo({ fila }: { fila: FilaTablero }) {
 
 function Conductores({ fila }: { fila: FilaTablero }) {
   if (fila.conductores.length === 0) return <span className="text-sm text-muted-foreground">Sin conductor</span>;
+  // Una línea: el primero y «+N»; todos los nombres al pasar el cursor (y para lectores de pantalla). Libera alto de fila.
+  const [primero, ...resto] = fila.conductores;
   return (
-    <div className="space-y-0.5 text-sm">
-      {fila.conductores.map((c) => (
-        <p key={c}>{c}</p>
-      ))}
-    </div>
+    <p className="max-w-[14rem] truncate text-sm" title={fila.conductores.join(" · ")}>
+      {primero}
+      {resto.length > 0 && (
+        <>
+          <span aria-hidden className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium">+{resto.length}</span>
+          <span className="sr-only">, {resto.join(", ")}</span>
+        </>
+      )}
+    </p>
   );
 }
 
