@@ -38,6 +38,23 @@ Roles disponibles: `ADMIN`, `REGULACION_MDE`, `REGULACION_BOG`, `OVEM_MDE`, `OVE
 
 Para una sola prueba o archivo: `npx playwright test e2e/specs/smoke/aislamiento.spec.ts`, o `-g "O-33"` para filtrar por el ID del caso.
 
+## Informe y action items
+
+Cada corrida deja `e2e-results/results.json`. De ahí sale el informe y, si quieres, un issue de GitHub por fallo:
+
+```powershell
+npm run e2e:smoke                  # corre las pruebas
+npm run e2e:informe                # simulación: escribe e2e-results/informe.md y .csv y muestra qué haría
+npm run e2e:informe -- --crear     # abre los issues (requiere `gh auth login`)
+```
+
+- Un fallo = un issue con etiqueta `e2e` y `area:<área>`, asignado según el prefijo del caso (`R-02` → «R») en `e2e/responsables.json`. Lo que no tiene responsable por prefijo cae al `porDefecto`.
+- No duplica: cada issue lleva una marca con la huella de la prueba. Si el issue ya está abierto, lo deja; si estaba cerrado y vuelve a fallar, lo reabre con un comentario.
+- Las pruebas «inestables» (pasaron solo al reintentar) también generan issue, marcado así en el título.
+- Las omitidas por falta de credenciales no generan issue; salen en el resumen.
+- El `.csv` abre en Excel y es solo una foto para mirar; el seguimiento se hace en los issues.
+- Ver lo que le toca a cada uno: `https://github.com/Aerosanidad-SAS/sismanto/issues?q=is:open+label:e2e+assignee:@me`
+
 ## Reglas para escribir pruebas
 
 - El título lleva el ID del caso del plan (`O-33: …`) y cada caso nuevo se registra en `COBERTURA.md`.
