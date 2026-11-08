@@ -20,7 +20,7 @@ import { MisServicios } from "@/components/servicios/mis-servicios";
 import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { centroVisible } from "@/lib/auth-utils";
 import { ciudadDeCentro } from "@/lib/servicios-centro";
-import { ciudadRegistroDePerfil, leerFiltros } from "@/lib/servicios-lista";
+import { ciudadRegistroDePerfil, leerFiltros, UNIDADES_SIN_GESTIONAR } from "@/lib/servicios-lista";
 import { ServiciosFiltros } from "@/components/servicios/servicios-filtros";
 import { ServiciosPaginacion } from "@/components/servicios/servicios-paginacion";
 import { ExportarServicios } from "@/components/servicios/exportar-servicios";
@@ -150,6 +150,14 @@ export default async function ServiciosPage(
             origenes={opciones.origenes}
             destinos={opciones.destinos}
           />
+          {Number(filtros.sinGestionar) > 0 && (
+            <p role="status" className="rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-foreground">
+              Estás viendo los servicios en PROGRAMADO o CURSO con más de {filtros.sinGestionar}{" "}
+              {(UNIDADES_SIN_GESTIONAR.find((u) => u.clave === filtros.sinGestionarUnidad) ?? UNIDADES_SIN_GESTIONAR[0]).nombre.toLowerCase()} sin cerrarse. Para
+              finalizar uno hacen falta la llegada y la salida reales de cada tramo; si nunca se hizo o no se puede reconstruir, cancélalo con su
+              motivo. Una vez cerrado, solo el Administrador puede reabrirlo.
+            </p>
+          )}
           {errorLista && (
             <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               No se pudo cargar la lista de servicios: {errorLista}
