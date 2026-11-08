@@ -107,14 +107,15 @@ export default async function RegulacionPage(
 
       <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
 
-      <TableroVehiculosCard tablero={tableroVehiculos} />
-
+      {/* Primero los servicios: es lo que Regulación recibe, agenda y sigue todo el día; el tablero de vehículos es de apoyo. */}
       <ServiciosDelDia
         antiguosSinCerrar={tablero.antiguosSinCerrar}
         servicios={(tablero.servicios as ServicioDelDia[]).filter(
           (s) => !prefijoDeCiudad || (s.ciudad_registro ?? "").toLowerCase().startsWith(prefijoDeCiudad)
         )}
       />
+
+      <TableroVehiculosCard tablero={tableroVehiculos} />
 
       <PreoperacionalHoyCard datos={preoperacional} />
 
