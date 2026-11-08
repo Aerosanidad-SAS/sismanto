@@ -7,19 +7,31 @@ import { errorDeDocumento, mensajeCelular, normalizarCelularColombia, normalizar
 
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
-  vehicleId: z.string().uuid('ID de vehículo inválido'),
-  fecha: z.date().max(new Date(), 'No puede ser fecha futura'),
-  kilometrajeActual: z.number().int().positive('Kilometraje debe ser positivo'),
+  vehicleId: z.string({ required_error: 'Selecciona un vehículo' }).uuid('Selecciona un vehículo'),
+  // Se compara al validar, no al cargar el módulo: un `new Date()` en la definición se congelaba y rechazaba la fecha de hoy.
+  fecha: z
+    .date({ required_error: 'Selecciona la fecha', invalid_type_error: 'Selecciona la fecha' })
+    .refine((d) => d.getTime() <= Date.now(), 'No puede ser fecha futura'),
+  kilometrajeActual: z
+    .number({ required_error: 'Ingresa el kilometraje', invalid_type_error: 'Ingresa el kilometraje' })
+    .int('El kilometraje debe ser un número entero')
+    .positive('Kilometraje debe ser positivo'),
   tipo: z.enum(['PREVENTIVO', 'CORRECTIVO'], {
     required_error: 'Debe seleccionar un tipo de mantenimiento',
   }),
-  categoriaId: z.number().int().positive('Debe seleccionar una categoría'),
+  categoriaId: z
+    .number({ required_error: 'Debe seleccionar una categoría', invalid_type_error: 'Debe seleccionar una categoría' })
+    .int()
+    .positive('Debe seleccionar una categoría'),
   descripcionTrabajo: z.string().min(10, 'Mínimo 10 caracteres'),
   proveedor: z.string().min(1, 'Requerido'),
   supplierId: z.number().int().optional(),
-  valor: z.number().nonnegative('El valor no puede ser negativo'),
+  valor: z.number({ required_error: 'Ingresa el valor', invalid_type_error: 'Ingresa el valor' }).nonnegative('El valor no puede ser negativo'),
   numeroFactura: z.string().optional(),
-  tiempoFueraServicioHoras: z.number().nonnegative().default(0),
+  tiempoFueraServicioHoras: z
+    .number({ invalid_type_error: 'Ingresa las horas (0 si no estuvo fuera de servicio)' })
+    .nonnegative('Las horas no pueden ser negativas')
+    .default(0),
   notasAdicionales: z.string().optional(),
   incidentId: z.number().int().optional(),
 });

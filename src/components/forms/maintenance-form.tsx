@@ -184,7 +184,7 @@ export function MaintenanceForm({
           )}
           {ultimoKm !== null && (
             <p className="text-sm text-muted-foreground mt-1">
-              Último kilometraje registrado: {ultimoKm.toLocaleString()} km
+              Último kilometraje registrado: {ultimoKm.toLocaleString("es-CO")} km
             </p>
           )}
         </div>
@@ -427,11 +427,15 @@ export function MaintenanceForm({
             type="number"
             step="0.01"
             {...register("tiempoFueraServicioHoras", {
-              valueAsNumber: true,
+              // Vacío cuenta como 0: con `valueAsNumber` queda NaN y el guardado se bloqueaba sin mostrar el motivo.
+              setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)),
             })}
             className="mt-1"
             placeholder="0"
           />
+          {errors.tiempoFueraServicioHoras && (
+            <p className="text-sm text-red-600 mt-1">{errors.tiempoFueraServicioHoras.message}</p>
+          )}
         </div>
       </div>
 
