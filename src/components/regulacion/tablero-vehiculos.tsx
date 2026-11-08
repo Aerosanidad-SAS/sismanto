@@ -1,5 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Ban, CheckCircle2, Circle, ClipboardX, ShieldAlert, Truck, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, ChevronDown, Circle, ClipboardX, ShieldAlert, Truck, type LucideIcon } from "lucide-react";
 import type { TableroVehiculos } from "@/app/api/actions/tablero-vehiculos";
 import {
   ETIQUETA_APTITUD,
@@ -10,10 +13,11 @@ import {
   type Aptitud,
   type FilaTablero,
 } from "@/lib/aptitud-vehiculo";
+import { contarFlota, filtrarFlota, FILTROS_FLOTA, iniciales, tonoTarjeta, type FiltroFlota, type TonoTarjeta } from "@/lib/tablero-tarjetas";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 const APTITUD_UI: Record<Aptitud, { tone: StatusTone; icon: LucideIcon }> = {
@@ -24,6 +28,19 @@ const APTITUD_UI: Record<Aptitud, { tone: StatusTone; icon: LucideIcon }> = {
   APTO: { tone: "success", icon: CheckCircle2 },
 };
 
+const FONDO: Record<TonoTarjeta, string> = {
+  alerta: "bg-destructive/5",
+  aviso: "bg-warning-soft",
+  servicio: "bg-info-soft",
+  libre: "bg-success-soft",
+};
+const BORDE: Record<TonoTarjeta, string> = {
+  alerta: "border-destructive/40",
+  aviso: "border-warning/50",
+  servicio: "border-border",
+  libre: "border-border",
+};
+
 function textoNovedades(f: FilaTablero): string | null {
   const { cantidad, severidadMaxima } = f.novedades;
   if (cantidad === 0) return null;
@@ -31,7 +48,7 @@ function textoNovedades(f: FilaTablero): string | null {
   return severidadMaxima ? `${base} · severidad ${ETIQUETA_SEVERIDAD[severidadMaxima]}` : base;
 }
 
-/** Línea de explicación bajo el estado de aptitud (el estado ya dice qué es; esto dice por qué). */
+/** Líneas de explicación bajo el estado de aptitud (el estado ya dice qué es; esto dice por qué). */
 function detalleAptitud(f: FilaTablero): string[] {
   const lineas: string[] = [];
   if (f.aptitud === "NO_APTO") lineas.push("Fuera de servicio");
@@ -42,45 +59,51 @@ function detalleAptitud(f: FilaTablero): string[] {
   return lineas;
 }
 
-function Aptitud({ fila }: { fila: FilaTablero }) {
-  const ui = APTITUD_UI[fila.aptitud];
-  const detalle = detalleAptitud(fila);
+/** Tripulación en una fila que se despliega al hacer clic (o al pasar el cursor, por el `title`): deja el espacio al servicio. */
+function Tripulacion({ conductores }: { conductores: string[] }) {
+  if (conductores.length === 0) {
+    return <p className="border-b px-4 py-2.5 text-sm text-muted-foreground">Sin conductor asignado hoy</p>;
+  }
   return (
-    <div className="space-y-1">
-      <StatusBadge tone={ui.tone} icon={ui.icon}>
-        {ETIQUETA_APTITUD[fila.aptitud]}
-      </StatusBadge>
-      {detalle.map((l) => (
-        <p key={l} className="line-clamp-2 text-xs text-muted-foreground">
-          {l}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function Ocupacion({ fila }: { fila: FilaTablero }) {
-  const { ocupacion } = fila;
-  return ocupacion.estado === "EN_SERVICIO" ? (
-    <StatusBadge tone="info" icon={Truck}>
-      En servicio
-    </StatusBadge>
-  ) : (
-    <StatusBadge tone="neutral" icon={Circle}>
-      Libre
-    </StatusBadge>
+    <details className="group border-b" title={conductores.join(" · ")}>
+      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2.5 px-4 [&::-webkit-details-marker]:hidden">
+        <span aria-hidden className="flex">
+          {conductores.slice(0, 3).map((c, i) => (
+            <span
+              key={c}
+              className={cn(
+                "flex h-6 w-6 items-center justify-center rounded-full border-2 border-card bg-muted text-[11px] font-semibold",
+                i > 0 && "-ml-2"
+              )}
+            >
+              {iniciales(c)}
+            </span>
+          ))}
+        </span>
+        <span className="flex-1 text-sm text-muted-foreground">
+          {conductores.length} {conductores.length === 1 ? "persona" : "personas"}
+        </span>
+        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+      </summary>
+      <ul className="space-y-1 px-4 pb-3 text-sm">
+        {conductores.map((c) => (
+          <li key={c} className="font-medium">
+            {c}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
 function ServicioActual({ fila }: { fila: FilaTablero }) {
   const { servicioActual, serviciosEnCurso } = fila.ocupacion;
-  if (!servicioActual) return <span className="text-muted-foreground">—</span>;
+  if (!servicioActual) return null;
   return (
     <div className="space-y-0.5 text-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Servicio actual</p>
       <p className="font-medium">{servicioActual.tipoServicio}</p>
-      <p className="tabular-nums">
-        {servicioActual.hito ? `${servicioActual.hito} · ${horaCorta(servicioActual.hitoAt)}` : servicioActual.estado}
-      </p>
+      <p className="tabular-nums">{servicioActual.hito ? `${servicioActual.hito} · ${horaCorta(servicioActual.hitoAt)}` : servicioActual.estado}</p>
       {servicioActual.minutosEnServicio !== null && (
         <p className="text-xs text-muted-foreground">Lleva {formatearDuracion(servicioActual.minutosEnServicio)}</p>
       )}
@@ -91,170 +114,141 @@ function ServicioActual({ fila }: { fila: FilaTablero }) {
 
 function Proximo({ fila }: { fila: FilaTablero }) {
   const { proximo } = fila.ocupacion;
-  if (!proximo) return <span className="text-sm text-muted-foreground">Sin servicios programados</span>;
   return (
     <div className="space-y-0.5 text-sm">
-      <p className="tabular-nums">
-        <span className="font-semibold">{horaCorta(proximo.programadoPara)}</span> · {proximo.tipoServicio}
-      </p>
-      {proximo.minutosDeRetraso !== null && (
-        <p className="text-xs font-semibold text-destructive">Retrasado {formatearDuracion(proximo.minutosDeRetraso)}</p>
-      )}
-    </div>
-  );
-}
-
-function Conductores({ fila }: { fila: FilaTablero }) {
-  if (fila.conductores.length === 0) return <span className="text-sm text-muted-foreground">Sin conductor</span>;
-  // Una línea: el primero y «+N»; todos los nombres al pasar el cursor (y para lectores de pantalla). Libera alto de fila.
-  const [primero, ...resto] = fila.conductores;
-  return (
-    <p className="max-w-[14rem] truncate text-sm" title={fila.conductores.join(" · ")}>
-      {primero}
-      {resto.length > 0 && (
+      <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Próximo servicio</p>
+      {proximo ? (
         <>
-          <span aria-hidden className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium">+{resto.length}</span>
-          <span className="sr-only">, {resto.join(", ")}</span>
+          <p className="tabular-nums">
+            <span className="font-semibold">{horaCorta(proximo.programadoPara)}</span> · {proximo.tipoServicio}
+          </p>
+          {proximo.minutosDeRetraso !== null && (
+            <p className="text-xs font-semibold text-destructive">Retrasado {formatearDuracion(proximo.minutosDeRetraso)}</p>
+          )}
         </>
+      ) : (
+        <p className="text-muted-foreground">Sin servicios programados</p>
       )}
-    </p>
-  );
-}
-
-function Placa({ fila }: { fila: FilaTablero }) {
-  return (
-    <Link
-      href={`/vehiculos/${fila.vehicleId}`}
-      className="inline-flex min-h-9 items-center text-base font-semibold tabular-nums underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      {fila.placa}
-    </Link>
-  );
-}
-
-/** Fondo y borde de la fila según urgencia; el estado también va en texto e ícono. */
-function claseFila(a: Aptitud): string {
-  if (a === "NO_APTO" || a === "NO_APTO_PENDIENTE_AVAL") return "bg-destructive/5";
-  if (a === "SIN_PREOPERACIONAL") return "bg-warning-soft";
-  return "";
-}
-
-function claseBorde(a: Aptitud): string {
-  if (!requiereAtencion(a)) return "border-l-4 border-l-transparent";
-  return a === "SIN_PREOPERACIONAL" ? "border-l-4 border-l-warning" : "border-l-4 border-l-destructive";
-}
-
-function Contador({ etiqueta, valor, tono }: { etiqueta: string; valor: number; tono?: "warning" | "destructive" }) {
-  const resaltar = valor > 0 && tono;
-  return (
-    <div
-      className={cn(
-        "rounded-md border p-2",
-        resaltar && tono === "warning" && "border-warning/50 bg-warning-soft",
-        resaltar && tono === "destructive" && "border-destructive/40 bg-destructive/5"
-      )}
-    >
-      <p className="text-2xl font-semibold tabular-nums leading-none">{valor}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{etiqueta}</p>
     </div>
+  );
+}
+
+function Tarjeta({ f }: { f: FilaTablero }) {
+  const tono = tonoTarjeta(f);
+  const aptitud = APTITUD_UI[f.aptitud];
+  const detalle = detalleAptitud(f);
+  const retraso = f.ocupacion.proximo?.minutosDeRetraso ?? null;
+  const enServicio = f.ocupacion.estado === "EN_SERVICIO";
+  return (
+    <li className={cn("flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm", BORDE[tono])}>
+      <div className={cn("space-y-2 border-b px-4 py-3", FONDO[tono])}>
+        <Link
+          href={`/vehiculos/${f.vehicleId}`}
+          className="inline-flex min-h-9 items-center text-2xl font-semibold tabular-nums tracking-wide underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {f.placa}
+        </Link>
+        <div className="flex flex-wrap gap-1.5">
+          <StatusBadge tone={enServicio ? "info" : "neutral"} icon={enServicio ? Truck : Circle}>
+            {enServicio ? "En servicio" : "Libre"}
+          </StatusBadge>
+          {f.aptitud !== "APTO" && (
+            <StatusBadge tone={aptitud.tone} icon={aptitud.icon}>
+              {ETIQUETA_APTITUD[f.aptitud]}
+            </StatusBadge>
+          )}
+          {retraso !== null && <StatusBadge tone="danger">Retrasado {formatearDuracion(retraso)}</StatusBadge>}
+        </div>
+      </div>
+
+      <Tripulacion conductores={f.conductores} />
+
+      <div className="flex-1 space-y-3 px-4 py-3">
+        <ServicioActual fila={f} />
+        {detalle.length > 0 && (
+          <ul className="space-y-1.5">
+            {detalle.map((l) => (
+              <li key={l} className="rounded-md bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning-foreground">
+                {l}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="space-y-3 border-t bg-background px-4 py-3">
+        <Proximo fila={f} />
+        <Button asChild variant="outline" className="w-full">
+          <Link href={`/vehiculos/${f.vehicleId}`}>{requiereAtencion(f.aptitud) || f.novedades.cantidad > 0 ? "Ver novedades" : "Ver vehículo"}</Link>
+        </Button>
+      </div>
+    </li>
   );
 }
 
 /**
- * Tablero de vehículos de Regulación: qué vehículos operan hoy, si están aptos y si están libres o en servicio.
- * Es de solo lectura y no tiene temporizador propio: `BarraTablero` refresca la página cada 30 s y este componente
- * se vuelve a pintar con datos nuevos. Móvil: tarjetas; escritorio: tabla densa (pensada para 1366×768).
+ * Flota de hoy en tarjetas: qué vehículos operan hoy, si están aptos y si están libres o en servicio, con su tripulación
+ * plegable y el servicio que llevan. Solo lectura y sin temporizador propio: `BarraTablero` refresca la página cada 30 s y
+ * las tarjetas se vuelven a pintar con datos nuevos. El filtro (Todos, En servicio, Libres, Con alertas) vive en el cliente.
  */
 export function TableroVehiculosCard({ tablero }: { tablero: TableroVehiculos }) {
-  const { filas, contadores } = tablero;
+  const [filtro, setFiltro] = useState<FiltroFlota>("todos");
+  const { filas } = tablero;
+  const conteo = contarFlota(filas);
+  const visibles = filtrarFlota(filas, filtro);
   return (
     <Card>
       <CardHeader className="space-y-0">
         <CardTitle className="flex items-center gap-2">
-          Tablero de vehículos
-          <HelpTrigger text="Los vehículos programados hoy en tu centro. Aptitud: si puede operar según su estado, el preoperacional de hoy, las novedades abiertas y las solicitudes de NO APTO pendientes de aval. Ocupación: en servicio desde que la tripulación marca el inicio de desplazamiento, con su último hito y cuánto lleva. Todavía no se estima a qué hora queda libre: se muestra el tiempo transcurrido. «Libres» cuenta solo los libres y aptos." />
+          Flota en operación hoy
+          <HelpTrigger text="Los vehículos programados hoy en tu centro. Aptitud: si puede operar según su estado, el preoperacional de hoy, las novedades abiertas y las solicitudes de NO APTO pendientes de aval. Ocupación: en servicio desde que la tripulación marca el inicio de desplazamiento, con su último hito y cuánto lleva. Todavía no se estima a qué hora queda libre: se muestra el tiempo transcurrido. «Libres» cuenta solo los libres y aptos. Los que necesitan atención van primero." />
         </CardTitle>
+        <p className="pt-1 text-sm text-muted-foreground">
+          {conteo.todos === 0 ? "Ningún vehículo con conductor asignado." : `${conteo.todos} ${conteo.todos === 1 ? "vehículo" : "vehículos"} con tripulación asignada. Primero los que necesitan tu atención.`}
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* El tablero se refresca solo: aria-live anuncia los cambios de los contadores. */}
-        <div role="status" aria-live="polite" className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          <Contador etiqueta="Libres" valor={contadores.libres} />
-          <Contador etiqueta="En servicio" valor={contadores.enServicio} />
-          <Contador etiqueta="Con novedades" valor={contadores.conNovedades} />
-          <Contador etiqueta="No aptos" valor={contadores.noAptos} tono="destructive" />
-          <Contador etiqueta="Sin preoperacional" valor={contadores.sinPreoperacional} tono="warning" />
+        {/* El tablero se refresca solo: el resumen anuncia los cambios a lectores de pantalla. */}
+        <p role="status" aria-live="polite" className="sr-only">
+          {conteo.servicio} en servicio, {conteo.libres} libres, {conteo.alertas} con alertas.
+        </p>
+        <div role="group" aria-label="Filtrar vehículos" className="flex flex-wrap gap-2">
+          {FILTROS_FLOTA.map(({ clave, etiqueta }) => (
+            <button
+              key={clave}
+              type="button"
+              aria-pressed={filtro === clave}
+              onClick={() => setFiltro(clave)}
+              className={cn(
+                "inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 text-sm font-medium",
+                filtro === clave ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"
+              )}
+            >
+              {etiqueta}
+              <span
+                className={cn(
+                  "min-w-[1.375rem] rounded-full px-1.5 text-center text-xs font-semibold leading-5 tabular-nums",
+                  filtro === clave ? "bg-white/20" : "bg-muted"
+                )}
+              >
+                {conteo[clave]}
+              </span>
+            </button>
+          ))}
         </div>
 
         {filas.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
             No hay vehículos programados hoy en tu centro. Asigna los conductores en la programación diaria de esta página.
           </p>
+        ) : visibles.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">Ningún vehículo coincide con este filtro.</p>
         ) : (
-          <>
-            {/* Móvil: una tarjeta por vehículo. */}
-            <ul className="space-y-2 md:hidden">
-              {filas.map((f) => (
-                <li key={f.vehicleId} className={cn("space-y-2 rounded-xl border p-3", claseFila(f.aptitud), claseBorde(f.aptitud))}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Placa fila={f} />
-                    <Ocupacion fila={f} />
-                  </div>
-                  <Conductores fila={f} />
-                  <Aptitud fila={f} />
-                  {f.ocupacion.servicioActual && (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Servicio actual</p>
-                      <ServicioActual fila={f} />
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Próximo servicio</p>
-                    <Proximo fila={f} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-
-            {/* Escritorio: tabla densa. */}
-            <div className="hidden md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Vehículo</TableHead>
-                    <TableHead>Conductores</TableHead>
-                    <TableHead>Aptitud</TableHead>
-                    <TableHead>Ocupación</TableHead>
-                    <TableHead>Servicio actual</TableHead>
-                    <TableHead>Próximo servicio</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filas.map((f) => (
-                    <TableRow key={f.vehicleId} className={claseFila(f.aptitud)}>
-                      <TableCell className={cn("px-3 py-2 align-top", claseBorde(f.aptitud))}>
-                        <Placa fila={f} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2 align-top">
-                        <Conductores fila={f} />
-                      </TableCell>
-                      <TableCell className="max-w-[16rem] px-3 py-2 align-top">
-                        <Aptitud fila={f} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2 align-top">
-                        <Ocupacion fila={f} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2 align-top">
-                        <ServicioActual fila={f} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2 align-top">
-                        <Proximo fila={f} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
+          <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(16.5rem,1fr))]">
+            {visibles.map((f) => (
+              <Tarjeta key={f.vehicleId} f={f} />
+            ))}
+          </ul>
         )}
       </CardContent>
     </Card>
