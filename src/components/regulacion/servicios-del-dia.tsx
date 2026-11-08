@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HelpTrigger } from "@/components/ui/help-trigger";
-import { textoRetraso } from "@/lib/servicios-abiertos";
+import { textoRetraso, VENTANA_ABIERTOS_DIAS } from "@/lib/servicios-abiertos";
 import {
   Table,
   TableBody,
@@ -131,7 +131,8 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
       {antiguosSinCerrar > 0 && (
         <div role="status" className="mx-6 mb-2 rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-foreground">
           Hay <strong>{antiguosSinCerrar}</strong> servicios abiertos de hace más de 3 días que no se muestran aquí. Revísalos y ciérralos en{" "}
-          <Link href="/servicios" className="font-medium underline">
+          {/* Lleva a Servicios ya filtrado por «Sin gestionar hace más de 3 días» (misma ventana que usa esta tabla). */}
+          <Link href={`/servicios?sinGestionar=${VENTANA_ABIERTOS_DIAS}&sinGestionarUnidad=dia`} className="font-medium underline">
             Servicios
           </Link>
           .
@@ -160,6 +161,9 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
                 <TableHead>Ruta</TableHead>
                 <TableHead>Asignado a</TableHead>
                 <TableHead>Estado</TableHead>
+                <TableHead>
+                  <span className="sr-only">Acción</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -175,6 +179,7 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
                   s.medico_nombre && `Médico: ${s.medico_nombre}`,
                   s.auxiliar_nombre && `Aux.: ${s.auxiliar_nombre}`,
                 ].filter(Boolean) as string[];
+                const sinAsignar = !s.placa && tripulacion.length === 0;
 
                 return (
                   <TableRow key={s.id} className={cn(retraso !== null && "bg-destructive/5")}>
@@ -197,11 +202,13 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
                     </TableCell>
                     <TableCell className="min-w-[16rem] max-w-[24rem] align-top text-sm">
                       {origen || destino ? (
+                        // Una línea por tramo: las direcciones completas largas (vereda, sector, clínica y sede) desbordaban la fila.
+                        // El texto completo queda en `title` (al pasar el cursor).
                         <div className="space-y-0.5">
-                          {origen && <p className="break-words">Recoge: {origen}</p>}
-                          {intermedio && <p className="break-words">Intermedio: {intermedio}</p>}
+                          {origen && <p className="truncate" title={`Recoge: ${origen}`}>Recoge: {origen}</p>}
+                          {intermedio && <p className="truncate" title={`Intermedio: ${intermedio}`}>Intermedio: {intermedio}</p>}
                           {destino && (
-                            <p className="break-words">
+                            <p className="truncate" title={`${esTraslado ? "Entrega" : "Atención"}: ${destino}`}>
                               {esTraslado ? "Entrega" : "Atención"}: {destino}
                             </p>
                           )}
@@ -211,7 +218,7 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
                       )}
                     </TableCell>
                     <TableCell className="align-top text-sm">
-                      {s.placa || tripulacion.length > 0 ? (
+                      {!sinAsignar ? (
                         <div className="space-y-0.5">
                           {s.placa && <p className="font-semibold">{s.placa}</p>}
                           {tripulacion.map((t) => (
@@ -233,6 +240,14 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-right align-top">
+                      {/* Lleva a Servicios filtrado por este número, donde se edita y se asigna el vehículo. */}
+                      <Button asChild size="sm" variant={sinAsignar ? "default" : "outline"}>
+                        <Link href={`/servicios?numero=${s.id}&editar=1`} aria-label={`${sinAsignar ? "Asignar vehículo al" : "Abrir el"} servicio ${s.id}`}>
+                          {sinAsignar ? "Asignar vehículo" : "Abrir"}
+                        </Link>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
