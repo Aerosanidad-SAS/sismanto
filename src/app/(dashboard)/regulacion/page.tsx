@@ -9,6 +9,9 @@ import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
 import { ServiciosDelDia, type ServicioDelDia } from "@/components/regulacion/servicios-del-dia";
 import { MantenimientoCard, VencimientosCard } from "@/components/regulacion/alertas-flota";
 import { BarraTablero } from "@/components/regulacion/barra-tablero";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AvisosServicios } from "@/components/servicios/avisos-servicios";
 import { ProgramacionDiaria } from "@/components/regulacion/programacion-diaria";
 import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
@@ -95,6 +98,12 @@ export default async function RegulacionPage(
             vehiculos={vehiculosOperativos}
             reportadoPor={profile.nombre_completo ?? profile.email ?? ""}
           />
+          <Button asChild>
+            <Link href="/servicios?nuevo=1">
+              <Plus className="mr-1 h-4 w-4" aria-hidden />
+              Nuevo servicio
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -107,15 +116,15 @@ export default async function RegulacionPage(
 
       <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
 
-      {/* Primero los servicios: es lo que Regulación recibe, agenda y sigue todo el día; el tablero de vehículos es de apoyo. */}
+      {/* Como en el diseño «Sala de control»: primero la flota (qué vehículo hace qué) y debajo los servicios del día. */}
+      <TableroVehiculosCard tablero={tableroVehiculos} />
+
       <ServiciosDelDia
         antiguosSinCerrar={tablero.antiguosSinCerrar}
         servicios={(tablero.servicios as ServicioDelDia[]).filter(
           (s) => !prefijoDeCiudad || (s.ciudad_registro ?? "").toLowerCase().startsWith(prefijoDeCiudad)
         )}
       />
-
-      <TableroVehiculosCard tablero={tableroVehiculos} />
 
       <PreoperacionalHoyCard datos={preoperacional} />
 
