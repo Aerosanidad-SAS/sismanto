@@ -126,6 +126,15 @@ export interface ServicioEnCurso {
   pasosTotal: number;
   /** fecha_hora_programacion (ISO). */
   programadoPara: string | null;
+  /** Parada intermedia (solo servicios dobles y aéreos). */
+  intermedio: string | null;
+  /** Recorrido del tipo de servicio, con el instante en que la tripulación marcó cada paso (null = pendiente). */
+  pasos: { hito: string; campo: string; at: string | null }[];
+  /**
+   * Minutos con signo contra la hora de recogida mientras la tripulación no marca la llegada al sitio: positivo = retraso,
+   * negativo o cero = margen que queda. null una vez llegó (no hay hora planeada por etapa) o si no hay hora programada.
+   */
+  desvioRecogida: number | null;
 }
 
 export interface ServicioProximo {
@@ -149,6 +158,8 @@ export interface OcupacionVehiculo {
   serviciosEnCurso: number;
   /** Próximo servicio programado que todavía no arranca. */
   proximo: ServicioProximo | null;
+  /** Los servicios que siguen al próximo, por hora (la cola del día). */
+  resto: ServicioProximo[];
   /**
    * Instante (ISO) estimado en que el vehículo queda libre. SIEMPRE null por ahora: no hay una estimación fiable
    * (falta GPS y tiempos de respuesta); Daniel definirá el cálculo. No inventar un valor: el tablero muestra el
@@ -177,7 +188,7 @@ function ultimoHito(s: ServicioDelVehiculo): { hito: string; at: string } | null
 const texto = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
 /** Lo que la tarjeta de la flota muestra de un servicio: quién, de dónde a dónde, para quién y cuánto del recorrido va. */
-function datosServicio(s: ServicioDelVehiculo) {
+function datosServicio(s: ServicioDelVehiculo, ahora: number) {
   const pasos = pasosPorTipo(s.tipo_servicio);
   return {
     paciente: texto(s.nombre_completo) || null,
@@ -187,7 +198,18 @@ function datosServicio(s: ServicioDelVehiculo) {
     pasosTotal: pasos.length,
     pasosHechos: pasos.filter((p) => texto(s[p.campo]) !== "").length,
     programadoPara: typeof s.fecha_hora_programacion === "string" ? s.fecha_hora_programacion : null,
+    intermedio: textoParada(texto(s.direccion_intermedia), texto(s.ciudad_intermedia)) || null,
+    pasos: pasos.map((p) => ({ hito: p.hito, campo: p.campo, at: texto(s[p.campo]) || null })),
+    desvioRecogida: desvioRecogida(s, pasos, ahora),
   };
+}
+
+/** Minutos con signo contra la hora de recogida hasta que se marca la llegada al sitio; null si ya llegó o no hay hora. */
+function desvioRecogida(s: ServicioDelVehiculo, pasos: ReturnType<typeof pasosPorTipo>, ahora: number): number | null {
+  const llegada = pasos.find((p) => p.campo === "fecha_hora_llegada_origen") ?? pasos.find((p) => p.campo === "fecha_hora_llegada_destino");
+  const programada = ms(s.fecha_hora_programacion);
+  if (!llegada || texto(s[llegada.campo]) !== "" || programada === null) return null;
+  return Math.floor((ahora - programada) / 60000);
 }
 
 function aEnCurso(s: ServicioDelVehiculo, ahora: number): ServicioEnCurso {
@@ -203,7 +225,7 @@ function aEnCurso(s: ServicioDelVehiculo, ahora: number): ServicioEnCurso {
     estado: estadoOperativo(s).etiqueta,
     desde,
     minutosEnServicio: desdeMs === null ? null : Math.max(0, Math.floor((ahora - desdeMs) / 60000)),
-    ...datosServicio(s),
+    ...datosServicio(s, ahora),
   };
 }
 
@@ -226,21 +248,26 @@ export function ocupacionVehiculo(servicios: readonly ServicioDelVehiculo[], aho
     .map((s) => ({ s, t: ms(s.fecha_hora_programacion) }))
     .filter((x): x is { s: ServicioDelVehiculo; t: number } => x.t !== null)
     .sort((a, b) => a.t - b.t);
-  const primero = proximos[0];
+  const aProximo = ({ s }: { s: ServicioDelVehiculo }): ServicioProximo => {
+    const { paciente, origen, destino, cliente } = datosServicio(s, ahora);
+    return {
+      id: s.id,
+      tipoServicio: s.tipo_servicio,
+      programadoPara: s.fecha_hora_programacion as string,
+      minutosDeRetraso: minutosDeRetraso(s, ahora),
+      paciente,
+      origen,
+      destino,
+      cliente,
+    };
+  };
 
   return {
     estado: actuales.length > 0 ? "EN_SERVICIO" : "LIBRE",
     servicioActual: actuales[0] ?? null,
     serviciosEnCurso: actuales.length,
-    proximo: primero
-      ? {
-          id: primero.s.id,
-          tipoServicio: primero.s.tipo_servicio,
-          programadoPara: primero.s.fecha_hora_programacion as string,
-          minutosDeRetraso: minutosDeRetraso(primero.s, ahora),
-          ...(({ paciente, origen, destino, cliente }) => ({ paciente, origen, destino, cliente }))(datosServicio(primero.s)),
-        }
-      : null,
+    proximo: proximos[0] ? aProximo(proximos[0]) : null,
+    resto: proximos.slice(1).map(aProximo),
     estimadoLibre: null,
   };
 }

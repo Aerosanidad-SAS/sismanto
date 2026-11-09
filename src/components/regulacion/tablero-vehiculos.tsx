@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Ban, CheckCircle2, ChevronDown, Circle, ClipboardX, ShieldAlert, Truck, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, ChevronDown, Circle, ClipboardX, Clock, ShieldAlert, Truck, type LucideIcon } from "lucide-react";
 import type { TableroVehiculos } from "@/app/api/actions/tablero-vehiculos";
 import {
   ETIQUETA_APTITUD,
@@ -11,6 +11,8 @@ import {
   horaCorta,
   type Aptitud,
   type FilaTablero,
+  type ServicioEnCurso,
+  type ServicioProximo,
 } from "@/lib/aptitud-vehiculo";
 import { contarFlota, filtrarFlota, FILTROS_FLOTA, iniciales, tonoTarjeta, type FiltroFlota, type TonoTarjeta } from "@/lib/tablero-tarjetas";
 import { Button } from "@/components/ui/button";
@@ -98,6 +100,9 @@ function Franja({ f }: { f: FilaTablero }) {
   );
 }
 
+/** «Dra. Natalia Cano» → «Natalia». */
+const nombreDePila = (nombre: string) => nombre.replace(/^(Dr\.|Dra\.)\s*/, "").split(/\s+/)[0] ?? nombre;
+
 /** Tripulación en una fila que se despliega al hacer clic (o al pasar el cursor, por el `title`): deja el espacio al servicio. */
 function Tripulacion({ conductores }: { conductores: string[] }) {
   if (conductores.length === 0) {
@@ -119,9 +124,7 @@ function Tripulacion({ conductores }: { conductores: string[] }) {
             </span>
           ))}
         </span>
-        <span className="flex-1 text-sm text-muted-foreground">
-          {conductores.length} {conductores.length === 1 ? "persona" : "personas"}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{conductores.map(nombreDePila).join(", ")}</span>
         <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
       </summary>
       <ul className="space-y-1 px-4 pb-3 text-sm">
@@ -135,10 +138,75 @@ function Tripulacion({ conductores }: { conductores: string[] }) {
   );
 }
 
+/** Lugar de cada paso: el origen, la parada intermedia o el destino; el inicio de desplazamiento no tiene lugar. */
+function lugarDelPaso(campo: string, s: ServicioEnCurso): string | null {
+  if (campo.endsWith("_origen")) return s.origen;
+  if (campo.endsWith("_intermedia")) return s.intermedio;
+  if (campo.endsWith("_destino")) return s.destino;
+  return null;
+}
+
+/**
+ * Recorrido del servicio, con scroll interno y la etapa actual a la vista (con una fila previa asomando). Cada paso hecho lleva la
+ * hora en que lo marcó la tripulación: no hay hora planeada por etapa (esa fuente sigue abierta), así que no se inventa.
+ */
+function Etapas({ s, retrasado }: { s: ServicioEnCurso; retrasado: boolean }) {
+  const caja = useRef<HTMLOListElement>(null);
+  const actual = s.pasos.findIndex((p) => p.at === null);
+  useEffect(() => {
+    const fila = caja.current?.querySelector<HTMLElement>("[data-actual]");
+    if (caja.current && fila) caja.current.scrollTop = Math.max(0, fila.offsetTop - 50);
+  }, [actual]);
+  const color = retrasado ? "bg-destructive border-destructive" : "bg-info border-info";
+  return (
+    <ol
+      ref={caja}
+      tabIndex={0}
+      role="region"
+      aria-label="Etapas del servicio"
+      className="relative max-h-28 overflow-y-auto rounded-lg border px-2.5 pt-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {s.pasos.map((p, i) => {
+        const hecho = p.at !== null;
+        const esActual = i === actual;
+        const lugar = lugarDelPaso(p.campo, s);
+        return (
+          <li key={p.campo} data-actual={esActual ? "" : undefined} className="flex gap-2.5">
+            <span className="flex w-3.5 shrink-0 flex-col items-center">
+              <span
+                aria-hidden
+                className={cn(
+                  "mt-1 block h-3 w-3 rounded-full border-2",
+                  hecho || esActual ? color : "border-input bg-card",
+                  esActual && (retrasado ? "ring-[3px] ring-destructive/20" : "ring-[3px] ring-info/20")
+                )}
+              />
+              {i < s.pasos.length - 1 && <span aria-hidden className={cn("min-h-4 w-0.5 flex-1", hecho ? (retrasado ? "bg-destructive" : "bg-info") : "bg-border")} />}
+            </span>
+            <span className="min-w-0 flex-1 pb-2.5">
+              <span className={cn("block text-sm", esActual ? "font-bold" : hecho ? "text-muted-foreground" : "font-medium")}>
+                {p.hito}
+                <span className="sr-only">{hecho ? " (hecho)" : esActual ? " (actual)" : " (pendiente)"}</span>
+              </span>
+              {lugar && (
+                <span className="block truncate text-xs text-muted-foreground" title={lugar}>
+                  {lugar}
+                </span>
+              )}
+            </span>
+            <span className={cn("text-xs leading-5 tabular-nums", esActual ? "font-bold" : "text-muted-foreground")}>{hecho ? horaCorta(p.at) : ""}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function ServicioActual({ fila }: { fila: FilaTablero }) {
   const s = fila.ocupacion.servicioActual;
   if (!s) return null;
-  const retrasado = fila.ocupacion.proximo?.minutosDeRetraso != null;
+  const desvio = s.desvioRecogida;
+  const retrasado = desvio !== null && desvio > 0;
   return (
     <div className="space-y-1.5 text-sm">
       <p className={ROTULO}>Servicio actual</p>
@@ -147,26 +215,26 @@ function ServicioActual({ fila }: { fila: FilaTablero }) {
         {s.cliente ? ` · ${s.cliente}` : ""}
       </p>
       {s.paciente && <p className="font-semibold">{s.paciente}</p>}
-      {(s.origen || s.destino) && (
-        <p className="line-clamp-2 text-muted-foreground" title={ruta(s.origen, s.destino)}>
-          {ruta(s.origen, s.destino)}
-        </p>
+      {desvio !== null && (
+        <span
+          suppressHydrationWarning
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold",
+            retrasado ? "bg-destructive text-destructive-foreground" : "bg-success-soft text-success"
+          )}
+        >
+          {retrasado ? <Clock className="h-3.5 w-3.5" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />}
+          {retrasado ? "Retraso" : "A tiempo"}: {formatearDuracion(Math.abs(desvio))}
+        </span>
       )}
-      {s.pasosTotal > 0 && (
-        <div>
-          <div className="flex gap-1" role="img" aria-label={`Paso ${s.pasosHechos} de ${s.pasosTotal}`}>
-            {Array.from({ length: s.pasosTotal }).map((_, i) => (
-              <span key={i} className={cn("h-1.5 flex-1 rounded-full", i < s.pasosHechos ? (retrasado ? "bg-destructive" : "bg-info") : "bg-muted")} />
-            ))}
-          </div>
-          <p className="mt-1 text-xs">
-            <span className="font-semibold">{s.hito ?? "Sin iniciar"}</span>
-            <span className="text-muted-foreground">
-              {" "}
-              · paso {s.pasosHechos} de {s.pasosTotal}
-            </span>
+      {s.pasos.length > 0 ? (
+        <Etapas s={s} retrasado={retrasado} />
+      ) : (
+        (s.origen || s.destino) && (
+          <p className="line-clamp-2 text-muted-foreground" title={ruta(s.origen, s.destino)}>
+            {ruta(s.origen, s.destino)}
           </p>
-        </div>
+        )
       )}
       {s.programadoPara && <p className="text-xs text-muted-foreground">Recogida programada {horaCorta(s.programadoPara)}</p>}
       {fila.ocupacion.serviciosEnCurso > 1 && <p className="text-xs text-muted-foreground">+{fila.ocupacion.serviciosEnCurso - 1} más en curso</p>}
@@ -185,10 +253,23 @@ function Disponibilidad({ fila }: { fila: FilaTablero }) {
 }
 
 function Proximo({ fila }: { fila: FilaTablero }) {
-  const { proximo, servicioActual } = fila.ocupacion;
+  const { proximo, servicioActual, resto } = fila.ocupacion;
+  const enCola = proximo && !noApto(fila.aptitud) ? 1 + resto.length : 0;
+  const lineaCola = (p: ServicioProximo) => (
+    <>
+      <p className="tabular-nums">
+        <span className="font-semibold">{horaCorta(p.programadoPara)}</span> · {p.tipoServicio}
+      </p>
+      {(p.origen || p.destino) && (
+        <p className="line-clamp-2 text-muted-foreground" title={ruta(p.origen, p.destino)}>
+          {ruta(p.origen, p.destino)}
+        </p>
+      )}
+    </>
+  );
   return (
     <div className="space-y-0.5 text-sm">
-      <p className={ROTULO}>Próximo servicio</p>
+      <p className={ROTULO}>{enCola > 1 ? `Cola del día · ${enCola} servicios` : "Próximo servicio"}</p>
       {noApto(fila.aptitud) ? (
         <>
           <p className="font-medium">No disponible</p>
@@ -196,14 +277,9 @@ function Proximo({ fila }: { fila: FilaTablero }) {
         </>
       ) : proximo ? (
         <>
-          <p className="tabular-nums">
-            <span className="font-semibold">{horaCorta(proximo.programadoPara)}</span> · {proximo.tipoServicio}
-          </p>
-          {(proximo.origen || proximo.destino) && (
-            <p className="line-clamp-2 text-muted-foreground" title={ruta(proximo.origen, proximo.destino)}>
-              {ruta(proximo.origen, proximo.destino)}
-            </p>
-          )}
+          {lineaCola(proximo)}
+          {resto[0] && <div className="mt-1.5 space-y-0.5 border-t border-dashed border-input pt-1.5">{lineaCola(resto[0])}</div>}
+          {resto.length > 1 && <p className="pt-1 text-xs font-semibold text-primary">+{resto.length - 1} más en cola</p>}
         </>
       ) : (
         <>
