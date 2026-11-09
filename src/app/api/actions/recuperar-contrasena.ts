@@ -22,7 +22,7 @@ import {
 // Es público (sin sesión): todo pasa por la clave de servicio y las respuestas no revelan si una cédula tiene cuenta.
 
 const MENSAJE_ENVIO =
-  "Si la cédula corresponde a un usuario activo con correo registrado, en unos segundos te llegará un código de 6 dígitos. Revisa también la carpeta de spam. Si no tienes un correo registrado en SISMANTO, pídele a tu coordinación o a un administrador que te restablezca la clave.";
+  "Si la cédula corresponde a un usuario activo con correo registrado, en unos segundos te llegará un código de 6 dígitos. Revisa también la carpeta de spam. Si no tienes un correo registrado en SISRES, pídele a tu coordinación o a un administrador que te restablezca la clave.";
 const CODIGO_INVALIDO = "Código inválido o vencido. Pide uno nuevo si ya pasaron 15 minutos o se agotaron los intentos.";
 
 async function ip(): Promise<string> {
@@ -78,7 +78,7 @@ export async function solicitarCodigoRecuperacion(cedulaEscrita: string) {
     } else {
       const envio = await enviarCorreo(
         [usuario.email],
-        "Código para recuperar tu contraseña de SISMANTO",
+        "Código para recuperar tu contraseña de SISRES",
         `<div style="font-family:sans-serif;color:#111827">
           <p>Recibimos una solicitud para cambiar la contraseña de tu cuenta.</p>
           <p style="font-size:28px;font-weight:700;letter-spacing:6px">${codigo}</p>

@@ -53,7 +53,7 @@ function resumen(d: DatosCorreoTicket): string {
 }
 
 const envolver = (titulo: string, cuerpo: string) =>
-  `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222"><h3 style="margin:0 0 12px">${escaparHtml(titulo)}</h3>${cuerpo}<p style="color:#888;font-size:12px;margin-top:20px">Mensaje automático de SISMANTO — Soporte técnico. No respondas a este correo.</p></div>`;
+  `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222"><h3 style="margin:0 0 12px">${escaparHtml(titulo)}</h3>${cuerpo}<p style="color:#888;font-size:12px;margin-top:20px">Mensaje automático de SISRES — Soporte técnico. No respondas a este correo.</p></div>`;
 
 export function armarCorreoTicket(evento: EventoTicketCorreo, d: DatosCorreoTicket): { asunto: string; html: string } {
   const gestion = enlace(d.baseUrl, `/soporte/gestion/${d.id}`, "Abrir el ticket en Gestión");
