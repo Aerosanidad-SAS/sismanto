@@ -10,7 +10,8 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 import { formatDateShort, formatCurrency, cn } from "@/lib/utils";
-import { actualizarMantenimientoCampo } from "@/app/api/actions/mantenimientos";
+import { actualizarMantenimientoCampo, urlSoporteMantenimiento } from "@/app/api/actions/mantenimientos";
+import { estadoSoporte } from "@/lib/soporte-mantenimiento";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,8 @@ export interface MantenimientoRow {
   categoria_id: number | null;
   vehicles: { placa: string } | null;
   maintenance_categories: { nombre: string } | null;
+  requiere_soporte?: boolean | null;
+  soporte_path?: string | null;
 }
 
 interface Category {
@@ -296,6 +299,40 @@ function DescripcionCell({
 
 // ─── Main Table ───────────────────────────────────────────────────────────────
 
+/** Soporte del mantenimiento: «Ver soporte» si tiene, «Sin soporte» si es un correctivo registrado sin él, nada si es histórico. */
+function SoporteCell({ m }: { m: MantenimientoRow }) {
+  const [abriendo, setAbriendo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const estado = estadoSoporte(m);
+  if (estado === "no_aplica") return <span className="text-muted-foreground">—</span>;
+  if (estado === "sin_soporte") return <Badge variant="warning">Sin soporte</Badge>;
+  return (
+    <div className="space-y-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={abriendo}
+        onClick={async () => {
+          setAbriendo(true);
+          setError(null);
+          const r = await urlSoporteMantenimiento(m.id_manto);
+          setAbriendo(false);
+          if ("url" in r) window.open(r.url, "_blank", "noopener,noreferrer");
+          else setError(r.error);
+        }}
+      >
+        {abriendo ? "Abriendo…" : "Ver soporte"}
+      </Button>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function MantenimientosTabla({
   mantenimientos: initial,
   categories,
@@ -385,6 +422,12 @@ export function MantenimientosTabla({
                 <dt className="text-muted-foreground">Factura</dt>
                 <dd>{m.numero_factura || "—"}</dd>
               </div>
+              <div>
+                <dt className="text-muted-foreground">Soporte</dt>
+                <dd>
+                  <SoporteCell m={m} />
+                </dd>
+              </div>
             </dl>
           </li>
         ))}
@@ -403,6 +446,7 @@ export function MantenimientosTabla({
               <TableHead>Proveedor</TableHead>
               <TableHead className="text-right">Valor</TableHead>
               <TableHead>Factura</TableHead>
+              <TableHead>Soporte</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -424,6 +468,9 @@ export function MantenimientosTabla({
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {m.numero_factura || "—"}
+                </TableCell>
+                <TableCell>
+                  <SoporteCell m={m} />
                 </TableCell>
               </TableRow>
             ))}
