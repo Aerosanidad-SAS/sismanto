@@ -218,7 +218,7 @@ export function DashboardShell({
             />
           </div>
           <p className="font-[var(--font-bebas-neue)] truncate text-xl uppercase leading-none tracking-wide">
-            <span className="text-primary">Aero</span> <span className="text-accent">Manto</span>
+            <span className="text-primary">SIS</span><span className="text-accent">RES</span>
           </p>
         </div>
       </header>

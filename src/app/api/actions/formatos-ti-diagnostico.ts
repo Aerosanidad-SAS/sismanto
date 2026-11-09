@@ -244,7 +244,7 @@ export async function generarDiagnosticoPdf(id: number) {
         diagnostico: fila,
         repuestos,
         firmas: firmas as Partial<Record<LadoDiagnostico, FirmaPdf>>,
-        generadoPor: profile?.nombre_completo || profile?.email || "Usuario SISMANTO",
+        generadoPor: profile?.nombre_completo || profile?.email || "Usuario SISRES",
       })
     );
     return { success: true, data: buffer.toString("base64"), filename: `diagnostico-${fila.numero_orden}.pdf` };

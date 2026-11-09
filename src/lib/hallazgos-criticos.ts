@@ -47,7 +47,7 @@ export function armarAlertaNoApto(d: DatosAlertaNoApto): { asunto: string; html:
         `<p><strong>${esc(d.reportadoPor)} solicita que el vehículo ${sitio} quede NO APTO y necesita tu aval.</strong></p>` +
         `<p>Motivo:</p><ul>${lista}</ul>` +
         `<p>Enviada el ${esc(d.cuando)} (hora de Colombia). Mientras se resuelve, el vehículo está en bloqueo provisional: no debe operar ni recibir servicios.</p>` +
-        `<p>Coordinación del CRA o el administrador: avala o rechaza la solicitud en SISMANTO.</p>`,
+        `<p>Coordinación del CRA o el administrador: avala o rechaza la solicitud en SISRES.</p>`,
     };
   }
   return {

@@ -195,7 +195,7 @@ export async function generarBajaPdf(id: number) {
       createElement(BajaPdf, {
         baja: fila,
         firmas: firmas as Partial<Record<LadoBaja, FirmaPdf>>,
-        generadoPor: profile?.nombre_completo || profile?.email || "Usuario SISMANTO",
+        generadoPor: profile?.nombre_completo || profile?.email || "Usuario SISRES",
       })
     );
     return { success: true, data: buffer.toString("base64"), filename: `baja-${fila.numero_orden}.pdf` };
