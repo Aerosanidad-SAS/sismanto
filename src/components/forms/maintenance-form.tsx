@@ -33,11 +33,13 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   crearMantenimiento,
+  subirSoporteMantenimiento,
   getUltimoKilometrajeVehiculo,
   getNovedadesAbiertasPorVehiculo,
 } from "@/app/api/actions/mantenimientos";
 import { crearProveedor } from "@/app/api/actions/proveedores";
 import { formatCurrency } from "@/lib/utils";
+import { SOPORTE_FORMATOS, SOPORTE_TAMANO_MAXIMO } from "@/lib/soporte-mantenimiento";
 import type { Vehicle, MaintenanceCategory, Supplier } from "@/types";
 import { Plus } from "lucide-react";
 
@@ -57,6 +59,8 @@ export function MaintenanceForm({
   const prefillVehicleId = searchParams.get("vehicleId") || undefined;
   const prefillIncidentId = searchParams.get("incidentId");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [soporte, setSoporte] = useState<File | null>(null);
+  const [errorSoporte, setErrorSoporte] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ultimoKm, setUltimoKm] = useState<number | null>(null);
   const [novedadesAbiertas, setNovedadesAbiertas] = useState<
@@ -139,7 +143,18 @@ export function MaintenanceForm({
     setError(null);
 
     try {
-      const result = await crearMantenimiento(data);
+      let soportePath: string | undefined;
+      if (soporte) {
+        const fd = new FormData();
+        fd.append("soporte", soporte);
+        const subida = await subirSoporteMantenimiento(fd);
+        if ("error" in subida) {
+          setError(subida.error);
+          return;
+        }
+        soportePath = subida.path;
+      }
+      const result = await crearMantenimiento({ ...data, soportePath });
       if (result.error) {
         setError(result.error);
       } else {
@@ -437,6 +452,43 @@ export function MaintenanceForm({
             <p className="text-sm text-red-600 mt-1">{errors.tiempoFueraServicioHoras.message}</p>
           )}
         </div>
+      </div>
+
+      {/* Soporte */}
+      <div>
+        <Label htmlFor="soporte">Soporte (factura, orden de trabajo o foto)</Label>
+        <Input
+          id="soporte"
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+          className="mt-1"
+          aria-describedby="soporte-ayuda"
+          onChange={(e) => {
+            const archivo = e.target.files?.[0] ?? null;
+            if (archivo && archivo.size > SOPORTE_TAMANO_MAXIMO) {
+              setSoporte(null);
+              setErrorSoporte("El soporte no puede pesar más de 8 MB");
+              e.target.value = "";
+              return;
+            }
+            setErrorSoporte(null);
+            setSoporte(archivo);
+          }}
+        />
+        <p id="soporte-ayuda" className="mt-1 text-xs text-muted-foreground">
+          {SOPORTE_FORMATOS}, máximo 8 MB.
+        </p>
+        {errorSoporte && (
+          <p role="alert" className="mt-1 text-sm text-red-600">
+            {errorSoporte}
+          </p>
+        )}
+        {watch("tipo") === "CORRECTIVO" && !soporte && (
+          <p className="mt-2 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning-foreground">
+            Un correctivo sin soporte se guarda, pero queda marcado «sin soporte» en el historial: sin él no se recupera el costo
+            (regla de Airplan).
+          </p>
+        )}
       </div>
 
       {/* Descripción */}
