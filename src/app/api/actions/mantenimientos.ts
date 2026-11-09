@@ -52,6 +52,12 @@ export async function crearMantenimiento(formData: MaintenanceFormData) {
   const quitarSoporte = async () => {
     if (payload.soportePath) await supabase.storage.from(SOPORTE_BUCKET).remove([payload.soportePath]);
   };
+  // La ruta debe corresponder a un archivo realmente subido: sin esto se podría marcar «con soporte» una ruta inventada.
+  if (payload.soportePath) {
+    const [carpeta, nombre] = payload.soportePath.split("/");
+    const { data: existente } = await supabase.storage.from(SOPORTE_BUCKET).list(carpeta, { search: nombre, limit: 1 });
+    if (!existente?.some((o) => o.name === nombre)) return { error: "Soporte inválido. Súbelo de nuevo." };
+  }
 
   try {
     // 1. Validar que el kilometraje sea >= al último registrado
@@ -133,6 +139,7 @@ export async function crearMantenimiento(formData: MaintenanceFormData) {
 
     return { success: true, data: manto };
   } catch (error) {
+    await quitarSoporte();
     return {
       error: error instanceof Error ? error.message : "Error desconocido",
     };
