@@ -34,6 +34,8 @@ export const maintenanceSchema = z.object({
     .default(0),
   notasAdicionales: z.string().optional(),
   incidentId: z.number().int().optional(),
+  // Ruta del soporte ya subido (ver `subirSoporteMantenimiento`); la acción comprueba que sea del propio usuario.
+  soportePath: z.string().max(200).optional(),
 });
 
 export type MaintenanceFormData = z.infer<typeof maintenanceSchema>;
