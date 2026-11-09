@@ -12,6 +12,7 @@ import {
   pasosPorTipo,
   type ServicioParaEstado,
 } from "@/lib/estado-servicio";
+import { textoParada } from "@/lib/servicio-detalle";
 
 // ── Aptitud ─────────────────────────────────────────────────────────────────
 
@@ -115,6 +116,16 @@ export interface ServicioEnCurso {
   desde: string | null;
   /** Minutos transcurridos desde `desde`; null si no hay marca de inicio. */
   minutosEnServicio: number | null;
+  paciente: string | null;
+  /** «dirección, ciudad» del origen y del destino (vacío si el servicio no los trae). */
+  origen: string | null;
+  destino: string | null;
+  cliente: string | null;
+  /** Pasos del recorrido que marcó la tripulación, de los que exige su tipo de servicio. */
+  pasosHechos: number;
+  pasosTotal: number;
+  /** fecha_hora_programacion (ISO). */
+  programadoPara: string | null;
 }
 
 export interface ServicioProximo {
@@ -124,6 +135,10 @@ export interface ServicioProximo {
   programadoPara: string;
   /** Minutos de retraso si la hora ya pasó y la tripulación no ha llegado; null si no aplica. */
   minutosDeRetraso: number | null;
+  paciente: string | null;
+  origen: string | null;
+  destino: string | null;
+  cliente: string | null;
 }
 
 export interface OcupacionVehiculo {
@@ -159,6 +174,22 @@ function ultimoHito(s: ServicioDelVehiculo): { hito: string; at: string } | null
   return ultimo;
 }
 
+const texto = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+
+/** Lo que la tarjeta de la flota muestra de un servicio: quién, de dónde a dónde, para quién y cuánto del recorrido va. */
+function datosServicio(s: ServicioDelVehiculo) {
+  const pasos = pasosPorTipo(s.tipo_servicio);
+  return {
+    paciente: texto(s.nombre_completo) || null,
+    origen: textoParada(texto(s.direccion_origen), texto(s.ciudad_origen)) || null,
+    destino: textoParada(texto(s.direccion_destino), texto(s.ciudad_destino)) || null,
+    cliente: texto(s.cliente) || null,
+    pasosTotal: pasos.length,
+    pasosHechos: pasos.filter((p) => texto(s[p.campo]) !== "").length,
+    programadoPara: typeof s.fecha_hora_programacion === "string" ? s.fecha_hora_programacion : null,
+  };
+}
+
 function aEnCurso(s: ServicioDelVehiculo, ahora: number): ServicioEnCurso {
   const hito = ultimoHito(s);
   const inicio = typeof s.fecha_hora_inicio_desplazamiento === "string" ? s.fecha_hora_inicio_desplazamiento : null;
@@ -172,6 +203,7 @@ function aEnCurso(s: ServicioDelVehiculo, ahora: number): ServicioEnCurso {
     estado: estadoOperativo(s).etiqueta,
     desde,
     minutosEnServicio: desdeMs === null ? null : Math.max(0, Math.floor((ahora - desdeMs) / 60000)),
+    ...datosServicio(s),
   };
 }
 
@@ -206,6 +238,7 @@ export function ocupacionVehiculo(servicios: readonly ServicioDelVehiculo[], aho
           tipoServicio: primero.s.tipo_servicio,
           programadoPara: primero.s.fecha_hora_programacion as string,
           minutosDeRetraso: minutosDeRetraso(primero.s, ahora),
+          ...(({ paciente, origen, destino, cliente }) => ({ paciente, origen, destino, cliente }))(datosServicio(primero.s)),
         }
       : null,
     estimadoLibre: null,
