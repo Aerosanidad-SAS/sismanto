@@ -11,7 +11,7 @@ const fila = (placa: string, aptitud: Aptitud, estado: "LIBRE" | "EN_SERVICIO"):
     aptitud,
     novedades: { cantidad: 0, severidadMaxima: null },
     motivoSolicitud: null,
-    ocupacion: { estado, servicioActual: null, serviciosEnCurso: 0, proximo: null },
+    ocupacion: { estado, servicioActual: null, serviciosEnCurso: 0, proximo: null, resto: [] },
   }) as unknown as FilaTablero;
 
 const filas = [
