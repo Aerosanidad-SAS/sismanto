@@ -23,6 +23,7 @@ import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
 import { errorDeCambioEtapa } from "@/lib/servicios-etapas";
+import { VENTANA_ABIERTOS_DIAS } from "@/lib/servicios-abiertos";
 import {
   ETAPAS_QUE_CHOCAN,
   filtroRecursos,
@@ -708,6 +709,60 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
   await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}${motivo?.trim() ? `. Motivo: ${motivo.trim()}` : ""}`);
   revalidatePath("/servicios");
   return { success: true };
+}
+
+const ROLES_CIERRE_EN_BLOQUE: UserRole[] = ["ADMIN", "REGULACION", "ANALISTA"];
+const MAX_CIERRE_EN_BLOQUE = 100;
+
+/**
+ * Finalizar o cancelar varios servicios de una vez (pantalla Servicios, selección múltiple). No salta ninguna regla: cada servicio
+ * pasa por `cambiarEtapaServicio`, así que FINALIZADO exige la llegada y salida reales de cada tramo, CANCELADO exige motivo, y
+ * cada uno queda en la bitácora con su nombre. Los que no cumplen vuelven con su razón; los demás se aplican.
+ */
+export async function cambiarEtapaVarios(
+  ids: number[],
+  etapaNueva: "FINALIZADO" | "CANCELADO",
+  motivo?: string
+): Promise<{ error?: string; aplicados: number; fallidos: { id: number; error: string }[] }> {
+  await requireRole(ROLES_CIERRE_EN_BLOQUE);
+  const lista = z.array(z.number().int().positive()).min(1).max(MAX_CIERRE_EN_BLOQUE).safeParse([...new Set(ids)]);
+  if (!lista.success) return { error: `Elige entre 1 y ${MAX_CIERRE_EN_BLOQUE} servicios.`, aplicados: 0, fallidos: [] };
+
+  const supabase = createClient();
+  const { data: filas, error } = await supabase.from("medical_services").select("id, etapa").in("id", lista.data);
+  if (error) return { error: error.message, aplicados: 0, fallidos: [] };
+  const etapaDe = new Map((filas ?? ([] as { id: number; etapa: string }[])).map((f: { id: number; etapa: string }) => [f.id, f.etapa]));
+
+  let aplicados = 0;
+  const fallidos: { id: number; error: string }[] = [];
+  for (const id of lista.data) {
+    const etapa = etapaDe.get(id);
+    if (!etapa) {
+      fallidos.push({ id, error: "No existe o no tienes acceso." });
+      continue;
+    }
+    const res = await cambiarEtapaServicio(id, etapa, etapaNueva, motivo);
+    if ("error" in res && res.error) fallidos.push({ id, error: res.error });
+    else aplicados++;
+  }
+  return { aplicados, fallidos };
+}
+
+/** Cuántos servicios hay en cada vista de la pantalla Servicios (Hoy y Estancados), dentro de lo que ve quien pregunta. */
+export async function contarVistasServicios(ciudad?: string) {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const centro = centroVisible(profile);
+  const hoy = hoyBogota();
+  const cuenta = async (f: FiltrosServicios): Promise<number> => {
+    const { count } = await aplicarFiltrosServicios(supabase.from("medical_services").select("id", { count: "exact", head: true }), f, centro);
+    return count ?? 0;
+  };
+  const [deHoy, estancados] = await Promise.all([
+    cuenta({ ciudad, desde: hoy, hasta: hoy }),
+    cuenta({ ciudad, sinGestionar: String(VENTANA_ABIERTOS_DIAS), sinGestionarUnidad: "dia" }),
+  ]);
+  return { hoy: deHoy, estancados };
 }
 
 /**

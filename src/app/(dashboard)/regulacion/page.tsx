@@ -9,6 +9,7 @@ import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
 import { ServiciosDelDia, type ServicioDelDia } from "@/components/regulacion/servicios-del-dia";
 import { MantenimientoCard, VencimientosCard } from "@/components/regulacion/alertas-flota";
 import { BarraTablero } from "@/components/regulacion/barra-tablero";
+import { estadoParaAvisos } from "@/lib/avisos-sala";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,12 @@ export default async function RegulacionPage(
     (tablero.servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa])
   );
 
+  // Foto de estado de cada servicio visible: AvisosServicios la compara entre refrescos para el toast y el sonido por categoría.
+  const ahoraServidor = Date.now();
+  const estadosSala = Object.fromEntries(
+    (tablero.servicios as (ServicioDelDia & { placa: string | null })[]).map((s) => [s.id, estadoParaAvisos(s, ahoraServidor)])
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -93,7 +100,7 @@ export default async function RegulacionPage(
         <div className="flex flex-wrap items-center gap-3">
           {!ciudadFija && <FiltroCiudadUrl />}
           {/* Alertas sonoras 60/30/15 min y avisos de servicio: antes solo estaban en /servicios. */}
-          <AvisosServicios etapasVisibles={etapasVisibles} />
+          <AvisosServicios etapasVisibles={etapasVisibles} estadosSala={estadosSala} />
           <BarraTablero
             vehiculos={vehiculosOperativos}
             reportadoPor={profile.nombre_completo ?? profile.email ?? ""}

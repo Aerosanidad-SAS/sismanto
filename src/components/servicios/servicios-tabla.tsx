@@ -8,8 +8,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { AccionesEnBloque } from "@/components/servicios/acciones-en-bloque";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -259,6 +261,9 @@ const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p
 // campos de logística con readonly/campo-bloqueado, no oculta secciones).
 const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>(CAMPOS_CLINICOS_LISTA);
 
+// Quién puede finalizar o cancelar en bloque: lo mismo que exige la acción del servidor.
+const ROLES_CIERRE_EN_BLOQUE = ["ADMIN", "REGULACION", "ANALISTA"];
+
 export function ServiciosTabla({
   servicios,
   vehiculos,
@@ -289,6 +294,15 @@ export function ServiciosTabla({
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  // Selección múltiple (finalizar o cancelar en bloque): ids elegidos en la página actual.
+  const puedeSeleccionar = puedeEditar && ROLES_CIERRE_EN_BLOQUE.includes(viewerRole ?? "");
+  const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
+  const alternarSeleccion = (id: number) =>
+    setSeleccion((prev) => {
+      const sig = new Set(prev);
+      if (!sig.delete(id)) sig.add(id);
+      return sig;
+    });
   const [cedulaBusqueda, setCedulaBusqueda] = useState("");
   const [pacienteNuevoAbierto, setPacienteNuevoAbierto] = useState(false);
   // Etapa inicial — solo aplica al crear (SISRES: registroServicios.php la
@@ -1661,11 +1675,33 @@ export function ServiciosTabla({
         ))}
       </ul>
 
+      {puedeSeleccionar && (
+        <AccionesEnBloque
+          ids={[...seleccion].filter((id) => filtrados.some((s) => s.id === id))}
+          onLimpiar={() => setSeleccion(new Set())}
+          onListo={() => {
+            setSeleccion(new Set());
+            router.refresh();
+          }}
+        />
+      )}
+
       {/* Escritorio (md en adelante): tabla. */}
       <div className="hidden overflow-x-auto [container-type:inline-size] md:block">
         <Table className="[&_td]:px-3 [&_td]:py-1.5 [&_th]:h-9 [&_th]:px-3">
           <TableHeader>
             <TableRow>
+              {puedeSeleccionar && (
+                <TableHead className="w-8 !px-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Seleccionar todos los servicios de la página"
+                    className="h-4 w-4 accent-primary"
+                    checked={filtrados.length > 0 && filtrados.every((s) => seleccion.has(s.id))}
+                    onChange={(e) => setSeleccion(e.target.checked ? new Set(filtrados.map((s) => s.id)) : new Set())}
+                  />
+                </TableHead>
+              )}
               <TableHead>ID</TableHead>
               <TableHead>Etapa</TableHead>
               <TableHead>Paciente</TableHead>
@@ -1682,7 +1718,7 @@ export function ServiciosTabla({
             {filtrados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6 + (puedeEditar ? 1 : 0)}
+                  colSpan={6 + (puedeEditar ? 1 : 0) + (puedeSeleccionar ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin servicios registrados
@@ -1692,7 +1728,7 @@ export function ServiciosTabla({
             {filtrados.map((s) =>
               filaEnEdicion === s.id ? (
                 <TableRow key={s.id} className="bg-muted/30 hover:bg-muted/30">
-                  <TableCell colSpan={6 + (puedeEditar ? 1 : 0)} className="!p-0">
+                  <TableCell colSpan={6 + (puedeEditar ? 1 : 0) + (puedeSeleccionar ? 1 : 0)} className="!p-0">
                     {/* sticky + 100cqw: el panel mide lo que mide la zona visible de la tabla (aunque la tabla sea más ancha) y el desplazamiento horizontal queda dentro del formulario. */}
                     <div className="sticky left-0 w-[calc(100cqw-2px)] max-w-full space-y-3 p-3" role="region" aria-labelledby={`edicion-titulo-${s.id}`}>
                       <div
@@ -1717,7 +1753,18 @@ export function ServiciosTabla({
                   </TableCell>
                 </TableRow>
               ) : (
-              <TableRow key={s.id}>
+              <TableRow key={s.id} className={cn(seleccion.has(s.id) && "bg-info-soft")}>
+                {puedeSeleccionar && (
+                  <TableCell className="w-8 !px-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Seleccionar servicio ${s.id}`}
+                      className="h-4 w-4 accent-primary"
+                      checked={seleccion.has(s.id)}
+                      onChange={() => alternarSeleccion(s.id)}
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="w-12 !px-2 text-xs tabular-nums text-muted-foreground">{s.id}</TableCell>
                 <TableCell>
                   <div className="flex flex-nowrap items-center gap-1">{insigniasEtapa(s)}</div>

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   buscarServicios,
+  contarVistasServicios,
   getMovilesEnServicio,
   getOpcionesFiltroServicios,
   getServiciosMedicos,
@@ -25,6 +26,8 @@ import { ServiciosFiltros } from "@/components/servicios/servicios-filtros";
 import { ServiciosPaginacion } from "@/components/servicios/servicios-paginacion";
 import { ExportarServicios } from "@/components/servicios/exportar-servicios";
 import { AvisosServicios } from "@/components/servicios/avisos-servicios";
+import { VistasServicios, vistaActiva } from "@/components/servicios/vistas-servicios";
+import { VENTANA_ABIERTOS_DIAS } from "@/lib/servicios-abiertos";
 
 export const metadata = { title: "Servicios" };
 
@@ -76,6 +79,7 @@ export default async function ServiciosPage(
     epsOptions,
     camposPacienteObligatorios,
     movilesOcupados,
+    conteoVistas,
   ] =
     await Promise.all([
       buscarServicios(filtros, pagina),
@@ -94,6 +98,7 @@ export default async function ServiciosPage(
       getCamposObligatoriosModulo("pacientes"),
       // Móviles con servicio en curso: verde (libre) o rojo (ocupado) en el selector de móvil del formulario.
       getMovilesEnServicio().catch(() => [] as string[]),
+      contarVistasServicios(filtros.ciudad).catch(() => ({ hoy: 0, estancados: 0 })),
     ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const etapasVisibles = Object.fromEntries((servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa]));
@@ -139,6 +144,8 @@ export default async function ServiciosPage(
           <MisServicios servicios={misServicios as any} modoAdmin={profile?.role_codigo === "ADMIN"} />
         </div>
       )}
+
+      <VistasServicios activa={vistaActiva(filtros, hoyIso, VENTANA_ABIERTOS_DIAS)} hoy={hoyIso} dias={VENTANA_ABIERTOS_DIAS} conteo={conteoVistas} />
 
       <Card>
         <CardContent className="space-y-3 p-4">

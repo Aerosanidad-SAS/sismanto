@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, BellOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toaster";
+import { detectarEventos, sonidoMasUrgente, type EstadoParaAvisos, type SonidoSala } from "@/lib/avisos-sala";
 import { getServiciosParaAvisos } from "@/app/api/actions/servicios-medicos";
 import { getResumenAbiertosFinDeDia } from "@/app/api/actions/servicios-fin-de-dia";
 import { getUmbralesEstancado } from "@/app/api/actions/servicios-estancados";
@@ -22,7 +24,7 @@ import { cn } from "@/lib/utils";
  * El sonido se activa o apaga por navegador (localStorage), igual que SISRES.
  */
 
-type TipoSonido = "click" | "alerta60" | "alerta30" | "alerta15" | "enCurso" | "finalizado" | "finDia";
+type TipoSonido = "click" | "alerta60" | "alerta30" | "alerta15" | "enCurso" | "finalizado" | "finDia" | SonidoSala;
 type Aviso = { id: string; titulo: string; detalle: string; tono: "info" | "alerta" | "urgente" | "ok"; enlace?: string };
 
 const REFRESCO_MS = 60_000;
@@ -82,6 +84,20 @@ const SONIDOS: Record<TipoSonido, () => void> = {
     beep(784, 0.36, 0.15, 0.3);
     beep(1047, 0.54, 0.3, 0.4);
   },
+  // Sala de control (diseño): cada categoría suena distinto y discreto. Cambio de estado: un tono suave y corto.
+  estado: () => beep(660, 0, 0.12, 0.12),
+  // Servicio nuevo o sin asignar: dos tonos ascendentes suaves.
+  nuevo: () => {
+    beep(523, 0, 0.14, 0.15);
+    beep(784, 0.18, 0.18, 0.15);
+  },
+  // Retraso: más grave que los avisos de hora y que «estancado»; dos repeticiones y no más.
+  retraso: () => {
+    for (const t of [0, 0.7]) {
+      beep(196, t, 0.25, 0.3, "triangle");
+      beep(165, t + 0.3, 0.3, 0.3, "triangle");
+    }
+  },
   // Fin de día: cuatro tonos largos que bajan y suben, distinto de los avisos de hora para que no se confunda.
   finDia: () => {
     beep(587, 0, 0.3, 0.45, "triangle");
@@ -113,7 +129,21 @@ function hayTrabajoEnCurso(): boolean {
   return !!activo?.matches('input, textarea, select, [contenteditable="true"]');
 }
 
-export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<number, string> }) {
+/** «08:12» en hora de Colombia; «—» si falta. */
+const horaBogota = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Bogota" }) : "—";
+
+/**
+ * `estadosSala` (solo la Sala de control): activa el aviso emergente y el sonido por cada cambio de estado, servicio nuevo o sin
+ * asignar y retraso; en ese caso reemplaza el aviso de «pasó a CURSO / FINALIZADO», que es un subconjunto.
+ */
+export function AvisosServicios({
+  etapasVisibles,
+  estadosSala,
+}: {
+  etapasVisibles: Record<number, string>;
+  estadosSala?: Record<number, EstadoParaAvisos>;
+}) {
   const router = useRouter();
   const [sonidoOn, setSonidoOn] = useState(true);
   const [avisos, setAvisos] = useState<Aviso[]>([]);
@@ -259,7 +289,23 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
   }, [router, revisar]);
 
   // Cambios de etapa entre un refresco y otro (sobre los servicios visibles).
+  // Sala de control: toast + sonido por categoría (ver `lib/avisos-sala.ts`). La primera foto solo se guarda.
+  const estadosPrevios = useRef<Record<number, EstadoParaAvisos> | null>(null);
   useEffect(() => {
+    if (!estadosSala) return;
+    const previos = estadosPrevios.current;
+    estadosPrevios.current = estadosSala;
+    if (!previos) return;
+    const eventos = detectarEventos(previos, estadosSala, horaBogota);
+    for (const ev of eventos) {
+      toast({ title: ev.titulo, description: ev.detalle, tone: ev.tono === "warning" ? "warning" : "info", duration: ev.tono === "warning" ? 10_000 : 6_000 });
+    }
+    const sonido = sonidoMasUrgente(eventos);
+    if (sonido) sonar(sonido);
+  }, [estadosSala, sonar]);
+
+  useEffect(() => {
+    if (estadosSala) return;
     const previas = etapasPrevias.current;
     etapasPrevias.current = etapasVisibles;
     if (!previas) return;
@@ -279,7 +325,7 @@ export function AvisosServicios({ etapasVisibles }: { etapasVisibles: Record<num
     agregar(cambios);
     if (cambios.some((c) => c.titulo.includes("finalizado"))) sonar("finalizado");
     else if (cambios.length > 0) sonar("enCurso");
-  }, [etapasVisibles, agregar, sonar]);
+  }, [etapasVisibles, estadosSala, agregar, sonar]);
 
   const alternarSonido = () => {
     const on = !sonidoOn;
