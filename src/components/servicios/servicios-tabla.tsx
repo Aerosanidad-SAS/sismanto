@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRightLeft, Clock, FileCheck, Lock, MapPin, MoreHorizontal, Pencil, Play, Trash2, UserPlus } from "lucide-react";
+import { HelpTrigger } from "@/components/ui/help-trigger";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -925,7 +926,10 @@ export function ServiciosTabla({
               <h3 className="text-sm font-semibold text-muted-foreground">Paciente</h3>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1 sm:col-span-1">
-                  <Label id="buscar_paciente_label">Buscar paciente</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label id="buscar_paciente_label">Buscar paciente</Label>
+                    <HelpTrigger hover text="Por cédula o nombre. Si no aparece, créalo con «Crear paciente nuevo» para que quede su ficha." />
+                  </div>
                   <div role="group" aria-labelledby="buscar_paciente_label">
                     <PatientSearchCombobox
                       valueLabel={cedulaBusqueda || undefined}
@@ -933,9 +937,6 @@ export function ServiciosTabla({
                       disabled={soloLecturaLogistica}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Por cédula o nombre — si no aparece, créalo aquí abajo para que quede su ficha.
-                  </p>
                   <Button
                     type="button"
                     variant="outline"
