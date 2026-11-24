@@ -48,7 +48,8 @@ import {
   OPCIONES_CIUDAD_REGISTRO,
   ubicacionPacientePorCiudadRegistro,
 } from "@/lib/servicios-lista";
-import { ETIQUETA_ROL, rolesFaltantes, rolesRequeridosPorTipo } from "@/lib/servicio-detalle";
+import { tripulacionPorCompletar, type RolTripulacion } from "@/lib/servicio-detalle";
+import { AsignarTripulacion } from "./asignar-tripulacion";
 import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
@@ -225,6 +226,9 @@ interface ServiciosTablaProps {
   puedeEditar: boolean;
   /** Médicos activos disponibles para asignar directo a un servicio (sin vehículo/OVEM) — típico de Medicina Domiciliaria con prestador externo. */
   medicosDisponibles: PersonaTripulacion[];
+  /** OVEM y auxiliares activos del centro: para armar la tripulación de un móvil desde el formulario («Asignar tripulación»). */
+  ovemsDisponibles?: PersonaTripulacion[];
+  auxiliaresDisponibles?: PersonaTripulacion[];
   /** Reguladores activos — reemplaza el texto libre de "usuario que recibe/despacha" por un select real (SISRES: usuarios cargo=4). */
   reguladoresDisponibles: PersonaTripulacion[];
   /** Nombre de quien ve el formulario — precarga "recibe/despacha" igual que la sesión en SISRES. */
@@ -272,6 +276,8 @@ export function ServiciosTabla({
   clientes,
   puedeEditar,
   medicosDisponibles,
+  ovemsDisponibles = [],
+  auxiliaresDisponibles = [],
   reguladoresDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
@@ -432,9 +438,21 @@ export function ServiciosTabla({
 
   // Al elegir móvil, autocompletar la tripulación ya armada para ese
   // vehículo (Regulación → pantalla de Flota) — no hace falta reescribirla acá.
+  // Lo que se asignó desde «Asignar tripulación» en esta sesión del formulario: se suma a lo que trae el servidor, que se
+  // actualiza solo después (revalidación) pero no a tiempo para el aviso.
+  const [asignadasAhora, setAsignadasAhora] = useState<Record<string, { ovem?: PersonaTripulacion; medico?: PersonaTripulacion; auxiliar?: PersonaTripulacion }>>({});
+  const tripulacionDe = (vehicleId: string) => ({ ...tripulacionPorVehiculo[vehicleId], ...asignadasAhora[vehicleId] });
+
+  const alAsignarTripulacion = (vehicleId: string, rol: RolTripulacion, persona: PersonaTripulacion) => {
+    const clave = rol === "OVEM" ? "ovem" : rol === "MEDICO" ? "medico" : "auxiliar";
+    setAsignadasAhora((previo) => ({ ...previo, [vehicleId]: { ...previo[vehicleId], [clave]: persona } }));
+    // La persona queda también en el servicio que se está registrando.
+    setValue(rol === "OVEM" ? "ovem_user_id" : rol === "MEDICO" ? "medico_user_id" : "auxiliar_user_id", persona.user_id);
+  };
+
   const handleVehiculo = (vehicleId: string) => {
     setValue("vehicle_id", vehicleId === "__none__" ? "" : vehicleId);
-    const tripulacion = tripulacionPorVehiculo[vehicleId];
+    const tripulacion = tripulacionDe(vehicleId);
     setValue("ovem_user_id", tripulacion?.ovem?.user_id ?? "");
     setValue("auxiliar_user_id", tripulacion?.auxiliar?.user_id ?? "");
     // El médico de la tripulación del vehículo solo aplica al perfil de
@@ -443,13 +461,21 @@ export function ServiciosTabla({
     if (perfil === "TRASLADO") setValue("medico_user_id", tripulacion?.medico?.user_id ?? "");
   };
 
-  const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionPorVehiculo[vehiculoSeleccionado] : undefined;
-  // TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico; domiciliaria = OVEM + médico. Solo avisa: un servicio no debe
-  // quedar sin poder guardarse por esto. En domiciliaria el médico también se elige aparte (prestador): con uno elegido no falta.
-  const tripulacionFaltante = rolesFaltantes(tipoSeleccionado, {
+  const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionDe(vehiculoSeleccionado) : undefined;
+  // OVEM siempre; TAB suma auxiliar; TAM auxiliar y médico; domiciliaria médico. Solo avisa: un servicio no debe quedar sin
+  // poder guardarse por esto. En domiciliaria el médico también se elige aparte (prestador): con uno elegido no falta.
+  const tripulacionFaltante = tripulacionPorCompletar(tipoSeleccionado, {
     ...tripulacionVehiculoActual,
     ...(perfil === "MEDICINA_DOMICILIARIA" && medicoIndependienteSeleccionado ? { medico: medicoIndependienteSeleccionado } : {}),
   });
+  const puedeAsignarTripulacion = ["ADMIN", "ANALISTA", "REGULACION"].includes(viewerRole ?? "") && !soloLecturaLogistica;
+  const tripulacionDeHoyTexto = [
+    nombrePersona(tripulacionVehiculoActual?.ovem) && `OVEM ${nombrePersona(tripulacionVehiculoActual?.ovem)}`,
+    perfil === "TRASLADO" && nombrePersona(tripulacionVehiculoActual?.medico) && `Médico ${nombrePersona(tripulacionVehiculoActual?.medico)}`,
+    nombrePersona(tripulacionVehiculoActual?.auxiliar) && `Auxiliar ${nombrePersona(tripulacionVehiculoActual?.auxiliar)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   // Los filtros se aplican en el servidor (ServiciosFiltros): la tabla muestra la página tal cual.
   const filtrados = servicios;
@@ -992,27 +1018,19 @@ export function ServiciosTabla({
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">Verde: libre · Rojo: con un servicio en curso.</p>
+                    {vehiculoSeleccionado && tripulacionDeHoyTexto && (
+                      <p className="text-xs text-muted-foreground">Tripulación de hoy: {tripulacionDeHoyTexto}</p>
+                    )}
                     {vehiculoSeleccionado && (
-                      <p className="text-xs text-muted-foreground">
-                        Tripulación de hoy: {[
-                          nombrePersona(tripulacionVehiculoActual?.ovem) && `OVEM ${nombrePersona(tripulacionVehiculoActual?.ovem)}`,
-                          perfil === "TRASLADO" && nombrePersona(tripulacionVehiculoActual?.medico) && `Médico ${nombrePersona(tripulacionVehiculoActual?.medico)}`,
-                          nombrePersona(tripulacionVehiculoActual?.auxiliar) && `Auxiliar ${nombrePersona(tripulacionVehiculoActual?.auxiliar)}`,
-                        ].filter(Boolean).join(" · ") || "sin nadie asignado — armar en Regulación"}
-                      </p>
-                    )}
-                    {vehiculoSeleccionado && !tripulacionVehiculoActual?.ovem && (
-                      <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
-                        Este móvil no tiene OVEM armado hoy: el servicio no le aparecerá a ningún conductor hasta que Regulación arme la
-                        tripulación (se le asigna solo al armarla).
-                      </p>
-                    )}
-                    {vehiculoSeleccionado && tripulacionFaltante.filter((r) => r !== "OVEM").length > 0 && (
-                      <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
-                        {tipoSeleccionado} lleva {rolesRequeridosPorTipo(tipoSeleccionado).map((r) => ETIQUETA_ROL[r]).join(", ")}: falta{" "}
-                        {tripulacionFaltante.filter((r) => r !== "OVEM").map((r) => ETIQUETA_ROL[r]).join(" y ")} en este móvil. Puedes guardar;
-                        la persona queda en el servicio cuando Regulación la arme en el móvil.
-                      </p>
+                      <AsignarTripulacion
+                        key={vehiculoSeleccionado}
+                        vehicleId={vehiculoSeleccionado}
+                        tipoServicio={tipoSeleccionado ?? ""}
+                        faltan={tripulacionFaltante}
+                        candidatos={{ OVEM: ovemsDisponibles, AUXILIAR_ENFERMERIA: auxiliaresDisponibles, MEDICO: medicosDisponibles }}
+                        puedeAsignar={puedeAsignarTripulacion}
+                        onAsignada={(rol, persona) => alAsignarTripulacion(vehiculoSeleccionado, rol, persona)}
+                      />
                     )}
                   </div>
                 )}
