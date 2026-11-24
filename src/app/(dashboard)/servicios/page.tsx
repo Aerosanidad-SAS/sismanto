@@ -65,6 +65,7 @@ export default async function ServiciosPage(
   const centroDelPerfil = centroVisible(profile);
   const ciudadFija = centroDelPerfil ? ciudadDeCentro(centroDelPerfil.codigo) : null;
   const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
+  const puedeArmarTripulacion = ["ADMIN", "ANALISTA", "REGULACION"].includes(profile?.role_codigo ?? "");
   const [
     { servicios, total, error: errorLista },
     opciones,
@@ -74,6 +75,8 @@ export default async function ServiciosPage(
     flota,
     medicosDisponibles,
     reguladoresDisponibles,
+    ovemsDisponibles,
+    auxiliaresDisponibles,
     resumenHoy,
     opcionesCampos,
     epsOptions,
@@ -91,6 +94,9 @@ export default async function ServiciosPage(
       getFleetWithAssignments(),
       getUsuariosPorRol("MEDICO"),
       getUsuariosPorRol("REGULACION"),
+      // Para «Asignar tripulación» desde el formulario: solo se cargan para quien puede armarla (Regulación, Analista, Admin).
+      puedeArmarTripulacion ? getUsuariosPorRol("OVEM") : Promise.resolve([]),
+      puedeArmarTripulacion ? getUsuariosPorRol("AUXILIAR_ENFERMERIA") : Promise.resolve([]),
       getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
       getOpcionesServicio(),
       // Para crear un paciente nuevo sin salir del formulario de servicio.
@@ -181,6 +187,8 @@ export default async function ServiciosPage(
             viewerNombreCompleto={profile?.nombre_completo ?? profile?.email ?? null}
             puedeEditar={puedeEditar}
             medicosDisponibles={medicosDisponibles}
+            ovemsDisponibles={ovemsDisponibles}
+            auxiliaresDisponibles={auxiliaresDisponibles}
             reguladoresDisponibles={reguladoresDisponibles}
             tripulacionPorVehiculo={tripulacionPorVehiculo}
             ciudadDefault={profile?.ciudad}
