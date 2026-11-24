@@ -23,11 +23,15 @@ export function textoDiagnostico(
 
 export type RolTripulacion = "OVEM" | "AUXILIAR_ENFERMERIA" | "MEDICO";
 
-/** Tripulación de cada tipo de traslado: TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico. El resto de tipos no fija una. */
+/**
+ * Tripulación de cada tipo: TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico; medicina domiciliaria = OVEM + médico
+ * (conductor y médico; no hay enfermería domiciliaria, Daniel 2026-11-23). El resto de tipos no fija una.
+ */
 export function rolesRequeridosPorTipo(tipoServicio: string | null | undefined): RolTripulacion[] {
   const tipo = (tipoServicio ?? "").trim().toUpperCase();
   if (tipo.startsWith("TAM")) return ["OVEM", "AUXILIAR_ENFERMERIA", "MEDICO"];
   if (tipo.startsWith("TAB")) return ["OVEM", "AUXILIAR_ENFERMERIA"];
+  if (tipo === "MEDICINA DOMICILIARIA") return ["OVEM", "MEDICO"];
   return [];
 }
 
