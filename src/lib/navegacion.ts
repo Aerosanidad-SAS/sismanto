@@ -49,6 +49,19 @@ export type NavItem = {
   hint: string;
 };
 
+/**
+ * Roles que el menú le da a una ruta. Las páginas lo usan en `requireRole(...)` para que lo que el menú oculta tampoco
+ * se abra escribiendo la URL (una sola lista, no dos que se descuadran). Una ruta que no está en el menú devuelve [],
+ * que bloquea a todos: mejor un error visible en pruebas que un hueco silencioso.
+ */
+export function rolesDeRuta(href: string): UserRole[] {
+  for (const g of NAV_GROUPS) {
+    const item = g.items.find((i) => i.href === href);
+    if (item) return item.roles;
+  }
+  return [];
+}
+
 // Navegación unificada Aeromanto + SISRES — jerarquía por dominio de trabajo
 // (ver NAVEGACION_UNIFICADA.md). Cada grupo solo se muestra si el rol del
 // usuario tiene al menos un ítem visible dentro.

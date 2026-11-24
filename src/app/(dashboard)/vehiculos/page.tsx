@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { VehiculosTablaExpandible } from "@/components/vehiculos/vehiculos-tabla-expandible";
-import { getProfile } from "@/app/api/actions/auth";
+import { requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { centroVisible, puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { AlertasHojaDeVida } from "@/components/vehiculos/alertas-hoja-de-vida";
 import { hoyBogota } from "@/lib/fechas";
@@ -32,7 +33,7 @@ async function contarCostosEstimados(): Promise<number> {
 }
 
 export default async function VehiculosPage() {
-  const profile = await getProfile();
+  const profile = await requireRole(rolesDeRuta("/vehiculos"));
   const [vehicles, estimados] = await Promise.all([getVehicles(centroVisible(profile)?.codigo ?? null), contarCostosEstimados()]);
   const puedeEditarEstado = puedeCambiarEstadoOperativoVehiculo(profile?.role_codigo);
 

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { listVehicleServiceRevenue } from "@/app/api/actions/service-revenue";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -107,6 +108,7 @@ export default async function VehicleDetailPage(
     params: Promise<{ id: string }>;
   }
 ) {
+  await requireRole(rolesDeRuta("/vehiculos"));
   const params = await props.params;
   const vehicle = await getVehicle(params.id);
 
