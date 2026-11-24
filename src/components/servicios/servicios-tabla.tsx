@@ -149,6 +149,8 @@ const ETAPAS_DESTINO = (etapaActual: string): EtapaServicio[] =>
 // es el mismo TAB SIMPLE, variante de captura duplicada) — pero sigue
 // existiendo en PERFIL_FORMULARIO_SERVICIO (validations.ts) para que los
 // servicios históricos que ya tienen ese valor sigan abriendo bien.
+// Lo mismo con "ENFERMERIA DOMICILIARIA" (Daniel, 2026-11-23: no existe; la domiciliaria es médico + conductor):
+// aparece en datos históricos de SISRES, así que se conserva en PERFIL_FORMULARIO_SERVICIO pero ya no se ofrece.
 export const TIPOS_SERVICIO = [
   "MEDICINA DOMICILIARIA",
   "TAB SIMPLE",
@@ -156,11 +158,10 @@ export const TIPOS_SERVICIO = [
   "TAM SIMPLE",
   "TAM DOBLE",
   "TELEMEDICINA",
-  "ENFERMERIA DOMICILIARIA",
   "TRASLADO AEREO",
 ];
 
-// SISRES no ofrece ENFERMERIA DOMICILIARIA/TELEMEDICINA/TRASLADO AEREO al
+// SISRES no ofrece TELEMEDICINA/TRASLADO AEREO al
 // Regulador (cargo=4) en el formulario de registro — solo al crear
 // (registroServicios.php, $esRegulador). No se aplica al editar un servicio
 // ya existente (editarServicio.php es otro flujo, fuera de este alcance).
