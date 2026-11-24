@@ -444,8 +444,12 @@ export function ServiciosTabla({
   };
 
   const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionPorVehiculo[vehiculoSeleccionado] : undefined;
-  // TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico. Solo avisa: un servicio no debe quedar sin poder guardarse por esto.
-  const tripulacionFaltante = rolesFaltantes(tipoSeleccionado, tripulacionVehiculoActual);
+  // TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico; domiciliaria = OVEM + médico. Solo avisa: un servicio no debe
+  // quedar sin poder guardarse por esto. En domiciliaria el médico también se elige aparte (prestador): con uno elegido no falta.
+  const tripulacionFaltante = rolesFaltantes(tipoSeleccionado, {
+    ...tripulacionVehiculoActual,
+    ...(perfil === "MEDICINA_DOMICILIARIA" && medicoIndependienteSeleccionado ? { medico: medicoIndependienteSeleccionado } : {}),
+  });
 
   // Los filtros se aplican en el servidor (ServiciosFiltros): la tabla muestra la página tal cual.
   const filtrados = servicios;
