@@ -808,8 +808,8 @@ export type MedicalServiceFormData = z.input<typeof medicalServiceSchema>;
 
 // Perfiles de formulario por tipo de servicio (Regulación, QA 2026-07-22):
 // cada tipo de servicio real muestra un subconjunto de secciones/campos.
-// Enfermería Domiciliaria comparte perfil con Medicina Domiciliaria por
-// similitud (visita a domicilio) — a confirmar con un usuario real.
+// Enfermería Domiciliaria ya no existe como servicio (Daniel, 2026-11-23): se conserva aquí solo para que los
+// servicios históricos de SISRES que traen ese valor abran con el perfil de Medicina Domiciliaria. No se ofrece al crear.
 export const PERFIL_FORMULARIO_SERVICIO = {
   MEDICINA_DOMICILIARIA: ["MEDICINA DOMICILIARIA", "ENFERMERIA DOMICILIARIA"],
   TRASLADO: ["TAB SIMPLE", "TAB DOBLE", "TAB SENCILLO", "TAM SIMPLE", "TAM DOBLE", "TRASLADO AEREO"],
