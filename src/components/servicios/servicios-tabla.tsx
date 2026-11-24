@@ -477,8 +477,10 @@ export function ServiciosTabla({
     // campos coherentes — si no se encuentra, se deja vacío en vez de un
     // valor huérfano que el candado departamento→ciudad rechazaría.
     const ubicacionDefault = resolverCiudad(ciudadDefault);
+    // La programación nace con la fecha y hora de ahora (Colombia): se cambia si hace falta, y si no, se deja como está.
     reset({
       tipo_servicio: "",
+      fecha_hora_programacion: aTextoLocalColombia(new Date().toISOString()),
       // Sin estos dos, «Guardar y crear otro» dejaba el paciente (y su nombre) del servicio anterior.
       nombre_completo: "",
       patient_id: undefined,
