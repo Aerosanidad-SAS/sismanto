@@ -295,6 +295,12 @@ function InformeAerocivilVista({ d }: { d: InformeAerocivil }) {
           ["Ambulancia", d.ambulancia],
         ]}
       />
+      {d.ambulanciaExternaSinPaciente > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Nota: «Ambulancia» incluye {d.ambulanciaExternaSinPaciente} ambulancia(s) externa(s) registrada(s) sin paciente en «Procedimientos y ambulancias
+          externas»; esas no se cuentan como pacientes en ningún otro total.
+        </p>
+      )}
       <div className={GRILLA}>
         <TablaConteo titulo="Patologías" filas={d.patologias} />
         <TablaHmt titulo="Tipo de vuelo" filas={vuelos} />

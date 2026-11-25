@@ -1488,6 +1488,12 @@ export type Database = {
         Update: { campo?: string; obligatorio?: boolean; updated_at?: string; updated_by?: string | null }
         Relationships: []
       }
+      captacion_procedimientos: {
+        Row: { id: number; lote: string; fecha_atencion: string; aeropuerto_atencion: string; procedimiento: string; cantidad: number; emergencia_tipo: string | null; notas: string | null; activo: boolean; registrado_por_id: string | null; nombre_registrado_por: string | null; created_at: string; updated_at: string }
+        Insert: { id?: number; lote: string; fecha_atencion?: string; aeropuerto_atencion: string; procedimiento: string; cantidad: number; emergencia_tipo?: string | null; notas?: string | null; activo?: boolean; registrado_por_id?: string | null; nombre_registrado_por?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: number; lote?: string; fecha_atencion?: string; aeropuerto_atencion?: string; procedimiento?: string; cantidad?: number; emergencia_tipo?: string | null; notas?: string | null; activo?: boolean; registrado_por_id?: string | null; nombre_registrado_por?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
       sispro_paises: {
         Row: { nombre: string; codigo: string }
         Insert: { nombre: string; codigo: string }

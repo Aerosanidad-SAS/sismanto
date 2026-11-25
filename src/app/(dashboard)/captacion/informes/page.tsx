@@ -48,9 +48,9 @@ export default async function InformesCaptacionPage(props: Props) {
           filtros={{ desde, hasta, aeropuerto }}
           informeInicial={searchParams.informe}
           aeropuertos={catalogos.aeropuertosAtencion}
-          acm={calcularInformeAcm(datos.filas)}
-          aerocivil={calcularInformeAerocivil(datos.filas)}
-          pme={calcularInformePme(datos.filas)}
+          acm={calcularInformeAcm(datos.filas, datos.externos)}
+          aerocivil={calcularInformeAerocivil(datos.filas, datos.externos)}
+          pme={calcularInformePme(datos.filas, datos.externos)}
           pae={calcularInformePae(datos.filas, datos.aerolineas)}
         />
       )}
