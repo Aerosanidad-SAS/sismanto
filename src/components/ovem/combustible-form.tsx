@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { evaluarKilometraje, parseKilometraje, parseNumeroDecimal } from "@/lib/ovem-portal";
+import { erroresTanqueo, type ErroresTanqueo } from "@/lib/tanqueo-errores";
 
 
 export function CombustibleForm({
@@ -32,13 +33,31 @@ export function CombustibleForm({
   const [costo, setCosto] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errores, setErrores] = useState<ErroresTanqueo>({});
 
   // Solo un tanqueo de hoy se compara con el último km; uno atrasado lo valida el servidor contra las lecturas de su época.
   const avisoKm = evaluarKilometraje(parseKilometraje(km), fecha === hoy ? ultimoKm : null).mensaje;
 
+  /** Al corregir un campo se le quita su error; los demás siguen hasta el próximo envío. */
+  const limpiarError = (campo: keyof ErroresTanqueo) => setErrores((previo) => ({ ...previo, [campo]: undefined }));
+  const errorCampo = (campo: keyof ErroresTanqueo) =>
+    errores[campo] ? (
+      <p id={`fuel-${campo}-error`} role="alert" className="text-sm text-destructive">
+        {errores[campo]}
+      </p>
+    ) : null;
+
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    // Un mensaje junto a cada campo que falta (el aviso nativo del navegador depende del idioma del teléfono y se pierde).
+    const faltas = erroresTanqueo({ fecha, km, galones, costo }, hoy);
+    setErrores(faltas);
+    const primero = (["fecha", "km", "galones", "costo"] as const).find((c) => faltas[c]);
+    if (primero) {
+      document.getElementById(`fuel-${primero}`)?.focus();
+      return;
+    }
     // Mismo orden que el servidor: el km solo se queda igual o aumenta (solo para tanqueos de hoy; uno con fecha pasada
     // lo valida el servidor contra las lecturas de esa época).
     const evalKm = evaluarKilometraje(parseKilometraje(km), fecha === hoy ? ultimoKm : null);
@@ -79,10 +98,23 @@ export function CombustibleForm({
         <CardDescription>Fecha, kilometraje, galones y valor pagado.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={guardar} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
           <div className="space-y-1">
             <Label htmlFor="fuel-fecha">Fecha</Label>
-            <Input id="fuel-fecha" type="date" max={hoy} value={fecha} onChange={(e) => setFecha(e.target.value)} required />
+            <Input
+              id="fuel-fecha"
+              type="date"
+              max={hoy}
+              value={fecha}
+              onChange={(e) => {
+                setFecha(e.target.value);
+                limpiarError("fecha");
+              }}
+              aria-invalid={errores.fecha ? "true" : undefined}
+              aria-describedby={errores.fecha ? "fuel-fecha-error" : undefined}
+              required
+            />
+            {errorCampo("fecha")}
           </div>
           <div className="space-y-1">
             <Label htmlFor="fuel-km">
@@ -94,12 +126,17 @@ export function CombustibleForm({
               inputMode="numeric"
               pattern="[0-9.\s]+"
               enterKeyHint="next"
-              aria-describedby="fuel-km-ayuda"
+              aria-invalid={errores.km ? "true" : undefined}
+              aria-describedby={errores.km ? "fuel-km-error fuel-km-ayuda" : "fuel-km-ayuda"}
               value={km}
-              onChange={(e) => setKm(e.target.value)}
+              onChange={(e) => {
+                setKm(e.target.value);
+                limpiarError("km");
+              }}
               placeholder="Ej: 125000"
               required
             />
+            {errorCampo("km")}
             <p id="fuel-km-ayuda" className="text-xs text-muted-foreground">
               {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
             </p>
@@ -119,11 +156,17 @@ export function CombustibleForm({
               inputMode="decimal"
               pattern="[0-9]+([.,][0-9]{1,3})?"
               enterKeyHint="next"
+              aria-invalid={errores.galones ? "true" : undefined}
+              aria-describedby={errores.galones ? "fuel-galones-error" : undefined}
               value={galones}
-              onChange={(e) => setGalones(e.target.value)}
+              onChange={(e) => {
+                setGalones(e.target.value);
+                limpiarError("galones");
+              }}
               placeholder="Ej: 12,5"
               required
             />
+            {errorCampo("galones")}
           </div>
           <div className="space-y-1">
             <Label htmlFor="fuel-costo">Valor pagado (COP)</Label>
@@ -132,10 +175,16 @@ export function CombustibleForm({
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
+              aria-invalid={errores.costo ? "true" : undefined}
+              aria-describedby={errores.costo ? "fuel-costo-error" : undefined}
               value={costo}
-              onChange={(e) => setCosto(e.target.value)}
+              onChange={(e) => {
+                setCosto(e.target.value);
+                limpiarError("costo");
+              }}
               placeholder="Opcional"
             />
+            {errorCampo("costo")}
           </div>
           {error && (
             <p role="alert" className="text-sm text-destructive sm:col-span-2">
