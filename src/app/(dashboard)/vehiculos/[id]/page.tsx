@@ -16,7 +16,8 @@ import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
 import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
 import { centroVisible, puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { VehicleMaintenanceAlertsPanel } from "@/components/vehiculos/vehicle-maintenance-alerts-panel";
-import { getAlertsForVehicle } from "@/app/api/actions/plan-mantenimiento";
+import { getAlertsForVehicle, getPlanItems } from "@/app/api/actions/plan-mantenimiento";
+import { itemsSinPrimerRegistro } from "@/lib/plan-sin-registro";
 import { VehicleSpecsEditor } from "@/components/vehiculos/vehicle-specs-editor";
 import { VehicleGeneralEditor } from "@/components/vehiculos/vehicle-general-editor";
 import { VehicleCostosAnuales } from "@/components/vehiculos/vehicle-costos-anuales";
@@ -123,7 +124,7 @@ export default async function VehicleDetailPage(
     );
   }
 
-  const [mantenimientos, incidentes, kilometrajes, profile, maintenanceAlerts, centrosOperativos] =
+  const [mantenimientos, incidentes, kilometrajes, profile, maintenanceAlerts, centrosOperativos, itemsDelPlan] =
     await Promise.all([
       getVehicleMaintenances(params.id),
       getVehicleIncidents(params.id),
@@ -131,6 +132,7 @@ export default async function VehicleDetailPage(
       getProfile(),
       getAlertsForVehicle(params.id),
       getCentrosOperativos(),
+      getPlanItems(),
     ]);
 
   // Regulación y Coordinación solo ven la ficha de vehículos de su centro.
@@ -374,6 +376,11 @@ export default async function VehicleDetailPage(
         vehicleId={vehicle.id}
         placa={vehicle.placa}
         alerts={maintenanceAlerts}
+        sinRegistro={itemsSinPrimerRegistro(
+          itemsDelPlan,
+          { placa: vehicle.placa, centro_operativo: (vehicle as { centro_operativo?: string | null }).centro_operativo ?? null },
+          maintenanceAlerts.map((a) => a.plan_item_id)
+        )}
         canLog={canLogMaintenance}
       />
 

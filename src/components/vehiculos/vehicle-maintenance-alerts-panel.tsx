@@ -17,12 +17,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { DateField } from "@/components/forms/date-field";
 import { CheckCircle2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
-import type { MaintenanceAlert, AlertLevel } from "@/types";
+import type { MaintenanceAlert, MaintenancePlanItem, AlertLevel } from "@/types";
 
 interface Props {
   vehicleId: string;
   placa: string;
   alerts: MaintenanceAlert[];
+  /** Ítems del plan que le aplican al vehículo pero aún no tienen un primer mantenimiento registrado. */
+  sinRegistro?: MaintenancePlanItem[];
   canLog: boolean;
 }
 
@@ -49,10 +51,13 @@ function AlertRow({
   alert,
   canLog,
   vehicleId,
+  sinRegistro = false,
 }: {
   alert: MaintenanceAlert;
   canLog: boolean;
   vehicleId: string;
+  /** Ítem sin ningún mantenimiento registrado: no hay próxima fecha ni km, solo se ofrece registrar el primero. */
+  sinRegistro?: boolean;
 }) {
   const router = useRouter();
   const uid = useId();
@@ -106,18 +111,18 @@ function AlertRow({
       : "—";
 
   return (
-    <div className={`rounded-lg border p-3 ${nivelColor(alert.nivel_alerta)}`}>
+    <div className={`rounded-lg border p-3 ${sinRegistro ? "bg-muted/40 border-border" : nivelColor(alert.nivel_alerta)}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={nivelBadgeVariant(alert.nivel_alerta)} className="text-xs">
-              {nivelLabel(alert.nivel_alerta)}
+            <Badge variant={sinRegistro ? "outline" : nivelBadgeVariant(alert.nivel_alerta)} className="text-xs">
+              {sinRegistro ? "Sin registro" : nivelLabel(alert.nivel_alerta)}
             </Badge>
             <Badge variant="outline" className="text-xs">{alert.categoria}</Badge>
             <span className="text-sm font-medium truncate">{alert.descripcion}</span>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            {proximo} &nbsp;·&nbsp; {restante}
+            {sinRegistro ? "Aún no hay un mantenimiento registrado: registra el último que se hizo para activar el aviso." : <>{proximo} &nbsp;·&nbsp; {restante}</>}
           </p>
         </div>
         {canLog && (
@@ -183,13 +188,26 @@ function AlertRow({
   );
 }
 
-export function VehicleMaintenanceAlertsPanel({ vehicleId, placa, alerts, canLog }: Props) {
+export function VehicleMaintenanceAlertsPanel({ vehicleId, placa, alerts, sinRegistro = [], canLog }: Props) {
   const [mostrarOk, setMostrarOk] = useState(false);
 
   const activas  = alerts.filter((a) => a.nivel_alerta !== "OK");
   const okAlerts = alerts.filter((a) => a.nivel_alerta === "OK");
 
-  if (alerts.length === 0) return null;
+  if (alerts.length === 0 && sinRegistro.length === 0) return null;
+
+  /** Un ítem del plan sin registro se pinta con la misma fila: el formulario de «Registrar» es el mismo. */
+  const comoAlerta = (it: MaintenancePlanItem): MaintenanceAlert =>
+    ({
+      vehicle_id: vehicleId,
+      placa,
+      plan_item_id: it.id,
+      descripcion: it.descripcion,
+      categoria: it.categoria,
+      intervalo_km: it.intervalo_km,
+      intervalo_dias: it.intervalo_dias,
+      nivel_alerta: "OK",
+    }) as unknown as MaintenanceAlert;
 
   return (
     <Card>
@@ -204,7 +222,7 @@ export function VehicleMaintenanceAlertsPanel({ vehicleId, placa, alerts, canLog
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {activas.length === 0 ? (
+        {alerts.length === 0 ? null : activas.length === 0 ? (
           <p className="text-sm text-green-700 flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4" />
             Todo el plan está al día.
@@ -218,6 +236,17 @@ export function VehicleMaintenanceAlertsPanel({ vehicleId, placa, alerts, canLog
               vehicleId={vehicleId}
             />
           ))
+        )}
+
+        {sinRegistro.length > 0 && (
+          <div className="space-y-2 pt-1">
+            <p className="text-sm font-medium">
+              Sin primer registro ({sinRegistro.length})
+            </p>
+            {sinRegistro.map((it) => (
+              <AlertRow key={it.id} alert={comoAlerta(it)} canLog={canLog} vehicleId={vehicleId} sinRegistro />
+            ))}
+          </div>
         )}
 
         {okAlerts.length > 0 && (
