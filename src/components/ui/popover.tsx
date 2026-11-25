@@ -11,12 +11,22 @@ const PopoverAnchor = PopoverPrimitive.Anchor;
 const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
->(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
+>(({ className, align = "center", sideOffset = 4, onWheel, onTouchMove, ...props }, ref) => (
   <PopoverPrimitive.Portal>
     <PopoverPrimitive.Content
       ref={ref}
       align={align}
       sideOffset={sideOffset}
+      // El Dialog modal (react-remove-scroll) bloquea la rueda y el arrastre en todo lo que está fuera de su contenido,
+      // y este Portal vive fuera: sin esto la lista de un combobox dentro de un diálogo no se podía desplazar.
+      onWheel={(e) => {
+        e.stopPropagation();
+        onWheel?.(e);
+      }}
+      onTouchMove={(e) => {
+        e.stopPropagation();
+        onTouchMove?.(e);
+      }}
       className={cn(
         // pointer-events-auto: Radix Dialog (modal) pone pointer-events:none en
         // <body> mientras está abierto — un Popover anidado (Select, CatalogCombobox,
