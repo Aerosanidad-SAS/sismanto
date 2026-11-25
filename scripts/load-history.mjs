@@ -24,7 +24,8 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const SOLO_MANTO = process.argv.includes("--solo-manto");
 const SOLO_COMB = process.argv.includes("--solo-comb");
 
-const MANTO_FILE = "CONTROL_VEH_INTERASSIST_UPDATED V2  2026 COMB.xlsx";
+// MANTO_FILE permite apuntar a la versión más reciente del Excel sin editar el script.
+const MANTO_FILE = process.env.MANTO_FILE || "CONTROL_VEH_INTERASSIST_UPDATED V2  2026 COMB.xlsx";
 const MANTO_SHEET = "HistorialMantenimientos";
 const COMB_INTERNA_SHEET = "Tabla_Combustibles"; // dentro del mismo workbook
 const COMB_PROVEEDOR_FILE = "detailed_consumption_2_1778607907.xlsx";
@@ -38,7 +39,7 @@ const REFERENCE_PLATES = new Set(["KOS929", "KYV199", "KYV219", "KZO779"]);
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function loadEnv() {
-  const raw = readFileSync(".env.local", "utf-8");
+  const raw = readFileSync(process.env.ENV_FILE || ".env.local", "utf-8");
   const env = {};
   for (const line of raw.split(/\r?\n/)) {
     const m = line.match(/^([^#=\s]+)\s*=\s*(.*)$/);
@@ -313,8 +314,13 @@ function deduplicateFuel(rows) {
 function buildMantoKey(vehicleId, fecha, factura, km, valor, tipo, desc) {
   const f = String(fecha || "").slice(0, 10);
   const fac = String(factura || "").trim().toUpperCase();
-  if (fac) return `${vehicleId}|${f}|FAC|${fac}`;
-  return `${vehicleId}|${f}|NOFAC|${Math.round(km)}|${Math.round(valor || 0)}|${tipo}|${String(desc || "").slice(0, 80).toUpperCase()}`;
+  // Una factura tiene varias líneas (repuestos, mano de obra): cada línea es un registro. Antes, con factura la clave era
+  // solo placa + fecha + factura y las líneas siguientes de la misma factura se descartaban como «duplicadas»
+  // (el historial quedaba con una línea por factura y el costo subcontado). Ahora la línea se distingue por descripción y valor.
+  const linea = `${Math.round(valor || 0)}|${String(desc || "").trim().slice(0, 80).toUpperCase()}`;
+  if (fac) return `${vehicleId}|${f}|FAC|${fac}|${linea}`;
+  // Sin el km: el de la base pudo ser imputado con otra serie y no coincidiría al recargar.
+  return `${vehicleId}|${f}|NOFAC|${tipo}|${linea}`;
 }
 
 // ─── Batch insert ─────────────────────────────────────────────────────────────
