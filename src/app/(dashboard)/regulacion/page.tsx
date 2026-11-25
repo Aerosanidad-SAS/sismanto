@@ -15,6 +15,8 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AvisosServicios } from "@/components/servicios/avisos-servicios";
 import { ProgramacionDiaria } from "@/components/regulacion/programacion-diaria";
+import { SolicitudesAsignacion } from "@/components/regulacion/solicitudes-asignacion";
+import { getSolicitudesAsignacionPendientes } from "@/app/api/actions/solicitudes-asignacion";
 import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
 import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
 import { getProgramacionDelDia } from "@/app/api/actions/programacion";
@@ -55,7 +57,7 @@ export default async function RegulacionPage(
   const prefijoDeCiudad = ciudadFija ? null : prefijoCiudad(pedida);
 
   const diaPedido = Array.isArray(searchParams.dia) ? searchParams.dia[0] : searchParams.dia;
-  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto, cierresTurno] = await Promise.all([
+  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto, cierresTurno, solicitudesAsignacion] = await Promise.all([
     getTableroRegulacion(),
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
@@ -65,6 +67,7 @@ export default async function RegulacionPage(
     getProgramacionDelDia(diaPedido ?? ""),
     getSolicitudesNoAptoPendientes(),
     getCierresDeTurnoHoy(),
+    getSolicitudesAsignacionPendientes(),
   ]);
 
   // Después del Promise.all: getProgramacionDelDia materializa la programación de hoy y el tablero la lee.
@@ -120,6 +123,8 @@ export default async function RegulacionPage(
           centros. Pide al administrador que te lo asigne en Administración → Usuarios.
         </div>
       )}
+
+      <SolicitudesAsignacion solicitudes={solicitudesAsignacion} />
 
       <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
 

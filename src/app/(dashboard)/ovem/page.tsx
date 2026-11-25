@@ -1,3 +1,4 @@
+import { getMiSolicitudAsignacion } from "@/app/api/actions/solicitudes-asignacion";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/app/api/actions/auth";
@@ -121,6 +122,7 @@ export default async function OvemPage() {
         checklistItems={checklistItems}
         hoyBogota={hoy}
         vehiculosDeHoy={vehiculosDeHoy}
+        solicitudAsignacion={await getMiSolicitudAsignacion()}
         ultimoKmPorVehiculo={ultimoKmPorVehiculo}
         servicios={servicios as any}
         isAdmin={isAdminLike(profile.role_codigo)}

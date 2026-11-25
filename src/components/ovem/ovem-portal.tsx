@@ -67,6 +67,8 @@ import { CierresTurnoConsulta } from "./cierres-turno-consulta";
 import { CombustibleForm } from "./combustible-form";
 import { SiniestroForm } from "./siniestro-form";
 import { DocumentosVehiculo } from "./documentos-vehiculo";
+import { PedirAsignacionVehiculo } from "./pedir-asignacion-vehiculo";
+import type { MiSolicitudAsignacion } from "@/app/api/actions/solicitudes-asignacion";
 import { alertNewService, useAutoRefresh } from "./use-auto-refresh";
 
 interface OvemPortalProps {
@@ -95,6 +97,8 @@ interface OvemPortalProps {
   ultimoKmPorVehiculo?: Record<string, number>;
   /** Lo que este conductor ya hizo hoy (el menú lo muestra); `at` es un instante ISO. */
   estadoHoy?: EstadoHoy | null;
+  /** Última solicitud de asignación de vehículo de hoy de este conductor. */
+  solicitudAsignacion?: MiSolicitudAsignacion | null;
 }
 
 export interface EstadoHoy {
@@ -178,6 +182,7 @@ export function OvemPortal({
   vehiculosDeHoy = SIN_VEHICULOS_DE_HOY,
   ultimoKmPorVehiculo = SIN_KM,
   estadoHoy = null,
+  solicitudAsignacion = null,
 }: OvemPortalProps) {
   const router = useRouter();
   const serviciosActivos = useMemo(
@@ -790,6 +795,10 @@ export function OvemPortal({
             </Select>
           </CardContent>
         </Card>
+      )}
+
+      {viewerRole === "OVEM" && flow === "preoperacional" && vehicleId && selectedVehicle && !vehiculosDeHoy.includes(vehicleId) && (
+        <PedirAsignacionVehiculo vehicleId={vehicleId} placa={selectedVehicle.placa} solicitud={solicitudAsignacion} />
       )}
 
       {vehicleId && selectedVehicle && flow === "preoperacional" && (
