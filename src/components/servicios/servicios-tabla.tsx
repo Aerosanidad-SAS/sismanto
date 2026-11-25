@@ -85,6 +85,7 @@ import { toast } from "@/components/ui/toaster";
 import { errorDeCambioEtapa, esEtapaCerrada, esEtapaNegativa, MOTIVO_MAX, puedeReabrir } from "@/lib/servicios-etapas";
 import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
 import { textoChoque, type ServicioEnChoque } from "@/lib/servicios-choque";
+import { direccionesFaltantes, faltasParaDespachar } from "@/lib/servicios-direccion";
 import { CAMPOS_CLINICOS_MEDICO_AUX as CAMPOS_CLINICOS_LISTA } from "@/lib/servicios-actualizacion";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
@@ -96,6 +97,10 @@ const ETIQUETA_CAMPO: Record<string, string> = {
   nombre_completo: "Nombre completo del paciente",
   tipo_servicio: "Tipo de servicio",
   valor_servicio: "Valor del servicio",
+  direccion_origen: "Dirección de origen",
+  ciudad_origen: "Ciudad de origen",
+  direccion_destino: "Dirección de destino",
+  ciudad_destino: "Ciudad de destino",
 };
 
 const ITEM_MENU_MOVIL =
@@ -334,7 +339,7 @@ export function ServiciosTabla({
   // Umbral de servicios estancados configurado por el ADMIN (migración 103).
   const umbralesEstancado = useUmbralesEstancado();
 
-  const { register, handleSubmit, reset, setValue: setValueForm, watch, formState } =
+  const { register, handleSubmit, reset, setValue: setValueForm, setError: setErrorCampo, watch, formState } =
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
   // Todo valor puesto desde un combobox/select cuenta como cambio: sin esto, «¿Descartar los cambios?» no se pedía.
   const setValue: typeof setValueForm = (name, value, opts) => setValueForm(name, value, { shouldDirty: true, ...opts });
@@ -396,6 +401,15 @@ export function ServiciosTabla({
   const perfil = perfilFormularioServicio(tipoSeleccionado ?? "");
   const requiereRuta = perfil !== "TELEMEDICINA";
   const requiereMedicoIndependiente = perfil === "MEDICINA_DOMICILIARIA" || perfil === "TELEMEDICINA";
+  // Se puede guardar sin dirección, pero no despachar (CURSO u OVEM): el aviso lo dice mientras falte.
+  const direccionesPorCompletar = requiereRuta
+    ? direccionesFaltantes(tipoSeleccionado, {
+        direccion_origen: watch("direccion_origen"),
+        ciudad_origen: watch("ciudad_origen"),
+        direccion_destino: watch("direccion_destino"),
+        ciudad_destino: watch("ciudad_destino"),
+      })
+    : [];
 
   // Ciudad en cascada: solo las del departamento ya elegido (catálogo real
   // DIVIPOLA, ver colombia-geo.ts). Si cambia el departamento, se limpia la
@@ -629,6 +643,7 @@ export function ServiciosTabla({
       fecha_hora_llegada_intermedia: fecha("fecha_hora_llegada_intermedia"),
       fecha_hora_salida_intermedia: fecha("fecha_hora_salida_intermedia"),
       direccion_destino: str("direccion_destino"),
+      notas_ubicacion: str("notas_ubicacion"),
       fecha_hora_llegada_destino: fecha("fecha_hora_llegada_destino"),
       fecha_hora_salida_destino: fecha("fecha_hora_salida_destino"),
       finalidad_traslado: str("finalidad_traslado"),
@@ -700,6 +715,20 @@ export function ServiciosTabla({
   };
 
   const onSubmit = async (values: MedicalServiceFormData, crearOtro = false, confirmarChoque = false) => {
+    // No se despacha (CURSO u OVEM nuevo) sin dirección; guardar sin despachar sí se permite, con el aviso de la sección Ruta.
+    const faltas = faltasParaDespachar(values.tipo_servicio, values, {
+      etapaAntes: editando?.etapa,
+      etapaDespues: editando ? editando.etapa : etapaInicial,
+      ovemAntes: editando ? String(editando.ovem_user_id ?? "") : null,
+      ovemDespues: values.ovem_user_id,
+    });
+    if (faltas.length > 0) {
+      setError(null);
+      setCreadoMsg(null);
+      for (const f of faltas) setErrorCampo(f.campo, { type: "manual", message: f.mensaje });
+      enfocarCampo(faltas[0].campo);
+      return;
+    }
     setGuardando(true);
     setError(null);
     setCreadoMsg(null);
@@ -734,6 +763,19 @@ export function ServiciosTabla({
   const mensajeError = (name: string) => listaErrores.find((e) => e.name === name)?.message;
 
   const aplicarEtapa = async (servicio: ServicioRow, etapaNueva: string, motivo?: string) => {
+    const faltas = faltasParaDespachar(servicio.tipo_servicio, {
+      direccion_origen: String(servicio.direccion_origen ?? ""),
+      ciudad_origen: servicio.ciudad_origen,
+      direccion_destino: String(servicio.direccion_destino ?? ""),
+      ciudad_destino: servicio.ciudad_destino,
+    }, { etapaAntes: servicio.etapa, etapaDespues: etapaNueva });
+    if (faltas.length > 0) {
+      setAviso({
+        titulo: "No se puede pasar a CURSO",
+        mensaje: `Falta: ${faltas.map((f) => f.etiqueta).join(", ")}. Edita el servicio, completa los datos y vuelve a intentarlo.`,
+      });
+      return;
+    }
     setBusyId(servicio.id);
     const res = await cambiarEtapaServicio(servicio.id, servicio.etapa, etapaNueva, motivo);
     setBusyId(null);
@@ -1225,6 +1267,12 @@ export function ServiciosTabla({
             {requiereRuta && (
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold text-muted-foreground">Ruta y tiempos</h3>
+                {direccionesPorCompletar.length > 0 && (
+                  <p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
+                    Falta: {direccionesPorCompletar.map((f) => f.etiqueta).join(", ")}. Puedes guardar el servicio así, pero no se puede
+                    asignar un OVEM ni pasarlo a CURSO hasta completarlo: la tripulación necesita saber adónde ir.
+                  </p>
+                )}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label htmlFor="departamento_origen">Departamento origen</Label>
@@ -1249,6 +1297,7 @@ export function ServiciosTabla({
                       allowCustom={false}
                       disabled={campoBloqueado("ciudad_origen") || !departamentoOrigenSeleccionado}
                     />
+                    <ErrorCampo id="ciudad_origen-error" message={mensajeError("ciudad_origen")} />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="departamento_destino">Departamento destino</Label>
@@ -1273,6 +1322,7 @@ export function ServiciosTabla({
                       allowCustom={false}
                       disabled={campoBloqueado("ciudad_destino") || !departamentoDestinoSeleccionado}
                     />
+                    <ErrorCampo id="ciudad_destino-error" message={mensajeError("ciudad_destino")} />
                   </div>
                   {paraPerfil(CAMPOS_RUTA, perfil).map((campo) =>
                     campo.type === "datetime-local" ? (
@@ -1293,11 +1343,25 @@ export function ServiciosTabla({
                           type="text"
                           placeholder={campo.placeholder}
                           disabled={campoBloqueado(campo.name)}
+                          aria-invalid={mensajeError(campo.name) ? "true" : undefined}
+                          aria-describedby={mensajeError(campo.name) ? `${campo.name}-error` : undefined}
                           {...register(campo.name)}
                         />
+                        <ErrorCampo id={`${campo.name}-error`} message={mensajeError(campo.name)} />
                       </div>
                     )
                   )}
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="notas_ubicacion">Notas de ubicación</Label>
+                    <Input
+                      id="notas_ubicacion"
+                      type="text"
+                      maxLength={255}
+                      placeholder="Apartamento, portería, referencias para llegar"
+                      disabled={campoBloqueado("notas_ubicacion")}
+                      {...register("notas_ubicacion")}
+                    />
+                  </div>
                   {perfil === "TRASLADO" && (
                     <div className="space-y-1">
                       <Label htmlFor="perimetro">Perímetro</Label>

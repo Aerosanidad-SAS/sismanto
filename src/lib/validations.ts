@@ -789,6 +789,7 @@ export const medicalServiceSchema = z.object({
   fecha_hora_llegada_intermedia: optStr,
   fecha_hora_salida_intermedia: optStr,
   direccion_destino: optStr,
+  notas_ubicacion: optStr,
   fecha_hora_llegada_destino: optStr,
   fecha_hora_salida_destino: optStr,
   finalidad_traslado: optStr,
