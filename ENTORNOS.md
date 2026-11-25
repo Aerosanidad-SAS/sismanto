@@ -49,6 +49,21 @@ Solo para probar: un ADMIN elige un rol en el pie del menú lateral y el sistema
 - **Límite:** OVEM, MEDICO y AUXILIAR_ENFERMERIA ven "Mis servicios" vacío hasta que se les asigne un vehículo o servicio.
 - Los usuarios `[TEST]` aparecen en Administración → Usuarios.
 
+## Subdominio de pruebas (`sismanto.aerosanidadeinterassist.com`)
+
+Pasos manuales **pendientes**: ninguno está hecho ni se hace desde el repo. `deploy.yml` hoy solo publica en `sismanto-dev.vercel.app` y `sismanto-staging.vercel.app`. Qué rama (`dev` o `staging`) quedará detrás del subdominio está **sin decidir**: el alias se fija por rama.
+
+| # | Paso | Dónde | Verificado en el código |
+|---|---|---|---|
+| 1 | Agregar el dominio al proyecto `sismanto` de Vercel y crear el registro DNS que Vercel indique | Vercel y el proveedor del DNS | NO VERIFICADO: depende de paneles externos. Sin el dominio en el proyecto, `vercel alias set` falla. |
+| 2 | Cambiar el alias de `.github/workflows/deploy.yml` (variable `ALIAS`, hoy `sismanto-staging.vercel.app` para `staging` y `sismanto-dev.vercel.app` para el resto) | Repo, PR aparte | Sí: es una expresión por rama. Un alias que falla solo avisa (`::warning::`), no rompe el despliegue. Este PR no toca el workflow. |
+| 3 | Fijar `NEXT_PUBLIC_APP_URL` con la URL pública (sin `/` final) en el entorno **Preview** de Vercel y volver a desplegar | Vercel | Sí: la leen `src/lib/tickets-correo.ts` (sin ella los correos de tickets salen sin enlace) y `src/lib/formatos-ti/servidor.ts` (si falta, usa el host de la petición). Como empieza con `NEXT_PUBLIC_`, entra en el build: cambiarla exige un despliegue nuevo. `dev` y `staging` comparten Preview: el mismo valor sirve a los dos salvo que se limite por rama (NO VERIFICADO). |
+| 4 | Que exista `SUPABASE_SERVICE_ROLE_KEY` en Preview: sin ella el login por cédula no funciona | Vercel | Sí: `resolverEmailLogin` (`src/app/api/actions/auth.ts`) devuelve `null` si falta y la cédula se rechaza como «Usuario o contraseña incorrectos». El login con correo sigue sirviendo. Si la integración Supabase↔Vercel ya la sincroniza: NO VERIFICADO; se comprueba en Administración → Estado del entorno (muestra si tiene valor, nunca el valor). |
+| 5 | Elegir un proveedor de correo y cargar sus variables en Preview (o en Administración → Configuración general, que pisa a las variables) | Vercel o la app | Sí, `src/lib/notifications/proveedor-correo.ts`: SMTP necesita `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` y `NOTIFICATIONS_MAIL_FROM` (`SMTP_PORT` por defecto 465); Graph necesita `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` y `NOTIFICATIONS_MAIL_FROM`. Con los dos gana SMTP. Sin ninguno, `enviarCorreo` devuelve OK **sin enviar nada**. Que el buzón o la app de Azure acepten el envío: NO VERIFICADO. |
+| 6 | `ROLE_SWITCHER_ENABLED=true` solo en **Preview** | Vercel | Sí, `src/lib/role-switcher.ts`: además exige `VERCEL_ENV` distinto de `production`. El despliegue de `deploy.yml` no usa `--prod`, así que cae en Preview. Nunca en Production. |
+
+Con el selector activo, los usuarios de prueba ya sembrados en la base compartida sirven para el subdominio; no hay que volver a correr `npm run db:seed-role-users`. El guion de pruebas por rol está en `docs/GUION_PRUEBAS.md`.
+
 ## Checklist de go-live
 
 Antes de recibir usuarios reales:
