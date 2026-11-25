@@ -1,12 +1,12 @@
 -- 142 · Orden del preoperacional según el flujo real del conductor: frío → motor calentando → herramientas → niveles en caliente.
--- Idempotente. Solo reasigna grupo y orden (no borra ni renombra nada) y agrega 3 ítems de re-verificación.
+-- Idempotente. Solo reasigna grupo y orden (no borra ni renombra nada) y agrega 4 ítems de re-verificación.
 --
 -- Por qué (Daniel, 2026-11-24): hoy la lista mezcla luces, cabina, fluidos y herramientas sin relación con lo que el conductor hace
 -- caminando alrededor del vehículo. El orden propuesto aprovecha que el motor necesita 2–3 minutos para calentar:
 --   1 · Niveles y fugas con el motor FRÍO (aceite, refrigerante, hidráulico, frenos, correas, mangueras, batería).
 --   2 · Se enciende el motor y MIENTRAS CALIENTA: luces, cabina, frenos, sistemas, llantas y habitáculo del paciente.
 --   3 · Herramientas y equipo (inventario).
---   4 · Niveles de nuevo con el motor CALIENTE (aceite, refrigerante, hidráulico): copias de los ítems de la etapa 1.
+--   4 · Niveles de nuevo con el motor CALIENTE (aceite, refrigerante, hidráulico y frenos): copias de los ítems de la etapa 1.
 -- Es una propuesta para validar con un técnico de mantenimiento: todo se puede ajustar luego desde Configuración → Preoperacional.
 -- Lo que no está en la lista de abajo conserva su grupo por categoría: LUCES/CABINA/GENERAL → etapa 2, EQUIPO_* → etapa 3.
 
@@ -22,7 +22,7 @@ INSERT INTO checklist_items (categoria, descripcion, cantidad_esperada, orden, a
 SELECT ci.categoria, ci.descripcion || ' (motor caliente)', ci.cantidad_esperada, 0, true, ci.lista, ci.tipos_vehiculo, ci.severidad_falla
   FROM checklist_items ci
  WHERE ci.lista = 'PREOPERACIONAL'
-   AND ci.descripcion IN ('Nivel aceite de motor', 'Nivel refrigerante radiador', 'Nivel líquido hidráulico')
+   AND ci.descripcion IN ('Nivel aceite de motor', 'Nivel refrigerante radiador', 'Nivel líquido hidráulico', 'Nivel líquido de frenos')
 ON CONFLICT (categoria, descripcion) DO NOTHING;
 
 WITH mapa(descripcion, grupo, pos) AS (
@@ -90,7 +90,8 @@ WITH mapa(descripcion, grupo, pos) AS (
 
     ('Nivel aceite de motor (motor caliente)', '4 · Niveles de nuevo (motor caliente)', 1),
     ('Nivel refrigerante radiador (motor caliente)', '4 · Niveles de nuevo (motor caliente)', 2),
-    ('Nivel líquido hidráulico (motor caliente)', '4 · Niveles de nuevo (motor caliente)', 3)
+    ('Nivel líquido hidráulico (motor caliente)', '4 · Niveles de nuevo (motor caliente)', 3),
+    ('Nivel líquido de frenos (motor caliente)', '4 · Niveles de nuevo (motor caliente)', 4)
 )
 UPDATE checklist_items ci
    SET group_id = g.id,
