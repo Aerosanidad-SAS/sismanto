@@ -40,7 +40,7 @@ async function getVehiculosActivos() {
     const supabase = createClient();
     let query = supabase
       .from("vehicles")
-      .select("id, placa")
+      .select("id, placa, centro_operativo")
       .eq("estado_actual", "OPERATIVO")
       .order("placa");
     const centro = centroVisible(await getProfile());

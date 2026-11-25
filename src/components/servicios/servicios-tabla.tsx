@@ -49,6 +49,7 @@ import {
   OPCIONES_CIUDAD_REGISTRO,
   ubicacionPacientePorCiudadRegistro,
 } from "@/lib/servicios-lista";
+import { ciudadRegistroDeServicioNuevo, ERROR_CIUDAD_REGISTRO } from "@/lib/servicio-ciudad-registro";
 import { tripulacionPorCompletar, type RolTripulacion } from "@/lib/servicio-detalle";
 import { AsignarTripulacion } from "./asignar-tripulacion";
 import { useUmbralesEstancado } from "./use-umbrales-estancado";
@@ -220,7 +221,7 @@ type PersonaTripulacion = { user_id: string; nombre_completo: string | null; ema
 
 interface ServiciosTablaProps {
   servicios: ServicioRow[];
-  vehiculos: { id: string; placa: string }[];
+  vehiculos: { id: string; placa: string; centro_operativo?: string | null }[];
   /** Ids de los móviles con un servicio en curso: se marcan en rojo y van al final del selector (los libres, en verde, primero). */
   movilesOcupados?: string[];
   clientes: string[];
@@ -700,6 +701,19 @@ export function ServiciosTabla({
   };
 
   const onSubmit = async (values: MedicalServiceFormData, crearOtro = false, confirmarChoque = false) => {
+    // Al crear, la ciudad de registro nunca queda vacía: la elegida, o la del móvil asignado (un ADMIN no tiene centro propio).
+    if (!editando) {
+      const ciudad = ciudadRegistroDeServicioNuevo({
+        ciudad: values.ciudad_registro,
+        centroDelMovil: vehiculos.find((v) => v.id === values.vehicle_id)?.centro_operativo,
+      });
+      if (!ciudad) {
+        setError(ERROR_CIUDAD_REGISTRO);
+        enfocarCampo("ciudad_registro");
+        return;
+      }
+      values = { ...values, ciudad_registro: ciudad };
+    }
     setGuardando(true);
     setError(null);
     setCreadoMsg(null);
