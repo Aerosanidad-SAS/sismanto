@@ -66,30 +66,18 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
   return { success: true };
 }
 
-const CAMPO_TRIPULACION = {
-  OVEM: "ovem_user_id",
-  MEDICO: "medico_user_id",
-  AUXILIAR_ENFERMERIA: "auxiliar_user_id",
-} as const;
-
 /**
- * Decisión de Daniel (2026-09-21): si Regulación cambia la tripulación de un
- * vehículo, los servicios de ese vehículo que aún no inician desplazamiento
- * pasan a quien quedó en el rol (o quedan sin nadie en ese rol si se
- * desasignó). Los que ya iniciaron se quedan con quien los empezó.
+ * Decisión de Daniel (2026-11-23, #383): cambiar la tripulación de un móvil ya NO mueve en silencio sus servicios. Los
+ * servicios PROGRAMADO del móvil pierden su confirmación y el regulador los revisa y confirma (`servicios-confirmacion.ts`).
+ * Devuelve cuántos quedaron por confirmar.
  */
-async function reasignarServiciosNoIniciados(
-  supabase: ReturnType<typeof createClient>,
-  vehicleId: string,
-  rol: keyof typeof CAMPO_TRIPULACION,
-  userId: string | null
-): Promise<number> {
+async function pedirConfirmacionDeServicios(supabase: ReturnType<typeof createClient>, vehicleId: string): Promise<number> {
   const { data } = await supabase
     .from("medical_services")
-    .update({ [CAMPO_TRIPULACION[rol]]: userId, updated_at: new Date().toISOString() })
+    .update({ confirmado_at: null, confirmado_por: null, updated_at: new Date().toISOString() } as never)
     .eq("vehicle_id", vehicleId)
     .eq("etapa", "PROGRAMADO")
-    .is("fecha_hora_inicio_desplazamiento", null)
+    .not("confirmado_at", "is", null)
     .select("id");
   return (data ?? []).length;
 }
@@ -157,17 +145,17 @@ export async function asignarTripulacion(
   // Se hace después de insertar para que, si el insert falla, no pierda el puesto que ya tenía.
   const liberados = await liberarOtrosVehiculos(supabase, parsed.data.userId, parsed.data.vehicleId);
 
-  const reasignados = await reasignarServiciosNoIniciados(supabase, parsed.data.vehicleId, parsed.data.rol, parsed.data.userId);
+  const porConfirmar = await pedirConfirmacionDeServicios(supabase, parsed.data.vehicleId);
   await auditar(
     "MODIFICAR",
     "regulacion",
     parsed.data.vehicleId,
-    `Tripulación asignada (rol ${parsed.data.rol}); servicios reasignados: ${reasignados}` +
+    `Tripulación asignada (rol ${parsed.data.rol}); servicios que vuelven a confirmación: ${porConfirmar}` +
       (liberados.length > 0 ? `; liberado de: ${liberados.join(", ")}` : "")
   );
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
-  return { success: true, reasignados, liberados };
+  return { success: true, liberados };
 }
 
 /** Desactiva las asignaciones activas de esa persona en vehículos distintos de `vehicleId`; devuelve las placas afectadas. */
@@ -192,36 +180,6 @@ async function liberarOtrosVehiculos(supabase: ReturnType<typeof createClient>, 
   return ((vehiculos ?? []) as { placa: string }[]).map((v) => v.placa).sort();
 }
 
-/**
- * Tripulación que tenía el vehículo ayer, por rol (para "Repetir tripulación de ayer").
- * Solo lee: el regulador revisa los campos y confirma con "Guardar tripulación".
- * Por rol toma la asignación más reciente que ya había empezado ayer y no había terminado.
- */
-export async function getTripulacionDeAyer(vehicleId: string) {
-  await requireRole(["ADMIN", "ANALISTA", "REGULACION"]);
-  const idParsed = z.string().uuid().safeParse(vehicleId);
-  if (!idParsed.success) return { error: "Vehículo inválido" };
-
-  const ayer = sumarDias(hoyBogota(), -1);
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("vehicle_assignments")
-    .select("user_id, rol_en_turno, fecha_inicio, id")
-    .eq("vehicle_id", idParsed.data)
-    .lte("fecha_inicio", ayer)
-    .or(`fecha_fin.is.null,fecha_fin.gte.${ayer}`)
-    .order("fecha_inicio", { ascending: false })
-    .order("id", { ascending: false });
-  if (error) return { error: error.message };
-
-  const porRol: Partial<Record<"OVEM" | "MEDICO" | "AUXILIAR_ENFERMERIA", string>> = {};
-  for (const a of (data ?? []) as any[]) {
-    const rol = a.rol_en_turno as keyof typeof CAMPO_TRIPULACION;
-    if (rol in CAMPO_TRIPULACION && !porRol[rol]) porRol[rol] = a.user_id;
-  }
-  return { success: true as const, tripulacion: porRol };
-}
-
 export async function unassignVehicle(assignmentId: number) {
   await requireRole(["ADMIN", "ANALISTA", "REGULACION"]);
   const idParsed = z.number().int().positive().safeParse(assignmentId);
@@ -237,10 +195,7 @@ export async function unassignVehicle(assignmentId: number) {
     .maybeSingle();
 
   if (error) return { error: error.message };
-  const rol = asignacion?.rol_en_turno as keyof typeof CAMPO_TRIPULACION | undefined;
-  if (asignacion && rol && rol in CAMPO_TRIPULACION) {
-    await reasignarServiciosNoIniciados(supabase, asignacion.vehicle_id, rol, null);
-  }
+  if (asignacion) await pedirConfirmacionDeServicios(supabase, asignacion.vehicle_id);
   await auditar("MODIFICAR", "regulacion", idParsed.data, "Asignación de tripulación finalizada");
   revalidatePath("/regulacion");
   revalidatePath("/servicios");

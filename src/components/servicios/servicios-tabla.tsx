@@ -85,6 +85,8 @@ import { toast } from "@/components/ui/toaster";
 import { errorDeCambioEtapa, esEtapaCerrada, esEtapaNegativa, MOTIVO_MAX, puedeReabrir } from "@/lib/servicios-etapas";
 import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
 import { textoChoque, type ServicioEnChoque } from "@/lib/servicios-choque";
+import { porConfirmar } from "@/lib/servicios-confirmacion";
+import { hoyBogota } from "@/lib/fechas";
 import { CAMPOS_CLINICOS_MEDICO_AUX as CAMPOS_CLINICOS_LISTA } from "@/lib/servicios-actualizacion";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
@@ -815,6 +817,11 @@ export function ServiciosTabla({
         <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"} className="shrink-0 whitespace-nowrap px-1.5 py-0 text-xs leading-5">
           {s.etapa}
         </Badge>
+        {porConfirmar({ etapa: s.etapa, vehicle_id: s.vehicle_id, confirmado_at: s.confirmado_at as string | null, fecha_hora_programacion: s.fecha_hora_programacion as string | null }, hoyBogota()) && (
+          <Badge variant="outline" className="shrink-0 whitespace-nowrap border-amber-400 bg-amber-50 px-1.5 py-0 text-xs leading-5 text-amber-900">
+            Por confirmar
+          </Badge>
+        )}
         {estancado !== null && (
           <Badge
             variant="outline"
