@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getProfile } from "@/app/api/actions/auth";
+import { requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { centroVisible, isAdminLike } from "@/lib/auth-utils";
 import { NovedadesTabla } from "@/components/novedades/novedades-tabla";
 import { NuevaNovedadBoton } from "@/components/novedades/nueva-novedad-boton";
@@ -51,7 +52,7 @@ async function getVehiculosParaNovedad(centroCodigo: string | null): Promise<{ i
 }
 
 export default async function NovedadesPage() {
-  const profile = await getProfile();
+  const profile = await requireRole(rolesDeRuta("/novedades"));
   const centroCodigo = centroVisible(profile)?.codigo ?? null;
   const [novedades, solicitudesNoApto, vehiculosNovedad] = await Promise.all([
     getNovedades(centroCodigo),

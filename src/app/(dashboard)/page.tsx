@@ -5,7 +5,8 @@ import { KpiCard, KpiCaption, KpiValue } from "@/components/ui/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { CostoPorVehiculoCard } from "@/components/dashboard/costo-por-vehiculo-card";
 import { DisponibilidadCard } from "@/components/dashboard/disponibilidad-card";
 import { ResolucionNovedadesCard } from "@/components/dashboard/resolucion-novedades-card";
@@ -299,6 +300,8 @@ export default async function DashboardPage(
   }
 ) {
   const searchParams = await props.searchParams;
+  // Quien no está en el menú del Dashboard vuelve a su pantalla aunque escriba la URL (lo hacía solo el cliente, tras cargar).
+  await requireRole(rolesDeRuta("/"));
   // COORDINACION tiene su propio inicio (resumen de servicios de su CRA, flota del día, informes): no carga
   // costos, disponibilidad ni biomédicos del tablero ejecutivo.
   if ((await getProfile())?.role_codigo === "COORDINACION") {
