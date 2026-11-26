@@ -196,3 +196,23 @@ export function minutosDeRetraso(s: ServicioParaEstado, ahora: number = Date.now
   const minutos = Math.floor((ahora - programada) / 60000);
   return minutos > 0 ? minutos : null;
 }
+
+/**
+ * Qué deshace «Volver al paso anterior»: el último hito marcado y, si ese hito abrió el curso del servicio, la etapa
+ * vuelve a PROGRAMADO. Telemedicina no tiene hitos: solo devuelve la etapa. null si no hay nada que deshacer.
+ */
+export function pasoADevolver(
+  s: ServicioParaEstado
+): { campo?: CampoPasoServicio; hito?: string; etapaNueva?: "PROGRAMADO" } | null {
+  if (s.etapa !== "PROGRAMADO" && s.etapa !== "CURSO") return null;
+  let ultimo: PasoServicio | undefined;
+  for (const p of pasosPorTipo(s.tipo_servicio)) if (s[p.campo]) ultimo = p;
+  if (ultimo) {
+    return {
+      campo: ultimo.campo,
+      hito: ultimo.hito,
+      etapaNueva: ultimo.etapaDestino === "CURSO" && s.etapa === "CURSO" ? "PROGRAMADO" : undefined,
+    };
+  }
+  return s.etapa === "CURSO" ? { etapaNueva: "PROGRAMADO" } : null;
+}
