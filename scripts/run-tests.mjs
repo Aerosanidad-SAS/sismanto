@@ -1,5 +1,5 @@
 /**
- * Corre las pruebas (`*.test.ts` bajo src/) tres veces, con la zona horaria del proceso en UTC, en Colombia y en
+ * Corre las pruebas (`*.test.ts` bajo src/ y `*.test.mjs` bajo scripts/) tres veces, con la zona horaria del proceso en UTC, en Colombia y en
  * Japón (UTC+9). Si un cálculo depende de la zona del equipo, alguna de las tres falla: es la red de seguridad contra
  * el "en local sale una cosa y en Vercel otra". Sin dependencias: usa el ejecutor de pruebas de Node vía tsx.
  *
@@ -11,20 +11,20 @@ import { join } from "node:path";
 
 const ZONAS = ["UTC", "America/Bogota", "Asia/Tokyo"];
 
-function archivosDePrueba(dir) {
+function archivosDePrueba(dir, sufijo) {
   const out = [];
   for (const nombre of readdirSync(dir)) {
     const ruta = join(dir, nombre);
     if (statSync(ruta).isDirectory()) {
-      if (nombre !== "node_modules") out.push(...archivosDePrueba(ruta));
-    } else if (nombre.endsWith(".test.ts")) {
+      if (nombre !== "node_modules") out.push(...archivosDePrueba(ruta, sufijo));
+    } else if (nombre.endsWith(sufijo)) {
       out.push(ruta);
     }
   }
   return out;
 }
 
-const archivos = archivosDePrueba("src");
+const archivos = [...archivosDePrueba("src", ".test.ts"), ...archivosDePrueba("scripts", ".test.mjs")];
 if (archivos.length === 0) {
   console.log("No hay pruebas.");
   process.exit(0);

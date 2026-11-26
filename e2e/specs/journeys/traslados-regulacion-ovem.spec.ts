@@ -1,4 +1,4 @@
-import { test, expect, type Browser, type Page } from "@playwright/test";
+import { test, expect, type Browser, type Locator, type Page } from "@playwright/test";
 import { PREFIJO } from "../../fixtures/datos";
 import { archivoSesion, tieneCredenciales, type RolClave } from "../../fixtures/roles";
 
@@ -38,6 +38,12 @@ function horaColombia(minutos: number): string {
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
 }
 
+/** Abre un combobox de catálogo del formulario y elige la opción. */
+async function elegir(page: Page, dialogo: Locator, selector: string, opcion: string) {
+  await dialogo.locator(selector).click();
+  await page.getByRole("option", { name: opcion, exact: true }).click();
+}
+
 async function crearServicio(page: Page, c: Caso, nombre: string, indice: number) {
   await page.goto("/servicios?nuevo=1");
   const dialogo = page.getByRole("dialog");
@@ -48,7 +54,14 @@ async function crearServicio(page: Page, c: Caso, nombre: string, indice: number
   await page.getByRole("option", { name: new RegExp(MOVIL) }).click();
   // shortcut: pocos minutos adelante para que caiga en la vista «Hoy»; falla si se corre a las 23:55 (el día cambia), pasar a la vista «Todos».
   await dialogo.locator("#fecha_hora_programacion").fill(horaColombia(2 + indice * 3));
-  if (!c.domiciliaria) await dialogo.locator("#direccion_origen").fill(`${PREFIJO} Calle 10 #20-30, Medellín`);
+  if (!c.domiciliaria) {
+    // TAB y TAM no se despachan sin ciudad de origen y de destino (#343).
+    for (const parada of ["origen", "destino"]) {
+      await elegir(page, dialogo, `#departamento_${parada}`, "Antioquia");
+      await elegir(page, dialogo, `#ciudad_${parada}`, "Medellín");
+    }
+    await dialogo.locator("#direccion_origen").fill(`${PREFIJO} Calle 10 #20-30, Medellín`);
+  }
   await dialogo.locator("#direccion_destino").fill(`${PREFIJO} ${c.domiciliaria ? "Domicilio Calle 5 #6-7" : "Clínica Las Américas"}, Medellín`);
   await dialogo.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(dialogo, "el servicio no se guardó").toBeHidden({ timeout: 20_000 });

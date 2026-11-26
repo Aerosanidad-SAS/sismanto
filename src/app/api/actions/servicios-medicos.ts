@@ -9,10 +9,12 @@ import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
 import { ciudadDeCentro } from "@/lib/servicios-centro";
+import { ciudadRegistroAlCrear, ERROR_CIUDAD_REGISTRO } from "@/lib/servicio-ciudad-registro";
 import { condicionServiciosVisibles } from "@/lib/servicios-centro-servidor";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { textoDiagnostico } from "@/lib/servicio-detalle";
+import { confirmacionAlCrear } from "@/lib/servicios-confirmacion";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
 import { hoyBogota, sumarDias } from "@/lib/fechas";
@@ -23,6 +25,7 @@ import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
 import { errorDeCambioEtapa } from "@/lib/servicios-etapas";
+import { errorDeDespacho, type DatosDireccion } from "@/lib/servicios-direccion";
 import { VENTANA_ABIERTOS_DIAS } from "@/lib/servicios-abiertos";
 import {
   ETAPAS_QUE_CHOCAN,
@@ -259,7 +262,7 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
  * El OVEM no lee `patients` (RLS: es dato clínico): la cédula se lee con la clave de servicio, pero solo después de
  * comprobar con la sesión de la persona que el servicio es suyo (la RLS de `medical_services` deja a OVEM, médico y
  * auxiliar ver solo los que tienen asignados; el ADMIN ve todos). Devuelve lo mínimo para atender: nombre, documento,
- * diagnóstico y las observaciones del servicio.
+ * diagnóstico y las notas de ubicación del servicio.
  */
 export async function getDetalleServicioTripulacion(
   id: number
@@ -270,7 +273,7 @@ export async function getDetalleServicioTripulacion(
 
   const { data, error } = await createClient()
     .from("medical_services")
-    .select("patient_id, nombre_completo, cedula_paciente, cie_codigo, cie_descripcion, observaciones")
+    .select("patient_id, nombre_completo, cedula_paciente, cie_codigo, cie_descripcion, notas_ubicacion")
     .eq("id", idParsed.data)
     .maybeSingle();
   if (error) {
@@ -283,7 +286,7 @@ export async function getDetalleServicioTripulacion(
     cedula_paciente: string | null;
     cie_codigo: string | null;
     cie_descripcion: string | null;
-    observaciones: string | null;
+    notas_ubicacion: string | null;
   } | null;
   if (!s) return { error: "Este servicio no está asignado a ti." };
 
@@ -303,7 +306,7 @@ export async function getDetalleServicioTripulacion(
     nombre: (s.nombre_completo ?? "").trim(),
     cedula,
     diagnostico: textoDiagnostico(s.cie_codigo, descripcion),
-    notas: (s.observaciones ?? "").trim(),
+    notas: (s.notas_ubicacion ?? "").trim(),
   };
 }
 
@@ -562,11 +565,25 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   // Las horas del recorrido deben ir en el orden en que ocurren (no se validaba en SISRES).
   const desorden = errorDeCronologia(parsed.data);
   if (desorden) return { error: desorden };
+  // #343: no se despacha sin dirección (misma regla del formulario).
+  const sinDireccion = errorDeDespacho(parsed.data.tipo_servicio, parsed.data, { etapaDespues: etapa, ovemDespues: parsed.data.ovem_user_id });
+  if (sinDireccion) return { error: sinDireccion };
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const profile = await getProfile();
   const fila = aFilaServicio(parsed.data);
+  // #387: la misma regla del formulario, para que no se salte llamando la acción a mano.
+  const ciudadRegistro = await ciudadRegistroAlCrear({
+    ciudad: fila.ciudad_registro,
+    vehicleId: fila.vehicle_id,
+    centroDelMovil: async (vehicleId) => {
+      const { data: movil } = await supabase.from("vehicles").select("centro_operativo").eq("id", vehicleId).maybeSingle<{ centro_operativo: string | null }>();
+      return movil?.centro_operativo;
+    },
+  });
+  if (!ciudadRegistro) return { error: ERROR_CIUDAD_REGISTRO };
+  fila.ciudad_registro = ciudadRegistro;
   // Bloqueo provisional (migración 113): no se despacha un servicio con un vehículo que tiene una solicitud de
   // NO APTO pendiente de aval.
   if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
@@ -585,6 +602,8 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
       etapa,
       operational_center_id: await centroDelServicio(supabase, fila.vehicle_id, profile?.operational_center_id ?? null),
       created_by: userData.user?.id ?? null,
+      // #383: creado ya con móvil y tripulación completos, no hay que volver a confirmarlo.
+      ...confirmacionAlCrear({ ...fila, etapa }, profile),
     })
     .select()
     .single();
@@ -609,11 +628,12 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   // guardar con etapa FINALIZADO). Los demás estados se guardan libres.
   const desorden = errorDeCronologia(parsed.data);
   if (desorden) return { error: desorden };
-  const { data: actual } = await supabase
+  const { data: actual, error: errorActual } = await supabase
     .from("medical_services")
-    .select("etapa")
+    .select("etapa, ovem_user_id")
     .eq("id", idParsed.data)
-    .maybeSingle<{ etapa: string }>();
+    .maybeSingle<{ etapa: string; ovem_user_id: string | null }>();
+  if (errorActual) return { error: errorActual.message };
   if (actual?.etapa === "FINALIZADO") {
     const falta = mensajeFaltantesParaFinalizar(parsed.data.tipo_servicio, parsed.data);
     if (falta) return { error: falta };
@@ -621,6 +641,16 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   const rol = (await getProfile())?.role_codigo;
   const esMedicoAux = rol === "MEDICO" || rol === "AUXILIAR_ENFERMERIA";
   const fila = aFilaServicio(parsed.data);
+  // #343: poner un OVEM distinto es despachar. Médico y Auxiliar no escriben la tripulación (`filaDeActualizacion`).
+  if (!esMedicoAux && actual) {
+    const sinDireccion = errorDeDespacho(parsed.data.tipo_servicio, parsed.data, {
+      etapaAntes: actual.etapa,
+      etapaDespues: actual.etapa,
+      ovemAntes: actual.ovem_user_id,
+      ovemDespues: parsed.data.ovem_user_id,
+    });
+    if (sinDireccion) return { error: sinDireccion };
+  }
   // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
   // asignado a un servicio — tampoco al editar uno que ya lo tenía.
   if (!esMedicoAux && fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
@@ -694,6 +724,17 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
       const desorden = errorDeCronologia(fila);
       if (desorden) return { error: desorden + " Edita el servicio, corrige las horas y luego finalízalo." };
     }
+  }
+  // #343: pasar a CURSO es despachar. «Volver al paso anterior» (`devolverPasoServicio`) no pasa por aquí.
+  if (nueva === "CURSO") {
+    const { data: ruta, error: errorRuta } = await supabase
+      .from("medical_services")
+      .select("tipo_servicio, direccion_origen, ciudad_origen, direccion_destino, ciudad_destino")
+      .eq("id", idParsed.data)
+      .maybeSingle<{ tipo_servicio: string } & DatosDireccion>();
+    if (errorRuta) return { error: errorRuta.message };
+    const sinDireccion = ruta ? errorDeDespacho(ruta.tipo_servicio, ruta, { etapaAntes: actual, etapaDespues: nueva }) : null;
+    if (sinDireccion) return { error: sinDireccion };
   }
   const { data, error } = await supabase
     .from("medical_services")

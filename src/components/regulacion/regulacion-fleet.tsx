@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   toggleVehicleStatus,
   asignarTripulacion,
-  getTripulacionDeAyer,
   unassignVehicle,
 } from "@/app/api/actions/regulacion";
 import { ROLES_TRIPULACION } from "@/lib/validations";
@@ -20,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CheckCircle2, XCircle, UserPlus, UserMinus, History, Undo2 } from "lucide-react";
+import { CheckCircle2, XCircle, UserPlus, UserMinus, Undo2 } from "lucide-react";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
 import {
@@ -33,6 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { ConfirmarServiciosMovil } from "@/components/regulacion/confirmar-servicios-movil";
 
 type TripulacionUser = { user_id: string; nombre_completo: string | null; email: string | null };
 
@@ -174,13 +174,10 @@ export function RegulacionFleet({
   const [unassignAssignmentId, setUnassignAssignmentId] = useState<number | null>(null);
   const [confirmFds, setConfirmFds] = useState<{ id: string; placa: string } | null>(null);
   const [aviso, setAviso] = useState<{ texto: string; deshacer?: () => void } | null>(null);
+  // Móvil cuya tripulación se acaba de guardar: se le piden confirmar sus servicios programados (#383).
+  const [porConfirmar, setPorConfirmar] = useState<{ id: string; placa: string } | null>(null);
   const hoy = hoyBogota();
 
-  const USERS_POR_ROL: Record<Rol, TripulacionUser[]> = {
-    OVEM: ovemUsers,
-    MEDICO: medicoUsers,
-    AUXILIAR_ENFERMERIA: auxiliarUsers,
-  };
   const opciones: Record<Rol, { label: string; id: string }[]> = {
     OVEM: opcionesDe(ovemUsers),
     MEDICO: opcionesDe(medicoUsers),
@@ -275,26 +272,22 @@ export function RegulacionFleet({
     setLoading(true);
     setDialogMsg(null);
     let fallo: string | null = null;
-    let reasignados = 0;
     const liberados = new Set<string>();
-    // Secuencial: cada asignación desactiva la anterior del mismo rol y reasigna servicios no iniciados.
+    // Secuencial: cada asignación desactiva la anterior del mismo rol. Los servicios no se mueven solos: se confirman después.
     for (const rol of rolesConCambio) {
       const result = await asignarTripulacion(assigningVehicle, crew[rol], rol, hoy);
       if (result?.error) {
         fallo = `${ROL_LABEL[rol]}: ${result.error}`;
         break;
       }
-      reasignados += "reasignados" in result ? result.reasignados ?? 0 : 0;
       if ("liberados" in result) result.liberados?.forEach((placa) => liberados.add(placa));
     }
     if (fallo) setDialogMsg({ tipo: "error", texto: fallo });
     else {
+      const placa = vehiculoEnEdicion?.placa ?? "";
+      setPorConfirmar({ id: assigningVehicle, placa });
       cerrarAsignar();
-      // DEU-01: antes los servicios PROGRAMADO sin iniciar se reasignaban en silencio, sin decir cuántos.
       const avisos: string[] = [];
-      if (reasignados > 0) {
-        avisos.push(`Los ${reasignados} servicio${reasignados === 1 ? "" : "s"} PROGRAMADO sin iniciar de este vehículo pasaron a la nueva tripulación.`);
-      }
       // Una persona no puede estar en dos vehículos: avisar de dónde quedó libre su puesto.
       if (liberados.size > 0) {
         avisos.push(`Quedó libre su puesto en ${[...liberados].join(", ")}: una persona solo puede estar en un vehículo.`);
@@ -303,35 +296,6 @@ export function RegulacionFleet({
     }
     // Si falló a medias, lo ya guardado debe verse reflejado.
     router.refresh();
-    setLoading(false);
-  };
-
-  const repetirDeAyer = async () => {
-    if (!assigningVehicle) return;
-    setLoading(true);
-    setDialogMsg(null);
-    const result = await getTripulacionDeAyer(assigningVehicle);
-    if ("error" in result && result.error) {
-      setDialogMsg({ tipo: "error", texto: result.error });
-    } else if ("tripulacion" in result) {
-      const ayer = result.tripulacion ?? {};
-      const siguiente: Tripulacion = { ...crew };
-      let encontrados = 0;
-      for (const rol of ROLES_TRIPULACION) {
-        const id = ayer[rol];
-        // Solo si la persona sigue activa con ese rol.
-        if (id && USERS_POR_ROL[rol].some((u) => u.user_id === id)) {
-          siguiente[rol] = id;
-          encontrados++;
-        }
-      }
-      if (encontrados === 0) {
-        setDialogMsg({ tipo: "info", texto: "Ayer este vehículo no tenía tripulación registrada." });
-      } else {
-        setCrew(siguiente);
-        setDialogMsg({ tipo: "info", texto: "Tripulación de ayer cargada. Revísala y pulsa «Guardar tripulación»." });
-      }
-    }
     setLoading(false);
   };
 
@@ -625,11 +589,7 @@ export function RegulacionFleet({
               </p>
             )}
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Button type="button" variant="ghost" onClick={() => void repetirDeAyer()} disabled={loading}>
-                <History className="mr-1 h-4 w-4" aria-hidden />
-                Repetir tripulación de ayer
-              </Button>
-              <div className="flex gap-2">
+              <div className="ml-auto flex gap-2">
                 <Button variant="outline" onClick={cerrarAsignar}>
                   Cancelar
                 </Button>
@@ -641,6 +601,8 @@ export function RegulacionFleet({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmarServiciosMovil vehiculo={porConfirmar} onCerrar={() => setPorConfirmar(null)} />
     </div>
   );
 }

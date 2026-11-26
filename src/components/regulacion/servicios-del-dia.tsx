@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { HelpTrigger } from "@/components/ui/help-trigger";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { textoRetraso, VENTANA_ABIERTOS_DIAS } from "@/lib/servicios-abiertos";
+import { porConfirmar } from "@/lib/servicios-confirmacion";
+import { hoyBogota } from "@/lib/fechas";
 import {
   clasificarServicio,
   coincideFiltro,
@@ -44,6 +46,8 @@ export interface ServicioDelDia extends ServicioParaEstado {
   ovem_nombre: string | null;
   medico_nombre: string | null;
   auxiliar_nombre: string | null;
+  vehicle_id?: string | null;
+  confirmado_at?: string | null;
 }
 
 const ESTADO_UI: Record<EstadoSala, { tone: StatusTone; icon: LucideIcon; etiqueta: string }> = {
@@ -77,6 +81,7 @@ function lugar(direccion: string | null, ciudad: string | null): string | null {
 export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicios: ServicioDelDia[]; antiguosSinCerrar?: number }) {
   const [filtro, setFiltro] = useState<FiltroServicios>("abiertos");
   const ahora = Date.now();
+  const hoy = hoyBogota(ahora);
 
   // Se recalcula en cada render: el tablero se refresca cada 30 s y el retraso depende de la hora actual.
   const todas = servicios.map((s) => ({ s, ...clasificarServicio(s, ahora), programadoPara: s.fecha_hora_programacion ?? null }));
@@ -240,6 +245,11 @@ export function ServiciosDelDia({ servicios, antiguosSinCerrar = 0 }: { servicio
                       <StatusBadge tone={ui.tone} icon={ui.icon}>
                         {estado === "cancelado" ? etiqueta : ui.etiqueta}
                       </StatusBadge>
+                      {porConfirmar(s, hoy) && (
+                        <StatusBadge tone="warning" icon={ClipboardCheck} className="ml-1">
+                          Por confirmar
+                        </StatusBadge>
+                      )}
                       {subtitulo.length > 0 && (
                         <p className={cn("mt-1 text-xs", retraso !== null ? "font-medium text-destructive" : "text-muted-foreground")}>
                           {subtitulo.join(" · ")}
