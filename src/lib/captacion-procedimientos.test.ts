@@ -5,6 +5,7 @@ import {
   PROCEDIMIENTOS_EXTERNOS,
   agruparPorLote,
   captacionProcedimientosSchema,
+  erroresDeCantidad,
   type FilaProcedimientoGuardada,
 } from "./captacion-procedimientos";
 import { rolesDeRuta } from "./navegacion";
@@ -145,5 +146,21 @@ describe("menú", () => {
     const ordenar = (r: readonly string[]) => [...r].sort();
     assert.deepEqual(ordenar(rolesDeRuta("/captacion")), ordenar(ROLES_CAPTACION_LISTA));
     assert.deepEqual(ordenar(rolesDeRuta("/captacion/procedimientos")), ordenar(ROLES_CAPTACION_LISTA));
+  });
+});
+
+describe("erroresDeCantidad", () => {
+  it("ubica cada error de cantidad en su línea y deja fuera los demás", () => {
+    const r = captacionProcedimientosSchema.safeParse(
+      valido({
+        aeropuerto_atencion: "",
+        lineas: [
+          { procedimiento: PROCEDIMIENTOS_EXTERNOS[0], cantidad: 2 },
+          { procedimiento: PROCEDIMIENTOS_EXTERNOS[1], cantidad: 0 },
+        ],
+      }),
+    );
+    assert.ok(!r.success);
+    assert.deepEqual(erroresDeCantidad(r.error.issues), { 1: "La cantidad va de 1 a 99" });
   });
 });

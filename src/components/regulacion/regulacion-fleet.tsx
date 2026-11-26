@@ -567,7 +567,7 @@ export function RegulacionFleet({
                         value={seleccion}
                         onChange={(label) => elegirPersona(rol, label)}
                         allowCustom={false}
-                        placeholder={`Selecciona ${ROL_LABEL[rol]?.toLowerCase() ?? "persona"}`}
+                        placeholder={`Selecciona ${rol === "OVEM" ? "OVEM" : (ROL_LABEL[rol]?.toLowerCase() ?? "persona")}`}
                         disabled={loading}
                       />
                     )}
@@ -588,12 +588,21 @@ export function RegulacionFleet({
                 {dialogMsg.texto}
               </p>
             )}
+            {rolesConCambio.length === 0 && !loading && (
+              <p id="tripulacion-sin-cambios" className="text-right text-xs text-muted-foreground">
+                Para guardar, elige o cambia al menos una persona.
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="ml-auto flex gap-2">
                 <Button variant="outline" onClick={cerrarAsignar}>
                   Cancelar
                 </Button>
-                <Button onClick={handleAssign} disabled={rolesConCambio.length === 0 || loading}>
+                <Button
+                  onClick={handleAssign}
+                  disabled={rolesConCambio.length === 0 || loading}
+                  aria-describedby={rolesConCambio.length === 0 ? "tripulacion-sin-cambios" : undefined}
+                >
                   {loading ? "Guardando…" : "Guardar tripulación"}
                 </Button>
               </div>

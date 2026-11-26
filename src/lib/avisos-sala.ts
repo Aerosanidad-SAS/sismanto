@@ -18,6 +18,12 @@ export interface EstadoParaAvisos {
 
 export type SonidoSala = "estado" | "nuevo" | "retraso";
 
+/** Pone los avisos nuevos arriba; uno con el mismo id reemplaza al anterior en vez de apilarse. */
+export function apilarAvisos<T extends { id: string }>(previos: T[], nuevos: T[], max = 6): T[] {
+  const ids = new Set(nuevos.map((n) => n.id));
+  return [...nuevos, ...previos.filter((p) => !ids.has(p.id))].slice(0, max);
+}
+
 export interface EventoSala {
   id: string;
   titulo: string;

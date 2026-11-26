@@ -14,6 +14,7 @@ import {
   CANTIDAD_MIN,
   PROCEDIMIENTOS_EXTERNOS,
   captacionProcedimientosSchema,
+  erroresDeCantidad,
 } from "@/lib/captacion-procedimientos";
 import { crearProcedimientosExternos } from "@/app/api/actions/captacion-procedimientos";
 
@@ -47,6 +48,8 @@ export function FormularioProcedimientos({ aeropuertos }: Props) {
   const [siguiente, setSiguiente] = useState(2);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Error de cantidad por `clave` de línea. */
+  const [erroresCantidad, setErroresCantidad] = useState<Record<number, string>>({});
 
   const cambiarLinea = (clave: number, cambios: Partial<Linea>) =>
     setLineas((prev) => prev.map((l) => (l.clave === clave ? { ...l, ...cambios } : l)));
@@ -62,6 +65,7 @@ export function FormularioProcedimientos({ aeropuertos }: Props) {
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setErroresCantidad({});
     const datos = {
       lote,
       fecha_atencion: fecha,
@@ -73,7 +77,11 @@ export function FormularioProcedimientos({ aeropuertos }: Props) {
     // El servidor vuelve a validar todo con el mismo esquema: aquí solo se avisa antes de enviar.
     const validacion = captacionProcedimientosSchema.safeParse(datos);
     if (!validacion.success) {
-      setError(validacion.error.issues[0]?.message ?? "Datos inválidos");
+      const porPosicion = erroresDeCantidad(validacion.error.issues);
+      setErroresCantidad(Object.fromEntries(Object.entries(porPosicion).map(([i, m]) => [lineas[Number(i)].clave, m])));
+      // Abajo van solo los errores que no quedan junto a un campo.
+      const otro = validacion.error.issues.find((issue) => issue.path[2] !== "cantidad");
+      setError(otro?.message ?? null);
       return;
     }
     setGuardando(true);
@@ -88,7 +96,7 @@ export function FormularioProcedimientos({ aeropuertos }: Props) {
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-6">
+    <form noValidate onSubmit={enviar} className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Atención</CardTitle>
@@ -151,7 +159,12 @@ export function FormularioProcedimientos({ aeropuertos }: Props) {
                     max={CANTIDAD_MAX}
                     step={1}
                     value={l.cantidad}
-                    onChange={(e) => cambiarLinea(l.clave, { cantidad: e.target.value })}
+                    aria-invalid={Boolean(erroresCantidad[l.clave])}
+                    aria-describedby={erroresCantidad[l.clave] ? `p-cant-error-${l.clave}` : undefined}
+                    onChange={(e) => {
+                      cambiarLinea(l.clave, { cantidad: e.target.value });
+                      setErroresCantidad(({ [l.clave]: _corregida, ...resto }) => resto);
+                    }}
                   />
                 </div>
                 <Button
@@ -162,6 +175,11 @@ export function FormularioProcedimientos({ aeropuertos }: Props) {
                 >
                   Quitar
                 </Button>
+                {erroresCantidad[l.clave] && (
+                  <p id={`p-cant-error-${l.clave}`} role="alert" className="text-sm text-destructive sm:col-span-3">
+                    {erroresCantidad[l.clave]}
+                  </p>
+                )}
               </div>
             );
           })}

@@ -62,6 +62,15 @@ export const captacionProcedimientosSchema = z
     });
   });
 
+/** Errores de cantidad por posición de línea, para mostrarlos junto a su campo. */
+export function erroresDeCantidad(issues: readonly { path: (string | number)[]; message: string }[]): Record<number, string> {
+  const errores: Record<number, string> = {};
+  for (const { path, message } of issues) {
+    if (path[0] === "lineas" && typeof path[1] === "number" && path[2] === "cantidad") errores[path[1]] ??= message;
+  }
+  return errores;
+}
+
 export type CaptacionProcedimientosInput = z.input<typeof captacionProcedimientosSchema>;
 export type CaptacionProcedimientosDatos = z.output<typeof captacionProcedimientosSchema>;
 

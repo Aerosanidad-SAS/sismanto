@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Bell, BellOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toaster";
-import { detectarEventos, sonidoMasUrgente, type EstadoParaAvisos, type SonidoSala } from "@/lib/avisos-sala";
+import { apilarAvisos, detectarEventos, sonidoMasUrgente, type EstadoParaAvisos, type SonidoSala } from "@/lib/avisos-sala";
 import { getServiciosParaAvisos } from "@/app/api/actions/servicios-medicos";
 import { getResumenAbiertosFinDeDia } from "@/app/api/actions/servicios-fin-de-dia";
 import { getUmbralesEstancado } from "@/app/api/actions/servicios-estancados";
@@ -185,7 +185,7 @@ export function AvisosServicios({
 
   const agregar = useCallback((nuevos: Aviso[]) => {
     if (nuevos.length === 0) return;
-    setAvisos((prev) => [...nuevos.filter((n) => !prev.some((p) => p.id === n.id)), ...prev].slice(0, 6));
+    setAvisos((prev) => apilarAvisos(prev, nuevos));
   }, []);
 
   const revisar = useCallback(async () => {
@@ -215,28 +215,30 @@ export function AvisosServicios({
       if (!peorSonido || Number(sonido.slice(6)) < Number(peorSonido.slice(6))) peorSonido = sonido;
     }
 
-    const estancados = servicios
+    const todosEstancados = servicios
       .map((s) => ({ s, horas: horasEstancado(s, ahora, umbrales) }))
-      .filter((x): x is { s: (typeof servicios)[number]; horas: number } => x.horas !== null)
-      .filter(({ s, horas }) => {
-        const clave = `estancado_${s.id}_${horas}`;
-        if (leerStorage("session", clave)) return false;
-        escribirStorage("session", clave, "1");
-        return true;
-      });
-    if (estancados.length > MAX_AVISOS_ESTANCADO_INDIVIDUALES) {
+      .filter((x): x is { s: (typeof servicios)[number]; horas: number } => x.horas !== null);
+    // Solo se avisa si hay alguno que no se haya avisado ya (cada servicio, una vez por hora cumplida).
+    const estancados = todosEstancados.filter(({ s, horas }) => {
+      const clave = `estancado_${s.id}_${horas}`;
+      if (leerStorage("session", clave)) return false;
+      escribirStorage("session", clave, "1");
+      return true;
+    });
+    if (estancados.length > 0 && todosEstancados.length > MAX_AVISOS_ESTANCADO_INDIVIDUALES) {
+      // Un solo aviso con el total actual: el id fijo hace que se actualice en vez de apilarse.
       nuevos.push({
-        id: `estancados_${ahora}`,
-        titulo: `⏰ ${estancados.length} servicios estancados`,
-        detalle: `${estancados.filter((e) => e.s.etapa === "PROGRAMADO").length} en PROGRAMADO y ${
-          estancados.filter((e) => e.s.etapa === "CURSO").length
+        id: "estancados",
+        titulo: `⏰ ${todosEstancados.length} servicios estancados`,
+        detalle: `${todosEstancados.filter((e) => e.s.etapa === "PROGRAMADO").length} en PROGRAMADO y ${
+          todosEstancados.filter((e) => e.s.etapa === "CURSO").length
         } en CURSO sin avanzar.`,
         tono: "alerta",
       });
     } else {
       for (const { s, horas } of estancados) {
         nuevos.push({
-          id: `estancado_${s.id}_${horas}`,
+          id: `estancado_${s.id}`,
           titulo: `⏰ Lleva ${horas} h en ${s.etapa}`,
           detalle: `#${s.id} · ${s.nombre_completo}`,
           tono: "alerta",
