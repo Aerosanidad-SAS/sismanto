@@ -6,8 +6,8 @@ import { Fuel } from "lucide-react";
 import { submitOvemFuelLog } from "@/app/api/actions/ovem";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { evaluarKilometraje, parseKilometraje, parseNumeroDecimal } from "@/lib/ovem-portal";
 import { erroresTanqueo, type ErroresTanqueo } from "@/lib/tanqueo-errores";
 
@@ -40,12 +40,6 @@ export function CombustibleForm({
 
   /** Al corregir un campo se le quita su error; los demás siguen hasta el próximo envío. */
   const limpiarError = (campo: keyof ErroresTanqueo) => setErrores((previo) => ({ ...previo, [campo]: undefined }));
-  const errorCampo = (campo: keyof ErroresTanqueo) =>
-    errores[campo] ? (
-      <p id={`fuel-${campo}-error`} role="alert" className="text-sm text-destructive">
-        {errores[campo]}
-      </p>
-    ) : null;
 
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,10 +93,8 @@ export function CombustibleForm({
       </CardHeader>
       <CardContent>
         <form onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
-          <div className="space-y-1">
-            <Label htmlFor="fuel-fecha">Fecha</Label>
+          <Field id="fuel-fecha" label="Fecha" required error={errores.fecha}>
             <Input
-              id="fuel-fecha"
               type="date"
               max={hoy}
               value={fecha}
@@ -110,73 +102,51 @@ export function CombustibleForm({
                 setFecha(e.target.value);
                 limpiarError("fecha");
               }}
-              aria-invalid={errores.fecha ? "true" : undefined}
-              aria-describedby={errores.fecha ? "fuel-fecha-error" : undefined}
-              required
             />
-            {errorCampo("fecha")}
-          </div>
+          </Field>
           <div className="space-y-1">
-            <Label htmlFor="fuel-km">
-              Kilometraje del tablero <span className="text-destructive">*</span>
-            </Label>
-            <Input
+            <Field
               id="fuel-km"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9.\s]+"
-              enterKeyHint="next"
-              aria-invalid={errores.km ? "true" : undefined}
-              aria-describedby={errores.km ? "fuel-km-error fuel-km-ayuda" : "fuel-km-ayuda"}
-              value={km}
-              onChange={(e) => {
-                setKm(e.target.value);
-                limpiarError("km");
-              }}
-              placeholder="Ej: 125000"
+              label="Kilometraje del tablero"
               required
-            />
-            {errorCampo("km")}
-            <p id="fuel-km-ayuda" className="text-xs text-muted-foreground">
-              {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
-            </p>
+              error={errores.km}
+              hint={ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
+            >
+              <Input
+                type="text"
+                inputMode="numeric"
+                enterKeyHint="next"
+                value={km}
+                onChange={(e) => {
+                  setKm(e.target.value);
+                  limpiarError("km");
+                }}
+                placeholder="Ej: 125000"
+              />
+            </Field>
             {avisoKm && (
               <p role="status" className="rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground">
                 {avisoKm}
               </p>
             )}
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="fuel-galones">
-              Galones <span className="text-destructive">*</span>
-            </Label>
+          <Field id="fuel-galones" label="Galones" required error={errores.galones}>
             <Input
-              id="fuel-galones"
               type="text"
               inputMode="decimal"
-              pattern="[0-9]+([.,][0-9]{1,3})?"
               enterKeyHint="next"
-              aria-invalid={errores.galones ? "true" : undefined}
-              aria-describedby={errores.galones ? "fuel-galones-error" : undefined}
               value={galones}
               onChange={(e) => {
                 setGalones(e.target.value);
                 limpiarError("galones");
               }}
               placeholder="Ej: 12,5"
-              required
             />
-            {errorCampo("galones")}
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="fuel-costo">Valor pagado (COP)</Label>
+          </Field>
+          <Field id="fuel-costo" label="Valor pagado (COP)" error={errores.costo}>
             <Input
-              id="fuel-costo"
               type="text"
               inputMode="numeric"
-              pattern="[0-9]*"
-              aria-invalid={errores.costo ? "true" : undefined}
-              aria-describedby={errores.costo ? "fuel-costo-error" : undefined}
               value={costo}
               onChange={(e) => {
                 setCosto(e.target.value);
@@ -184,8 +154,7 @@ export function CombustibleForm({
               }}
               placeholder="Opcional"
             />
-            {errorCampo("costo")}
-          </div>
+          </Field>
           {error && (
             <p role="alert" className="text-sm text-destructive sm:col-span-2">
               {error}
