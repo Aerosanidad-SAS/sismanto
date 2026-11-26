@@ -1,13 +1,18 @@
 import { COLUMNAS_SISPRO } from "@/lib/captacion";
 import { diasDelRango, esDia } from "@/lib/fechas";
-import type {
-  HMT,
-  InformeAcm,
-  InformeAerocivil,
-  InformePae,
-  InformePme,
-  TablaCantidad,
-  TablaHMT,
+import {
+  calcularInformeAcm,
+  calcularInformeAerocivil,
+  calcularInformePae,
+  calcularInformePme,
+  type FilaInforme,
+  type HMT,
+  type InformeAcm,
+  type InformeAerocivil,
+  type InformePae,
+  type InformePme,
+  type TablaCantidad,
+  type TablaHMT,
 } from "@/lib/informes-captacion";
 import { celdaExcelSegura } from "@/lib/servicios-lista";
 
@@ -70,6 +75,31 @@ export function mesesDelRango(desde: string, hasta: string): string[] {
 }
 
 export const nombreHojaSispro = (mes: string) => `SISPRO ${mes}`;
+
+/**
+ * Línea de bitácora de una exportación. SISPRO se describe aparte porque no sigue los filtros: sale con meses completos
+ * y de todos los aeropuertos, y es la parte con datos personales.
+ */
+export function detalleAuditoriaExport(d: {
+  informes: readonly InformeExportable[];
+  desde: string;
+  hasta: string;
+  aeropuerto: string;
+  captaciones: number;
+  mesesSispro: readonly string[];
+  filasSispro: number;
+}): string {
+  const partes = [`Informes de captación (${d.informes.map((i) => ROTULO_INFORME[i]).join(", ")}) del ${d.desde} al ${d.hasta}`];
+  if (d.informes.some((i) => i !== "sispro")) {
+    partes.push(`${d.aeropuerto ? `aeropuerto ${d.aeropuerto}` : "todos los aeropuertos"}: ${d.captaciones} captaciones`);
+  }
+  if (d.mesesSispro.length > 0) {
+    // Los meses son consecutivos: primero y último bastan, y la línea no pasa del máximo de la bitácora.
+    const meses = [...new Set([d.mesesSispro[0], d.mesesSispro[d.mesesSispro.length - 1]])].join(" a ");
+    partes.push(`SISPRO con datos personales, meses completos ${meses}, todos los aeropuertos: ${d.filasSispro} filas`);
+  }
+  return partes.join("; ");
+}
 
 // ─── Piezas de las hojas ────────────────────────────────────────────────────
 
@@ -138,10 +168,18 @@ export function hojaAerocivil(d: InformeAerocivil, periodo: string): Hoja {
     ["Silla de ruedas", d.sillaRuedas],
     ["Ambulancia", d.ambulancia],
   ];
+  // La misma nota de la pantalla cuando «Ambulancia» trae registros sin paciente (el campo llega con el PR #415).
+  const sinPaciente = (d as InformeAerocivil & { ambulanciaExternaSinPaciente?: number }).ambulanciaExternaSinPaciente ?? 0;
   return [
     ...encabezado("Informe Aerocivil (GSAP2.2-8-02)", periodo, "Pacientes atendidos", d.totalPacientes),
     ["Resumen", "Cantidad"],
     ...resumen,
+    ...(sinPaciente > 0
+      ? [[
+          `Nota: «Ambulancia» incluye ${sinPaciente} ambulancia(s) externa(s) registrada(s) sin paciente en «Procedimientos y ambulancias externas»; ` +
+            "esas no se cuentan como pacientes en ningún otro total.",
+        ]]
+      : []),
     [],
     ...tablaConteo("Patologías", d.patologias),
     ...tablaHmt("Tipo de vuelo", { "Vuelo comercial": d.vueloComercial, "Vuelo ambulancia": d.vueloAmbulancia }),
@@ -168,6 +206,34 @@ export function hojaPae(d: InformePae, periodo: string): Hoja {
     [],
     ["El total de cada empresa incluye todas sus captaciones (tripulantes, visitantes y demás), no solo empleados y pasajeros."],
   ];
+}
+
+// ─── Libro ──────────────────────────────────────────────────────────────────
+
+/**
+ * Lo que devuelve getDatosInformeCaptacion. `externos` son los registros «solo procedimiento» (PR #415, migración 144):
+ * se entregan a las mismas funciones que usa la pantalla; mientras la consulta no los traiga, las cifras no cambian.
+ */
+export interface DatosInforme {
+  filas: FilaInforme[];
+  aerolineas: string[];
+  externos?: unknown;
+}
+
+// Permite pasar `externos` tanto antes como después de que los calcularInforme* declaren ese segundo parámetro, para que
+// #415 y el exportador se puedan fusionar en cualquier orden. Con #415 ya en `dev`, se puede llamar directo y quitarlo.
+type ConExternos<R> = (filas: FilaInforme[], externos?: unknown) => R;
+
+/** Una hoja por cada informe pedido (SISPRO va aparte, por meses), con las cifras que muestra la pantalla. */
+export function hojasInformes(informes: readonly InformeExportable[], datos: DatosInforme, periodo: string): { nombre: string; hoja: Hoja }[] {
+  const { filas, aerolineas, externos } = datos;
+  const armar: Record<Exclude<InformeExportable, "sispro">, () => Hoja> = {
+    acm: () => hojaAcm((calcularInformeAcm as ConExternos<InformeAcm>)(filas, externos), periodo),
+    aerocivil: () => hojaAerocivil((calcularInformeAerocivil as ConExternos<InformeAerocivil>)(filas, externos), periodo),
+    pme: () => hojaPme((calcularInformePme as ConExternos<InformePme>)(filas, externos), periodo),
+    pae: () => hojaPae(calcularInformePae(filas, aerolineas), periodo),
+  };
+  return informes.flatMap((i) => (i === "sispro" ? [] : [{ nombre: ROTULO_INFORME[i], hoja: armar[i]() }]));
 }
 
 /** Hoja de un mes de SISPRO: las 38 columnas del reporte y las filas de getFilasSisproMes, con el texto a salvo de fórmulas. */

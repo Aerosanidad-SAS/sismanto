@@ -5,6 +5,8 @@ import { COLUMNAS_SISPRO } from "./captacion";
 import {
   EXPORT_INFORMES_MAX_DIAS,
   INFORMES_EXPORTABLES,
+  detalleAuditoriaExport,
+  hojasInformes,
   hojaAcm,
   hojaAerocivil,
   hojaPae,
@@ -183,4 +185,47 @@ test("mesesDelRango: todos los meses que toca el rango, de enero a diciembre y c
   assert.deepEqual(mesesDelRango("2026-11-05", "2026-11-25"), ["2026-11"]);
   assert.deepEqual(mesesDelRango("2026-10-31", "2026-12-01"), ["2026-10", "2026-11", "2026-12"]);
   assert.deepEqual(mesesDelRango("2026-12-15", "2027-01-02"), ["2026-12", "2027-01"]);
+});
+
+// «Solo procedimiento» (PR #415): la forma que entrega getDatosInformeCaptacion en `externos`.
+const EXTERNOS = [{ lote: "a", procedimiento: "AMBULANCIAS EXTERNAS", cantidad: 3, emergencia_tipo: "ALISTAMIENTOS" }];
+
+test("hojasInformes: una hoja por informe pedido, sin SISPRO, en el mismo orden", () => {
+  const r = hojasInformes(["acm", "pae", "sispro"], { filas: FILAS, aerolineas: ["AVIANCA"] }, "p");
+  assert.deepEqual(r.map((h) => h.nombre), ["ACM", "PAE"]);
+  assert.deepEqual(r[0].hoja, hojaAcm(calcularInformeAcm(FILAS), "p"));
+  assert.deepEqual(hojasInformes(["sispro"], { filas: FILAS, aerolineas: [] }, "p"), []);
+});
+
+test("hojasInformes: entrega los registros sin paciente a las mismas funciones que la pantalla", () => {
+  // Vale antes y después de #415: se compara con lo que la función calcula recibiendo `externos`.
+  type Calc<R> = (filas: FilaInforme[], externos?: unknown) => R;
+  const [acm, aerocivil, pme] = hojasInformes(["acm", "aerocivil", "pme"], { filas: FILAS, aerolineas: [], externos: EXTERNOS }, "p");
+  assert.deepEqual(acm.hoja, hojaAcm((calcularInformeAcm as Calc<ReturnType<typeof calcularInformeAcm>>)(FILAS, EXTERNOS), "p"));
+  assert.deepEqual(
+    aerocivil.hoja,
+    hojaAerocivil((calcularInformeAerocivil as Calc<ReturnType<typeof calcularInformeAerocivil>>)(FILAS, EXTERNOS), "p"),
+  );
+  assert.deepEqual(pme.hoja, hojaPme((calcularInformePme as Calc<ReturnType<typeof calcularInformePme>>)(FILAS, EXTERNOS), "p"));
+});
+
+test("hojaAerocivil: repite la nota de la pantalla cuando «Ambulancia» incluye registros sin paciente", () => {
+  const base = calcularInformeAerocivil(FILAS);
+  const conNota = hojaAerocivil({ ...base, ambulanciaExternaSinPaciente: 3 } as typeof base, "p");
+  assert.ok(conNota.some((f) => /incluye 3 ambulancia/.test(String(f[0]))));
+  const sinNota = hojaAerocivil({ ...base, ambulanciaExternaSinPaciente: 0 } as typeof base, "p");
+  assert.ok(!sinNota.some((f) => String(f[0]).startsWith("Nota:")));
+});
+
+test("detalleAuditoriaExport: separa SISPRO, que sale con meses completos y sin filtrar aeropuerto", () => {
+  const base = { desde: "2026-01-15", hasta: "2026-02-10", aeropuerto: "AEROPUERTO PRUEBA", captaciones: 7 };
+  assert.equal(
+    detalleAuditoriaExport({ ...base, informes: ["acm", "sispro"], mesesSispro: ["2026-01", "2026-02"], filasSispro: 20 }),
+    "Informes de captación (ACM, SISPRO) del 2026-01-15 al 2026-02-10; aeropuerto AEROPUERTO PRUEBA: 7 captaciones; " +
+      "SISPRO con datos personales, meses completos 2026-01 a 2026-02, todos los aeropuertos: 20 filas",
+  );
+  const soloSispro = detalleAuditoriaExport({ ...base, informes: ["sispro"], captaciones: 0, mesesSispro: ["2026-01"], filasSispro: 2 });
+  assert.doesNotMatch(soloSispro, /AEROPUERTO PRUEBA|captaciones:/);
+  const sinSispro = detalleAuditoriaExport({ ...base, aeropuerto: "", informes: ["pme"], mesesSispro: [], filasSispro: 0 });
+  assert.equal(sinSispro, "Informes de captación (PME) del 2026-01-15 al 2026-02-10; todos los aeropuertos: 7 captaciones");
 });

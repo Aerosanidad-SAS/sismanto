@@ -5,16 +5,12 @@ import { getDatosInformeCaptacion, getFilasSisproMes } from "@/app/api/actions/c
 import { auditar } from "@/lib/auditoria";
 import { COLUMNAS_SISPRO, puedeUsarCaptacion } from "@/lib/captacion";
 import { formatoDia } from "@/lib/fechas";
-import { calcularInformeAcm, calcularInformeAerocivil, calcularInformePae, calcularInformePme } from "@/lib/informes-captacion";
 import {
   EXPORT_INFORMES_MAX_FILAS,
   EXPORT_SISPRO_MAX_MESES,
-  ROTULO_INFORME,
-  hojaAcm,
-  hojaAerocivil,
-  hojaPae,
-  hojaPme,
+  detalleAuditoriaExport,
   hojaSispro,
+  hojasInformes,
   mesesDelRango,
   nombreHojaSispro,
   parsearInformes,
@@ -55,7 +51,7 @@ export async function GET(request: Request) {
 
   const periodo = `Del ${formatoDia(desde)} al ${formatoDia(hasta)} — ${aeropuerto || "todos los aeropuertos"}`;
   const libro = XLSX.utils.book_new();
-  let filasLeidas = 0;
+  let captaciones = 0;
 
   if (informes.some((i) => i !== "sispro")) {
     const datos = await getDatosInformeCaptacion(desde, hasta, aeropuerto || undefined);
@@ -63,11 +59,8 @@ export async function GET(request: Request) {
     if (datos.filas.length > EXPORT_INFORMES_MAX_FILAS) {
       return error(`El período tiene más de ${EXPORT_INFORMES_MAX_FILAS} captaciones: acórtalo para exportar`, 413);
     }
-    filasLeidas += datos.filas.length;
-    if (informes.includes("acm")) agregarHoja(libro, ROTULO_INFORME.acm, hojaAcm(calcularInformeAcm(datos.filas), periodo));
-    if (informes.includes("aerocivil")) agregarHoja(libro, ROTULO_INFORME.aerocivil, hojaAerocivil(calcularInformeAerocivil(datos.filas), periodo));
-    if (informes.includes("pme")) agregarHoja(libro, ROTULO_INFORME.pme, hojaPme(calcularInformePme(datos.filas), periodo));
-    if (informes.includes("pae")) agregarHoja(libro, ROTULO_INFORME.pae, hojaPae(calcularInformePae(datos.filas, datos.aerolineas), periodo));
+    captaciones = datos.filas.length;
+    for (const { nombre, hoja } of hojasInformes(informes, datos, periodo)) agregarHoja(libro, nombre, hoja);
   }
 
   let filasSispro = 0;
@@ -82,14 +75,11 @@ export async function GET(request: Request) {
     ws["!cols"] = COLUMNAS_SISPRO.map((c) => ({ wch: Math.min(Math.max(c.length, 12), 40) }));
     XLSX.utils.book_append_sheet(libro, ws, nombreHojaSispro(mes));
   }
-  filasLeidas += filasSispro;
-
   await auditar(
     "EXPORTAR",
     "captacion",
     "",
-    `Informes de captación (${informes.map((i) => ROTULO_INFORME[i]).join(", ")}) del ${desde} al ${hasta}` +
-      `${aeropuerto ? `, aeropuerto ${aeropuerto}` : ""} (${filasLeidas} filas)`,
+    detalleAuditoriaExport({ informes, desde, hasta, aeropuerto, captaciones, mesesSispro: meses, filasSispro }),
   );
 
   const buffer = XLSX.write(libro, { type: "buffer", bookType: "xlsx" }) as Buffer;
