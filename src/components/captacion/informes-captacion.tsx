@@ -3,8 +3,9 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Printer } from "lucide-react";
+import { FileSpreadsheet, Loader2, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,6 +19,12 @@ import type {
   TablaCantidad,
   TablaHMT,
 } from "@/lib/informes-captacion";
+import {
+  INFORMES_EXPORTABLES,
+  INFORMES_POR_DEFECTO,
+  ROTULO_INFORME,
+  type InformeExportable,
+} from "@/lib/informes-captacion-export";
 
 const INFORMES = ["acm", "aerocivil", "pme", "pae"] as const;
 type Informe = (typeof INFORMES)[number];
@@ -52,6 +59,43 @@ export function InformesCaptacion({ filtros, informeInicial, aeropuertos, acm, a
     const p = new URLSearchParams({ informe, desde, hasta });
     if (aeropuerto.trim()) p.set("aeropuerto", aeropuerto.trim());
     router.push(`/captacion/informes?${p}`);
+  }
+
+  const [exportables, setExportables] = useState<InformeExportable[]>([...INFORMES_POR_DEFECTO]);
+  const [exportando, setExportando] = useState(false);
+  const [errorExport, setErrorExport] = useState("");
+  const sinSeleccion = exportables.length === 0;
+
+  function marcar(i: InformeExportable, marcado: boolean) {
+    setErrorExport("");
+    setExportables((prev) => INFORMES_EXPORTABLES.filter((x) => (x === i ? marcado : prev.includes(x))));
+  }
+
+  // Se exporta el período que se está viendo (los filtros ya aplicados), no lo escrito en los campos sin aplicar.
+  async function exportar() {
+    if (sinSeleccion || exportando) return;
+    setExportando(true);
+    setErrorExport("");
+    try {
+      const p = new URLSearchParams({ desde: filtros.desde, hasta: filtros.hasta, informes: exportables.join(",") });
+      if (filtros.aeropuerto) p.set("aeropuerto", filtros.aeropuerto);
+      const res = await fetch(`/api/captacion/informes/exportar?${p}`);
+      if (!res.ok) {
+        const cuerpo = await res.json().catch(() => null);
+        setErrorExport(cuerpo?.error ?? "No se pudo generar el Excel. Inténtalo de nuevo.");
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `informes-captacion-${filtros.desde}_${filtros.hasta}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErrorExport("No se pudo generar el Excel. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setExportando(false);
+    }
   }
 
   const periodo = `Del ${formatoDia(filtros.desde)} al ${formatoDia(filtros.hasta)} — ${filtros.aeropuerto || "todos los aeropuertos"}`;
@@ -93,6 +137,47 @@ export function InformesCaptacion({ filtros, informeInicial, aeropuertos, acm, a
           <Link href="/captacion">Volver a captaciones</Link>
         </Button>
       </div>
+
+      <section aria-labelledby="inf-exportar-titulo" className="space-y-2 rounded-md border border-border p-3 print:hidden">
+        <h2 id="inf-exportar-titulo" className="text-sm font-semibold">
+          Exportar a Excel
+        </h2>
+        <fieldset className="flex flex-wrap items-center gap-x-5 gap-y-2" aria-describedby="inf-exportar-ayuda">
+          <legend className="sr-only">Informes que se incluyen en el libro de Excel</legend>
+          {INFORMES_EXPORTABLES.map((i) => (
+            <label key={i} className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={exportables.includes(i)} onCheckedChange={(v) => marcar(i, v)} disabled={exportando} />
+              {ROTULO_INFORME[i]}
+            </label>
+          ))}
+          <Button
+            onClick={exportar}
+            aria-disabled={sinSeleccion || exportando}
+            aria-busy={exportando}
+            aria-describedby="inf-exportar-ayuda"
+            className={sinSeleccion ? "opacity-60" : undefined}
+          >
+            {exportando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <FileSpreadsheet className="mr-2 h-4 w-4" aria-hidden />}
+            {exportando ? "Generando…" : "Exportar Excel"}
+          </Button>
+        </fieldset>
+        <p id="inf-exportar-ayuda" className="text-xs text-muted-foreground" role="status">
+          {sinSeleccion
+            ? "Marca al menos un informe para poder exportar."
+            : `Un solo libro, una hoja por informe, con el período mostrado: ${periodo}.`}
+        </p>
+        {exportables.includes("sispro") && (
+          <p className="text-xs text-amber-700 dark:text-amber-400" role="note">
+            SISPRO incluye datos personales (nombre, identificación, fecha de nacimiento y teléfono). Va una hoja por cada mes que toca el rango, con el mes
+            completo y sin filtrar por aeropuerto. Descárgalo solo si lo necesitas y guárdalo con cuidado.
+          </p>
+        )}
+        {errorExport && (
+          <p className="text-sm text-destructive" role="alert">
+            {errorExport}
+          </p>
+        )}
+      </section>
 
       <Tabs value={informe} onValueChange={(v) => setInforme(v as Informe)}>
         <TabsList className="print:hidden">
