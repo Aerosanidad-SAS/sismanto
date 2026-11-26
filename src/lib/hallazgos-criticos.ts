@@ -17,10 +17,18 @@ export const HALLAZGOS_CRITICOS = [
 
 export const PREFIJO_CRITICO = "CRÍTICO: ";
 
-/** true si la descripción es la de un hallazgo crítico de la lista cerrada («CRÍTICO: Falla de frenos. …»). */
-export function esDescripcionCritica(descripcion: string): boolean {
-  const d = descripcion.trim();
-  return HALLAZGOS_CRITICOS.some((h) => d.startsWith(PREFIJO_CRITICO + h));
+export type HallazgoCritico = (typeof HALLAZGOS_CRITICOS)[number];
+
+/**
+ * Descripción de una novedad crítica: «CRÍTICO: Falla de frenos. <detalle>». La arma el servidor a partir del hallazgo
+ * elegido; el texto que escribe quien reporta ya no decide si la novedad es crítica (antes bastaba borrar el prefijo).
+ */
+export function descripcionCritica(hallazgo: HallazgoCritico, detalle?: string): string {
+  const limpio = (detalle ?? "").trim();
+  // Si el formulario ya trae el prefijo de este mismo hallazgo, no se duplica.
+  const base = `${PREFIJO_CRITICO}${hallazgo}.`;
+  if (limpio.startsWith(base)) return limpio;
+  return limpio ? `${base} ${limpio}` : base;
 }
 
 export interface DatosAlertaNoApto {

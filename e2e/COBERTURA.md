@@ -16,18 +16,25 @@ Fuente de los casos: `PLAN_PRUEBAS_REGULACION_OVEM.md` (IDs `O-`, `R-`, `X-`) y 
 | O-33 | OVEM sin scroll horizontal (390 y 360) | `smoke/ovem@mobile.spec.ts` | observado | auto |
 | R-04 / R-05 | Aislamiento por URL y por API (RLS con el token del usuario) | — | Daniel | pendiente |
 | O-04 a O-11 | Preoperacional (validaciones, falla, novedad, km) | — | observado | pendiente |
-| O-12 a O-18 | Recibir el servicio y la tripulación | — | observado | pendiente |
+| O-12 a O-18 | Recibir el servicio y la tripulación | — | observado | pendiente (cubierto de paso por X-10 a X-15) |
 | O-19 a O-24 | Pasos del servicio (orden, doble clic, horas, sin conexión) | — | observado | pendiente |
 | O-25 a O-30 | Tanqueo, novedad, siniestro y cierre de turno | — | observado | pendiente |
 | R-06 a R-14 | FDS y tripulación (Programación del día como fuente única) | — | Daniel | pendiente |
 | R-15 a R-33 | Crear, asignar, choque, cancelar, filtros, edición de FINALIZADO | — | R-28 sin decidir | pendiente |
 | X-01 a X-05 | Cruce Regulación ↔ OVEM con dos contextos | — | observado | pendiente |
+| X-10 | TAB simple: Regulación crea, el OVEM recorre los 5 pasos y finaliza | `journeys/traslados-regulacion-ovem.spec.ts` | Daniel | auto |
+| X-11 | TAB doble: 7 pasos (punto intermedio y regreso) | `journeys/traslados-regulacion-ovem.spec.ts` | Daniel | auto |
+| X-12 | TAM simple | `journeys/traslados-regulacion-ovem.spec.ts` | Daniel | auto |
+| X-13 | TAM doble | `journeys/traslados-regulacion-ovem.spec.ts` | Daniel | auto |
+| X-14 | Medicina domiciliaria: inicio de desplazamiento, inicio y fin de atención | `journeys/traslados-regulacion-ovem.spec.ts` | Daniel | auto |
+| X-15 | Traslado aéreo (lo crea ADMIN: Regulación no lo ofrece, SRG-06): 7 pasos con aeropuerto | `journeys/traslados-regulacion-ovem.spec.ts` | Daniel | auto |
+| — | Pasos y estados por tipo de servicio (lógica pura) | `src/lib/estado-servicio.test.ts` | Daniel | auto |
 | Regresión | Novedad en el vehículo elegido (#326) | — | Daniel | pendiente (primera prueba tras los cimientos) |
 | O-09 / O-11 / O-24 / O-35 | Borrador, fotos, señal débil y celular real | — | — | manual |
 
 ## Pendiente de decisión (oráculos)
 
-1. ¿Regulación puede editar un servicio FINALIZADO? (R-28)
-2. ¿OVEM puede abrir `/pacientes` y `/vehiculos`? (hoy abren; la matriz de permisos no los prohíbe)
+1. ~~¿Regulación puede editar un servicio FINALIZADO? (R-28)~~ Decidido el 2026-11-23: sí, con auditoría.
+2. ~~¿OVEM puede abrir `/pacientes` y `/vehiculos`?~~ Decidido el 2026-11-23: no (#389, PR #392).
 3. ¿Un servicio sin móvil, fecha ni destino es válido? (R-20)
 4. Mecanismo de limpieza de datos `TEST-` (cuenta de servicio con permiso acotado, o la cuenta de administración).

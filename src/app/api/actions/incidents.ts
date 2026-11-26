@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import type { IncidentFormData } from "@/lib/validations";
 import { incidentSchema, updateIncidentPrioridadSchema } from "@/lib/validations";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
-import { esDescripcionCritica } from "@/lib/hallazgos-criticos";
+import { descripcionCritica } from "@/lib/hallazgos-criticos";
 import { avisarVehiculoNoApto } from "@/lib/notifications/alerta-no-apto";
 import { z } from "zod";
 
@@ -20,19 +20,22 @@ export async function createIncident(data: IncidentFormData) {
 
   try {
     const payload = parsed.data;
-    const severidad = payload.severidad ?? "MEDIA";
+    // Lo crítico lo decide el hallazgo elegido (lista cerrada, validada por el esquema), no el texto de la descripción.
+    const hallazgo = payload.hallazgoCritico;
+    const descripcion = hallazgo ? descripcionCritica(hallazgo, payload.descripcion) : payload.descripcion;
+    const severidad = hallazgo ? "ALTA" : (payload.severidad ?? "MEDIA");
     // El OVEM no decide a criterio sacar un vehículo de servicio: solo un hallazgo crítico de la lista cerrada del
     // sistema lo hace (y avisa de inmediato). Cualquier otra cosa queda como novedad para que Regulación o
     // Mantenimiento decidan. Los demás roles conservan su criterio.
     const perfil = await getProfile();
     // Quien reporta lo fija la sesión, no el formulario: el campo es editable en el cliente y se podría firmar a nombre de otro.
     const reportadoPor = perfil?.nombre_completo || perfil?.email || payload.reportadoPor;
-    const afectaOperatividad = perfil?.role_codigo === "OVEM" ? payload.afectaOperatividad && esDescripcionCritica(payload.descripcion) : payload.afectaOperatividad;
+    const afectaOperatividad = hallazgo ? true : perfil?.role_codigo === "OVEM" ? false : payload.afectaOperatividad;
     const { data: incident, error } = await supabase
       .from("incidents")
       .insert({
         vehicle_id: payload.vehicleId,
-        descripcion: payload.descripcion,
+        descripcion,
         severidad,
         reportado_por: reportadoPor,
         afecta_operatividad: afectaOperatividad,
@@ -47,7 +50,7 @@ export async function createIncident(data: IncidentFormData) {
 
     // El trigger de la BD actualizará el estado del vehículo si afecta_operatividad = true
     if (afectaOperatividad) {
-      await avisarVehiculoNoApto(supabase, { vehicleId: payload.vehicleId, hallazgos: [payload.descripcion], reportadoPor });
+      await avisarVehiculoNoApto(supabase, { vehicleId: payload.vehicleId, hallazgos: [descripcion], reportadoPor });
     }
 
     await auditar("INSERTAR", "novedades", (incident as unknown as { id: number }).id, `Novedad reportada (severidad ${severidad})`);

@@ -1,14 +1,36 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { armarAlertaNoApto, esDescripcionCritica, HALLAZGOS_CRITICOS } from "./hallazgos-criticos";
+import { armarAlertaNoApto, descripcionCritica, HALLAZGOS_CRITICOS } from "./hallazgos-criticos";
+import { incidentSchema } from "./validations";
 
-test("solo la lista cerrada cuenta como crítica", () => {
-  assert.equal(esDescripcionCritica("CRÍTICO: Falla de frenos. pedal largo"), true);
-  assert.equal(esDescripcionCritica("  CRÍTICO: Sin aceite de motor."), true);
-  assert.equal(esDescripcionCritica("CRÍTICO: me parece que está raro"), false);
-  assert.equal(esDescripcionCritica("Falla de frenos"), false);
+const base = { vehicleId: "11111111-1111-4111-8111-111111111111", reportadoPor: "Ana Pérez", afectaOperatividad: false };
+
+test("la descripción crítica la arma el servidor con el hallazgo, con o sin detalle", () => {
+  assert.equal(descripcionCritica("Falla de frenos"), "CRÍTICO: Falla de frenos.");
+  assert.equal(descripcionCritica("Falla de frenos", "  pedal largo "), "CRÍTICO: Falla de frenos. pedal largo");
+  // Si el cliente ya trae el prefijo de este hallazgo no se duplica.
+  assert.equal(descripcionCritica("Falla de frenos", "CRÍTICO: Falla de frenos. pedal largo"), "CRÍTICO: Falla de frenos. pedal largo");
   assert.ok(HALLAZGOS_CRITICOS.length >= 8);
+});
+
+test("regresión: un hallazgo crítico sigue siéndolo aunque el OVEM borre o reescriba el texto", () => {
+  const sinTexto = incidentSchema.safeParse({ ...base, descripcion: "", hallazgoCritico: "Falla de frenos" });
+  assert.equal(sinTexto.success, true);
+  const otroTexto = incidentSchema.safeParse({ ...base, descripcion: "TEST- algo distinto", hallazgoCritico: "Falla de frenos" });
+  assert.equal(otroTexto.success, true);
+  assert.equal(otroTexto.success && otroTexto.data.hallazgoCritico, "Falla de frenos");
+});
+
+test("solo la lista cerrada cuenta como hallazgo crítico", () => {
+  assert.equal(incidentSchema.safeParse({ ...base, descripcion: "me parece que está raro", hallazgoCritico: "me parece que está raro" }).success, false);
+  assert.equal(incidentSchema.safeParse({ ...base, descripcion: "texto con CRÍTICO: Falla de frenos. pero sin hallazgo" }).success, true);
+});
+
+test("sin hallazgo crítico la descripción sigue pidiendo 10 caracteres", () => {
+  const r = incidentSchema.safeParse({ ...base, descripcion: "corta" });
+  assert.equal(r.success, false);
+  assert.equal(!r.success && r.error.issues[0]?.path[0], "descripcion");
 });
 
 test("el aviso nombra la placa, el centro y los hallazgos, y escapa el HTML", () => {
