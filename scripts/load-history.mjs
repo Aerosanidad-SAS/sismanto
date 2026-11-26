@@ -63,6 +63,24 @@ function excelSerialToIso(serial) {
   return d.toISOString().slice(0, 10);
 }
 
+/** Lee TODAS las filas: Supabase corta cada consulta en 1.000, y el historial ya pasa de ese tamaño. */
+async function selectAll(supabase, table, columns, apply = (q) => q) {
+  const rows = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await apply(supabase.from(table).select(columns)).range(desde, desde + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) return rows;
+  }
+}
+
+/** Fecha escrita como texto: «26/11/2024» (día primero, como en Colombia) o ISO «2024-11-26». */
+function fechaTexto(v) {
+  const s = String(v || "").trim();
+  const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : s.slice(0, 10);
+}
+
 function normalPlaca(p) {
   return String(p || "")
     .trim()
@@ -207,7 +225,7 @@ function parseMantenimientoSheet(ws) {
 
     const fechaRaw = r[1];
     const fecha = typeof fechaRaw === "number" ? excelSerialToIso(fechaRaw)
-      : String(fechaRaw || "").trim() !== "" ? String(fechaRaw).trim().slice(0, 10) : null;
+      : String(fechaRaw || "").trim() !== "" ? fechaTexto(fechaRaw) : null;
     if (!fecha || isNaN(Date.parse(fecha))) {
       skipped.push({ fila: i + 1, motivo: `Fecha inválida: "${fechaRaw}"`, placa });
       continue;
@@ -257,7 +275,7 @@ function parseCombInternaSheet(ws) {
     const placa = normalPlaca(r[8]);
     if (!placa || REFERENCE_PLATES.has(placa)) continue;
     const fecha = typeof r[4] === "number" ? excelSerialToIso(r[4])
-      : String(r[4] || "").trim().slice(0, 10);
+      : fechaTexto(r[4]);
     if (!fecha || isNaN(Date.parse(fecha))) continue;
     const galones = safeNum(r[11], 0);
     if (galones <= 0) continue;
@@ -282,7 +300,7 @@ function parseCombProveedorSheet(ws) {
     const placa = normalPlaca(r[1]);
     if (!placa || REFERENCE_PLATES.has(placa)) continue;
     const fecha = typeof r[0] === "number" ? excelSerialToIso(r[0])
-      : String(r[0] || "").trim().slice(0, 10);
+      : fechaTexto(r[0]);
     if (!fecha || isNaN(Date.parse(fecha))) continue;
     const galones = safeNum(r[3], 0);
     if (galones <= 0) continue;
@@ -454,13 +472,8 @@ async function main() {
   console.log("📐 Construyendo serie temporal de km...");
 
   // También leer km de mantenimientos existentes en BD para mejorar timeline
-  const { data: existingMantoKm } = await supabase
-    .from("maintenance_records")
-    .select("vehicle_id, fecha, kilometraje_actual")
-    .gt("kilometraje_actual", 0);
-  const existingFuelKm = await supabase
-    .from("fuel_logs")
-    .select("vehicle_id, fecha, kilometraje");
+  const existingMantoKm = await selectAll(supabase, "maintenance_records", "vehicle_id, fecha, kilometraje_actual", (q) => q.gt("kilometraje_actual", 0));
+  const existingFuelKm = { data: await selectAll(supabase, "fuel_logs", "vehicle_id, fecha, kilometraje") };
 
   const timelinePoints = [
     // Combustible nuevo (con km)
@@ -515,9 +528,7 @@ async function main() {
   console.log(`  Sin datos (quedan 0) : ${sinDatosKm}\n`);
 
   // 8. Deduplicar mantenimientos contra BD existente
-  const { data: existingManto } = await supabase
-    .from("maintenance_records")
-    .select("vehicle_id, fecha, numero_factura, kilometraje_actual, valor, tipo, descripcion_trabajo");
+  const existingManto = await selectAll(supabase, "maintenance_records", "vehicle_id, fecha, numero_factura, kilometraje_actual, valor, tipo, descripcion_trabajo");
 
   const existingMantoKeys = new Set();
   for (const e of existingManto || []) {
