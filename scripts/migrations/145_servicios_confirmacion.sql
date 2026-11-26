@@ -34,7 +34,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SET search_path = public;
+$$ LANGUAGE plpgsql SET search_path = public, pg_temp;
 
 CREATE OR REPLACE TRIGGER trg_medical_services_limpiar_confirmacion
   BEFORE UPDATE ON medical_services

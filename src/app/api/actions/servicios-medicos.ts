@@ -13,6 +13,7 @@ import { condicionServiciosVisibles } from "@/lib/servicios-centro-servidor";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { textoDiagnostico } from "@/lib/servicio-detalle";
+import { confirmacionAlCrear } from "@/lib/servicios-confirmacion";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
 import { hoyBogota, sumarDias } from "@/lib/fechas";
@@ -585,6 +586,8 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
       etapa,
       operational_center_id: await centroDelServicio(supabase, fila.vehicle_id, profile?.operational_center_id ?? null),
       created_by: userData.user?.id ?? null,
+      // #383: creado ya con móvil y tripulación completos, no hay que volver a confirmarlo.
+      ...confirmacionAlCrear({ ...fila, etapa }, profile),
     })
     .select()
     .single();

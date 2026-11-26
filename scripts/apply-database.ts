@@ -162,8 +162,8 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "136_usuario_tiene_historial.sql", file: "scripts/migrations/136_usuario_tiene_historial.sql" },
   { name: "137_servicios_escritura_regulacion_por_centro.sql", file: "scripts/migrations/137_servicios_escritura_regulacion_por_centro.sql" },
   { name: "138_resolver_solicitud_no_apto.sql", file: "scripts/migrations/138_resolver_solicitud_no_apto.sql" },
-  { name: "139_mantenimiento_soporte.sql", file: "scripts/migrations/139_mantenimiento_soporte.sql" },
   { name: "145_servicios_confirmacion.sql", file: "scripts/migrations/145_servicios_confirmacion.sql" },
+  { name: "139_mantenimiento_soporte.sql", file: "scripts/migrations/139_mantenimiento_soporte.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

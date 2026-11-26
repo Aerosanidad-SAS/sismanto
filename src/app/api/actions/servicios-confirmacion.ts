@@ -6,9 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
 import { hoyBogota } from "@/lib/fechas";
 import { requireRole } from "./auth";
-import { serviciosPorConfirmarDelDia } from "@/lib/servicios-confirmacion";
-
-const ROLES_CONFIRMAN = ["ADMIN", "ANALISTA", "REGULACION"] as const;
+import { filtroDesdeHoy, ROLES_CONFIRMAN, serviciosPorConfirmarDelDia } from "@/lib/servicios-confirmacion";
 
 export interface ServicioPorConfirmar {
   id: number;
@@ -27,15 +25,20 @@ export async function getServiciosPorConfirmar(vehicleId: string): Promise<Servi
   await requireRole([...ROLES_CONFIRMAN]);
   if (!z.string().uuid().safeParse(vehicleId).success) return [];
   const supabase = createClient() as any;
-  const { data } = await supabase
+  const hoy = hoyBogota();
+  const { data, error } = await supabase
     .from("medical_services")
     .select("id, tipo_servicio, etapa, vehicle_id, fecha_hora_programacion, confirmado_at, ovem_user_id, medico_user_id, auxiliar_user_id")
     .eq("vehicle_id", vehicleId)
     .eq("etapa", "PROGRAMADO")
     .is("confirmado_at", null)
+    // En la consulta y no solo después: los programados viejos sin cerrar no deben llenar el tope y tapar los de hoy.
+    .or(filtroDesdeHoy(hoy))
     .order("fecha_hora_programacion", { ascending: true, nullsFirst: false })
     .limit(200);
-  const filas = serviciosPorConfirmarDelDia((data ?? []) as any[], hoyBogota());
+  // Un fallo no puede parecer «no hay nada por confirmar»: el diálogo muestra el error.
+  if (error) throw new Error("No se pudieron leer los servicios por confirmar");
+  const filas = serviciosPorConfirmarDelDia((data ?? []) as any[], hoy);
   const ids = [...new Set(filas.flatMap((s) => [s.ovem_user_id, s.medico_user_id, s.auxiliar_user_id]).filter(Boolean))] as string[];
   const { data: personas } = ids.length
     ? await supabase.from("user_profiles").select("user_id, nombre_completo, email").in("user_id", ids)
@@ -64,11 +67,12 @@ export async function confirmarServicios(servicioIds: number[]) {
     .update({ confirmado_at: new Date().toISOString(), confirmado_por: profile.user_id } as never)
     .in("id", ids.data)
     .eq("etapa", "PROGRAMADO")
+    .not("vehicle_id", "is", null)
     .is("confirmado_at", null)
     .select("id");
   if (error) return { error: error.message };
-  const confirmados = (data ?? []).length;
-  if (confirmados > 0) await auditar("MODIFICAR", "servicios", ids.data[0], `Servicios programados confirmados: ${(data as { id: number }[]).map((s) => s.id).join(", ")}`);
+  const confirmados = ((data ?? []) as { id: number }[]).map((s) => s.id);
+  if (confirmados.length > 0) await auditar("MODIFICAR", "servicios", confirmados[0], `Servicios programados confirmados: ${confirmados.join(", ")}`);
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
   return { success: true as const, confirmados };

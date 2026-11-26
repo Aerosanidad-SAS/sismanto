@@ -43,15 +43,20 @@ export function ConfirmarServiciosMovil({ vehiculo, onCerrar }: { vehiculo: { id
   const confirmar = async (ids: number[]) => {
     setGuardando(true);
     setError(null);
-    const r = await confirmarServicios(ids);
+    const r = await confirmarServicios(ids).catch(() => ({ error: "No se pudo confirmar. Revisa tu señal e inténtalo de nuevo." }));
     setGuardando(false);
-    if ("error" in r && r.error) {
-      setError(r.error);
+    if (!("confirmados" in r)) {
+      setError(r.error ?? "No se pudo confirmar.");
       return;
     }
-    const quedan = (lista ?? []).filter((s) => !ids.includes(s.id));
+    // Solo salen de la lista los que de verdad quedaron confirmados.
+    const quedan = (lista ?? []).filter((s) => !r.confirmados.includes(s.id));
     setLista(quedan);
     router.refresh();
+    if (r.confirmados.length < ids.length) {
+      setError("Algún servicio no se confirmó: puede que ya haya cambiado o que no tengas permiso sobre él. Cierra y vuelve a revisar.");
+      return;
+    }
     if (quedan.length === 0) onCerrar();
   };
 

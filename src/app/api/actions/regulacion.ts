@@ -1,6 +1,7 @@
 "use server";
 
 import { esDia, hoyBogota, sumarDias } from "@/lib/fechas";
+import { quitarConfirmacion } from "@/lib/servicios-confirmacion";
 import { camposTripulacionDestino, serviciosMovibles, tripulacionVigente } from "@/lib/cambio-vehiculo";
 import { createClient } from "@/lib/supabase/server";
 import { auditar } from "@/lib/auditoria";
@@ -67,22 +68,6 @@ export async function toggleVehicleStatus(vehicleId: string, nuevoEstado: "OPERA
 }
 
 /**
- * Decisión de Daniel (2026-11-23, #383): cambiar la tripulación de un móvil ya NO mueve en silencio sus servicios. Los
- * servicios PROGRAMADO del móvil pierden su confirmación y el regulador los revisa y confirma (`servicios-confirmacion.ts`).
- * Devuelve cuántos quedaron por confirmar.
- */
-async function pedirConfirmacionDeServicios(supabase: ReturnType<typeof createClient>, vehicleId: string): Promise<number> {
-  const { data } = await supabase
-    .from("medical_services")
-    .update({ confirmado_at: null, confirmado_por: null, updated_at: new Date().toISOString() } as never)
-    .eq("vehicle_id", vehicleId)
-    .eq("etapa", "PROGRAMADO")
-    .not("confirmado_at", "is", null)
-    .select("id");
-  return (data ?? []).length;
-}
-
-/**
  * Arma la tripulación de un vehículo para el turno — un vehículo puede
  * tener a la vez un OVEM, un médico y un auxiliar activos (roles
  * distintos), no solo un conductor. Reemplaza a assignVehicleToOvem.
@@ -145,7 +130,9 @@ export async function asignarTripulacion(
   // Se hace después de insertar para que, si el insert falla, no pierda el puesto que ya tenía.
   const liberados = await liberarOtrosVehiculos(supabase, parsed.data.userId, parsed.data.vehicleId);
 
-  const porConfirmar = await pedirConfirmacionDeServicios(supabase, parsed.data.vehicleId);
+  // Decisión de Daniel (2026-11-23, #383): cambiar la tripulación ya NO mueve servicios en silencio; los PROGRAMADO del
+  // móvil pierden su confirmación y el regulador los revisa y confirma (`servicios-confirmacion.ts`).
+  const porConfirmar = await quitarConfirmacion(supabase, [parsed.data.vehicleId]);
   await auditar(
     "MODIFICAR",
     "regulacion",
@@ -172,6 +159,8 @@ async function liberarOtrosVehiculos(supabase: ReturnType<typeof createClient>, 
   // `as never`: el cliente Supabase infiere `never` para los payloads de update en todo el repo (ver CLAUDE.md).
   const { error } = await supabase.from("vehicle_assignments").update({ activo: false } as never).in("id", filas.map((f) => f.id));
   if (error) return [];
+  // El móvil del que sale también cambió de equipo: sus servicios programados vuelven a «por confirmar».
+  await quitarConfirmacion(supabase, filas.map((f) => f.vehicle_id));
 
   const { data: vehiculos } = await supabase
     .from("vehicles")
@@ -195,7 +184,7 @@ export async function unassignVehicle(assignmentId: number) {
     .maybeSingle();
 
   if (error) return { error: error.message };
-  if (asignacion) await pedirConfirmacionDeServicios(supabase, asignacion.vehicle_id);
+  if (asignacion) await quitarConfirmacion(supabase, [asignacion.vehicle_id]);
   await auditar("MODIFICAR", "regulacion", idParsed.data, "Asignación de tripulación finalizada");
   revalidatePath("/regulacion");
   revalidatePath("/servicios");
