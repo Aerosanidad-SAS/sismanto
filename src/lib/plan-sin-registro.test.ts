@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { itemsSinPrimerRegistro } from "./plan-sin-registro";
+import { errorKmCumplimiento, itemsSinPrimerRegistro } from "./plan-sin-registro";
 
 const items = [
   { id: 1, aplica_a: "TODOS" },
@@ -18,4 +18,11 @@ test("solo quedan los que aplican al vehículo y no tienen alerta", () => {
 test("sin centro, solo TODOS y la placa", () => {
   const r = itemsSinPrimerRegistro(items, { placa: "XYZ999", centro_operativo: null }, []);
   assert.deepEqual(r.map((i) => i.id), [1, 5]);
+});
+
+test("un ítem por kilómetros no se registra sin kilometraje; uno por días sí", () => {
+  assert.match(errorKmCumplimiento(5000, null)!, /kilometraje/);
+  assert.match(errorKmCumplimiento(5000, undefined)!, /kilometraje/);
+  assert.equal(errorKmCumplimiento(5000, 0), null);
+  assert.equal(errorKmCumplimiento(0, null), null);
 });

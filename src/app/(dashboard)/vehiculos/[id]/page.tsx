@@ -378,7 +378,7 @@ export default async function VehicleDetailPage(
         alerts={maintenanceAlerts}
         sinRegistro={itemsSinPrimerRegistro(
           itemsDelPlan,
-          { placa: vehicle.placa, centro_operativo: (vehicle as { centro_operativo?: string | null }).centro_operativo ?? null },
+          vehicle as { placa: string; centro_operativo: string | null },
           maintenanceAlerts.map((a) => a.plan_item_id)
         )}
         canLog={canLogMaintenance}

@@ -155,6 +155,7 @@ function AlertRow({
                   id={kmId}
                   type="number"
                   min={0}
+                  required
                   placeholder="ej. 45000"
                   value={km}
                   onChange={(e) => setKm(e.target.value)}
@@ -225,7 +226,7 @@ export function VehicleMaintenanceAlertsPanel({ vehicleId, placa, alerts, sinReg
         {alerts.length === 0 ? null : activas.length === 0 ? (
           <p className="text-sm text-green-700 flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4" />
-            Todo el plan está al día.
+            {sinRegistro.length > 0 ? "Lo que ya tiene registro está al día." : "Todo el plan está al día."}
           </p>
         ) : (
           activas.map((a) => (
