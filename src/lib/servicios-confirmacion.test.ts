@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { confirmacionAlCrear, filtroDesdeHoy, porConfirmar, quitarConfirmacion, serviciosPorConfirmarDelDia } from "./servicios-confirmacion";
+import { confirmacionAlCrear, filtroDesdeHoy, porConfirmar, quitarConfirmacion, ROLES_CONFIRMAN, serviciosPorConfirmarDelDia } from "./servicios-confirmacion";
 
 const HOY = "2026-11-25";
 const BASE = { etapa: "PROGRAMADO", vehicle_id: "v1", confirmado_at: null, fecha_hora_programacion: "2026-11-25T14:00:00-05:00" };
@@ -99,5 +100,19 @@ describe("quitarConfirmacion", () => {
     const { db, llamadas } = baseFalsa();
     assert.equal(await quitarConfirmacion(db, []), 0);
     assert.equal(llamadas.length, 0);
+  });
+});
+
+// No ejecuta SQL: vigila que la base siga exigiendo los mismos roles que la aplicación, también al insertar.
+describe("migración 145: quién puede confirmar", () => {
+  const sql = readFileSync("scripts/migrations/145_servicios_confirmacion.sql", "utf8");
+
+  it("el trigger cubre INSERT y UPDATE (la RLS no distingue columnas)", () => {
+    assert.match(sql, /BEFORE INSERT OR UPDATE ON medical_services/);
+  });
+
+  it("los roles del trigger son los de ROLES_CONFIRMAN", () => {
+    const lista = sql.match(/get_user_role\(\) IN \(([^)]*)\)/)?.[1] ?? "";
+    assert.deepEqual(lista.split(",").map((r) => r.trim().replace(/'/g, "")).sort(), [...ROLES_CONFIRMAN].sort());
   });
 });
