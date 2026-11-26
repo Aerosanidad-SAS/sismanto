@@ -1,6 +1,6 @@
 # Guion de pruebas por rol: SISMANTO (dev y staging)
 
-Contrastado con la rama `dev` (base `b5fc823`, PR #400) el 2026-11-25. Es un guion para recorrer a mano; las pruebas automáticas están en `e2e/` (ver `e2e/README.md`).
+Contrastado con la rama `dev` (base `b5fc823`, PR #400) el 2026-11-25; C17 y la nota sobre direcciones de la sección B, revisados contra `4b98d1d` (PR #405) el 2026-11-26. Es un guion para recorrer a mano; las pruebas automáticas están en `e2e/` (ver `e2e/README.md`).
 
 **Certeza de cada punto**
 - **Confirmado en código**: leído en el archivo que se cita.
@@ -32,7 +32,12 @@ Contrastado con la rama `dev` (base `b5fc823`, PR #400) el 2026-11-25. Es un gui
 
 ## B. Qué ve cada rol (selector «Ver como…»)
 
-La columna «Debe ver» sale del menú real (`src/lib/navegacion.ts`) y de la pantalla de inicio de cada rol (`getDefaultRoute`, `src/lib/auth-utils.ts`). Todo lo que el menú oculta tampoco debe abrirse escribiendo la URL (las páginas usan `requireRole(rolesDeRuta(...))` y mandan al inicio del rol). La seguridad de los datos la da la base (RLS), no el menú.
+La columna «Debe ver» sale del menú real (`src/lib/navegacion.ts`) y de la pantalla de inicio de cada rol (`getDefaultRoute`, `src/lib/auth-utils.ts`). Lo esperado es que lo que el menú oculta tampoco se abra escribiendo la URL. La seguridad de los datos la da la base (RLS), no el menú.
+
+**Diferencias conocidas** (confirmadas en código; anotarlas como hallazgo conocido): cada página tiene su propia guarda y no todas usan la lista del menú.
+- Mientras no se mergee el PR #413, se abren por URL: `/servicios` (OVEM, MANTENIMIENTO), `/novedades` (OVEM, MEDICO, AUXILIAR_ENFERMERIA, VISTA), `/clientes` y `/proveedores` (esos cuatro y MANTENIMIENTO).
+- COORDINACION abre `/equipos` y `/comunicaciones` aunque su menú no los muestre.
+- A ANALISTA el menú le muestra Chat IA y AI Insights, pero esas páginas no lo dejan entrar.
 
 | Rol | Inicio | Debe ver (menú) | NO debe ver | Certeza |
 |---|---|---|---|---|
@@ -74,7 +79,7 @@ Tipos de servicio que ve Regulación al crear: MEDICINA DOMICILIARIA, TAB SIMPLE
 - [ ] C14 Regulación intenta pasar un servicio FINALIZADO, CANCELADO o DUPLICADO a otra etapa: se rechaza («pídele a un administrador que lo corrija»). ADMIN sí puede. | Lógica: Confirmado en código (`puedeReabrir`, solo ADMIN). Que la acción de servidor la use: NO VERIFICADO.
 - [ ] C15 Corrección de un servicio FINALIZADO: la interfaz deja editarlo a ADMIN, ANALISTA y REGULACION (no a COORDINACION ni VISTA). El libro y COBERTURA R-28 no concuerdan sobre Regulación: resultado esperado NO DEFINIDO hasta resolver R-28. | Interfaz: Confirmado en código (`ROLES_EDITAN_FINALIZADO`; la RLS lo hace cumplir según el comentario, migración 055: NO VERIFICADO). Decisión pendiente.
 - [ ] C16 Cierre en bloque (ADMIN, REGULACION, ANALISTA): seleccionar servicios y finalizar o cancelar hasta 100; los que no cumplen las reglas se informan sin tocarse. | Deducido (changelog `servicios-vistas-y-cierre-en-bloque`).
-- [ ] C17 Paso mal marcado por la tripulación: hoy Regulación lo corrige editando las horas a mano (DEU-08). Anotar como hallazgo conocido, no como fallo nuevo. | Deducido (PARIDAD DEU-08); revisar si el PR de «volver al paso anterior» (#405) ya está mergeado.
+- [ ] C17 Paso mal marcado por la tripulación: en «Mis servicios», «Me equivoqué: volver al paso anterior» pide un motivo (mínimo 5 letras), borra el último paso marcado y, si ese paso había iniciado el servicio, lo devuelve a programado; queda en la bitácora. No aparece en un servicio ya cerrado (por ejemplo FINALIZADO): eso lo corrige Regulación o ADMIN. | Confirmado en código (`pasoADevolver` en `estado-servicio.ts`, `devolverPasoServicio`; PR #405). Que la base lo permita a cada rol de la tripulación: NO VERIFICADO.
 
 ## D. Permisos cruzados (RLS y rutas)
 
