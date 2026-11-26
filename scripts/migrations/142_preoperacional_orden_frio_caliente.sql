@@ -17,9 +17,10 @@ INSERT INTO checklist_groups (nombre, orden) VALUES
   ('4 · Niveles de nuevo (motor caliente)', 4)
 ON CONFLICT (nombre) DO NOTHING;
 
--- Re-verificación en caliente: mismas propiedades (severidad, tipos de vehículo, cantidad) que el ítem en frío.
+-- Re-verificación en caliente: mismas propiedades (activo, severidad, tipos de vehículo, cantidad) que el ítem en frío:
+-- si el ADMIN desactivó uno, su copia en caliente no lo revive.
 INSERT INTO checklist_items (categoria, descripcion, cantidad_esperada, orden, activo, lista, tipos_vehiculo, severidad_falla)
-SELECT ci.categoria, ci.descripcion || ' (motor caliente)', ci.cantidad_esperada, 0, true, ci.lista, ci.tipos_vehiculo, ci.severidad_falla
+SELECT ci.categoria, ci.descripcion || ' (motor caliente)', ci.cantidad_esperada, 0, ci.activo, ci.lista, ci.tipos_vehiculo, ci.severidad_falla
   FROM checklist_items ci
  WHERE ci.lista = 'PREOPERACIONAL'
    AND ci.descripcion IN ('Nivel aceite de motor', 'Nivel refrigerante radiador', 'Nivel líquido hidráulico', 'Nivel líquido de frenos')
