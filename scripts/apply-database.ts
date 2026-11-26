@@ -164,6 +164,7 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "138_resolver_solicitud_no_apto.sql", file: "scripts/migrations/138_resolver_solicitud_no_apto.sql" },
   { name: "139_mantenimiento_soporte.sql", file: "scripts/migrations/139_mantenimiento_soporte.sql" },
   { name: "140_destornilladores_de_pala.sql", file: "scripts/migrations/140_destornilladores_de_pala.sql" },
+  { name: "143_servicios_notas_ubicacion.sql", file: "scripts/migrations/143_servicios_notas_ubicacion.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────
