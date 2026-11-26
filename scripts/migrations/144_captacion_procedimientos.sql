@@ -34,33 +34,42 @@ CREATE TABLE IF NOT EXISTS captacion_procedimientos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_captacion_proc_fecha ON captacion_procedimientos (activo, fecha_atencion DESC);
-CREATE INDEX IF NOT EXISTS idx_captacion_proc_lote  ON captacion_procedimientos (lote);
+-- Una línea por procedimiento dentro de un lote. Es lo que hace segura la idempotencia: si el mismo envío llega dos veces
+-- a la vez, la segunda inserción falla aquí (23505) en vez de duplicar las cifras. Sirve también para buscar por lote.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_captacion_proc_lote_procedimiento ON captacion_procedimientos (lote, procedimiento);
 
 -- ─── RLS ────────────────────────────────────────────────────────────────────
 ALTER TABLE captacion_procedimientos ENABLE ROW LEVEL SECURITY;
 
+-- Sin sesión no se ve ni se escribe nada: la 132 ya quita la escritura de `anon` por defecto; aquí también la lectura
+-- (las notas son texto libre sobre una atención). `authenticated` conserva sus privilegios y lo limita la RLS.
+REVOKE ALL ON captacion_procedimientos FROM anon;
+
+-- Las funciones van envueltas en (SELECT ...) para evaluarse una vez por consulta y no por fila (087 y 110): los
+-- informes leen todas las líneas de un período.
+
 DROP POLICY IF EXISTS captacion_procedimientos_select ON captacion_procedimientos;
 CREATE POLICY captacion_procedimientos_select ON captacion_procedimientos
-  FOR SELECT TO authenticated USING (puede_captacion());
+  FOR SELECT TO authenticated USING ((SELECT puede_captacion()));
 
 -- Quien registra queda como autor: no se puede registrar "a nombre de otro" ni con una fecha futura.
 DROP POLICY IF EXISTS captacion_procedimientos_insert ON captacion_procedimientos;
 CREATE POLICY captacion_procedimientos_insert ON captacion_procedimientos
   FOR INSERT TO authenticated
   WITH CHECK (
-    puede_captacion()
-    AND registrado_por_id = auth.uid()
+    (SELECT puede_captacion())
+    AND registrado_por_id = (SELECT auth.uid())
     AND fecha_atencion <= now() + interval '5 minutes'
   );
 
 DROP POLICY IF EXISTS captacion_procedimientos_update ON captacion_procedimientos;
 CREATE POLICY captacion_procedimientos_update ON captacion_procedimientos
   FOR UPDATE TO authenticated
-  USING (get_user_role() = 'ADMIN') WITH CHECK (get_user_role() = 'ADMIN');
+  USING ((SELECT get_user_role()) = 'ADMIN') WITH CHECK ((SELECT get_user_role()) = 'ADMIN');
 
 DROP POLICY IF EXISTS captacion_procedimientos_delete ON captacion_procedimientos;
 CREATE POLICY captacion_procedimientos_delete ON captacion_procedimientos
-  FOR DELETE TO authenticated USING (get_user_role() = 'ADMIN');
+  FOR DELETE TO authenticated USING ((SELECT get_user_role()) = 'ADMIN');
 
 -- Si la política restrictiva para TECNICO/AEROPUERTO (zz_rol_restringido) ya existe, esta tabla nueva también
 -- queda blindada para esos roles. puede_captacion() ya los deja fuera: esta es una segunda barrera.

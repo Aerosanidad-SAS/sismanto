@@ -429,7 +429,7 @@ const COLUMNAS_INFORME =
 /**
  * Captaciones activas de un rango de días de Bogotá (y un aeropuerto, si se da), con solo las columnas que usan los
  * informes, más el catálogo de aerolíneas activas en su orden de alta (el del formato PAE) y, aparte, las líneas de los
- * registros «solo procedimiento» (`externos`, migración 143), que no son pacientes. Solo roles de captación.
+ * registros «solo procedimiento» (`externos`, migración 144), que no son pacientes. Solo roles de captación.
  */
 export async function getDatosInformeCaptacion(
   desde: string,

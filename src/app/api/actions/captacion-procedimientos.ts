@@ -10,6 +10,7 @@ import { aTimestamptzColombia } from "@/lib/hora-colombia";
 import { puedeAdministrarCaptacion, puedeUsarCaptacion } from "@/lib/captacion";
 import {
   captacionProcedimientosSchema,
+  esEnvioRepetido,
   type CaptacionProcedimientosInput,
   type FilaProcedimientoGuardada,
 } from "@/lib/captacion-procedimientos";
@@ -79,6 +80,8 @@ export async function crearProcedimientosExternos(datos: CaptacionProcedimientos
     nombre_registrado_por: nombre,
   }));
   const { error } = await supabase.from("captacion_procedimientos").insert(filas as never);
+  // Dos envíos simultáneos pasan los dos la consulta de arriba: el índice único (lote, procedimiento) rechaza el segundo.
+  if (error && d.lote && esEnvioRepetido(error)) return { success: true as const, lote };
   if (error) return { error: error.message };
 
   await auditar("INSERTAR", "captacion", lote, `Procedimientos sin paciente registrados: ${filas.length} línea(s)`);

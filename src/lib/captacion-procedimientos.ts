@@ -65,6 +65,14 @@ export const captacionProcedimientosSchema = z
 export type CaptacionProcedimientosInput = z.input<typeof captacionProcedimientosSchema>;
 export type CaptacionProcedimientosDatos = z.output<typeof captacionProcedimientosSchema>;
 
+/**
+ * ¿El INSERT falló porque ese lote ya estaba guardado? Es la violación de unicidad (23505) del índice
+ * (lote, procedimiento) de la migración 144; el esquema ya impide repetir un procedimiento dentro de un envío.
+ */
+export function esEnvioRepetido(error: { code?: string | null } | null | undefined): boolean {
+  return error?.code === "23505";
+}
+
 /** Una fila de `captacion_procedimientos` tal como la lista la lee. */
 export interface FilaProcedimientoGuardada {
   id: number;
