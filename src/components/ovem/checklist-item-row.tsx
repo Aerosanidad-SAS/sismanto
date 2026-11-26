@@ -115,6 +115,8 @@ export function ChecklistItemRow({
   const idObservacion = `${uid}-obs`;
   const expectedNum = item.cantidad_esperada ? Number(item.cantidad_esperada) : NaN;
   const esConteo = Number.isFinite(expectedNum) && expectedNum > 0;
+  /** Con una sola unidad no hay nada que contar: «Falla» ya dice que esa única unidad falla o falta. */
+  const pideCuantos = esConteo && expectedNum > 1;
   const sinResponder = exigirRespuesta && !state;
   const st: ChecklistItemState = state ?? { estado: "OK" };
   const esInventario = faltanteNoEsFalla && esItemDeInventario(item);
@@ -239,7 +241,7 @@ export function ChecklistItemRow({
           <DialogHeader>
             <DialogTitle>{item.descripcion}</DialogTitle>
             <DialogDescription>
-              {esConteo
+              {pideCuantos
                 ? "Dinos cuántos están bien y, si falta o falla algo, descríbelo."
                 : desdeFalla
                   ? "Describe la falla: se reporta sola como novedad."
@@ -247,7 +249,7 @@ export function ChecklistItemRow({
             </DialogDescription>
           </DialogHeader>
 
-          {esConteo && (
+          {pideCuantos && (
             <div className="flex items-center justify-center gap-4" role="group" aria-label="¿Cuántos están bien?">
               <Button type="button" variant="outline" className="h-14 w-14" onClick={() => setCuantos((c) => Math.max(0, c - 1))} aria-label="Uno menos">
                 <Minus className="h-6 w-6" aria-hidden="true" />
@@ -266,7 +268,7 @@ export function ChecklistItemRow({
           </Label>
           <Textarea
             id={idObservacion}
-            autoFocus={!esConteo}
+            autoFocus={!pideCuantos}
             rows={3}
             value={borrador}
             placeholder={textoRequerido ? fallaPlaceholder : "Opcional"}
