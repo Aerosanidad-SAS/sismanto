@@ -715,6 +715,9 @@ export function ServiciosTabla({
   };
 
   const onSubmit = async (values: MedicalServiceFormData, crearOtro = false, confirmarChoque = false) => {
+    setGuardando(true);
+    setError(null);
+    setCreadoMsg(null);
     // No se despacha (CURSO u OVEM nuevo) sin dirección; guardar sin despachar sí se permite, con el aviso de la sección Ruta.
     const faltas = faltasParaDespachar(values.tipo_servicio, values, {
       etapaAntes: editando?.etapa,
@@ -723,15 +726,11 @@ export function ServiciosTabla({
       ovemDespues: values.ovem_user_id,
     });
     if (faltas.length > 0) {
-      setError(null);
-      setCreadoMsg(null);
+      setGuardando(false);
       for (const f of faltas) setErrorCampo(f.campo, { type: "manual", message: f.mensaje });
       enfocarCampo(faltas[0].campo);
       return;
     }
-    setGuardando(true);
-    setError(null);
-    setCreadoMsg(null);
     const res = editando
       ? await actualizarServicioMedico(editando.id, values, confirmarChoque)
       : await crearServicioMedico(values, etapaInicial, confirmarChoque);

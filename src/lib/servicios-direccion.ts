@@ -63,9 +63,12 @@ export interface CambioDespacho {
   ovemDespues?: string | null;
 }
 
-/** ¿Este guardado despacha el servicio? Pasar a CURSO o dejar un OVEM distinto del que ya tenía. */
+/**
+ * ¿Este guardado despacha el servicio? Pasar a CURSO o dejar un OVEM distinto del que ya tenía.
+ * Devolver un FINALIZADO a CURSO no despacha: es volver atrás sobre un servicio que ya salió (corrección del ADMIN).
+ */
 export function seDespacha(c: CambioDespacho): boolean {
-  const pasaACurso = c.etapaDespues === "CURSO" && c.etapaAntes !== "CURSO";
+  const pasaACurso = c.etapaDespues === "CURSO" && c.etapaAntes !== "CURSO" && c.etapaAntes !== "FINALIZADO";
   const ovemNuevo = tiene(c.ovemDespues) && c.ovemDespues !== (c.ovemAntes ?? "");
   return pasaACurso || ovemNuevo;
 }
@@ -77,4 +80,15 @@ export function faltasParaDespachar(
   cambio: CambioDespacho
 ): FaltaDireccion[] {
   return seDespacha(cambio) ? direccionesFaltantes(tipoServicio, datos) : [];
+}
+
+/** Mensaje con el que el servidor rechaza un despacho sin dirección; null si se puede guardar. */
+export function errorDeDespacho(
+  tipoServicio: string | null | undefined,
+  datos: DatosDireccion,
+  cambio: CambioDespacho
+): string | null {
+  const faltas = faltasParaDespachar(tipoServicio, datos, cambio);
+  if (faltas.length === 0) return null;
+  return `Falta: ${faltas.map((f) => f.etiqueta).join(", ")}. Sin eso no se puede asignar un OVEM ni pasar el servicio a CURSO: edítalo y complétalo.`;
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { direccionesFaltantes, faltasParaDespachar, seDespacha } from "./servicios-direccion";
+import { direccionesFaltantes, errorDeDespacho, faltasParaDespachar, seDespacha } from "./servicios-direccion";
 
 const COMPLETO = {
   direccion_origen: "Calle 1 # 2-3",
@@ -69,5 +69,33 @@ describe("faltasParaDespachar", () => {
 
   it("con las direcciones completas se despacha", () => {
     assert.deepEqual(faltasParaDespachar("TAM DOBLE", COMPLETO, { etapaDespues: "PROGRAMADO", ovemDespues: "u1" }), []);
+  });
+});
+
+describe("volver atrás no se bloquea (#405)", () => {
+  it("devolver un servicio de CURSO a PROGRAMADO nunca pide dirección", () => {
+    assert.equal(errorDeDespacho("TAB SIMPLE", {}, { etapaAntes: "CURSO", etapaDespues: "PROGRAMADO", ovemAntes: "u1", ovemDespues: "u1" }), null);
+  });
+
+  it("devolver un FINALIZADO a CURSO tampoco: el servicio ya había salido", () => {
+    assert.equal(errorDeDespacho("TAB SIMPLE", {}, { etapaAntes: "FINALIZADO", etapaDespues: "CURSO" }), null);
+  });
+
+  it("después de volver atrás, editar sin cambiar el OVEM sigue libre y pasar otra vez a CURSO desde Regulación sí la pide", () => {
+    const historico = { etapaAntes: "PROGRAMADO", ovemAntes: "u1", ovemDespues: "u1" };
+    assert.equal(errorDeDespacho("TAM SIMPLE", {}, { ...historico, etapaDespues: "PROGRAMADO" }), null);
+    assert.notEqual(errorDeDespacho("TAM SIMPLE", {}, { ...historico, etapaDespues: "CURSO" }), null);
+  });
+});
+
+describe("errorDeDespacho (servidor)", () => {
+  it("crear con OVEM y sin dirección se rechaza diciendo qué falta", () => {
+    const error = errorDeDespacho("TAB SIMPLE", { ...COMPLETO, direccion_origen: undefined }, { etapaDespues: "PROGRAMADO", ovemDespues: "u1" });
+    assert.match(error ?? "", /^Falta: dirección de origen\./);
+  });
+
+  it("crear sin OVEM en PROGRAMADO, o con todo completo, pasa", () => {
+    assert.equal(errorDeDespacho("TAB SIMPLE", {}, { etapaDespues: "PROGRAMADO" }), null);
+    assert.equal(errorDeDespacho("TAB SIMPLE", COMPLETO, { etapaDespues: "CURSO", ovemDespues: "u1" }), null);
   });
 });
