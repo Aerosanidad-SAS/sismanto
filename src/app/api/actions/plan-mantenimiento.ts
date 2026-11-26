@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getProfile } from "@/app/api/actions/auth";
 import { auditar } from "@/lib/auditoria";
 import { z } from "zod";
+import { errorKmCumplimiento } from "@/lib/plan-sin-registro";
 import type { MaintenanceAlert, MaintenancePlanItem } from "@/types";
 
 // ── Queries ──────────────────────────────────────────────────────────────────
@@ -90,6 +91,15 @@ export async function registrarCumplimiento(input: LogPlanItemInput) {
     return { error: "Sin permisos" };
 
   const supabase = createAdminClient();
+  const { data: item } = await (supabase as any)
+    .from("maintenance_plan_items")
+    .select("intervalo_km")
+    .eq("id", parsed.data.plan_item_id)
+    .maybeSingle();
+  if (!item) return { error: "No encontramos ese ítem del plan." };
+  const sinKm = errorKmCumplimiento(item.intervalo_km, parsed.data.km_realizado);
+  if (sinKm) return { error: sinKm };
+
   const { error } = await supabase.from("vehicle_maintenance_log").insert({
     ...parsed.data,
     registrado_por: profile.user_id,

@@ -14,7 +14,8 @@ import { getClientes } from "@/app/api/actions/clientes";
 import { getOpcionesServicio } from "@/app/api/actions/servicios-opciones";
 import { getEpsCatalog } from "@/app/api/actions/pacientes";
 import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 import { MisServicios } from "@/components/servicios/mis-servicios";
@@ -40,7 +41,7 @@ async function getVehiculosActivos() {
     const supabase = createClient();
     let query = supabase
       .from("vehicles")
-      .select("id, placa")
+      .select("id, placa, centro_operativo")
       .eq("estado_actual", "OPERATIVO")
       .order("placa");
     const centro = centroVisible(await getProfile());
@@ -60,7 +61,7 @@ export default async function ServiciosPage(
   const searchParams = await props.searchParams;
   const hoyIso = hoyBogota();
   const { filtros, pagina } = leerFiltros(searchParams);
-  const profile = await getProfile();
+  const profile = await requireRole(rolesDeRuta("/servicios"));
   // Con centro asignado (Regulación, Coordinación…) la lista es de su ciudad y nada más: sin selector ni resumen de la otra.
   const centroDelPerfil = centroVisible(profile);
   const ciudadFija = centroDelPerfil ? ciudadDeCentro(centroDelPerfil.codigo) : null;

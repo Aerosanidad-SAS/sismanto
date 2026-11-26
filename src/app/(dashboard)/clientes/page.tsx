@@ -1,7 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { getDirectorioClientes } from "@/app/api/actions/directorios";
 import { getClientes } from "@/app/api/actions/clientes";
-import { getProfile } from "@/app/api/actions/auth";
+import { requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { DirectorioTabla } from "@/components/directorio/directorio-tabla";
 import { ClientesTab, type ClienteRow } from "@/components/configuracion/clientes-tab";
 import { puedeDesactivarCliente, puedeEscribirClientes } from "@/lib/clientes-reglas";
@@ -9,7 +10,7 @@ import { puedeDesactivarCliente, puedeEscribirClientes } from "@/lib/clientes-re
 export const metadata = { title: "Clientes" };
 
 export default async function ClientesPage() {
-  const profile = await getProfile();
+  const profile = await requireRole(rolesDeRuta("/clientes"));
   // Quien puede registrar y editar (Admin, Analista y Regulación, como en SISRES) ve la tabla con acciones; el resto,
   // el directorio de consulta.
   const puedeEscribir = puedeEscribirClientes(profile?.role_codigo);

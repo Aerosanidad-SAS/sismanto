@@ -17,6 +17,7 @@
 import { readFileSync } from "fs";
 import { createClient } from "@supabase/supabase-js";
 import XLSX from "xlsx";
+import { fechaTexto } from "./lib/mapeo-plan.mjs";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,8 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const SOLO_MANTO = process.argv.includes("--solo-manto");
 const SOLO_COMB = process.argv.includes("--solo-comb");
 
-const MANTO_FILE = "CONTROL_VEH_INTERASSIST_UPDATED V2  2026 COMB.xlsx";
+// MANTO_FILE permite apuntar a la versión más reciente del Excel sin editar el script.
+const MANTO_FILE = process.env.MANTO_FILE || "CONTROL_VEH_INTERASSIST_UPDATED V2  2026 COMB.xlsx";
 const MANTO_SHEET = "HistorialMantenimientos";
 const COMB_INTERNA_SHEET = "Tabla_Combustibles"; // dentro del mismo workbook
 const COMB_PROVEEDOR_FILE = "detailed_consumption_2_1778607907.xlsx";
@@ -38,7 +40,7 @@ const REFERENCE_PLATES = new Set(["KOS929", "KYV199", "KYV219", "KZO779"]);
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function loadEnv() {
-  const raw = readFileSync(".env.local", "utf-8");
+  const raw = readFileSync(process.env.ENV_FILE || ".env.local", "utf-8");
   const env = {};
   for (const line of raw.split(/\r?\n/)) {
     const m = line.match(/^([^#=\s]+)\s*=\s*(.*)$/);
@@ -60,6 +62,20 @@ function excelSerialToIso(serial) {
   const d = new Date(ms);
   if (isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Lee TODAS las filas: Supabase corta cada consulta en 1.000, y el historial ya pasa de ese tamaño. Se ordena por la
+ * llave para que las páginas no se pisen (una fila saltada se volvería a insertar como nueva).
+ */
+async function selectAll(supabase, table, key, columns, apply = (q) => q) {
+  const rows = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await apply(supabase.from(table).select(columns)).order(key).range(desde, desde + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) return rows;
+  }
 }
 
 function normalPlaca(p) {
@@ -206,7 +222,7 @@ function parseMantenimientoSheet(ws) {
 
     const fechaRaw = r[1];
     const fecha = typeof fechaRaw === "number" ? excelSerialToIso(fechaRaw)
-      : String(fechaRaw || "").trim() !== "" ? String(fechaRaw).trim().slice(0, 10) : null;
+      : String(fechaRaw || "").trim() !== "" ? fechaTexto(fechaRaw) : null;
     if (!fecha || isNaN(Date.parse(fecha))) {
       skipped.push({ fila: i + 1, motivo: `Fecha inválida: "${fechaRaw}"`, placa });
       continue;
@@ -256,7 +272,7 @@ function parseCombInternaSheet(ws) {
     const placa = normalPlaca(r[8]);
     if (!placa || REFERENCE_PLATES.has(placa)) continue;
     const fecha = typeof r[4] === "number" ? excelSerialToIso(r[4])
-      : String(r[4] || "").trim().slice(0, 10);
+      : fechaTexto(r[4]);
     if (!fecha || isNaN(Date.parse(fecha))) continue;
     const galones = safeNum(r[11], 0);
     if (galones <= 0) continue;
@@ -281,7 +297,7 @@ function parseCombProveedorSheet(ws) {
     const placa = normalPlaca(r[1]);
     if (!placa || REFERENCE_PLATES.has(placa)) continue;
     const fecha = typeof r[0] === "number" ? excelSerialToIso(r[0])
-      : String(r[0] || "").trim().slice(0, 10);
+      : fechaTexto(r[0]);
     if (!fecha || isNaN(Date.parse(fecha))) continue;
     const galones = safeNum(r[3], 0);
     if (galones <= 0) continue;
@@ -313,8 +329,13 @@ function deduplicateFuel(rows) {
 function buildMantoKey(vehicleId, fecha, factura, km, valor, tipo, desc) {
   const f = String(fecha || "").slice(0, 10);
   const fac = String(factura || "").trim().toUpperCase();
-  if (fac) return `${vehicleId}|${f}|FAC|${fac}`;
-  return `${vehicleId}|${f}|NOFAC|${Math.round(km)}|${Math.round(valor || 0)}|${tipo}|${String(desc || "").slice(0, 80).toUpperCase()}`;
+  // Una factura tiene varias líneas (repuestos, mano de obra): cada línea es un registro. Antes, con factura la clave era
+  // solo placa + fecha + factura y las líneas siguientes de la misma factura se descartaban como «duplicadas»
+  // (el historial quedaba con una línea por factura y el costo subcontado). Ahora la línea se distingue por descripción y valor.
+  const linea = `${Math.round(valor || 0)}|${String(desc || "").trim().slice(0, 80).toUpperCase()}`;
+  if (fac) return `${vehicleId}|${f}|FAC|${fac}|${linea}`;
+  // Sin el km: el de la base pudo ser imputado con otra serie y no coincidiría al recargar.
+  return `${vehicleId}|${f}|NOFAC|${tipo}|${linea}`;
 }
 
 // ─── Batch insert ─────────────────────────────────────────────────────────────
@@ -448,13 +469,8 @@ async function main() {
   console.log("📐 Construyendo serie temporal de km...");
 
   // También leer km de mantenimientos existentes en BD para mejorar timeline
-  const { data: existingMantoKm } = await supabase
-    .from("maintenance_records")
-    .select("vehicle_id, fecha, kilometraje_actual")
-    .gt("kilometraje_actual", 0);
-  const existingFuelKm = await supabase
-    .from("fuel_logs")
-    .select("vehicle_id, fecha, kilometraje");
+  const existingMantoKm = await selectAll(supabase, "maintenance_records", "id_manto", "vehicle_id, fecha, kilometraje_actual", (q) => q.gt("kilometraje_actual", 0));
+  const existingFuelKm = { data: await selectAll(supabase, "fuel_logs", "id", "vehicle_id, fecha, kilometraje") };
 
   const timelinePoints = [
     // Combustible nuevo (con km)
@@ -509,9 +525,7 @@ async function main() {
   console.log(`  Sin datos (quedan 0) : ${sinDatosKm}\n`);
 
   // 8. Deduplicar mantenimientos contra BD existente
-  const { data: existingManto } = await supabase
-    .from("maintenance_records")
-    .select("vehicle_id, fecha, numero_factura, kilometraje_actual, valor, tipo, descripcion_trabajo");
+  const existingManto = await selectAll(supabase, "maintenance_records", "id_manto", "vehicle_id, fecha, numero_factura, kilometraje_actual, valor, tipo, descripcion_trabajo");
 
   const existingMantoKeys = new Set();
   for (const e of existingManto || []) {
@@ -551,9 +565,7 @@ async function main() {
   }
 
   // 9. Deduplicar combustible contra BD existente
-  const { data: existingFuel } = await supabase
-    .from("fuel_logs")
-    .select("vehicle_id, fecha, kilometraje, galones");
+  const existingFuel = await selectAll(supabase, "fuel_logs", "id", "vehicle_id, fecha, kilometraje, galones");
 
   const existingFuelKeys = new Set();
   for (const e of existingFuel || []) {
