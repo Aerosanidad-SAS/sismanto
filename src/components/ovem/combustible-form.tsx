@@ -6,9 +6,10 @@ import { Fuel } from "lucide-react";
 import { submitOvemFuelLog } from "@/app/api/actions/ovem";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { evaluarKilometraje, parseKilometraje, parseNumeroDecimal } from "@/lib/ovem-portal";
+import { erroresTanqueo, type ErroresTanqueo } from "@/lib/tanqueo-errores";
 
 
 export function CombustibleForm({
@@ -32,13 +33,25 @@ export function CombustibleForm({
   const [costo, setCosto] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errores, setErrores] = useState<ErroresTanqueo>({});
 
   // Solo un tanqueo de hoy se compara con el último km; uno atrasado lo valida el servidor contra las lecturas de su época.
   const avisoKm = evaluarKilometraje(parseKilometraje(km), fecha === hoy ? ultimoKm : null).mensaje;
 
+  /** Al corregir un campo se le quita su error; los demás siguen hasta el próximo envío. */
+  const limpiarError = (campo: keyof ErroresTanqueo) => setErrores((previo) => ({ ...previo, [campo]: undefined }));
+
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    // Un mensaje junto a cada campo que falta (el aviso nativo del navegador depende del idioma del teléfono y se pierde).
+    const faltas = erroresTanqueo({ fecha, km, galones, costo }, hoy);
+    setErrores(faltas);
+    const primero = (["fecha", "km", "galones", "costo"] as const).find((c) => faltas[c]);
+    if (primero) {
+      document.getElementById(`fuel-${primero}`)?.focus();
+      return;
+    }
     // Mismo orden que el servidor: el km solo se queda igual o aumenta (solo para tanqueos de hoy; uno con fecha pasada
     // lo valida el servidor contra las lecturas de esa época).
     const evalKm = evaluarKilometraje(parseKilometraje(km), fecha === hoy ? ultimoKm : null);
@@ -79,64 +92,69 @@ export function CombustibleForm({
         <CardDescription>Fecha, kilometraje, galones y valor pagado.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={guardar} className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1">
-            <Label htmlFor="fuel-fecha">Fecha</Label>
-            <Input id="fuel-fecha" type="date" max={hoy} value={fecha} onChange={(e) => setFecha(e.target.value)} required />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="fuel-km">
-              Kilometraje del tablero <span className="text-destructive">*</span>
-            </Label>
+        <form onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
+          <Field id="fuel-fecha" label="Fecha" required error={errores.fecha}>
             <Input
-              id="fuel-km"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9.\s]+"
-              enterKeyHint="next"
-              aria-describedby="fuel-km-ayuda"
-              value={km}
-              onChange={(e) => setKm(e.target.value)}
-              placeholder="Ej: 125000"
-              required
+              type="date"
+              max={hoy}
+              value={fecha}
+              onChange={(e) => {
+                setFecha(e.target.value);
+                limpiarError("fecha");
+              }}
             />
-            <p id="fuel-km-ayuda" className="text-xs text-muted-foreground">
-              {ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
-            </p>
+          </Field>
+          <div className="space-y-1">
+            <Field
+              id="fuel-km"
+              label="Kilometraje del tablero"
+              required
+              error={errores.km}
+              hint={ultimoKm ? `Último: ${ultimoKm.toLocaleString("es-CO")} km` : "Número que marca el tablero."}
+            >
+              <Input
+                type="text"
+                inputMode="numeric"
+                enterKeyHint="next"
+                value={km}
+                onChange={(e) => {
+                  setKm(e.target.value);
+                  limpiarError("km");
+                }}
+                placeholder="Ej: 125000"
+              />
+            </Field>
             {avisoKm && (
               <p role="status" className="rounded border border-warning bg-warning-soft p-2 text-sm text-warning-foreground">
                 {avisoKm}
               </p>
             )}
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="fuel-galones">
-              Galones <span className="text-destructive">*</span>
-            </Label>
+          <Field id="fuel-galones" label="Galones" required error={errores.galones}>
             <Input
-              id="fuel-galones"
               type="text"
               inputMode="decimal"
-              pattern="[0-9]+([.,][0-9]{1,3})?"
               enterKeyHint="next"
               value={galones}
-              onChange={(e) => setGalones(e.target.value)}
+              onChange={(e) => {
+                setGalones(e.target.value);
+                limpiarError("galones");
+              }}
               placeholder="Ej: 12,5"
-              required
             />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="fuel-costo">Valor pagado (COP)</Label>
+          </Field>
+          <Field id="fuel-costo" label="Valor pagado (COP)" error={errores.costo}>
             <Input
-              id="fuel-costo"
               type="text"
               inputMode="numeric"
-              pattern="[0-9]*"
               value={costo}
-              onChange={(e) => setCosto(e.target.value)}
+              onChange={(e) => {
+                setCosto(e.target.value);
+                limpiarError("costo");
+              }}
               placeholder="Opcional"
             />
-          </div>
+          </Field>
           {error && (
             <p role="alert" className="text-sm text-destructive sm:col-span-2">
               {error}
