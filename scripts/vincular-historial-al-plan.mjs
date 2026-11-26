@@ -15,7 +15,7 @@
 import { readFileSync, writeFileSync } from "fs";
 import { createClient } from "@supabase/supabase-js";
 import XLSX from "xlsx";
-import { claveServicio, norm, tareasDelServicio } from "./lib/mapeo-plan.mjs";
+import { claveServicio, faltaKm, fechaExcel, itemDelPlan, kmDelServicio, norm, tareasDelServicio } from "./lib/mapeo-plan.mjs";
 
 const CONFIRMAR = process.argv.includes("--confirmar");
 const MANTO_FILE = process.env.MANTO_FILE;
@@ -36,32 +36,30 @@ function loadEnv() {
 }
 
 const placaNorm = (p) => String(p ?? "").trim().toUpperCase().replace(/\s+/g, "");
-const serialAIso = (v) => {
-  if (typeof v === "number") return new Date((Math.floor(v) - 25569) * 86400000).toISOString().slice(0, 10);
-  const s = String(v ?? "").trim().slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
-};
 const claveLinea = (vehicleId, fecha, desc, valor) => `${vehicleId}|${fecha}|${norm(desc).slice(0, 80)}|${Math.round(Number(valor) || 0)}`;
 
 const env = loadEnv();
 const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-const { data: vehiculos } = await supabase.from("vehicles").select("id, placa, centro_operativo");
-const porPlaca = new Map((vehiculos ?? []).map((v) => [placaNorm(v.placa), v]));
-const { data: plan } = await supabase.from("maintenance_plan_items").select("id, descripcion");
-const planId = new Map((plan ?? []).map((p) => [p.descripcion, p.id]));
-
-// Registros de la base, paginados (pasan de 1.000 filas).
-const registros = [];
-for (let desde = 0; ; desde += 1000) {
-  const { data, error } = await supabase
-    .from("maintenance_records")
-    .select("id_manto, vehicle_id, fecha, kilometraje_actual, descripcion_trabajo, valor, numero_factura")
-    .range(desde, desde + 999);
-  if (error) throw error;
-  registros.push(...data);
-  if (data.length < 1000) break;
+/**
+ * Lee TODAS las filas (Supabase corta en 1.000), ordenadas por la llave para que las páginas no se pisen. Un error
+ * detiene el script: seguir con una lectura vacía duplicaría vínculos.
+ */
+async function selectAll(table, columns, key) {
+  const rows = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await supabase.from(table).select(columns).order(key).range(desde, desde + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) return rows;
+  }
 }
+
+const vehiculos = await selectAll("vehicles", "id, placa, centro_operativo", "id");
+const porPlaca = new Map(vehiculos.map((v) => [placaNorm(v.placa), v]));
+const plan = await selectAll("maintenance_plan_items", "id, descripcion, aplica_a, intervalo_km", "id");
+
+const registros = await selectAll("maintenance_records", "id_manto, vehicle_id, fecha, kilometraje_actual, descripcion_trabajo, valor, numero_factura", "id_manto");
 const idPorLinea = new Map();
 for (const r of registros) idPorLinea.set(claveLinea(r.vehicle_id, r.fecha, r.descripcion_trabajo, r.valor), r);
 
@@ -73,7 +71,7 @@ let sinCruce = 0;
 let sinVehiculo = 0;
 for (const r of filas) {
   const v = porPlaca.get(placaNorm(r[0]));
-  const fecha = serialAIso(r[1]);
+  const fecha = fechaExcel(r[1]);
   if (!placaNorm(r[0]) || !fecha) continue;
   if (!v) { sinVehiculo++; continue; }
   const reg = idPorLinea.get(claveLinea(v.id, fecha, r[5], r[7]));
@@ -81,9 +79,7 @@ for (const r of filas) {
   const k = claveServicio(v.id, fecha, r[9] || r[8]);
   const s = servicios.get(k) ?? { vehicle: v, fecha, km: 0, kmReal: false, lineas: [], registro: reg.id_manto };
   s.lineas.push({ categoria: String(r[4] ?? ""), descripcion: String(r[5] ?? "") });
-  const kmExcel = Number(r[2]) || 0;
-  if (kmExcel > s.km) { s.km = kmExcel; s.kmReal = true; }
-  else if (!s.kmReal && reg.kilometraje_actual > s.km) s.km = reg.kilometraje_actual;
+  Object.assign(s, kmDelServicio({ km: s.km, kmReal: s.kmReal }, Number(r[2]) || 0, reg.kilometraje_actual));
   servicios.set(k, s);
 }
 
@@ -98,13 +94,19 @@ for (const s of servicios.values()) {
   }
 }
 
-const sinTarea = [...new Set([...ultimo.values()].map((u) => u.tarea))].filter((t) => !planId.has(t));
-const { data: existentes } = await supabase.from("vehicle_maintenance_log").select("vehicle_id, plan_item_id, fecha_realizado");
-const yaHay = new Set((existentes ?? []).map((l) => `${l.vehicle_id}|${l.plan_item_id}|${l.fecha_realizado}`));
+const enElPlan = new Set(plan.map((p) => p.descripcion));
+const sinTarea = [...new Set([...ultimo.values()].map((u) => u.tarea))].filter((t) => !enElPlan.has(t));
+const existentes = await selectAll("vehicle_maintenance_log", "vehicle_id, plan_item_id, fecha_realizado", "id");
+const yaHay = new Set(existentes.map((l) => `${l.vehicle_id}|${l.plan_item_id}|${l.fecha_realizado}`));
 const nuevos = [];
+let noAplican = 0;
+const sinKm = [];
 for (const u of ultimo.values()) {
-  const id = planId.get(u.tarea);
-  if (!id || yaHay.has(`${u.vehicle.id}|${id}|${u.fecha}`)) continue;
+  const item = itemDelPlan(plan, u.tarea, u.vehicle);
+  if (!item) { noAplican++; continue; }
+  if (faltaKm(item, u.km)) { sinKm.push(`${u.vehicle.placa} · ${u.tarea} (${u.fecha})`); continue; }
+  const id = item.id;
+  if (yaHay.has(`${u.vehicle.id}|${id}|${u.fecha}`)) continue;
   nuevos.push({
     vehicle_id: u.vehicle.id,
     plan_item_id: id,
@@ -120,6 +122,8 @@ for (const u of ultimo.values()) porPlacaCuenta.set(u.vehicle.placa, (porPlacaCu
 console.log(`Servicios armados: ${servicios.size} · filas sin cruce con la base: ${sinCruce} · sin vehículo: ${sinVehiculo}`);
 console.log(`Tareas con último mantenimiento derivado: ${ultimo.size} · nuevas para el plan: ${nuevos.length}`);
 if (sinTarea.length) console.log("Tareas del mapeo que NO existen en maintenance_plan_items:", sinTarea.join(" | "));
+console.log(`Sin enlazar: ${noAplican} porque el plan de ese vehículo no tiene la tarea · ${sinKm.length} por kilómetros sin km conocido`);
+for (const l of sinKm) console.log(`  sin km: ${l}`);
 for (const p of ["TRG544", "KQX040"]) {
   console.log(`\n${p}:`);
   for (const u of [...ultimo.values()].filter((x) => x.vehicle.placa === p).sort((a, b) => a.tarea.localeCompare(b.tarea)))

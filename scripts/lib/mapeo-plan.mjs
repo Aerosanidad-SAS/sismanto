@@ -151,3 +151,36 @@ export function tareasDelServicio(lineas, esAirplan) {
 
 /** Clave del servicio: placa + fecha + factura (sin factura, solo placa + fecha). */
 export const claveServicio = (placa, fecha, factura) => `${placa}|${String(fecha).slice(0, 10)}|${String(factura ?? "").trim().toUpperCase()}`;
+
+/** Fecha escrita como texto: «26/11/2024» (día primero, como en Colombia) o ISO «2024-11-26». */
+export function fechaTexto(v) {
+  const s = String(v || "").trim();
+  const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : s.slice(0, 10);
+}
+
+/** Celda de fecha del Excel (número de serie o texto) → «YYYY-MM-DD», o null si no es una fecha. */
+export function fechaExcel(v) {
+  if (typeof v === "number") return v >= 1 ? new Date((Math.floor(v) - 25569) * 86400000).toISOString().slice(0, 10) : null;
+  const s = fechaTexto(v);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) ? s : null;
+}
+
+/**
+ * Km de un servicio al sumarle una línea. El escrito en el Excel (real) manda sobre el de la base, que pudo ser
+ * imputado por el cargador, sin importar en qué orden vengan las líneas.
+ */
+export function kmDelServicio(actual, kmExcel, kmBase) {
+  if (kmExcel > 0) return !actual.kmReal || kmExcel > actual.km ? { km: kmExcel, kmReal: true } : actual;
+  return !actual.kmReal && kmBase > actual.km ? { km: kmBase, kmReal: false } : actual;
+}
+
+/** Ítem del plan con esa descripción que le aplica al vehículo (misma regla de la vista: TODOS, su centro o su placa). */
+export function itemDelPlan(plan, descripcion, vehiculo) {
+  return plan.find(
+    (p) => p.descripcion === descripcion && (p.aplica_a === "TODOS" || p.aplica_a === vehiculo.centro_operativo || p.aplica_a === vehiculo.placa)
+  );
+}
+
+/** En un ítem por kilómetros, un vínculo sin km dejaría la tarea «al día» para siempre en la vista: no se crea. */
+export const faltaKm = (item, km) => item.intervalo_km > 0 && !(km > 0);

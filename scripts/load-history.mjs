@@ -17,6 +17,7 @@
 import { readFileSync } from "fs";
 import { createClient } from "@supabase/supabase-js";
 import XLSX from "xlsx";
+import { fechaTexto } from "./lib/mapeo-plan.mjs";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -63,22 +64,18 @@ function excelSerialToIso(serial) {
   return d.toISOString().slice(0, 10);
 }
 
-/** Lee TODAS las filas: Supabase corta cada consulta en 1.000, y el historial ya pasa de ese tamaño. */
-async function selectAll(supabase, table, columns, apply = (q) => q) {
+/**
+ * Lee TODAS las filas: Supabase corta cada consulta en 1.000, y el historial ya pasa de ese tamaño. Se ordena por la
+ * llave para que las páginas no se pisen (una fila saltada se volvería a insertar como nueva).
+ */
+async function selectAll(supabase, table, key, columns, apply = (q) => q) {
   const rows = [];
   for (let desde = 0; ; desde += 1000) {
-    const { data, error } = await apply(supabase.from(table).select(columns)).range(desde, desde + 999);
+    const { data, error } = await apply(supabase.from(table).select(columns)).order(key).range(desde, desde + 999);
     if (error) throw error;
     rows.push(...data);
     if (data.length < 1000) return rows;
   }
-}
-
-/** Fecha escrita como texto: «26/11/2024» (día primero, como en Colombia) o ISO «2024-11-26». */
-function fechaTexto(v) {
-  const s = String(v || "").trim();
-  const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
-  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : s.slice(0, 10);
 }
 
 function normalPlaca(p) {
@@ -472,8 +469,8 @@ async function main() {
   console.log("📐 Construyendo serie temporal de km...");
 
   // También leer km de mantenimientos existentes en BD para mejorar timeline
-  const existingMantoKm = await selectAll(supabase, "maintenance_records", "vehicle_id, fecha, kilometraje_actual", (q) => q.gt("kilometraje_actual", 0));
-  const existingFuelKm = { data: await selectAll(supabase, "fuel_logs", "vehicle_id, fecha, kilometraje") };
+  const existingMantoKm = await selectAll(supabase, "maintenance_records", "id_manto", "vehicle_id, fecha, kilometraje_actual", (q) => q.gt("kilometraje_actual", 0));
+  const existingFuelKm = { data: await selectAll(supabase, "fuel_logs", "id", "vehicle_id, fecha, kilometraje") };
 
   const timelinePoints = [
     // Combustible nuevo (con km)
@@ -528,7 +525,7 @@ async function main() {
   console.log(`  Sin datos (quedan 0) : ${sinDatosKm}\n`);
 
   // 8. Deduplicar mantenimientos contra BD existente
-  const existingManto = await selectAll(supabase, "maintenance_records", "vehicle_id, fecha, numero_factura, kilometraje_actual, valor, tipo, descripcion_trabajo");
+  const existingManto = await selectAll(supabase, "maintenance_records", "id_manto", "vehicle_id, fecha, numero_factura, kilometraje_actual, valor, tipo, descripcion_trabajo");
 
   const existingMantoKeys = new Set();
   for (const e of existingManto || []) {
@@ -568,9 +565,7 @@ async function main() {
   }
 
   // 9. Deduplicar combustible contra BD existente
-  const { data: existingFuel } = await supabase
-    .from("fuel_logs")
-    .select("vehicle_id, fecha, kilometraje, galones");
+  const existingFuel = await selectAll(supabase, "fuel_logs", "id", "vehicle_id, fecha, kilometraje, galones");
 
   const existingFuelKeys = new Set();
   for (const e of existingFuel || []) {
