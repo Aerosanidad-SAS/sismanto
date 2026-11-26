@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auditar } from "@/lib/auditoria";
 import { centroVisible } from "@/lib/auth-utils";
 import { hoyBogota } from "@/lib/fechas";
-import { operadoresConLlegada, validarDecisionAsignacion, type DecisionAsignacion } from "@/lib/solicitud-asignacion";
+import { motivoNoConfirmable, operadoresConLlegada, validarDecisionAsignacion, type DecisionAsignacion } from "@/lib/solicitud-asignacion";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProfile, requireRole } from "./auth";
@@ -113,16 +113,31 @@ export async function resolverSolicitudAsignacion(id: number, decision: Decision
   const centro = centroVisible(profile);
   if (centro && sol.vehicles?.centro_operativo !== centro.codigo) return { error: "Esa solicitud es de otro centro operativo." };
 
+  // Lo que la programación quiera avisar (servicios sin OVEM, tripulación sin actualizar…) llega a quien confirma.
+  let advertencias: string[] = [];
   if (decision === "CONFIRMAR") {
     const hoy = hoyBogota();
-    const { data: prev } = await admin.from("vehicle_operacion_diaria").select("user_id").eq("vehicle_id", sol.vehicle_id).eq("fecha", hoy);
+    const bloqueo = motivoNoConfirmable({ fechaSolicitud: sol.fecha, hoy, noAptoPendiente: await tieneNoAptoPendiente(sol.vehicle_id) });
+    if (bloqueo) return { error: bloqueo };
+    // Primero se completa el día desde los titulares: si no, guardar solo a quien llega dejaría por fuera a los titulares.
+    const { error: eDia } = await (createClient() as any).rpc("materializar_operacion_dia", { p_fecha: hoy });
+    if (eDia) {
+      console.error("[solicitud-asignacion] materializar_operacion_dia falló:", eDia.code, eDia.message);
+      return { error: "No se pudo preparar la programación de hoy. Inténtalo de nuevo." };
+    }
+    const { data: prev, error: ePrev } = await admin.from("vehicle_operacion_diaria").select("user_id").eq("vehicle_id", sol.vehicle_id).eq("fecha", hoy);
+    if (ePrev) return { error: "No se pudo leer la programación de hoy. Inténtalo de nuevo." };
     const operadores = operadoresConLlegada(((prev ?? []) as Fila[]).map((f) => f.user_id as string), sol.user_id);
     const texto = "Autoasignación pedida por el OVEM y confirmada por Regulación";
     const r = await cambiarOperadoresDelDia(sol.vehicle_id, hoy, operadores, texto, { razonCodigo: "AJUSTE_OPERATIVO", razonTexto: texto });
     if (r && "error" in r && r.error) return { error: r.error };
+    if (r && "success" in r) {
+      advertencias = [...(r.advertencias ?? [])];
+      if ((r.traslados ?? []).length > 0) advertencias.push("El conductor salió de otro vehículo: revisa en Servicios si hay que mover los servicios sin iniciar de ese vehículo.");
+    }
   }
 
-  const { error } = await admin
+  const { data: cerradas, error } = await admin
     .from("vehicle_solicitudes_asignacion")
     .update({
       estado: decision === "CONFIRMAR" ? "CONFIRMADA" : "RECHAZADA",
@@ -131,11 +146,12 @@ export async function resolverSolicitudAsignacion(id: number, decision: Decision
       nota_revision: nota?.trim() || null,
     })
     .eq("id", id)
-    .eq("estado", "PENDIENTE");
-  if (error) return { error: "No se pudo cerrar la solicitud. Revisa el estado en la programación." };
+    .eq("estado", "PENDIENTE")
+    .select("id");
+  if (error || !cerradas || cerradas.length === 0) return { error: "No se pudo cerrar la solicitud. Revisa el estado en la programación." };
 
   await auditar("MODIFICAR", "regulacion", sol.vehicle_id, `Solicitud de asignación ${decision === "CONFIRMAR" ? "confirmada" : "rechazada"} (${sol.vehicles?.placa ?? ""})`);
   revalidatePath("/regulacion");
   revalidatePath("/ovem");
-  return { success: true };
+  return { success: true, advertencias };
 }

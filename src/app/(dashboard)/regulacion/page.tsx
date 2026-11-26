@@ -124,7 +124,10 @@ export default async function RegulacionPage(
         </div>
       )}
 
-      <SolicitudesAsignacion solicitudes={solicitudesAsignacion} />
+      <SolicitudesAsignacion
+        solicitudes={solicitudesAsignacion}
+        puedeResolver={profile.role_codigo === "ADMIN" || profile.role_codigo === "REGULACION"}
+      />
 
       <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
 

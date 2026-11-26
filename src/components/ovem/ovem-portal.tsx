@@ -797,8 +797,13 @@ export function OvemPortal({
         </Card>
       )}
 
-      {viewerRole === "OVEM" && flow === "preoperacional" && vehicleId && selectedVehicle && !vehiculosDeHoy.includes(vehicleId) && (
-        <PedirAsignacionVehiculo vehicleId={vehicleId} placa={selectedVehicle.placa} solicitud={solicitudAsignacion} />
+      {viewerRole === "OVEM" && flow === "preoperacional" && vehicleId && selectedVehicle && (
+        <PedirAsignacionVehiculo
+          vehicleId={vehicleId}
+          placa={selectedVehicle.placa}
+          asignadoHoy={vehiculosDeHoy.includes(vehicleId)}
+          solicitud={solicitudAsignacion}
+        />
       )}
 
       {vehicleId && selectedVehicle && flow === "preoperacional" && (

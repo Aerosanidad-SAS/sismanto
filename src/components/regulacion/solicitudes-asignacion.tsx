@@ -12,22 +12,26 @@ const cuando = (iso: string) =>
   new Intl.DateTimeFormat("es-CO", { timeStyle: "short", hour12: false, timeZone: "America/Bogota" }).format(new Date(iso));
 
 /** OVEM que pidieron asignarse un vehículo hoy: Regulación confirma (entra a la programación) o rechaza con una nota. */
-export function SolicitudesAsignacion({ solicitudes }: { solicitudes: SolicitudAsignacion[] }) {
+export function SolicitudesAsignacion({ solicitudes, puedeResolver }: { solicitudes: SolicitudAsignacion[]; puedeResolver: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [rechazando, setRechazando] = useState<{ id: number; nota: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [avisos, setAvisos] = useState<string[]>([]);
 
-  if (solicitudes.length === 0) return null;
+  // Con avisos pendientes de leer la tarjeta se queda aunque ya no haya solicitudes.
+  if (solicitudes.length === 0 && avisos.length === 0) return null;
 
   const resolver = (id: number, decision: "CONFIRMAR" | "RECHAZAR", nota?: string) =>
     startTransition(async () => {
       setError(null);
+      setAvisos([]);
       const r = await resolverSolicitudAsignacion(id, decision, nota);
       if ("error" in r && r.error) {
         setError(r.error);
         return;
       }
+      setAvisos(("advertencias" in r && r.advertencias) || []);
       setRechazando(null);
       router.refresh();
     });
@@ -49,14 +53,16 @@ export function SolicitudesAsignacion({ solicitudes }: { solicitudes: SolicitudA
                   <span className="font-medium">{s.conductor}</span> quiere <span className="font-semibold">{s.placa}</span>
                   <span className="text-muted-foreground"> · {cuando(s.solicitadoAt)}</span>
                 </p>
-                <div className="flex gap-2">
-                  <Button size="sm" disabled={pending} onClick={() => resolver(s.id, "CONFIRMAR")}>
-                    Confirmar
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={pending} onClick={() => setRechazando({ id: s.id, nota: "" })}>
-                    Rechazar
-                  </Button>
-                </div>
+                {puedeResolver && (
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={pending} onClick={() => resolver(s.id, "CONFIRMAR")}>
+                      Confirmar
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={pending} onClick={() => setRechazando({ id: s.id, nota: "" })}>
+                      Rechazar
+                    </Button>
+                  </div>
+                )}
               </div>
               {rechazando?.id === s.id && (
                 <div className="space-y-2">
@@ -75,6 +81,13 @@ export function SolicitudesAsignacion({ solicitudes }: { solicitudes: SolicitudA
             </li>
           ))}
         </ul>
+        {avisos.length > 0 && (
+          <ul role="status" className="mt-2 space-y-1 rounded-md border border-warning/50 bg-warning-soft p-3 text-sm text-foreground">
+            {avisos.map((a) => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
+        )}
         {error && (
           <p role="alert" className="mt-2 text-sm text-destructive">
             {error}
