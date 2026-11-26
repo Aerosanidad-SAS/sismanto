@@ -9,6 +9,7 @@ import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
 import { ciudadDeCentro } from "@/lib/servicios-centro";
+import { ciudadRegistroAlCrear, ERROR_CIUDAD_REGISTRO } from "@/lib/servicio-ciudad-registro";
 import { condicionServiciosVisibles } from "@/lib/servicios-centro-servidor";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -567,6 +568,17 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   const { data: userData } = await supabase.auth.getUser();
   const profile = await getProfile();
   const fila = aFilaServicio(parsed.data);
+  // #387: la misma regla del formulario, para que no se salte llamando la acción a mano.
+  const ciudadRegistro = await ciudadRegistroAlCrear({
+    ciudad: fila.ciudad_registro,
+    vehicleId: fila.vehicle_id,
+    centroDelMovil: async (vehicleId) => {
+      const { data: movil } = await supabase.from("vehicles").select("centro_operativo").eq("id", vehicleId).maybeSingle<{ centro_operativo: string | null }>();
+      return movil?.centro_operativo;
+    },
+  });
+  if (!ciudadRegistro) return { error: ERROR_CIUDAD_REGISTRO };
+  fila.ciudad_registro = ciudadRegistro;
   // Bloqueo provisional (migración 113): no se despacha un servicio con un vehículo que tiene una solicitud de
   // NO APTO pendiente de aval.
   if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {

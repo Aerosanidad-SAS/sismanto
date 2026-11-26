@@ -708,6 +708,7 @@ export function ServiciosTabla({
         centroDelMovil: vehiculos.find((v) => v.id === values.vehicle_id)?.centro_operativo,
       });
       if (!ciudad) {
+        setCreadoMsg(null);
         setError(ERROR_CIUDAD_REGISTRO);
         enfocarCampo("ciudad_registro");
         return;
