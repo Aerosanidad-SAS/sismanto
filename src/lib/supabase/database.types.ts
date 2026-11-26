@@ -323,6 +323,53 @@ export type Database = {
           }
         ]
       }
+      vehicle_solicitudes_asignacion: {
+        Row: {
+          id: number
+          vehicle_id: string
+          user_id: string
+          rol_en_turno: 'OVEM'
+          fecha: string
+          estado: 'PENDIENTE' | 'CONFIRMADA' | 'RECHAZADA'
+          solicitado_at: string
+          revisado_por: string | null
+          revisado_at: string | null
+          nota_revision: string | null
+        }
+        Insert: {
+          id?: number
+          vehicle_id: string
+          user_id: string
+          rol_en_turno?: 'OVEM'
+          fecha: string
+          estado?: 'PENDIENTE' | 'CONFIRMADA' | 'RECHAZADA'
+          solicitado_at?: string
+          revisado_por?: string | null
+          revisado_at?: string | null
+          nota_revision?: string | null
+        }
+        Update: {
+          id?: number
+          vehicle_id?: string
+          user_id?: string
+          rol_en_turno?: 'OVEM'
+          fecha?: string
+          estado?: 'PENDIENTE' | 'CONFIRMADA' | 'RECHAZADA'
+          solicitado_at?: string
+          revisado_por?: string | null
+          revisado_at?: string | null
+          nota_revision?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_solicitudes_asignacion_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       vehicle_status_history: {
         Row: {
           id: number
