@@ -38,4 +38,23 @@ describe("erroresTanqueo", () => {
     assert.equal(erroresTanqueo({ ...BUENO, costo: "-5" }, HOY).costo, "El valor pagado no puede ser negativo.");
     assert.equal(erroresTanqueo({ ...BUENO, costo: "0" }, HOY).costo, undefined);
   });
+
+  it("un valor con separador de miles no se guarda truncado (150.000 no es 150)", () => {
+    for (const costo of ["150.000", "150,000", "1.500.000", "150 000", "12,5"]) {
+      assert.equal(erroresTanqueo({ ...BUENO, costo }, HOY).costo, "Escribe el valor pagado sin puntos ni comas, por ejemplo 150000.", costo);
+    }
+    assert.equal(erroresTanqueo({ ...BUENO, costo: "1e5" }, HOY).costo, "El valor pagado debe ser un número, o déjalo vacío.");
+    assert.equal(erroresTanqueo({ ...BUENO, costo: " 150000 " }, HOY).costo, undefined);
+  });
+
+  it("rechaza los formatos que antes frenaba el navegador en kilometraje y galones", () => {
+    for (const km of ["125,430", "1e5", "0x1F"]) {
+      assert.equal(erroresTanqueo({ ...BUENO, km }, HOY).km, "El kilometraje debe ser un número, por ejemplo 125000.", km);
+    }
+    assert.equal(erroresTanqueo({ ...BUENO, km: "125 430" }, HOY).km, undefined);
+    for (const galones of ["1e1", "0x1A", "12,3456", ".5"]) {
+      assert.equal(erroresTanqueo({ ...BUENO, galones }, HOY).galones, "Escribe los galones con máximo 3 decimales, por ejemplo 12,5.", galones);
+    }
+    assert.equal(erroresTanqueo({ ...BUENO, galones: "12.505" }, HOY).galones, undefined);
+  });
 });
