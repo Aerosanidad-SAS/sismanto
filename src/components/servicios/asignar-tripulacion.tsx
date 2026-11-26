@@ -51,7 +51,6 @@ export function AsignarTripulacion({ vehicleId, tipoServicio, faltan, candidatos
   const guardar = async () => {
     setGuardando(true);
     setError(null);
-    let reasignados = 0;
     const liberados: string[] = [];
     for (const rol of faltan) {
       const persona = candidatos[rol].find((p) => p.user_id === elegidos[rol]);
@@ -63,7 +62,6 @@ export function AsignarTripulacion({ vehicleId, tipoServicio, faltan, candidatos
         return;
       }
       if ("success" in r) {
-        reasignados += r.reasignados ?? 0;
         liberados.push(...(r.liberados ?? []));
       }
       onAsignada(rol, persona);
@@ -71,10 +69,10 @@ export function AsignarTripulacion({ vehicleId, tipoServicio, faltan, candidatos
     setGuardando(false);
     setAbierto(false);
     setElegidos({});
-    // Se avisa lo que la asignación mueve por detrás, para que no sea una sorpresa.
+    // Se avisa lo que la asignación deja pendiente, para que no sea una sorpresa.
     setConfirmacion(
       "Tripulación asignada." +
-        (reasignados > 0 ? ` ${reasignados} servicio(s) programado(s) de este móvil pasaron a esta tripulación.` : "") +
+        " Los servicios programados de este móvil quedan por confirmar en la sala de control." +
         (liberados.length > 0 ? ` Salió de: ${[...new Set(liberados)].join(", ")}.` : "")
     );
   };

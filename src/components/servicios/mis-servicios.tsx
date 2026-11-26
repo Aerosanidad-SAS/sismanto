@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { marcarPasoServicio, cambiarEtapaServicio, devolverPasoServicio, getDetalleServicioTripulacion } from "@/app/api/actions/servicios-medicos";
 import { textoParada } from "@/lib/servicio-detalle";
 import { estadoOperativo, pasoADevolver, pasosPorTipo, type CampoPasoServicio } from "@/lib/estado-servicio";
+import { porConfirmar } from "@/lib/servicios-confirmacion";
+import { hoyBogota } from "@/lib/fechas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +26,9 @@ interface ServicioAsignado {
   direccion_destino: string | null;
   /** Cuándo está programado el servicio (instante ISO); puede faltar en servicios sin hora. */
   fecha_hora_programacion?: string | null;
+  vehicle_id?: string | null;
+  /** Cuándo confirmó Regulación la asignación (#383); null = por confirmar. */
+  confirmado_at?: string | null;
   fecha_hora_inicio_desplazamiento: string | null;
   fecha_hora_llegada_origen: string | null;
   fecha_hora_salida_origen: string | null;
@@ -293,6 +298,11 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
               >
                 <span className="min-w-0">
                   <CardTitle className="text-base">{s.tipo_servicio}</CardTitle>
+                  {porConfirmar(s, hoyBogota()) && (
+                    <span className="mt-1 inline-block rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900">
+                      Por confirmar
+                    </span>
+                  )}
                   {cuando && (
                     <span suppressHydrationWarning className="mt-1 flex items-center gap-1 text-base font-semibold text-foreground">
                       <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
