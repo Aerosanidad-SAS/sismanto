@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { MedicalServiceFormData } from "@/lib/validations";
 import { medicalServiceSchema, ETAPAS_SERVICIO } from "@/lib/validations";
-import { CAMPOS_PASO_SERVICIO } from "@/lib/estado-servicio";
+import { CAMPOS_PASO_SERVICIO, pasoADevolver } from "@/lib/estado-servicio";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
@@ -812,6 +812,60 @@ export async function marcarPasoServicio(
     "servicios",
     data[0].id,
     detalleConAtribucion(rol, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`)
+  );
+  revalidatePath("/servicios");
+  revalidatePath("/ovem");
+  return { success: true };
+}
+
+/**
+ * «Volver al paso anterior» (OVEM/tripulación): borra la hora del último hito marcado por error y, si ese hito había
+ * abierto el curso, devuelve la etapa a PROGRAMADO. El motivo es obligatorio y queda en la bitácora con quién lo hizo
+ * y qué hora se borró. Mismo guardado optimista que marcarPasoServicio; RLS limita el acceso a la tripulación.
+ */
+export async function devolverPasoServicio(id: number, etapaActual: string, motivo: string) {
+  const idParsed = z.number().int().positive().safeParse(id);
+  if (!idParsed.success) return { error: "ID inválido" };
+  const razon = motivo?.trim() ?? "";
+  if (razon.length < 5) return { error: "Escribe el motivo (mínimo 5 letras): queda en la bitácora." };
+
+  const supabase = createClient();
+  const { data: fila, error: errLectura } = await supabase
+    .from("medical_services")
+    .select(["etapa", "tipo_servicio", ...CAMPOS_PASO_SERVICIO].join(", "))
+    .eq("id", idParsed.data)
+    .maybeSingle<Record<string, string | null> & { etapa: string; tipo_servicio: string }>();
+  if (errLectura) return { error: errLectura.message };
+  if (!fila || fila.etapa !== etapaActual) {
+    return { error: "El servicio cambió mientras lo mirabas. Actualiza la pantalla." };
+  }
+  const deshacer = pasoADevolver(fila);
+  if (!deshacer) return { error: "No hay un paso que devolver." };
+
+  const ahora = new Date().toISOString();
+  const update: Record<string, string | null> = { updated_at: ahora };
+  if (deshacer.campo) update[deshacer.campo] = null;
+  if (deshacer.etapaNueva) update.etapa = deshacer.etapaNueva;
+
+  const { data, error } = await supabase
+    .from("medical_services")
+    .update(update)
+    .eq("id", idParsed.data)
+    .eq("etapa", etapaActual)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "El servicio cambió mientras lo mirabas. Actualiza la pantalla." };
+
+  const rol = (await getProfile())?.role_codigo;
+  const borrado = deshacer.campo ? `${deshacer.hito} (${fila[deshacer.campo] ?? "sin hora"})` : "ninguno";
+  await auditar(
+    "MODIFICAR",
+    "servicios",
+    data[0].id,
+    detalleConAtribucion(
+      rol,
+      `Volvió al paso anterior: borró ${borrado}${deshacer.etapaNueva ? `, etapa ${etapaActual} → ${deshacer.etapaNueva}` : ""}. Motivo: ${razon}`
+    )
   );
   revalidatePath("/servicios");
   revalidatePath("/ovem");
