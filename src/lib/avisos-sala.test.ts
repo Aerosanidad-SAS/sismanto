@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { detectarEventos, estadoParaAvisos, sonidoMasUrgente, type EstadoParaAvisos } from "./avisos-sala";
+import { apilarAvisos, detectarEventos, estadoParaAvisos, sonidoMasUrgente, type EstadoParaAvisos } from "./avisos-sala";
 
 const hora = (iso: string | null) => (iso ? "08:00" : "—");
 const e = (etiqueta: string, clase: EstadoParaAvisos["clase"], placa: string | null = "DRU893", hitoAt: string | null = "2026-11-09T13:00:00Z"): EstadoParaAvisos => ({
@@ -65,5 +65,18 @@ describe("estadoParaAvisos", () => {
     assert.equal(r.clase, "encurso");
     assert.equal(r.placa, "KLM218");
     assert.equal(r.hitoAt, "2026-11-09T12:20:00Z");
+  });
+});
+
+describe("apilarAvisos", () => {
+  const a = (id: string, titulo = id) => ({ id, titulo });
+
+  it("un aviso con el mismo id reemplaza al anterior en vez de apilarse", () => {
+    const r = apilarAvisos([a("estancados", "4 servicios"), a("otro")], [a("estancados", "9 servicios")]);
+    assert.deepEqual(r, [a("estancados", "9 servicios"), a("otro")]);
+  });
+
+  it("pone los nuevos arriba y respeta el tope", () => {
+    assert.deepEqual(apilarAvisos([a("1"), a("2")], [a("3")], 2), [a("3"), a("1")]);
   });
 });
