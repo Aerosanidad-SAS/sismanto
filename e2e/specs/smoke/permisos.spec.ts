@@ -9,8 +9,8 @@ const rutaActual = (url: string) => new URL(url).pathname;
 const PROHIBIDAS: Partial<Record<RolClave, string[]>> = {
   REGULACION_MDE: ["/ovem", "/admin/usuarios", "/gerencial", "/configuracion"],
   REGULACION_BOG: ["/ovem", "/admin/usuarios", "/gerencial", "/configuracion"],
-  OVEM_MDE: ["/servicios", "/regulacion", "/admin/usuarios", "/pacientes", "/vehiculos"],
-  OVEM_BOG: ["/servicios", "/regulacion", "/admin/usuarios", "/pacientes", "/vehiculos"],
+  OVEM_MDE: ["/servicios", "/regulacion", "/admin/usuarios", "/pacientes", "/vehiculos", "/clientes", "/proveedores", "/novedades"],
+  OVEM_BOG: ["/servicios", "/regulacion", "/admin/usuarios", "/pacientes", "/vehiculos", "/clientes", "/proveedores", "/novedades"],
   MEDICO: ["/admin/usuarios"],
   AUXILIAR: ["/admin/usuarios"],
   MANTENIMIENTO: ["/admin/usuarios"],

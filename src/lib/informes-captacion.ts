@@ -26,6 +26,17 @@ export interface FilaInforme {
   aerolinea: string | null;
 }
 
+/**
+ * Una línea de un registro «solo procedimiento» (tabla captacion_procedimientos, migración 144): ambulancias externas
+ * y otros procedimientos sin paciente. `lote` une las líneas de un mismo registro. Nunca cuentan como pacientes.
+ */
+export interface FilaProcedimientoExterno {
+  lote: string;
+  procedimiento: string;
+  cantidad: number;
+  emergencia_tipo: string | null;
+}
+
 /** Hombres / Mujeres / Total. T cuenta también a quien no tiene sexo registrado. */
 export interface HMT {
   H: number;
@@ -55,9 +66,9 @@ function sumar(tabla: TablaHMT, categoria: string, sexo: string | null) {
   else if (sexo === "F") c.M++;
 }
 
-function contar(tabla: TablaCantidad, categoria: string | null) {
+function contar(tabla: TablaCantidad, categoria: string | null, cantidad = 1) {
   const clave = (categoria ?? "").trim();
-  if (clave in tabla) tabla[clave]++;
+  if (clave in tabla) tabla[clave] += cantidad;
 }
 
 const texto = (v: string | null) => (v ?? "").trim().toUpperCase();
@@ -122,7 +133,11 @@ export interface InformeAcm {
   emergencias: TablaCantidad;
 }
 
-export function calcularInformeAcm(filas: FilaInforme[]): InformeAcm {
+/**
+ * `externos` (opcional): los registros «solo procedimiento». No son pacientes: solo suman en `emergencias`, una vez por
+ * registro (lote) y tipo de emergencia, sin importar cuántas líneas ni qué cantidad tenga.
+ */
+export function calcularInformeAcm(filas: FilaInforme[], externos: readonly FilaProcedimientoExterno[] = []): InformeAcm {
   const r: InformeAcm = {
     totalPacientes: filas.length,
     tipoAtencion: hmt(Object.values(TIPO_ATENCION_ACM)),
@@ -163,6 +178,14 @@ export function calcularInformeAcm(filas: FilaInforme[]): InformeAcm {
     contar(r.otraPatologia, f.otra_patologia);
     contar(r.postOperatorio, f.post_operatorio);
     contar(r.emergencias, f.emergencia_tipo);
+  }
+
+  const lotesContados = new Set<string>();
+  for (const e of externos) {
+    const clave = `${e.lote}|${texto(e.emergencia_tipo)}`;
+    if (lotesContados.has(clave)) continue;
+    lotesContados.add(clave);
+    contar(r.emergencias, e.emergencia_tipo);
   }
   return r;
 }
@@ -213,12 +236,18 @@ export interface InformeAerocivil {
   curaciones: number;
   sillaRuedas: number;
   ambulancia: number;
+  /** Parte de `ambulancia` que viene de registros «solo procedimiento» (sin paciente); el informe lo avisa en una nota. */
+  ambulanciaExternaSinPaciente: number;
   vueloComercial: HMT;
   vueloAmbulancia: HMT;
   grupoEtareo: TablaHMT;
 }
 
-export function calcularInformeAerocivil(filas: FilaInforme[]): InformeAerocivil {
+/**
+ * `externos` (opcional): los registros «solo procedimiento». No son pacientes: solo suman su cantidad en «Ambulancia»
+ * (los mismos procedimientos de ambulancia que cuentan las captaciones).
+ */
+export function calcularInformeAerocivil(filas: FilaInforme[], externos: readonly FilaProcedimientoExterno[] = []): InformeAerocivil {
   const r: InformeAerocivil = {
     totalPacientes: filas.length,
     totalServicio: 0,
@@ -237,6 +266,7 @@ export function calcularInformeAerocivil(filas: FilaInforme[]): InformeAerocivil
     curaciones: 0,
     sillaRuedas: 0,
     ambulancia: 0,
+    ambulanciaExternaSinPaciente: 0,
     vueloComercial: { H: 0, M: 0, T: 0 },
     vueloAmbulancia: { H: 0, M: 0, T: 0 },
     grupoEtareo: hmt(AEROCIVIL_GRUPO_ETAREO),
@@ -280,6 +310,11 @@ export function calcularInformeAerocivil(filas: FilaInforme[]): InformeAerocivil
     const edad = edadAlAtender(f);
     if (edad !== null) sumar(r.grupoEtareo, grupoEtareoAerocivil(edad), f.sexo);
   }
+
+  for (const e of externos) {
+    if (PROC_AMBULANCIA.includes(e.procedimiento)) r.ambulanciaExternaSinPaciente += e.cantidad;
+  }
+  r.ambulancia += r.ambulanciaExternaSinPaciente;
   return r;
 }
 
@@ -315,9 +350,11 @@ export interface InformePme {
   total: number;
 }
 
-export function calcularInformePme(filas: FilaInforme[]): InformePme {
+/** `externos` (opcional): los registros «solo procedimiento» suman su cantidad (cada línea cuenta × cantidad). */
+export function calcularInformePme(filas: FilaInforme[], externos: readonly FilaProcedimientoExterno[] = []): InformePme {
   const conteo = cantidades(PME_PROCEDIMIENTOS);
   for (const f of filas) for (const p of f.procedimientos ?? []) contar(conteo, p);
+  for (const e of externos) contar(conteo, e.procedimiento, e.cantidad);
   return { conteo, total: Object.values(conteo).reduce((a, b) => a + b, 0) };
 }
 

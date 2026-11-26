@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { getProfile } from "@/app/api/actions/auth";
+import { requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { getDirectorioProveedores } from "@/app/api/actions/directorios";
 import { PrestadoresDirectorio } from "@/components/proveedores/prestadores-directorio";
 import { puedeEditarPrestadores } from "@/lib/prestadores";
@@ -7,7 +8,8 @@ import { puedeEditarPrestadores } from "@/lib/prestadores";
 export const metadata = { title: "Proveedores" };
 
 export default async function ProveedoresPage() {
-  const [proveedores, profile] = await Promise.all([getDirectorioProveedores(), getProfile()]);
+  const profile = await requireRole(rolesDeRuta("/proveedores"));
+  const proveedores = await getDirectorioProveedores();
   return (
     <div className="space-y-8">
       <div>
