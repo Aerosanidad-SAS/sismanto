@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRightLeft, Clock, FileCheck, Lock, MapPin, MoreHorizontal, Pencil, Play, Trash2, UserPlus } from "lucide-react";
+import { HelpTrigger } from "@/components/ui/help-trigger";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -48,7 +49,8 @@ import {
   OPCIONES_CIUDAD_REGISTRO,
   ubicacionPacientePorCiudadRegistro,
 } from "@/lib/servicios-lista";
-import { ETIQUETA_ROL, rolesFaltantes, rolesRequeridosPorTipo } from "@/lib/servicio-detalle";
+import { tripulacionPorCompletar, type RolTripulacion } from "@/lib/servicio-detalle";
+import { AsignarTripulacion } from "./asignar-tripulacion";
 import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
@@ -149,6 +151,8 @@ const ETAPAS_DESTINO = (etapaActual: string): EtapaServicio[] =>
 // es el mismo TAB SIMPLE, variante de captura duplicada) — pero sigue
 // existiendo en PERFIL_FORMULARIO_SERVICIO (validations.ts) para que los
 // servicios históricos que ya tienen ese valor sigan abriendo bien.
+// Lo mismo con "ENFERMERIA DOMICILIARIA" (Daniel, 2026-11-23: no existe; la domiciliaria es médico + conductor):
+// aparece en datos históricos de SISRES, así que se conserva en PERFIL_FORMULARIO_SERVICIO pero ya no se ofrece.
 export const TIPOS_SERVICIO = [
   "MEDICINA DOMICILIARIA",
   "TAB SIMPLE",
@@ -156,11 +160,10 @@ export const TIPOS_SERVICIO = [
   "TAM SIMPLE",
   "TAM DOBLE",
   "TELEMEDICINA",
-  "ENFERMERIA DOMICILIARIA",
   "TRASLADO AEREO",
 ];
 
-// SISRES no ofrece ENFERMERIA DOMICILIARIA/TELEMEDICINA/TRASLADO AEREO al
+// SISRES no ofrece TELEMEDICINA/TRASLADO AEREO al
 // Regulador (cargo=4) en el formulario de registro — solo al crear
 // (registroServicios.php, $esRegulador). No se aplica al editar un servicio
 // ya existente (editarServicio.php es otro flujo, fuera de este alcance).
@@ -224,6 +227,9 @@ interface ServiciosTablaProps {
   puedeEditar: boolean;
   /** Médicos activos disponibles para asignar directo a un servicio (sin vehículo/OVEM) — típico de Medicina Domiciliaria con prestador externo. */
   medicosDisponibles: PersonaTripulacion[];
+  /** OVEM y auxiliares activos del centro: para armar la tripulación de un móvil desde el formulario («Asignar tripulación»). */
+  ovemsDisponibles?: PersonaTripulacion[];
+  auxiliaresDisponibles?: PersonaTripulacion[];
   /** Reguladores activos — reemplaza el texto libre de "usuario que recibe/despacha" por un select real (SISRES: usuarios cargo=4). */
   reguladoresDisponibles: PersonaTripulacion[];
   /** Nombre de quien ve el formulario — precarga "recibe/despacha" igual que la sesión en SISRES. */
@@ -271,6 +277,8 @@ export function ServiciosTabla({
   clientes,
   puedeEditar,
   medicosDisponibles,
+  ovemsDisponibles = [],
+  auxiliaresDisponibles = [],
   reguladoresDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
@@ -431,9 +439,21 @@ export function ServiciosTabla({
 
   // Al elegir móvil, autocompletar la tripulación ya armada para ese
   // vehículo (Regulación → pantalla de Flota) — no hace falta reescribirla acá.
+  // Lo que se asignó desde «Asignar tripulación» en esta sesión del formulario: se suma a lo que trae el servidor, que se
+  // actualiza solo después (revalidación) pero no a tiempo para el aviso.
+  const [asignadasAhora, setAsignadasAhora] = useState<Record<string, { ovem?: PersonaTripulacion; medico?: PersonaTripulacion; auxiliar?: PersonaTripulacion }>>({});
+  const tripulacionDe = (vehicleId: string) => ({ ...tripulacionPorVehiculo[vehicleId], ...asignadasAhora[vehicleId] });
+
+  const alAsignarTripulacion = (vehicleId: string, rol: RolTripulacion, persona: PersonaTripulacion) => {
+    const clave = rol === "OVEM" ? "ovem" : rol === "MEDICO" ? "medico" : "auxiliar";
+    setAsignadasAhora((previo) => ({ ...previo, [vehicleId]: { ...previo[vehicleId], [clave]: persona } }));
+    // La persona queda también en el servicio que se está registrando.
+    setValue(rol === "OVEM" ? "ovem_user_id" : rol === "MEDICO" ? "medico_user_id" : "auxiliar_user_id", persona.user_id);
+  };
+
   const handleVehiculo = (vehicleId: string) => {
     setValue("vehicle_id", vehicleId === "__none__" ? "" : vehicleId);
-    const tripulacion = tripulacionPorVehiculo[vehicleId];
+    const tripulacion = tripulacionDe(vehicleId);
     setValue("ovem_user_id", tripulacion?.ovem?.user_id ?? "");
     setValue("auxiliar_user_id", tripulacion?.auxiliar?.user_id ?? "");
     // El médico de la tripulación del vehículo solo aplica al perfil de
@@ -442,9 +462,21 @@ export function ServiciosTabla({
     if (perfil === "TRASLADO") setValue("medico_user_id", tripulacion?.medico?.user_id ?? "");
   };
 
-  const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionPorVehiculo[vehiculoSeleccionado] : undefined;
-  // TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico. Solo avisa: un servicio no debe quedar sin poder guardarse por esto.
-  const tripulacionFaltante = rolesFaltantes(tipoSeleccionado, tripulacionVehiculoActual);
+  const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionDe(vehiculoSeleccionado) : undefined;
+  // OVEM siempre; TAB suma auxiliar; TAM auxiliar y médico; domiciliaria médico. Solo avisa: un servicio no debe quedar sin
+  // poder guardarse por esto. En domiciliaria el médico también se elige aparte (prestador): con uno elegido no falta.
+  const tripulacionFaltante = tripulacionPorCompletar(tipoSeleccionado, {
+    ...tripulacionVehiculoActual,
+    ...(perfil === "MEDICINA_DOMICILIARIA" && medicoIndependienteSeleccionado ? { medico: medicoIndependienteSeleccionado } : {}),
+  });
+  const puedeAsignarTripulacion = ["ADMIN", "ANALISTA", "REGULACION"].includes(viewerRole ?? "") && !soloLecturaLogistica;
+  const tripulacionDeHoyTexto = [
+    nombrePersona(tripulacionVehiculoActual?.ovem) && `OVEM ${nombrePersona(tripulacionVehiculoActual?.ovem)}`,
+    perfil === "TRASLADO" && nombrePersona(tripulacionVehiculoActual?.medico) && `Médico ${nombrePersona(tripulacionVehiculoActual?.medico)}`,
+    nombrePersona(tripulacionVehiculoActual?.auxiliar) && `Auxiliar ${nombrePersona(tripulacionVehiculoActual?.auxiliar)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   // Los filtros se aplican en el servidor (ServiciosFiltros): la tabla muestra la página tal cual.
   const filtrados = servicios;
@@ -471,8 +503,10 @@ export function ServiciosTabla({
     // campos coherentes — si no se encuentra, se deja vacío en vez de un
     // valor huérfano que el candado departamento→ciudad rechazaría.
     const ubicacionDefault = resolverCiudad(ciudadDefault);
+    // La programación nace con la fecha y hora de ahora (Colombia): se cambia si hace falta, y si no, se deja como está.
     reset({
       tipo_servicio: "",
+      fecha_hora_programacion: aTextoLocalColombia(new Date().toISOString()),
       // Sin estos dos, «Guardar y crear otro» dejaba el paciente (y su nombre) del servicio anterior.
       nombre_completo: "",
       patient_id: undefined,
@@ -920,7 +954,10 @@ export function ServiciosTabla({
               <h3 className="text-sm font-semibold text-muted-foreground">Paciente</h3>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1 sm:col-span-1">
-                  <Label id="buscar_paciente_label">Buscar paciente</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label id="buscar_paciente_label">Buscar paciente</Label>
+                    <HelpTrigger hover text="Por cédula o nombre. Si no aparece, créalo con «Crear paciente nuevo» para que quede su ficha." />
+                  </div>
                   <div role="group" aria-labelledby="buscar_paciente_label">
                     <PatientSearchCombobox
                       valueLabel={cedulaBusqueda || undefined}
@@ -928,9 +965,6 @@ export function ServiciosTabla({
                       disabled={soloLecturaLogistica}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Por cédula o nombre — si no aparece, créalo aquí abajo para que quede su ficha.
-                  </p>
                   <Button
                     type="button"
                     variant="outline"
@@ -987,27 +1021,19 @@ export function ServiciosTabla({
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">Verde: libre · Rojo: con un servicio en curso.</p>
+                    {vehiculoSeleccionado && tripulacionDeHoyTexto && (
+                      <p className="text-xs text-muted-foreground">Tripulación de hoy: {tripulacionDeHoyTexto}</p>
+                    )}
                     {vehiculoSeleccionado && (
-                      <p className="text-xs text-muted-foreground">
-                        Tripulación de hoy: {[
-                          nombrePersona(tripulacionVehiculoActual?.ovem) && `OVEM ${nombrePersona(tripulacionVehiculoActual?.ovem)}`,
-                          perfil === "TRASLADO" && nombrePersona(tripulacionVehiculoActual?.medico) && `Médico ${nombrePersona(tripulacionVehiculoActual?.medico)}`,
-                          nombrePersona(tripulacionVehiculoActual?.auxiliar) && `Auxiliar ${nombrePersona(tripulacionVehiculoActual?.auxiliar)}`,
-                        ].filter(Boolean).join(" · ") || "sin nadie asignado — armar en Regulación"}
-                      </p>
-                    )}
-                    {vehiculoSeleccionado && !tripulacionVehiculoActual?.ovem && (
-                      <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
-                        Este móvil no tiene OVEM armado hoy: el servicio no le aparecerá a ningún conductor hasta que Regulación arme la
-                        tripulación (se le asigna solo al armarla).
-                      </p>
-                    )}
-                    {vehiculoSeleccionado && tripulacionFaltante.filter((r) => r !== "OVEM").length > 0 && (
-                      <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
-                        {tipoSeleccionado} lleva {rolesRequeridosPorTipo(tipoSeleccionado).map((r) => ETIQUETA_ROL[r]).join(", ")}: falta{" "}
-                        {tripulacionFaltante.filter((r) => r !== "OVEM").map((r) => ETIQUETA_ROL[r]).join(" y ")} en este móvil. Puedes guardar;
-                        la persona queda en el servicio cuando Regulación la arme en el móvil.
-                      </p>
+                      <AsignarTripulacion
+                        key={vehiculoSeleccionado}
+                        vehicleId={vehiculoSeleccionado}
+                        tipoServicio={tipoSeleccionado ?? ""}
+                        faltan={tripulacionFaltante}
+                        candidatos={{ OVEM: ovemsDisponibles, AUXILIAR_ENFERMERIA: auxiliaresDisponibles, MEDICO: medicosDisponibles }}
+                        puedeAsignar={puedeAsignarTripulacion}
+                        onAsignada={(rol, persona) => alAsignarTripulacion(vehiculoSeleccionado, rol, persona)}
+                      />
                     )}
                   </div>
                 )}

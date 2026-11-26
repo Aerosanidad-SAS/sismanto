@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { esDia } from '@/lib/fechas';
+import { HALLAZGOS_CRITICOS } from '@/lib/hallazgos-criticos';
 import { validarObligatoriosSiniestro } from '@/lib/siniestro-datos';
 import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 import { TIPOS_MANTENIMIENTO_BIOMEDICO } from '@/lib/biomedico-fechas';
@@ -41,13 +42,22 @@ export const maintenanceSchema = z.object({
 export type MaintenanceFormData = z.infer<typeof maintenanceSchema>;
 
 // Schema de validación para incidente/novedad (severidad opcional si el reporter no la define; servidor usa MEDIA)
-export const incidentSchema = z.object({
-  vehicleId: z.string().uuid('ID de vehículo inválido'),
-  descripcion: z.string().min(10, 'Mínimo 10 caracteres').max(2000, 'Máximo 2000 caracteres'),
-  severidad: z.enum(['BAJA', 'MEDIA', 'ALTA']).optional(),
-  reportadoPor: z.string().min(3, 'Mínimo 3 caracteres'),
-  afectaOperatividad: z.boolean().default(false),
-});
+export const incidentSchema = z
+  .object({
+    vehicleId: z.string().uuid('ID de vehículo inválido'),
+    descripcion: z.string().max(2000, 'Máximo 2000 caracteres'),
+    severidad: z.enum(['BAJA', 'MEDIA', 'ALTA']).optional(),
+    reportadoPor: z.string().min(3, 'Mínimo 3 caracteres'),
+    afectaOperatividad: z.boolean().default(false),
+    // Hallazgo de la lista cerrada: lo que vuelve crítica a la novedad. No se deduce del texto de la descripción.
+    hallazgoCritico: z.enum(HALLAZGOS_CRITICOS).optional(),
+  })
+  .superRefine((v, ctx) => {
+    // Con un hallazgo crítico basta con el hallazgo: el detalle es opcional (en una emergencia no se bloquea el reporte).
+    if (!v.hallazgoCritico && v.descripcion.length < 10) {
+      ctx.addIssue({ code: z.ZodIssueCode.too_small, minimum: 10, type: 'string', inclusive: true, message: 'Mínimo 10 caracteres', path: ['descripcion'] });
+    }
+  });
 
 export type IncidentFormData = z.infer<typeof incidentSchema>;
 
@@ -808,8 +818,8 @@ export type MedicalServiceFormData = z.input<typeof medicalServiceSchema>;
 
 // Perfiles de formulario por tipo de servicio (Regulación, QA 2026-07-22):
 // cada tipo de servicio real muestra un subconjunto de secciones/campos.
-// Enfermería Domiciliaria comparte perfil con Medicina Domiciliaria por
-// similitud (visita a domicilio) — a confirmar con un usuario real.
+// Enfermería Domiciliaria ya no existe como servicio (Daniel, 2026-11-23): se conserva aquí solo para que los
+// servicios históricos de SISRES que traen ese valor abran con el perfil de Medicina Domiciliaria. No se ofrece al crear.
 export const PERFIL_FORMULARIO_SERVICIO = {
   MEDICINA_DOMICILIARIA: ["MEDICINA DOMICILIARIA", "ENFERMERIA DOMICILIARIA"],
   TRASLADO: ["TAB SIMPLE", "TAB DOBLE", "TAB SENCILLO", "TAM SIMPLE", "TAM DOBLE", "TRASLADO AEREO"],

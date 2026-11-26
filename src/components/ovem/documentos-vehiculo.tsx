@@ -85,9 +85,12 @@ export function DocumentosVehiculo({
         {onConfirmar && (
           <Button
             type="button"
-            variant={confirmado ? "default" : "outline"}
+            variant="outline"
             aria-pressed={Boolean(confirmado)}
-            className="min-h-12 w-full gap-2 text-base"
+            className={cn(
+              "min-h-12 w-full gap-2 text-base",
+              confirmado && "border-success bg-success text-success-foreground hover:bg-success/90 hover:text-success-foreground"
+            )}
             onClick={() => onConfirmar(!confirmado)}
           >
             {confirmado && <Check className="h-5 w-5" aria-hidden="true" />}
