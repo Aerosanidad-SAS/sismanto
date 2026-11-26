@@ -47,7 +47,7 @@ CREATE POLICY solicitud_asignacion_insert ON vehicle_solicitudes_asignacion
     AND estado = 'PENDIENTE'
     -- Solo para hoy y sin datos de revisión: por REST directo no se puede dejar una solicitud «ya revisada» ni de otro
     -- día (quedaría invisible en las pantallas y ocuparía el único cupo pendiente de la persona).
-    AND fecha = (now() AT TIME ZONE 'America/Bogota')::date
+    AND fecha = public.hoy_bogota()
     AND revisado_por IS NULL
     AND revisado_at IS NULL
     AND nota_revision IS NULL
