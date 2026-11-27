@@ -1,5 +1,5 @@
 ---
-type: feature
+type: feat
 area: servicios
 roles: OVEM, MEDICO, AUXILIAR
 ---

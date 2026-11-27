@@ -454,6 +454,8 @@ export type Database = {
           invoice_job_id: string | null
           created_at: string
           created_by: string | null
+          soporte_path: string | null
+          requiere_soporte: boolean
         }
         Insert: {
           id_manto?: number
@@ -473,6 +475,8 @@ export type Database = {
           invoice_job_id?: string | null
           created_at?: string
           created_by?: string | null
+          soporte_path?: string | null
+          requiere_soporte?: boolean
         }
         Update: {
           id_manto?: number
@@ -492,6 +496,8 @@ export type Database = {
           invoice_job_id?: string | null
           created_at?: string
           created_by?: string | null
+          soporte_path?: string | null
+          requiere_soporte?: boolean
         }
         Relationships: [
           {
