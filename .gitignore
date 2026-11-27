@@ -49,4 +49,5 @@ ui-ux-pro-max-skill/
 # E2E (Playwright)
 e2e/.auth/
 playwright-report/
+e2e-results/
 test-results/

@@ -1,6 +1,6 @@
 "use client";
 
-import { HALLAZGOS_CRITICOS, PREFIJO_CRITICO } from "@/lib/hallazgos-criticos";
+import { HALLAZGOS_CRITICOS, type HallazgoCritico } from "@/lib/hallazgos-criticos";
 import { crearSolicitudNoApto } from "@/app/api/actions/solicitudes-no-apto";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -63,17 +63,19 @@ export function IncidentForm({
   });
 
   const severidad = watch("severidad");
-  const [critico, setCritico] = useState<string | null>(null);
+  const [critico, setCritico] = useState<HallazgoCritico | null>(null);
   /** Pide que el vehículo quede NO APTO: no lo cambia, abre una solicitud que avala Coordinación o el administrador. */
   const [pedirNoApto, setPedirNoApto] = useState(false);
 
   // Un hallazgo crítico marca la novedad como severa y que impide operar: el trigger de la base pasa el vehículo a FDS.
-  const elegirCritico = (hallazgo: string | null) => {
+  const elegirCritico = (hallazgo: HallazgoCritico | null) => {
     setCritico(hallazgo);
     setConfirmarCritico(false);
     setValue("afectaOperatividad", hallazgo !== null);
     setValue("severidad", hallazgo !== null ? "ALTA" : "MEDIA");
-    setValue("descripcion", hallazgo !== null ? `${PREFIJO_CRITICO}${hallazgo}. ` : "");
+    // El hallazgo viaja como dato propio: el servidor arma «CRÍTICO: …» y editar el texto no cambia que sea crítico.
+    setValue("hallazgoCritico", hallazgo ?? undefined);
+    setValue("descripcion", "");
   };
 
   const onSubmit = async (data: IncidentFormData) => {
@@ -154,13 +156,13 @@ export function IncidentForm({
       )}
 
       <div>
-        <Label htmlFor="descripcion">Descripción *</Label>
+        <Label htmlFor="descripcion">{critico !== null ? "Detalle (opcional)" : "Descripción *"}</Label>
         <Textarea
           id="descripcion"
           {...register("descripcion")}
           aria-invalid={errors.descripcion ? "true" : undefined}
           aria-describedby={errors.descripcion ? `${uid}-descripcion-error` : undefined}
-          placeholder="Describe la novedad o incidente. Si te la reportó otra persona, escribe quién."
+          placeholder={critico !== null ? `Hallazgo: ${critico}. Agrega lo que observaste, si quieres.` : "Describe la novedad o incidente. Si te la reportó otra persona, escribe quién."}
           className="mt-1"
         />
         {errors.descripcion && (

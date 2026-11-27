@@ -2,12 +2,15 @@
 
 import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
-import { marcarPasoServicio, cambiarEtapaServicio, getDetalleServicioTripulacion } from "@/app/api/actions/servicios-medicos";
+import { marcarPasoServicio, cambiarEtapaServicio, devolverPasoServicio, getDetalleServicioTripulacion } from "@/app/api/actions/servicios-medicos";
 import { textoParada } from "@/lib/servicio-detalle";
-import { estadoOperativo, pasosPorTipo, type CampoPasoServicio } from "@/lib/estado-servicio";
+import { estadoOperativo, pasoADevolver, pasosPorTipo, type CampoPasoServicio } from "@/lib/estado-servicio";
+import { porConfirmar } from "@/lib/servicios-confirmacion";
+import { hoyBogota } from "@/lib/fechas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, CheckCircle2, Circle, Clock, Navigation, ChevronDown, ChevronUp } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Undo2, MapPin, CheckCircle2, Circle, Clock, Navigation, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ServicioAsignado {
@@ -23,6 +26,9 @@ interface ServicioAsignado {
   direccion_destino: string | null;
   /** Cuándo está programado el servicio (instante ISO); puede faltar en servicios sin hora. */
   fecha_hora_programacion?: string | null;
+  vehicle_id?: string | null;
+  /** Cuándo confirmó Regulación la asignación (#383); null = por confirmar. */
+  confirmado_at?: string | null;
   fecha_hora_inicio_desplazamiento: string | null;
   fecha_hora_llegada_origen: string | null;
   fecha_hora_salida_origen: string | null;
@@ -147,6 +153,16 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
       setLoadingId(null);
     }
   };
+
+  /** Servicio cuyo «volver al paso anterior» está abierto, con el motivo que se está escribiendo. */
+  const [devolviendo, setDevolviendo] = useState<{ servicioId: number; motivo: string } | null>(null);
+
+  const devolverPaso = (s: ServicioAsignado, motivo: string) =>
+    ejecutar(s, async () => {
+      const r = await devolverPasoServicio(s.id, s.etapa, motivo);
+      if (!r?.error) setDevolviendo(null);
+      return r;
+    });
 
   const avanzarPaso = (s: ServicioAsignado, campo: CampoPasoServicio, etapaNueva?: string) =>
     ejecutar(s, () => marcarPasoServicio(s.id, s.etapa, campo, etapaNueva));
@@ -282,6 +298,11 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
               >
                 <span className="min-w-0">
                   <CardTitle className="text-base">{s.tipo_servicio}</CardTitle>
+                  {porConfirmar(s, hoyBogota()) && (
+                    <span className="mt-1 inline-block rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900">
+                      Por confirmar
+                    </span>
+                  )}
                   {cuando && (
                     <span suppressHydrationWarning className="mt-1 flex items-center gap-1 text-base font-semibold text-foreground">
                       <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -402,6 +423,54 @@ export function MisServicios({ servicios, modoAdmin = false }: MisServiciosProps
                     boton(s, "finalizar", "Finalizar atención", true, () => avanzarEtapa(s, "FINALIZADO"))}
                 </div>
               )}
+
+              {(() => {
+                const atras = pasoADevolver(s);
+                if (!atras) return null;
+                const abierto = devolviendo?.servicioId === s.id;
+                if (!abierto) {
+                  return (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-auto w-full gap-2 py-3 text-muted-foreground"
+                      onClick={() => setDevolviendo({ servicioId: s.id, motivo: "" })}
+                    >
+                      <Undo2 className="h-4 w-4" aria-hidden="true" /> Me equivoqué: volver al paso anterior
+                    </Button>
+                  );
+                }
+                const ocupado = loadingId === s.id;
+                const motivo = devolviendo?.motivo ?? "";
+                return (
+                  <div className="space-y-2 rounded-md border p-3" role="group" aria-label="Volver al paso anterior">
+                    <p className="text-sm font-medium">
+                      {atras.hito ? `Se borra «${atras.hito}»` : "El servicio vuelve a programado"}
+                      {atras.hito && atras.etapaNueva ? " y el servicio vuelve a programado" : ""}. Cuéntanos qué pasó:
+                    </p>
+                    <Textarea
+                      value={motivo}
+                      onChange={(e) => setDevolviendo({ servicioId: s.id, motivo: e.target.value })}
+                      placeholder="Ej: toqué el botón sin querer"
+                      rows={2}
+                      autoFocus
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        className="h-auto py-3"
+                        disabled={ocupado || motivo.trim().length < 5}
+                        onClick={() => devolverPaso(s, motivo)}
+                      >
+                        {ocupado ? "Guardando..." : "Volver atrás"}
+                      </Button>
+                      <Button type="button" variant="outline" className="h-auto py-3" disabled={ocupado} onClick={() => setDevolviendo(null)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {errorDeEsta && (
                 <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">

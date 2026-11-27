@@ -12,7 +12,7 @@ export default defineConfig({
   forbidOnly: enCI,
   retries: enCI ? 1 : 0,
   workers: enCI ? 2 : 3,
-  reporter: [["list"], ["html", { open: "never" }]],
+  reporter: [["list"], ["html", { open: "never" }], ["json", { outputFile: "e2e-results/results.json" }]],
   use: {
     baseURL,
     locale: "es-CO",

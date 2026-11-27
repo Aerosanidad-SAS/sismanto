@@ -12,7 +12,7 @@ const bebasNeue = Bebas_Neue({
 });
 
 export const metadata: Metadata = {
-  title: { default: "SISMANTO — Gestión de flota | Aerosanidad e Inter Assist", template: "%s · SISMANTO" },
+  title: { default: "SISRES — Gestión de flota | Aerosanidad e Inter Assist", template: "%s · SISRES" },
   description:
     "Sistema de gestión de flota y mantenimiento para ambulancias. Operación alineada con Aerosanidad e Inter Assist.",
 };

@@ -57,7 +57,7 @@ export async function enviarCorreoDePrueba() {
   }
   const r = await enviarCorreo(
     [destino],
-    "Prueba de correo de SISMANTO",
+    "Prueba de correo de SISRES",
     `<div style="font-family:sans-serif;color:#111827">
       <p>Este es un correo de prueba enviado desde <strong>Administración → Configuración general</strong>.</p>
       <p>Si lo estás leyendo, el servidor, el usuario y la clave del correo funcionan.</p>

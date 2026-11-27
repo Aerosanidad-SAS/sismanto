@@ -201,3 +201,21 @@ test("duración legible", () => {
   assert.equal(formatearDuracion(120), "2 h");
   assert.equal(formatearDuracion(135), "2 h 15 min");
 });
+
+test("ocupación: la cola trae los servicios que siguen al próximo, por hora", () => {
+  const o = ocupacionVehiculo([traslado(3, { fecha_hora_programacion: en("18:00") }), traslado(1, { fecha_hora_programacion: en("16:00") }), traslado(2, { fecha_hora_programacion: en("17:00") })], AHORA);
+  assert.equal(o.proximo?.id, 1);
+  assert.deepEqual(o.resto.map((p) => p.id), [2, 3]);
+});
+
+test("ocupación: el servicio en curso trae el recorrido y el desvío contra la hora de recogida hasta que llega al sitio", () => {
+  const enCamino = traslado(1, { etapa: "CURSO", fecha_hora_inicio_desplazamiento: en("14:30"), fecha_hora_programacion: en("14:48") });
+  const a = ocupacionVehiculo([enCamino], AHORA).servicioActual;
+  assert.equal(a?.desvioRecogida, 12); // 15:00 contra 14:48: retraso
+  assert.equal(a?.pasos[0].at, en("14:30"));
+  assert.equal(a?.pasos.filter((p) => p.at === null).length, a ? a.pasos.length - 1 : -1);
+  const aTiempo = ocupacionVehiculo([{ ...enCamino, fecha_hora_programacion: en("15:20") }], AHORA).servicioActual;
+  assert.equal(aTiempo?.desvioRecogida, -20); // margen de 20 min
+  const enSitio = ocupacionVehiculo([{ ...enCamino, fecha_hora_llegada_origen: en("14:55") }], AHORA).servicioActual;
+  assert.equal(enSitio?.desvioRecogida, null);
+});

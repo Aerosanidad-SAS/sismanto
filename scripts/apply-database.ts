@@ -161,6 +161,14 @@ const MIGRATIONS: { name: string; file: string }[] = [
   { name: "135_rbac_pacientes_valoraciones_por_servicio.sql", file: "scripts/migrations/135_rbac_pacientes_valoraciones_por_servicio.sql" },
   { name: "136_usuario_tiene_historial.sql", file: "scripts/migrations/136_usuario_tiene_historial.sql" },
   { name: "137_servicios_escritura_regulacion_por_centro.sql", file: "scripts/migrations/137_servicios_escritura_regulacion_por_centro.sql" },
+  { name: "138_resolver_solicitud_no_apto.sql", file: "scripts/migrations/138_resolver_solicitud_no_apto.sql" },
+  { name: "145_servicios_confirmacion.sql", file: "scripts/migrations/145_servicios_confirmacion.sql" },
+  { name: "139_mantenimiento_soporte.sql", file: "scripts/migrations/139_mantenimiento_soporte.sql" },
+  { name: "140_destornilladores_de_pala.sql", file: "scripts/migrations/140_destornilladores_de_pala.sql" },
+  { name: "141_solicitudes_asignacion_vehiculo.sql", file: "scripts/migrations/141_solicitudes_asignacion_vehiculo.sql" },
+  { name: "142_preoperacional_orden_frio_caliente.sql", file: "scripts/migrations/142_preoperacional_orden_frio_caliente.sql" },
+  { name: "143_servicios_notas_ubicacion.sql", file: "scripts/migrations/143_servicios_notas_ubicacion.sql" },
+  { name: "144_captacion_procedimientos.sql", file: "scripts/migrations/144_captacion_procedimientos.sql" },
 ];
 
 // ─── Env loading ──────────────────────────────────────────────────────────────

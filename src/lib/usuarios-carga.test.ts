@@ -23,7 +23,22 @@ test("los roles que ven solo su centro exigen centro; los demás no", () => {
     assert.ok(!r.ok, rol);
   }
   assert.ok(validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol: "MANTENIMIENTO" }, CENTROS).ok);
-  assert.ok(validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol: "GERENCIAL" }, CENTROS).ok);
+  // GERENCIAL no necesita centro, pero tampoco entra con la cédula como clave: lleva clave propia (ver el test siguiente).
+  assert.ok(validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol: "GERENCIAL", password_inicial: "ClaveInicial1" }, CENTROS).ok);
+});
+
+test("ADMIN, ANALISTA y GERENCIAL no pueden entrar con la cédula como clave: la fila debe traer password_inicial", () => {
+  for (const rol of ["ADMIN", "ANALISTA", "GERENCIAL"]) {
+    const sin = validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol }, CENTROS);
+    assert.ok(!sin.ok, `${rol} sin clave propia debe rechazarse`);
+    if (!sin.ok) assert.ok(sin.errores.some((e) => e.columna === "password_inicial" && /clave inicial propia/.test(e.mensaje)));
+    const con = validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol, password_inicial: "ClaveInicial1" }, CENTROS);
+    assert.ok(con.ok, `${rol} con clave propia debe aceptarse`);
+    if (con.ok) assert.equal(con.valor.passwordEsCedula, false);
+  }
+  // El resto de los roles sigue pudiendo entrar con la cédula.
+  const ovem = validarUsuario({ cedula: "1020458300", nombre_completo: "X Y", rol: "MANTENIMIENTO" }, CENTROS);
+  assert.ok(ovem.ok && ovem.valor.passwordEsCedula);
 });
 
 test("errores con su columna: cédula, rol, centro, correo, código y clave corta", () => {

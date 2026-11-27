@@ -58,7 +58,7 @@ export function VersionMenu({ colapsado }: { colapsado?: boolean }) {
       <Dialog open={abierto} onOpenChange={setAbierto}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>SISMANTO v{version}</DialogTitle>
+            <DialogTitle>SISRES v{version}</DialogTitle>
             <DialogDescription>
               {ETIQUETA_ENTORNO[datos?.entorno ?? ""] ?? "Historial"} {sha ? `· commit ${sha}` : ""} — qué cambió en cada versión.
             </DialogDescription>

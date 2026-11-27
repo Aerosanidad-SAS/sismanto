@@ -4,15 +4,17 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { MedicalServiceFormData } from "@/lib/validations";
 import { medicalServiceSchema, ETAPAS_SERVICIO } from "@/lib/validations";
-import { CAMPOS_PASO_SERVICIO } from "@/lib/estado-servicio";
+import { CAMPOS_PASO_SERVICIO, pasoADevolver } from "@/lib/estado-servicio";
 import { sanitizarTelefono, enviarPlantilla } from "@/lib/notifications/whatsapp";
 import { getProfile, requireRole } from "@/app/api/actions/auth";
 import { centroVisible, type UserRole } from "@/lib/auth-utils";
 import { ciudadDeCentro } from "@/lib/servicios-centro";
+import { ciudadRegistroAlCrear, ERROR_CIUDAD_REGISTRO } from "@/lib/servicio-ciudad-registro";
 import { condicionServiciosVisibles } from "@/lib/servicios-centro-servidor";
 import { filaConHoraColombia } from "@/lib/hora-colombia";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { textoDiagnostico } from "@/lib/servicio-detalle";
+import { confirmacionAlCrear } from "@/lib/servicios-confirmacion";
 import { z } from "zod";
 import { auditar } from "@/lib/auditoria";
 import { hoyBogota, sumarDias } from "@/lib/fechas";
@@ -23,6 +25,8 @@ import { detalleConAtribucion } from "@/lib/atribucion-admin";
 import { mensajeFaltantesParaFinalizar, type FechasServicio } from "@/lib/servicios-finalizar";
 import { errorDeCronologia, type TiemposServicio } from "@/lib/servicios-cronologia";
 import { errorDeCambioEtapa } from "@/lib/servicios-etapas";
+import { errorDeDespacho, type DatosDireccion } from "@/lib/servicios-direccion";
+import { VENTANA_ABIERTOS_DIAS } from "@/lib/servicios-abiertos";
 import {
   ETAPAS_QUE_CHOCAN,
   filtroRecursos,
@@ -258,7 +262,7 @@ export async function getServiciosMedicos(filtro?: { etapa?: string; desde?: str
  * El OVEM no lee `patients` (RLS: es dato clínico): la cédula se lee con la clave de servicio, pero solo después de
  * comprobar con la sesión de la persona que el servicio es suyo (la RLS de `medical_services` deja a OVEM, médico y
  * auxiliar ver solo los que tienen asignados; el ADMIN ve todos). Devuelve lo mínimo para atender: nombre, documento,
- * diagnóstico y las observaciones del servicio.
+ * diagnóstico y las notas de ubicación del servicio.
  */
 export async function getDetalleServicioTripulacion(
   id: number
@@ -269,7 +273,7 @@ export async function getDetalleServicioTripulacion(
 
   const { data, error } = await createClient()
     .from("medical_services")
-    .select("patient_id, nombre_completo, cedula_paciente, cie_codigo, cie_descripcion, observaciones")
+    .select("patient_id, nombre_completo, cedula_paciente, cie_codigo, cie_descripcion, notas_ubicacion")
     .eq("id", idParsed.data)
     .maybeSingle();
   if (error) {
@@ -282,7 +286,7 @@ export async function getDetalleServicioTripulacion(
     cedula_paciente: string | null;
     cie_codigo: string | null;
     cie_descripcion: string | null;
-    observaciones: string | null;
+    notas_ubicacion: string | null;
   } | null;
   if (!s) return { error: "Este servicio no está asignado a ti." };
 
@@ -302,7 +306,7 @@ export async function getDetalleServicioTripulacion(
     nombre: (s.nombre_completo ?? "").trim(),
     cedula,
     diagnostico: textoDiagnostico(s.cie_codigo, descripcion),
-    notas: (s.observaciones ?? "").trim(),
+    notas: (s.notas_ubicacion ?? "").trim(),
   };
 }
 
@@ -561,11 +565,25 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
   // Las horas del recorrido deben ir en el orden en que ocurren (no se validaba en SISRES).
   const desorden = errorDeCronologia(parsed.data);
   if (desorden) return { error: desorden };
+  // #343: no se despacha sin dirección (misma regla del formulario).
+  const sinDireccion = errorDeDespacho(parsed.data.tipo_servicio, parsed.data, { etapaDespues: etapa, ovemDespues: parsed.data.ovem_user_id });
+  if (sinDireccion) return { error: sinDireccion };
 
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
   const profile = await getProfile();
   const fila = aFilaServicio(parsed.data);
+  // #387: la misma regla del formulario, para que no se salte llamando la acción a mano.
+  const ciudadRegistro = await ciudadRegistroAlCrear({
+    ciudad: fila.ciudad_registro,
+    vehicleId: fila.vehicle_id,
+    centroDelMovil: async (vehicleId) => {
+      const { data: movil } = await supabase.from("vehicles").select("centro_operativo").eq("id", vehicleId).maybeSingle<{ centro_operativo: string | null }>();
+      return movil?.centro_operativo;
+    },
+  });
+  if (!ciudadRegistro) return { error: ERROR_CIUDAD_REGISTRO };
+  fila.ciudad_registro = ciudadRegistro;
   // Bloqueo provisional (migración 113): no se despacha un servicio con un vehículo que tiene una solicitud de
   // NO APTO pendiente de aval.
   if (fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
@@ -584,6 +602,8 @@ export async function crearServicioMedico(formData: MedicalServiceFormData, etap
       etapa,
       operational_center_id: await centroDelServicio(supabase, fila.vehicle_id, profile?.operational_center_id ?? null),
       created_by: userData.user?.id ?? null,
+      // #383: creado ya con móvil y tripulación completos, no hay que volver a confirmarlo.
+      ...confirmacionAlCrear({ ...fila, etapa }, profile),
     })
     .select()
     .single();
@@ -608,11 +628,12 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   // guardar con etapa FINALIZADO). Los demás estados se guardan libres.
   const desorden = errorDeCronologia(parsed.data);
   if (desorden) return { error: desorden };
-  const { data: actual } = await supabase
+  const { data: actual, error: errorActual } = await supabase
     .from("medical_services")
-    .select("etapa")
+    .select("etapa, ovem_user_id")
     .eq("id", idParsed.data)
-    .maybeSingle<{ etapa: string }>();
+    .maybeSingle<{ etapa: string; ovem_user_id: string | null }>();
+  if (errorActual) return { error: errorActual.message };
   if (actual?.etapa === "FINALIZADO") {
     const falta = mensajeFaltantesParaFinalizar(parsed.data.tipo_servicio, parsed.data);
     if (falta) return { error: falta };
@@ -620,6 +641,16 @@ export async function actualizarServicioMedico(id: number, formData: MedicalServ
   const rol = (await getProfile())?.role_codigo;
   const esMedicoAux = rol === "MEDICO" || rol === "AUXILIAR_ENFERMERIA";
   const fila = aFilaServicio(parsed.data);
+  // #343: poner un OVEM distinto es despachar. Médico y Auxiliar no escriben la tripulación (`filaDeActualizacion`).
+  if (!esMedicoAux && actual) {
+    const sinDireccion = errorDeDespacho(parsed.data.tipo_servicio, parsed.data, {
+      etapaAntes: actual.etapa,
+      etapaDespues: actual.etapa,
+      ovemAntes: actual.ovem_user_id,
+      ovemDespues: parsed.data.ovem_user_id,
+    });
+    if (sinDireccion) return { error: sinDireccion };
+  }
   // Bloqueo provisional (migración 113): igual que al crear, no se deja un vehículo con NO APTO pendiente
   // asignado a un servicio — tampoco al editar uno que ya lo tenía.
   if (!esMedicoAux && fila.vehicle_id && (await tieneNoAptoPendiente(fila.vehicle_id))) {
@@ -694,6 +725,17 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
       if (desorden) return { error: desorden + " Edita el servicio, corrige las horas y luego finalízalo." };
     }
   }
+  // #343: pasar a CURSO es despachar. «Volver al paso anterior» (`devolverPasoServicio`) no pasa por aquí.
+  if (nueva === "CURSO") {
+    const { data: ruta, error: errorRuta } = await supabase
+      .from("medical_services")
+      .select("tipo_servicio, direccion_origen, ciudad_origen, direccion_destino, ciudad_destino")
+      .eq("id", idParsed.data)
+      .maybeSingle<{ tipo_servicio: string } & DatosDireccion>();
+    if (errorRuta) return { error: errorRuta.message };
+    const sinDireccion = ruta ? errorDeDespacho(ruta.tipo_servicio, ruta, { etapaAntes: actual, etapaDespues: nueva }) : null;
+    if (sinDireccion) return { error: sinDireccion };
+  }
   const { data, error } = await supabase
     .from("medical_services")
     .update({ etapa: nueva, updated_at: new Date().toISOString() })
@@ -708,6 +750,60 @@ export async function cambiarEtapaServicio(id: number, etapaActual: string, etap
   await auditar("MODIFICAR", "servicios", data[0].id, `Etapa: ${actual} → ${nueva}${motivo?.trim() ? `. Motivo: ${motivo.trim()}` : ""}`);
   revalidatePath("/servicios");
   return { success: true };
+}
+
+const ROLES_CIERRE_EN_BLOQUE: UserRole[] = ["ADMIN", "REGULACION", "ANALISTA"];
+const MAX_CIERRE_EN_BLOQUE = 100;
+
+/**
+ * Finalizar o cancelar varios servicios de una vez (pantalla Servicios, selección múltiple). No salta ninguna regla: cada servicio
+ * pasa por `cambiarEtapaServicio`, así que FINALIZADO exige la llegada y salida reales de cada tramo, CANCELADO exige motivo, y
+ * cada uno queda en la bitácora con su nombre. Los que no cumplen vuelven con su razón; los demás se aplican.
+ */
+export async function cambiarEtapaVarios(
+  ids: number[],
+  etapaNueva: "FINALIZADO" | "CANCELADO",
+  motivo?: string
+): Promise<{ error?: string; aplicados: number; fallidos: { id: number; error: string }[] }> {
+  await requireRole(ROLES_CIERRE_EN_BLOQUE);
+  const lista = z.array(z.number().int().positive()).min(1).max(MAX_CIERRE_EN_BLOQUE).safeParse([...new Set(ids)]);
+  if (!lista.success) return { error: `Elige entre 1 y ${MAX_CIERRE_EN_BLOQUE} servicios.`, aplicados: 0, fallidos: [] };
+
+  const supabase = createClient();
+  const { data: filas, error } = await supabase.from("medical_services").select("id, etapa").in("id", lista.data);
+  if (error) return { error: error.message, aplicados: 0, fallidos: [] };
+  const etapaDe = new Map((filas ?? ([] as { id: number; etapa: string }[])).map((f: { id: number; etapa: string }) => [f.id, f.etapa]));
+
+  let aplicados = 0;
+  const fallidos: { id: number; error: string }[] = [];
+  for (const id of lista.data) {
+    const etapa = etapaDe.get(id);
+    if (!etapa) {
+      fallidos.push({ id, error: "No existe o no tienes acceso." });
+      continue;
+    }
+    const res = await cambiarEtapaServicio(id, etapa, etapaNueva, motivo);
+    if ("error" in res && res.error) fallidos.push({ id, error: res.error });
+    else aplicados++;
+  }
+  return { aplicados, fallidos };
+}
+
+/** Cuántos servicios hay en cada vista de la pantalla Servicios (Hoy y Estancados), dentro de lo que ve quien pregunta. */
+export async function contarVistasServicios(ciudad?: string) {
+  const profile = await requireRole(ROLES_LISTA_SERVICIOS);
+  const supabase = createClient();
+  const centro = centroVisible(profile);
+  const hoy = hoyBogota();
+  const cuenta = async (f: FiltrosServicios): Promise<number> => {
+    const { count } = await aplicarFiltrosServicios(supabase.from("medical_services").select("id", { count: "exact", head: true }), f, centro);
+    return count ?? 0;
+  };
+  const [deHoy, estancados] = await Promise.all([
+    cuenta({ ciudad, desde: hoy, hasta: hoy }),
+    cuenta({ ciudad, sinGestionar: String(VENTANA_ABIERTOS_DIAS), sinGestionarUnidad: "dia" }),
+  ]);
+  return { hoy: deHoy, estancados };
 }
 
 /**
@@ -757,6 +853,60 @@ export async function marcarPasoServicio(
     "servicios",
     data[0].id,
     detalleConAtribucion(rol, `Paso ${campoValido}${nueva ? ` (etapa ${actual} → ${nueva})` : ""}`)
+  );
+  revalidatePath("/servicios");
+  revalidatePath("/ovem");
+  return { success: true };
+}
+
+/**
+ * «Volver al paso anterior» (OVEM/tripulación): borra la hora del último hito marcado por error y, si ese hito había
+ * abierto el curso, devuelve la etapa a PROGRAMADO. El motivo es obligatorio y queda en la bitácora con quién lo hizo
+ * y qué hora se borró. Mismo guardado optimista que marcarPasoServicio; RLS limita el acceso a la tripulación.
+ */
+export async function devolverPasoServicio(id: number, etapaActual: string, motivo: string) {
+  const idParsed = z.number().int().positive().safeParse(id);
+  if (!idParsed.success) return { error: "ID inválido" };
+  const razon = motivo?.trim() ?? "";
+  if (razon.length < 5) return { error: "Escribe el motivo (mínimo 5 letras): queda en la bitácora." };
+
+  const supabase = createClient();
+  const { data: fila, error: errLectura } = await supabase
+    .from("medical_services")
+    .select(["etapa", "tipo_servicio", ...CAMPOS_PASO_SERVICIO].join(", "))
+    .eq("id", idParsed.data)
+    .maybeSingle<Record<string, string | null> & { etapa: string; tipo_servicio: string }>();
+  if (errLectura) return { error: errLectura.message };
+  if (!fila || fila.etapa !== etapaActual) {
+    return { error: "El servicio cambió mientras lo mirabas. Actualiza la pantalla." };
+  }
+  const deshacer = pasoADevolver(fila);
+  if (!deshacer) return { error: "No hay un paso que devolver." };
+
+  const ahora = new Date().toISOString();
+  const update: Record<string, string | null> = { updated_at: ahora };
+  if (deshacer.campo) update[deshacer.campo] = null;
+  if (deshacer.etapaNueva) update.etapa = deshacer.etapaNueva;
+
+  const { data, error } = await supabase
+    .from("medical_services")
+    .update(update)
+    .eq("id", idParsed.data)
+    .eq("etapa", etapaActual)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "El servicio cambió mientras lo mirabas. Actualiza la pantalla." };
+
+  const rol = (await getProfile())?.role_codigo;
+  const borrado = deshacer.campo ? `${deshacer.hito} (${fila[deshacer.campo] ?? "sin hora"})` : "ninguno";
+  await auditar(
+    "MODIFICAR",
+    "servicios",
+    data[0].id,
+    detalleConAtribucion(
+      rol,
+      `Volvió al paso anterior: borró ${borrado}${deshacer.etapaNueva ? `, etapa ${etapaActual} → ${deshacer.etapaNueva}` : ""}. Motivo: ${razon}`
+    )
   );
   revalidatePath("/servicios");
   revalidatePath("/ovem");

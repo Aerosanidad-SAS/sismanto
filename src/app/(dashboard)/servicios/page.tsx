@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   buscarServicios,
+  contarVistasServicios,
   getMovilesEnServicio,
   getOpcionesFiltroServicios,
   getServiciosMedicos,
@@ -13,18 +14,21 @@ import { getClientes } from "@/app/api/actions/clientes";
 import { getOpcionesServicio } from "@/app/api/actions/servicios-opciones";
 import { getEpsCatalog } from "@/app/api/actions/pacientes";
 import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { getFleetWithAssignments, getUsuariosPorRol } from "@/app/api/actions/regulacion";
 import { ServiciosTabla } from "@/components/servicios/servicios-tabla";
 import { MisServicios } from "@/components/servicios/mis-servicios";
 import { ResumenOperativo } from "@/components/gerencial/resumen-operativo";
 import { centroVisible } from "@/lib/auth-utils";
 import { ciudadDeCentro } from "@/lib/servicios-centro";
-import { ciudadRegistroDePerfil, leerFiltros } from "@/lib/servicios-lista";
+import { ciudadRegistroDePerfil, leerFiltros, UNIDADES_SIN_GESTIONAR } from "@/lib/servicios-lista";
 import { ServiciosFiltros } from "@/components/servicios/servicios-filtros";
 import { ServiciosPaginacion } from "@/components/servicios/servicios-paginacion";
 import { ExportarServicios } from "@/components/servicios/exportar-servicios";
 import { AvisosServicios } from "@/components/servicios/avisos-servicios";
+import { VistasServicios, vistaActiva } from "@/components/servicios/vistas-servicios";
+import { VENTANA_ABIERTOS_DIAS } from "@/lib/servicios-abiertos";
 
 export const metadata = { title: "Servicios" };
 
@@ -37,7 +41,7 @@ async function getVehiculosActivos() {
     const supabase = createClient();
     let query = supabase
       .from("vehicles")
-      .select("id, placa")
+      .select("id, placa, centro_operativo")
       .eq("estado_actual", "OPERATIVO")
       .order("placa");
     const centro = centroVisible(await getProfile());
@@ -57,11 +61,12 @@ export default async function ServiciosPage(
   const searchParams = await props.searchParams;
   const hoyIso = hoyBogota();
   const { filtros, pagina } = leerFiltros(searchParams);
-  const profile = await getProfile();
+  const profile = await requireRole(rolesDeRuta("/servicios"));
   // Con centro asignado (Regulación, Coordinación…) la lista es de su ciudad y nada más: sin selector ni resumen de la otra.
   const centroDelPerfil = centroVisible(profile);
   const ciudadFija = centroDelPerfil ? ciudadDeCentro(centroDelPerfil.codigo) : null;
   const mostrarMisServicios = ROLES_MIS_SERVICIOS.includes(profile?.role_codigo ?? "");
+  const puedeArmarTripulacion = ["ADMIN", "ANALISTA", "REGULACION"].includes(profile?.role_codigo ?? "");
   const [
     { servicios, total, error: errorLista },
     opciones,
@@ -71,11 +76,14 @@ export default async function ServiciosPage(
     flota,
     medicosDisponibles,
     reguladoresDisponibles,
+    ovemsDisponibles,
+    auxiliaresDisponibles,
     resumenHoy,
     opcionesCampos,
     epsOptions,
     camposPacienteObligatorios,
     movilesOcupados,
+    conteoVistas,
   ] =
     await Promise.all([
       buscarServicios(filtros, pagina),
@@ -87,6 +95,9 @@ export default async function ServiciosPage(
       getFleetWithAssignments(),
       getUsuariosPorRol("MEDICO"),
       getUsuariosPorRol("REGULACION"),
+      // Para «Asignar tripulación» desde el formulario: solo se cargan para quien puede armarla (Regulación, Analista, Admin).
+      puedeArmarTripulacion ? getUsuariosPorRol("OVEM") : Promise.resolve([]),
+      puedeArmarTripulacion ? getUsuariosPorRol("AUXILIAR_ENFERMERIA") : Promise.resolve([]),
       getResumenOperativoDiario({ desde: hoyIso, hasta: hoyIso }),
       getOpcionesServicio(),
       // Para crear un paciente nuevo sin salir del formulario de servicio.
@@ -94,6 +105,7 @@ export default async function ServiciosPage(
       getCamposObligatoriosModulo("pacientes"),
       // Móviles con servicio en curso: verde (libre) o rojo (ocupado) en el selector de móvil del formulario.
       getMovilesEnServicio().catch(() => [] as string[]),
+      contarVistasServicios(filtros.ciudad).catch(() => ({ hoy: 0, estancados: 0 })),
     ]);
   const puedeEditar = ROLES_EDICION.includes(profile?.role_codigo ?? "");
   const etapasVisibles = Object.fromEntries((servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa]));
@@ -140,6 +152,8 @@ export default async function ServiciosPage(
         </div>
       )}
 
+      <VistasServicios activa={vistaActiva(filtros, hoyIso, VENTANA_ABIERTOS_DIAS)} hoy={hoyIso} dias={VENTANA_ABIERTOS_DIAS} conteo={conteoVistas} />
+
       <Card>
         <CardContent className="space-y-3 p-4">
           <ServiciosFiltros
@@ -150,6 +164,14 @@ export default async function ServiciosPage(
             origenes={opciones.origenes}
             destinos={opciones.destinos}
           />
+          {Number(filtros.sinGestionar) > 0 && (
+            <p role="status" className="rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-foreground">
+              Estás viendo los servicios en PROGRAMADO o CURSO con más de {filtros.sinGestionar}{" "}
+              {(UNIDADES_SIN_GESTIONAR.find((u) => u.clave === filtros.sinGestionarUnidad) ?? UNIDADES_SIN_GESTIONAR[0]).nombre.toLowerCase()} sin cerrarse. Para
+              finalizar uno hacen falta la llegada y la salida reales de cada tramo; si nunca se hizo o no se puede reconstruir, cancélalo con su
+              motivo. Una vez cerrado, solo el Administrador puede reabrirlo.
+            </p>
+          )}
           {errorLista && (
             <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               No se pudo cargar la lista de servicios: {errorLista}
@@ -166,6 +188,8 @@ export default async function ServiciosPage(
             viewerNombreCompleto={profile?.nombre_completo ?? profile?.email ?? null}
             puedeEditar={puedeEditar}
             medicosDisponibles={medicosDisponibles}
+            ovemsDisponibles={ovemsDisponibles}
+            auxiliaresDisponibles={auxiliaresDisponibles}
             reguladoresDisponibles={reguladoresDisponibles}
             tripulacionPorVehiculo={tripulacionPorVehiculo}
             ciudadDefault={profile?.ciudad}

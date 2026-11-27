@@ -9,7 +9,7 @@ import type { CampoIntegracion } from "@/lib/integraciones";
 
 type Entorno = Record<string, string | undefined>;
 
-export const NOMBRE_REMITENTE_POR_DEFECTO = "SISMANTO — Aerosanidad";
+export const NOMBRE_REMITENTE_POR_DEFECTO = "SISRES — Aerosanidad";
 
 const HOST = /^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
 const CORREO = /^[^\s@"'<>]+@[^\s@"'<>]+\.[^\s@"'<>]+$/;

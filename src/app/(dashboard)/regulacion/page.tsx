@@ -9,8 +9,14 @@ import { RegulacionFleet } from "@/components/regulacion/regulacion-fleet";
 import { ServiciosDelDia, type ServicioDelDia } from "@/components/regulacion/servicios-del-dia";
 import { MantenimientoCard, VencimientosCard } from "@/components/regulacion/alertas-flota";
 import { BarraTablero } from "@/components/regulacion/barra-tablero";
+import { estadoParaAvisos } from "@/lib/avisos-sala";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AvisosServicios } from "@/components/servicios/avisos-servicios";
 import { ProgramacionDiaria } from "@/components/regulacion/programacion-diaria";
+import { SolicitudesAsignacion } from "@/components/regulacion/solicitudes-asignacion";
+import { getSolicitudesAsignacionPendientes } from "@/app/api/actions/solicitudes-asignacion";
 import { SolicitudesNoApto } from "@/components/regulacion/solicitudes-no-apto";
 import { getSolicitudesNoAptoPendientes } from "@/app/api/actions/solicitudes-no-apto";
 import { getProgramacionDelDia } from "@/app/api/actions/programacion";
@@ -51,7 +57,7 @@ export default async function RegulacionPage(
   const prefijoDeCiudad = ciudadFija ? null : prefijoCiudad(pedida);
 
   const diaPedido = Array.isArray(searchParams.dia) ? searchParams.dia[0] : searchParams.dia;
-  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto, cierresTurno] = await Promise.all([
+  const [tablero, fleet, ovemUsers, medicoUsers, auxiliarUsers, preoperacional, programacion, solicitudesNoApto, cierresTurno, solicitudesAsignacion] = await Promise.all([
     getTableroRegulacion(),
     getFleetWithAssignments(),
     getUsuariosPorRol("OVEM"),
@@ -61,6 +67,7 @@ export default async function RegulacionPage(
     getProgramacionDelDia(diaPedido ?? ""),
     getSolicitudesNoAptoPendientes(),
     getCierresDeTurnoHoy(),
+    getSolicitudesAsignacionPendientes(),
   ]);
 
   // Después del Promise.all: getProgramacionDelDia materializa la programación de hoy y el tablero la lee.
@@ -73,6 +80,12 @@ export default async function RegulacionPage(
   // Etapa de cada servicio visible: AvisosServicios avisa cuando uno pasa a CURSO o FINALIZADO entre refrescos.
   const etapasVisibles = Object.fromEntries(
     (tablero.servicios as { id: number; etapa: string }[]).map((s) => [s.id, s.etapa])
+  );
+
+  // Foto de estado de cada servicio visible: AvisosServicios la compara entre refrescos para el toast y el sonido por categoría.
+  const ahoraServidor = Date.now();
+  const estadosSala = Object.fromEntries(
+    (tablero.servicios as (ServicioDelDia & { placa: string | null })[]).map((s) => [s.id, estadoParaAvisos(s, ahoraServidor)])
   );
 
   return (
@@ -90,11 +103,17 @@ export default async function RegulacionPage(
         <div className="flex flex-wrap items-center gap-3">
           {!ciudadFija && <FiltroCiudadUrl />}
           {/* Alertas sonoras 60/30/15 min y avisos de servicio: antes solo estaban en /servicios. */}
-          <AvisosServicios etapasVisibles={etapasVisibles} />
+          <AvisosServicios etapasVisibles={etapasVisibles} estadosSala={estadosSala} />
           <BarraTablero
             vehiculos={vehiculosOperativos}
             reportadoPor={profile.nombre_completo ?? profile.email ?? ""}
           />
+          <Button asChild>
+            <Link href="/servicios?nuevo=1">
+              <Plus className="mr-1 h-4 w-4" aria-hidden />
+              Nuevo servicio
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -105,8 +124,14 @@ export default async function RegulacionPage(
         </div>
       )}
 
+      <SolicitudesAsignacion
+        solicitudes={solicitudesAsignacion}
+        puedeResolver={profile.role_codigo === "ADMIN" || profile.role_codigo === "REGULACION"}
+      />
+
       <SolicitudesNoApto solicitudes={solicitudesNoApto} puedeResolver={profile.role_codigo === "ADMIN"} />
 
+      {/* Como en el diseño «Sala de control»: primero la flota (qué vehículo hace qué) y debajo los servicios del día. */}
       <TableroVehiculosCard tablero={tableroVehiculos} />
 
       <ServiciosDelDia

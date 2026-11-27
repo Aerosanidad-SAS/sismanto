@@ -67,6 +67,8 @@ import { CierresTurnoConsulta } from "./cierres-turno-consulta";
 import { CombustibleForm } from "./combustible-form";
 import { SiniestroForm } from "./siniestro-form";
 import { DocumentosVehiculo } from "./documentos-vehiculo";
+import { PedirAsignacionVehiculo } from "./pedir-asignacion-vehiculo";
+import type { MiSolicitudAsignacion } from "@/app/api/actions/solicitudes-asignacion";
 import { alertNewService, useAutoRefresh } from "./use-auto-refresh";
 
 interface OvemPortalProps {
@@ -95,6 +97,8 @@ interface OvemPortalProps {
   ultimoKmPorVehiculo?: Record<string, number>;
   /** Lo que este conductor ya hizo hoy (el menú lo muestra); `at` es un instante ISO. */
   estadoHoy?: EstadoHoy | null;
+  /** Última solicitud de asignación de vehículo de hoy de este conductor. */
+  solicitudAsignacion?: MiSolicitudAsignacion | null;
 }
 
 export interface EstadoHoy {
@@ -178,6 +182,7 @@ export function OvemPortal({
   vehiculosDeHoy = SIN_VEHICULOS_DE_HOY,
   ultimoKmPorVehiculo = SIN_KM,
   estadoHoy = null,
+  solicitudAsignacion = null,
 }: OvemPortalProps) {
   const router = useRouter();
   const serviciosActivos = useMemo(
@@ -505,7 +510,8 @@ export function OvemPortal({
       if (result?.error) setError(result.error);
       else {
         const avisoServidor = result?.hallazgos?.mensaje;
-        if (avisoServidor && (result?.hallazgos?.criticos ?? 0) > 0) setError(`Checklist guardado. ${avisoServidor}`);
+        // Crítico, o algo que marcó no quedó registrado como novedad: se muestra como aviso, no como éxito en verde.
+        if (avisoServidor && ((result?.hallazgos?.criticos ?? 0) > 0 || result?.hallazgos?.registroIncompleto)) setError(`Checklist guardado. ${avisoServidor}`);
         else setSuccess(avisoServidor ? `Checklist guardado. ${avisoServidor}` : "Checklist completado correctamente");
         setDailyCheckDone(true);
         const dcId = result?.dailyCheckId ?? null;
@@ -526,7 +532,10 @@ export function OvemPortal({
           setFotosPreop((prev) => ({ ...prev, ...nuevasFotos }));
           setFotosSeleccionadas({});
           if (fallos > 0) {
-            setError(`El checklist se guardó, pero ${fallos} foto${fallos === 1 ? "" : "s"} no se pudo subir. Vuelve a intentarlo abajo.`);
+            // Se suma al aviso anterior en vez de reemplazarlo: si el checklist trajo un aviso crítico («llama ya a Regulación»)
+            // no puede desaparecer porque además falló una foto.
+            const avisoFotos = `El checklist se guardó, pero ${fallos} foto${fallos === 1 ? "" : "s"} no se pudo subir. Vuelve a intentarlo abajo.`;
+            setError((previo) => (previo ? `${previo} ${avisoFotos}` : avisoFotos));
           }
         }
         // Lo enviado pasa a ser la base: ya no hay cambios pendientes ni borrador.
@@ -786,6 +795,15 @@ export function OvemPortal({
             </Select>
           </CardContent>
         </Card>
+      )}
+
+      {viewerRole === "OVEM" && flow === "preoperacional" && vehicleId && selectedVehicle && (
+        <PedirAsignacionVehiculo
+          vehicleId={vehicleId}
+          placa={selectedVehicle.placa}
+          asignadoHoy={vehiculosDeHoy.includes(vehicleId)}
+          solicitud={solicitudAsignacion}
+        />
       )}
 
       {vehicleId && selectedVehicle && flow === "preoperacional" && (

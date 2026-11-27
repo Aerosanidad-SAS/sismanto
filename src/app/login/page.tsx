@@ -67,7 +67,7 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <CardTitle as="h1" className="text-2xl">SISMANTO</CardTitle>
+            <CardTitle as="h1" className="text-2xl">SISRES</CardTitle>
             <CardDescription>Inicia sesión con tu cédula y contraseña</CardDescription>
           </div>
         </CardHeader>

@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRightLeft, Clock, FileCheck, Lock, MapPin, MoreHorizontal, Pencil, Play, Trash2, UserPlus } from "lucide-react";
+import { HelpTrigger } from "@/components/ui/help-trigger";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { AccionesEnBloque } from "@/components/servicios/acciones-en-bloque";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -46,7 +49,9 @@ import {
   OPCIONES_CIUDAD_REGISTRO,
   ubicacionPacientePorCiudadRegistro,
 } from "@/lib/servicios-lista";
-import { ETIQUETA_ROL, rolesFaltantes, rolesRequeridosPorTipo } from "@/lib/servicio-detalle";
+import { ciudadRegistroDeServicioNuevo, ERROR_CIUDAD_REGISTRO } from "@/lib/servicio-ciudad-registro";
+import { tripulacionPorCompletar, type RolTripulacion } from "@/lib/servicio-detalle";
+import { AsignarTripulacion } from "./asignar-tripulacion";
 import { useUmbralesEstancado } from "./use-umbrales-estancado";
 import { aTextoLocalColombia } from "@/lib/hora-colombia";
 import { CatalogCombobox } from "@/components/forms/catalog-combobox";
@@ -81,7 +86,10 @@ import { toast } from "@/components/ui/toaster";
 import { errorDeCambioEtapa, esEtapaCerrada, esEtapaNegativa, MOTIVO_MAX, puedeReabrir } from "@/lib/servicios-etapas";
 import { opcionesConValorActual, opcionesDeFabrica, type OpcionesServicio } from "@/lib/servicios-opciones";
 import { textoChoque, type ServicioEnChoque } from "@/lib/servicios-choque";
+import { direccionesFaltantes, faltasParaDespachar } from "@/lib/servicios-direccion";
 import { CAMPOS_CLINICOS_MEDICO_AUX as CAMPOS_CLINICOS_LISTA } from "@/lib/servicios-actualizacion";
+import { porConfirmar } from "@/lib/servicios-confirmacion";
+import { hoyBogota } from "@/lib/fechas";
 
 const ENTREGA_DOMICILIO = "ENTREGA EN DOMICILIO";
 // Casi todos los servicios nacen programados: las demás etapas solo se eligen al registrar uno que ya ocurrió.
@@ -92,6 +100,10 @@ const ETIQUETA_CAMPO: Record<string, string> = {
   nombre_completo: "Nombre completo del paciente",
   tipo_servicio: "Tipo de servicio",
   valor_servicio: "Valor del servicio",
+  direccion_origen: "Dirección de origen",
+  ciudad_origen: "Ciudad de origen",
+  direccion_destino: "Dirección de destino",
+  ciudad_destino: "Ciudad de destino",
 };
 
 const ITEM_MENU_MOVIL =
@@ -147,6 +159,8 @@ const ETAPAS_DESTINO = (etapaActual: string): EtapaServicio[] =>
 // es el mismo TAB SIMPLE, variante de captura duplicada) — pero sigue
 // existiendo en PERFIL_FORMULARIO_SERVICIO (validations.ts) para que los
 // servicios históricos que ya tienen ese valor sigan abriendo bien.
+// Lo mismo con "ENFERMERIA DOMICILIARIA" (Daniel, 2026-11-23: no existe; la domiciliaria es médico + conductor):
+// aparece en datos históricos de SISRES, así que se conserva en PERFIL_FORMULARIO_SERVICIO pero ya no se ofrece.
 export const TIPOS_SERVICIO = [
   "MEDICINA DOMICILIARIA",
   "TAB SIMPLE",
@@ -154,11 +168,10 @@ export const TIPOS_SERVICIO = [
   "TAM SIMPLE",
   "TAM DOBLE",
   "TELEMEDICINA",
-  "ENFERMERIA DOMICILIARIA",
   "TRASLADO AEREO",
 ];
 
-// SISRES no ofrece ENFERMERIA DOMICILIARIA/TELEMEDICINA/TRASLADO AEREO al
+// SISRES no ofrece TELEMEDICINA/TRASLADO AEREO al
 // Regulador (cargo=4) en el formulario de registro — solo al crear
 // (registroServicios.php, $esRegulador). No se aplica al editar un servicio
 // ya existente (editarServicio.php es otro flujo, fuera de este alcance).
@@ -215,13 +228,16 @@ type PersonaTripulacion = { user_id: string; nombre_completo: string | null; ema
 
 interface ServiciosTablaProps {
   servicios: ServicioRow[];
-  vehiculos: { id: string; placa: string }[];
+  vehiculos: { id: string; placa: string; centro_operativo?: string | null }[];
   /** Ids de los móviles con un servicio en curso: se marcan en rojo y van al final del selector (los libres, en verde, primero). */
   movilesOcupados?: string[];
   clientes: string[];
   puedeEditar: boolean;
   /** Médicos activos disponibles para asignar directo a un servicio (sin vehículo/OVEM) — típico de Medicina Domiciliaria con prestador externo. */
   medicosDisponibles: PersonaTripulacion[];
+  /** OVEM y auxiliares activos del centro: para armar la tripulación de un móvil desde el formulario («Asignar tripulación»). */
+  ovemsDisponibles?: PersonaTripulacion[];
+  auxiliaresDisponibles?: PersonaTripulacion[];
   /** Reguladores activos — reemplaza el texto libre de "usuario que recibe/despacha" por un select real (SISRES: usuarios cargo=4). */
   reguladoresDisponibles: PersonaTripulacion[];
   /** Nombre de quien ve el formulario — precarga "recibe/despacha" igual que la sesión en SISRES. */
@@ -259,6 +275,9 @@ const nombrePersona = (p?: PersonaTripulacion | null) => p?.nombre_completo || p
 // campos de logística con readonly/campo-bloqueado, no oculta secciones).
 const CAMPOS_CLINICOS_MEDICO_AUX = new Set<keyof MedicalServiceFormData>(CAMPOS_CLINICOS_LISTA);
 
+// Quién puede finalizar o cancelar en bloque: lo mismo que exige la acción del servidor.
+const ROLES_CIERRE_EN_BLOQUE = ["ADMIN", "REGULACION", "ANALISTA"];
+
 export function ServiciosTabla({
   servicios,
   vehiculos,
@@ -266,6 +285,8 @@ export function ServiciosTabla({
   clientes,
   puedeEditar,
   medicosDisponibles,
+  ovemsDisponibles = [],
+  auxiliaresDisponibles = [],
   reguladoresDisponibles,
   tripulacionPorVehiculo,
   ciudadDefault,
@@ -289,6 +310,15 @@ export function ServiciosTabla({
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  // Selección múltiple (finalizar o cancelar en bloque): ids elegidos en la página actual.
+  const puedeSeleccionar = puedeEditar && ROLES_CIERRE_EN_BLOQUE.includes(viewerRole ?? "");
+  const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
+  const alternarSeleccion = (id: number) =>
+    setSeleccion((prev) => {
+      const sig = new Set(prev);
+      if (!sig.delete(id)) sig.add(id);
+      return sig;
+    });
   const [cedulaBusqueda, setCedulaBusqueda] = useState("");
   const [pacienteNuevoAbierto, setPacienteNuevoAbierto] = useState(false);
   // Etapa inicial — solo aplica al crear (SISRES: registroServicios.php la
@@ -312,7 +342,7 @@ export function ServiciosTabla({
   // Umbral de servicios estancados configurado por el ADMIN (migración 103).
   const umbralesEstancado = useUmbralesEstancado();
 
-  const { register, handleSubmit, reset, setValue: setValueForm, watch, formState } =
+  const { register, handleSubmit, reset, setValue: setValueForm, setError: setErrorCampo, watch, formState } =
     useForm<MedicalServiceFormData>({ resolver: zodResolver(medicalServiceSchema) });
   // Todo valor puesto desde un combobox/select cuenta como cambio: sin esto, «¿Descartar los cambios?» no se pedía.
   const setValue: typeof setValueForm = (name, value, opts) => setValueForm(name, value, { shouldDirty: true, ...opts });
@@ -374,6 +404,15 @@ export function ServiciosTabla({
   const perfil = perfilFormularioServicio(tipoSeleccionado ?? "");
   const requiereRuta = perfil !== "TELEMEDICINA";
   const requiereMedicoIndependiente = perfil === "MEDICINA_DOMICILIARIA" || perfil === "TELEMEDICINA";
+  // Se puede guardar sin dirección, pero no despachar (CURSO u OVEM): el aviso lo dice mientras falte.
+  const direccionesPorCompletar = requiereRuta
+    ? direccionesFaltantes(tipoSeleccionado, {
+        direccion_origen: watch("direccion_origen"),
+        ciudad_origen: watch("ciudad_origen"),
+        direccion_destino: watch("direccion_destino"),
+        ciudad_destino: watch("ciudad_destino"),
+      })
+    : [];
 
   // Ciudad en cascada: solo las del departamento ya elegido (catálogo real
   // DIVIPOLA, ver colombia-geo.ts). Si cambia el departamento, se limpia la
@@ -417,9 +456,21 @@ export function ServiciosTabla({
 
   // Al elegir móvil, autocompletar la tripulación ya armada para ese
   // vehículo (Regulación → pantalla de Flota) — no hace falta reescribirla acá.
+  // Lo que se asignó desde «Asignar tripulación» en esta sesión del formulario: se suma a lo que trae el servidor, que se
+  // actualiza solo después (revalidación) pero no a tiempo para el aviso.
+  const [asignadasAhora, setAsignadasAhora] = useState<Record<string, { ovem?: PersonaTripulacion; medico?: PersonaTripulacion; auxiliar?: PersonaTripulacion }>>({});
+  const tripulacionDe = (vehicleId: string) => ({ ...tripulacionPorVehiculo[vehicleId], ...asignadasAhora[vehicleId] });
+
+  const alAsignarTripulacion = (vehicleId: string, rol: RolTripulacion, persona: PersonaTripulacion) => {
+    const clave = rol === "OVEM" ? "ovem" : rol === "MEDICO" ? "medico" : "auxiliar";
+    setAsignadasAhora((previo) => ({ ...previo, [vehicleId]: { ...previo[vehicleId], [clave]: persona } }));
+    // La persona queda también en el servicio que se está registrando.
+    setValue(rol === "OVEM" ? "ovem_user_id" : rol === "MEDICO" ? "medico_user_id" : "auxiliar_user_id", persona.user_id);
+  };
+
   const handleVehiculo = (vehicleId: string) => {
     setValue("vehicle_id", vehicleId === "__none__" ? "" : vehicleId);
-    const tripulacion = tripulacionPorVehiculo[vehicleId];
+    const tripulacion = tripulacionDe(vehicleId);
     setValue("ovem_user_id", tripulacion?.ovem?.user_id ?? "");
     setValue("auxiliar_user_id", tripulacion?.auxiliar?.user_id ?? "");
     // El médico de la tripulación del vehículo solo aplica al perfil de
@@ -428,9 +479,21 @@ export function ServiciosTabla({
     if (perfil === "TRASLADO") setValue("medico_user_id", tripulacion?.medico?.user_id ?? "");
   };
 
-  const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionPorVehiculo[vehiculoSeleccionado] : undefined;
-  // TAB = OVEM + auxiliar; TAM = OVEM + auxiliar + médico. Solo avisa: un servicio no debe quedar sin poder guardarse por esto.
-  const tripulacionFaltante = rolesFaltantes(tipoSeleccionado, tripulacionVehiculoActual);
+  const tripulacionVehiculoActual = vehiculoSeleccionado ? tripulacionDe(vehiculoSeleccionado) : undefined;
+  // OVEM siempre; TAB suma auxiliar; TAM auxiliar y médico; domiciliaria médico. Solo avisa: un servicio no debe quedar sin
+  // poder guardarse por esto. En domiciliaria el médico también se elige aparte (prestador): con uno elegido no falta.
+  const tripulacionFaltante = tripulacionPorCompletar(tipoSeleccionado, {
+    ...tripulacionVehiculoActual,
+    ...(perfil === "MEDICINA_DOMICILIARIA" && medicoIndependienteSeleccionado ? { medico: medicoIndependienteSeleccionado } : {}),
+  });
+  const puedeAsignarTripulacion = ["ADMIN", "ANALISTA", "REGULACION"].includes(viewerRole ?? "") && !soloLecturaLogistica;
+  const tripulacionDeHoyTexto = [
+    nombrePersona(tripulacionVehiculoActual?.ovem) && `OVEM ${nombrePersona(tripulacionVehiculoActual?.ovem)}`,
+    perfil === "TRASLADO" && nombrePersona(tripulacionVehiculoActual?.medico) && `Médico ${nombrePersona(tripulacionVehiculoActual?.medico)}`,
+    nombrePersona(tripulacionVehiculoActual?.auxiliar) && `Auxiliar ${nombrePersona(tripulacionVehiculoActual?.auxiliar)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   // Los filtros se aplican en el servidor (ServiciosFiltros): la tabla muestra la página tal cual.
   const filtrados = servicios;
@@ -457,8 +520,10 @@ export function ServiciosTabla({
     // campos coherentes — si no se encuentra, se deja vacío en vez de un
     // valor huérfano que el candado departamento→ciudad rechazaría.
     const ubicacionDefault = resolverCiudad(ciudadDefault);
+    // La programación nace con la fecha y hora de ahora (Colombia): se cambia si hace falta, y si no, se deja como está.
     reset({
       tipo_servicio: "",
+      fecha_hora_programacion: aTextoLocalColombia(new Date().toISOString()),
       // Sin estos dos, «Guardar y crear otro» dejaba el paciente (y su nombre) del servicio anterior.
       nombre_completo: "",
       patient_id: undefined,
@@ -581,6 +646,7 @@ export function ServiciosTabla({
       fecha_hora_llegada_intermedia: fecha("fecha_hora_llegada_intermedia"),
       fecha_hora_salida_intermedia: fecha("fecha_hora_salida_intermedia"),
       direccion_destino: str("direccion_destino"),
+      notas_ubicacion: str("notas_ubicacion"),
       fecha_hora_llegada_destino: fecha("fecha_hora_llegada_destino"),
       fecha_hora_salida_destino: fecha("fecha_hora_salida_destino"),
       finalidad_traslado: str("finalidad_traslado"),
@@ -608,6 +674,24 @@ export function ServiciosTabla({
     }
   };
 
+  // «Asignar vehículo» / «Abrir» desde la Sala de control llega como /servicios?numero=ID&editar=1: la lista viene filtrada a ese
+  // único servicio, que se abre directo en edición. El parámetro se limpia igual que `nuevo`.
+  const editarDesdeUrl = useRef(false);
+  useEffect(() => {
+    if (searchParams.get("editar") !== "1") {
+      editarDesdeUrl.current = false;
+      return;
+    }
+    if (editarDesdeUrl.current || servicios.length !== 1) return;
+    editarDesdeUrl.current = true;
+    if (puedeEditar && puedeEditarServicio(servicios[0])) abrirEdicion(servicios[0]);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("editar");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, servicios]);
+
   // Al abrir la edición en la fila, la lleva a la vista y le da el foco (lectores de pantalla anuncian el título).
   useEffect(() => {
     if (filaEnEdicion === null) return;
@@ -634,9 +718,36 @@ export function ServiciosTabla({
   };
 
   const onSubmit = async (values: MedicalServiceFormData, crearOtro = false, confirmarChoque = false) => {
+    // Al crear, la ciudad de registro nunca queda vacía: la elegida, o la del móvil asignado (un ADMIN no tiene centro propio).
+    if (!editando) {
+      const ciudad = ciudadRegistroDeServicioNuevo({
+        ciudad: values.ciudad_registro,
+        centroDelMovil: vehiculos.find((v) => v.id === values.vehicle_id)?.centro_operativo,
+      });
+      if (!ciudad) {
+        setCreadoMsg(null);
+        setError(ERROR_CIUDAD_REGISTRO);
+        enfocarCampo("ciudad_registro");
+        return;
+      }
+      values = { ...values, ciudad_registro: ciudad };
+    }
     setGuardando(true);
     setError(null);
     setCreadoMsg(null);
+    // No se despacha (CURSO u OVEM nuevo) sin dirección; guardar sin despachar sí se permite, con el aviso de la sección Ruta.
+    const faltas = faltasParaDespachar(values.tipo_servicio, values, {
+      etapaAntes: editando?.etapa,
+      etapaDespues: editando ? editando.etapa : etapaInicial,
+      ovemAntes: editando ? String(editando.ovem_user_id ?? "") : null,
+      ovemDespues: values.ovem_user_id,
+    });
+    if (faltas.length > 0) {
+      setGuardando(false);
+      for (const f of faltas) setErrorCampo(f.campo, { type: "manual", message: f.mensaje });
+      enfocarCampo(faltas[0].campo);
+      return;
+    }
     const res = editando
       ? await actualizarServicioMedico(editando.id, values, confirmarChoque)
       : await crearServicioMedico(values, etapaInicial, confirmarChoque);
@@ -668,6 +779,19 @@ export function ServiciosTabla({
   const mensajeError = (name: string) => listaErrores.find((e) => e.name === name)?.message;
 
   const aplicarEtapa = async (servicio: ServicioRow, etapaNueva: string, motivo?: string) => {
+    const faltas = faltasParaDespachar(servicio.tipo_servicio, {
+      direccion_origen: String(servicio.direccion_origen ?? ""),
+      ciudad_origen: servicio.ciudad_origen,
+      direccion_destino: String(servicio.direccion_destino ?? ""),
+      ciudad_destino: servicio.ciudad_destino,
+    }, { etapaAntes: servicio.etapa, etapaDespues: etapaNueva });
+    if (faltas.length > 0) {
+      setAviso({
+        titulo: "No se puede pasar a CURSO",
+        mensaje: `Falta: ${faltas.map((f) => f.etiqueta).join(", ")}. Edita el servicio, completa los datos y vuelve a intentarlo.`,
+      });
+      return;
+    }
     setBusyId(servicio.id);
     const res = await cambiarEtapaServicio(servicio.id, servicio.etapa, etapaNueva, motivo);
     setBusyId(null);
@@ -749,6 +873,11 @@ export function ServiciosTabla({
         <Badge variant={ETAPA_BADGE[s.etapa] ?? "outline"} className="shrink-0 whitespace-nowrap px-1.5 py-0 text-xs leading-5">
           {s.etapa}
         </Badge>
+        {porConfirmar({ etapa: s.etapa, vehicle_id: s.vehicle_id, confirmado_at: s.confirmado_at as string | null, fecha_hora_programacion: s.fecha_hora_programacion as string | null }, hoyBogota()) && (
+          <Badge variant="outline" className="shrink-0 whitespace-nowrap border-amber-400 bg-amber-50 px-1.5 py-0 text-xs leading-5 text-amber-900">
+            Por confirmar
+          </Badge>
+        )}
         {estancado !== null && (
           <Badge
             variant="outline"
@@ -888,7 +1017,10 @@ export function ServiciosTabla({
               <h3 className="text-sm font-semibold text-muted-foreground">Paciente</h3>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1 sm:col-span-1">
-                  <Label id="buscar_paciente_label">Buscar paciente</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label id="buscar_paciente_label">Buscar paciente</Label>
+                    <HelpTrigger hover text="Por cédula o nombre. Si no aparece, créalo con «Crear paciente nuevo» para que quede su ficha." />
+                  </div>
                   <div role="group" aria-labelledby="buscar_paciente_label">
                     <PatientSearchCombobox
                       valueLabel={cedulaBusqueda || undefined}
@@ -896,9 +1028,6 @@ export function ServiciosTabla({
                       disabled={soloLecturaLogistica}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Por cédula o nombre — si no aparece, créalo aquí abajo para que quede su ficha.
-                  </p>
                   <Button
                     type="button"
                     variant="outline"
@@ -955,27 +1084,19 @@ export function ServiciosTabla({
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">Verde: libre · Rojo: con un servicio en curso.</p>
+                    {vehiculoSeleccionado && tripulacionDeHoyTexto && (
+                      <p className="text-xs text-muted-foreground">Tripulación de hoy: {tripulacionDeHoyTexto}</p>
+                    )}
                     {vehiculoSeleccionado && (
-                      <p className="text-xs text-muted-foreground">
-                        Tripulación de hoy: {[
-                          nombrePersona(tripulacionVehiculoActual?.ovem) && `OVEM ${nombrePersona(tripulacionVehiculoActual?.ovem)}`,
-                          perfil === "TRASLADO" && nombrePersona(tripulacionVehiculoActual?.medico) && `Médico ${nombrePersona(tripulacionVehiculoActual?.medico)}`,
-                          nombrePersona(tripulacionVehiculoActual?.auxiliar) && `Auxiliar ${nombrePersona(tripulacionVehiculoActual?.auxiliar)}`,
-                        ].filter(Boolean).join(" · ") || "sin nadie asignado — armar en Regulación"}
-                      </p>
-                    )}
-                    {vehiculoSeleccionado && !tripulacionVehiculoActual?.ovem && (
-                      <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
-                        Este móvil no tiene OVEM armado hoy: el servicio no le aparecerá a ningún conductor hasta que Regulación arme la
-                        tripulación (se le asigna solo al armarla).
-                      </p>
-                    )}
-                    {vehiculoSeleccionado && tripulacionFaltante.filter((r) => r !== "OVEM").length > 0 && (
-                      <p className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-foreground">
-                        {tipoSeleccionado} lleva {rolesRequeridosPorTipo(tipoSeleccionado).map((r) => ETIQUETA_ROL[r]).join(", ")}: falta{" "}
-                        {tripulacionFaltante.filter((r) => r !== "OVEM").map((r) => ETIQUETA_ROL[r]).join(" y ")} en este móvil. Puedes guardar;
-                        la persona queda en el servicio cuando Regulación la arme en el móvil.
-                      </p>
+                      <AsignarTripulacion
+                        key={vehiculoSeleccionado}
+                        vehicleId={vehiculoSeleccionado}
+                        tipoServicio={tipoSeleccionado ?? ""}
+                        faltan={tripulacionFaltante}
+                        candidatos={{ OVEM: ovemsDisponibles, AUXILIAR_ENFERMERIA: auxiliaresDisponibles, MEDICO: medicosDisponibles }}
+                        puedeAsignar={puedeAsignarTripulacion}
+                        onAsignada={(rol, persona) => alAsignarTripulacion(vehiculoSeleccionado, rol, persona)}
+                      />
                     )}
                   </div>
                 )}
@@ -1167,6 +1288,12 @@ export function ServiciosTabla({
             {requiereRuta && (
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold text-muted-foreground">Ruta y tiempos</h3>
+                {direccionesPorCompletar.length > 0 && (
+                  <p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
+                    Falta: {direccionesPorCompletar.map((f) => f.etiqueta).join(", ")}. Puedes guardar el servicio así, pero no se puede
+                    asignar un OVEM ni pasarlo a CURSO hasta completarlo: la tripulación necesita saber adónde ir.
+                  </p>
+                )}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label htmlFor="departamento_origen">Departamento origen</Label>
@@ -1191,6 +1318,7 @@ export function ServiciosTabla({
                       allowCustom={false}
                       disabled={campoBloqueado("ciudad_origen") || !departamentoOrigenSeleccionado}
                     />
+                    <ErrorCampo id="ciudad_origen-error" message={mensajeError("ciudad_origen")} />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="departamento_destino">Departamento destino</Label>
@@ -1215,6 +1343,7 @@ export function ServiciosTabla({
                       allowCustom={false}
                       disabled={campoBloqueado("ciudad_destino") || !departamentoDestinoSeleccionado}
                     />
+                    <ErrorCampo id="ciudad_destino-error" message={mensajeError("ciudad_destino")} />
                   </div>
                   {paraPerfil(CAMPOS_RUTA, perfil).map((campo) =>
                     campo.type === "datetime-local" ? (
@@ -1235,11 +1364,25 @@ export function ServiciosTabla({
                           type="text"
                           placeholder={campo.placeholder}
                           disabled={campoBloqueado(campo.name)}
+                          aria-invalid={mensajeError(campo.name) ? "true" : undefined}
+                          aria-describedby={mensajeError(campo.name) ? `${campo.name}-error` : undefined}
                           {...register(campo.name)}
                         />
+                        <ErrorCampo id={`${campo.name}-error`} message={mensajeError(campo.name)} />
                       </div>
                     )
                   )}
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="notas_ubicacion">Notas de ubicación</Label>
+                    <Input
+                      id="notas_ubicacion"
+                      type="text"
+                      maxLength={255}
+                      placeholder="Apartamento, portería, referencias para llegar"
+                      disabled={campoBloqueado("notas_ubicacion")}
+                      {...register("notas_ubicacion")}
+                    />
+                  </div>
                   {perfil === "TRASLADO" && (
                     <div className="space-y-1">
                       <Label htmlFor="perimetro">Perímetro</Label>
@@ -1643,11 +1786,33 @@ export function ServiciosTabla({
         ))}
       </ul>
 
+      {puedeSeleccionar && (
+        <AccionesEnBloque
+          ids={[...seleccion].filter((id) => filtrados.some((s) => s.id === id))}
+          onLimpiar={() => setSeleccion(new Set())}
+          onListo={() => {
+            setSeleccion(new Set());
+            router.refresh();
+          }}
+        />
+      )}
+
       {/* Escritorio (md en adelante): tabla. */}
       <div className="hidden overflow-x-auto [container-type:inline-size] md:block">
         <Table className="[&_td]:px-3 [&_td]:py-1.5 [&_th]:h-9 [&_th]:px-3">
           <TableHeader>
             <TableRow>
+              {puedeSeleccionar && (
+                <TableHead className="w-8 !px-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Seleccionar todos los servicios de la página"
+                    className="h-4 w-4 accent-primary"
+                    checked={filtrados.length > 0 && filtrados.every((s) => seleccion.has(s.id))}
+                    onChange={(e) => setSeleccion(e.target.checked ? new Set(filtrados.map((s) => s.id)) : new Set())}
+                  />
+                </TableHead>
+              )}
               <TableHead>ID</TableHead>
               <TableHead>Etapa</TableHead>
               <TableHead>Paciente</TableHead>
@@ -1664,7 +1829,7 @@ export function ServiciosTabla({
             {filtrados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6 + (puedeEditar ? 1 : 0)}
+                  colSpan={6 + (puedeEditar ? 1 : 0) + (puedeSeleccionar ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin servicios registrados
@@ -1674,7 +1839,7 @@ export function ServiciosTabla({
             {filtrados.map((s) =>
               filaEnEdicion === s.id ? (
                 <TableRow key={s.id} className="bg-muted/30 hover:bg-muted/30">
-                  <TableCell colSpan={6 + (puedeEditar ? 1 : 0)} className="!p-0">
+                  <TableCell colSpan={6 + (puedeEditar ? 1 : 0) + (puedeSeleccionar ? 1 : 0)} className="!p-0">
                     {/* sticky + 100cqw: el panel mide lo que mide la zona visible de la tabla (aunque la tabla sea más ancha) y el desplazamiento horizontal queda dentro del formulario. */}
                     <div className="sticky left-0 w-[calc(100cqw-2px)] max-w-full space-y-3 p-3" role="region" aria-labelledby={`edicion-titulo-${s.id}`}>
                       <div
@@ -1699,7 +1864,18 @@ export function ServiciosTabla({
                   </TableCell>
                 </TableRow>
               ) : (
-              <TableRow key={s.id}>
+              <TableRow key={s.id} className={cn(seleccion.has(s.id) && "bg-info-soft")}>
+                {puedeSeleccionar && (
+                  <TableCell className="w-8 !px-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Seleccionar servicio ${s.id}`}
+                      className="h-4 w-4 accent-primary"
+                      checked={seleccion.has(s.id)}
+                      onChange={() => alternarSeleccion(s.id)}
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="w-12 !px-2 text-xs tabular-nums text-muted-foreground">{s.id}</TableCell>
                 <TableCell>
                   <div className="flex flex-nowrap items-center gap-1">{insigniasEtapa(s)}</div>

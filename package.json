@@ -25,7 +25,8 @@
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
     "e2e:debug": "playwright test --debug",
-    "e2e:report": "playwright show-report"
+    "e2e:report": "playwright show-report",
+    "e2e:informe": "tsx scripts/e2e-informe.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

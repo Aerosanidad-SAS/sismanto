@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@/app/api/actions/auth";
+import { getProfile, requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { listVehicleServiceRevenue } from "@/app/api/actions/service-revenue";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,8 @@ import { ELECTRIC_VEHICLE_PLACAS } from "@/lib/electric-reference";
 import { VehicleEstadoBadge } from "@/components/vehiculos/vehicle-estado-badge";
 import { centroVisible, puedeCambiarEstadoOperativoVehiculo } from "@/lib/auth-utils";
 import { VehicleMaintenanceAlertsPanel } from "@/components/vehiculos/vehicle-maintenance-alerts-panel";
-import { getAlertsForVehicle } from "@/app/api/actions/plan-mantenimiento";
+import { getAlertsForVehicle, getPlanItems } from "@/app/api/actions/plan-mantenimiento";
+import { itemsSinPrimerRegistro } from "@/lib/plan-sin-registro";
 import { VehicleSpecsEditor } from "@/components/vehiculos/vehicle-specs-editor";
 import { VehicleGeneralEditor } from "@/components/vehiculos/vehicle-general-editor";
 import { VehicleCostosAnuales } from "@/components/vehiculos/vehicle-costos-anuales";
@@ -107,6 +109,7 @@ export default async function VehicleDetailPage(
     params: Promise<{ id: string }>;
   }
 ) {
+  await requireRole(rolesDeRuta("/vehiculos"));
   const params = await props.params;
   const vehicle = await getVehicle(params.id);
 
@@ -121,7 +124,7 @@ export default async function VehicleDetailPage(
     );
   }
 
-  const [mantenimientos, incidentes, kilometrajes, profile, maintenanceAlerts, centrosOperativos] =
+  const [mantenimientos, incidentes, kilometrajes, profile, maintenanceAlerts, centrosOperativos, itemsDelPlan] =
     await Promise.all([
       getVehicleMaintenances(params.id),
       getVehicleIncidents(params.id),
@@ -129,6 +132,7 @@ export default async function VehicleDetailPage(
       getProfile(),
       getAlertsForVehicle(params.id),
       getCentrosOperativos(),
+      getPlanItems(),
     ]);
 
   // Regulación y Coordinación solo ven la ficha de vehículos de su centro.
@@ -372,6 +376,11 @@ export default async function VehicleDetailPage(
         vehicleId={vehicle.id}
         placa={vehicle.placa}
         alerts={maintenanceAlerts}
+        sinRegistro={itemsSinPrimerRegistro(
+          itemsDelPlan,
+          vehicle as { placa: string; centro_operativo: string | null },
+          maintenanceAlerts.map((a) => a.plan_item_id)
+        )}
         canLog={canLogMaintenance}
       />
 

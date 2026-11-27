@@ -27,25 +27,31 @@ export async function registrarHallazgosPreoperacional(
   supabase: Cliente,
   args: { vehicleId: string; items: ItemEvaluado[]; reportadoPor: string; hoy: Dia }
 ): Promise<ResultadoHallazgos> {
-  const { data: vehiculo } = await supabase
+  const { data: vehiculo, error: errVehiculo } = await supabase
     .from("vehicles")
     .select("vencimiento_soat, vencimiento_tecnicomecanica, vencimiento_rtm")
     .eq("id", args.vehicleId)
     .maybeSingle();
+  if (errVehiculo) console.error("[preoperacional] no se pudo leer la ficha del vehículo:", errVehiculo.code, errVehiculo.message);
 
-  const hallazgos = hallazgosPreoperacional(args.items, vehiculo ?? {}, args.hoy);
-  let resumen = resumirHallazgos(hallazgos);
+  // Sin la ficha no se pueden evaluar los documentos: mejor omitirlos que inventar un «sin fecha de vencimiento».
+  const documentosSinEvaluar = Boolean(errVehiculo);
+  const hallazgos = hallazgosPreoperacional(args.items, vehiculo ?? {}, args.hoy, { sinDocumentos: documentosSinEvaluar });
+  let resumen = resumirHallazgos(hallazgos, "ENVIADO", { criticos: 0, otros: 0, documentosSinEvaluar });
   const novedades = novedadesDeHallazgos(hallazgos, args.hoy);
   if (novedades.length === 0) return { ...resumen, novedadesCreadas: 0 };
 
-  const { data: abiertas } = await supabase
+  const { data: abiertas, error: errAbiertas } = await supabase
     .from("incidents")
     .select("descripcion")
     .eq("vehicle_id", args.vehicleId)
     .in("estado", ["ABIERTO", "EN_PROCESO"]);
+  // Sin esta lectura no se puede evitar un duplicado, pero perder un crítico es peor: se sigue y se deja el rastro.
+  if (errAbiertas) console.error("[preoperacional] no se pudieron leer las novedades abiertas (puede haber duplicados):", errAbiertas.code, errAbiertas.message);
   const yaAbiertas: string[] = (abiertas ?? []).map((i: { descripcion: string }) => i.descripcion);
 
   let creadas = 0;
+  const noRegistrados = { criticos: 0, otros: 0 };
   const criticosNuevos: string[] = [];
   for (const n of novedades) {
     // La clave es un prefijo estable: «[Preoperacional] Luz de freno» sigue abierta aunque el detalle cambie.
@@ -62,7 +68,14 @@ export async function registrarHallazgosPreoperacional(
       })
       .select("id")
       .single();
-    if (error || !data) continue;
+    if (error || !data) {
+      // Antes se saltaba en silencio: el OVEM leía «ya estaba reportado» sin que se hubiera creado nada. Ahora se cuenta y
+      // se le dice; reenviar el checklist reintenta (la clave estable evita duplicar lo que sí quedó abierto).
+      console.error("[preoperacional] no se pudo abrir la novedad:", n.clave, error?.code, error?.message);
+      if (n.afectaOperatividad) noRegistrados.criticos++;
+      else noRegistrados.otros++;
+      continue;
+    }
     creadas++;
     if (n.afectaOperatividad) criticosNuevos.push(n.clave.replace(/^\[Preoperacional\]\s*/, ""));
     await auditar(
@@ -79,6 +92,6 @@ export async function registrarHallazgosPreoperacional(
     // Sin destinatarios o sin correo configurado el aviso no salió: el conductor debe saberlo para llamar.
     aviso = r.enviado && r.destinatarios > 0 ? "ENVIADO" : "FALLO";
   }
-  resumen = resumirHallazgos(hallazgos, aviso);
+  resumen = resumirHallazgos(hallazgos, aviso, { ...noRegistrados, documentosSinEvaluar });
   return { ...resumen, novedadesCreadas: creadas };
 }

@@ -327,7 +327,7 @@ export async function generarActaEntregaPdf(id: number) {
       createElement(ActaEntregaPdf, {
         acta: fila,
         firmas,
-        generadoPor: profile?.nombre_completo || profile?.email || "Usuario SISMANTO",
+        generadoPor: profile?.nombre_completo || profile?.email || "Usuario SISRES",
       })
     );
     return { success: true, data: buffer.toString("base64"), filename: `acta-entrega-${fila.numero_orden}.pdf` };

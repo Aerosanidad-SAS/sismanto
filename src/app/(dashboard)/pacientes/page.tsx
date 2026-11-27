@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buscarPacientes, getEpsCatalog, getResumenPacientes } from "@/app/api/actions/pacientes";
 import { formatNumber } from "@/lib/utils";
-import { getProfile } from "@/app/api/actions/auth";
+import { requireRole } from "@/app/api/actions/auth";
+import { rolesDeRuta } from "@/lib/navegacion";
 import { PacientesTabla } from "@/components/pacientes/pacientes-tabla";
 import { getCamposObligatoriosModulo } from "@/app/api/actions/campos-obligatorios";
 import { ExportarPacientes } from "@/components/pacientes/exportar-pacientes";
@@ -21,10 +22,11 @@ export default async function PacientesPage(
     searchParams: Promise<Record<string, string | string[] | undefined>>;
   }
 ) {
+  // Datos clínicos: el OVEM (y cualquier rol que el menú no incluya) vuelve a su pantalla aunque escriba la URL.
+  const profile = await requireRole(rolesDeRuta("/pacientes"));
   const searchParams = await props.searchParams;
   const { q, pagina } = leerBusquedaPacientes(searchParams);
-  const [profile, { pacientes, total, error: errorLista }, resumen, epsOptions, obligatorios] = await Promise.all([
-    getProfile(),
+  const [{ pacientes, total, error: errorLista }, resumen, epsOptions, obligatorios] = await Promise.all([
     buscarPacientes(q, pagina),
     getResumenPacientes(),
     getEpsCatalog(),

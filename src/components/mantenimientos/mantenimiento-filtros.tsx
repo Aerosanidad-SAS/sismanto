@@ -21,6 +21,7 @@ export type MantenimientoFiltrosIniciales = {
   tipo?: string;
   proveedor?: string;
   factura?: string;
+  soporte?: string;
 };
 
 const TIPOS_ALL = "__all__";
@@ -36,6 +37,7 @@ export function MantenimientoFiltrosForm({ inicial }: { inicial: MantenimientoFi
   const [tipo, setTipo] = useState<string>(inicial.tipo ?? "");
   const [proveedor, setProveedor] = useState(inicial.proveedor ?? "");
   const [factura, setFactura] = useState(inicial.factura ?? "");
+  const [soporte, setSoporte] = useState(inicial.soporte ?? "");
 
   const aplicar = () => {
     const qs = new URLSearchParams();
@@ -46,6 +48,7 @@ export function MantenimientoFiltrosForm({ inicial }: { inicial: MantenimientoFi
     if (tipo && tipo !== TIPOS_ALL) qs.set("mTipo", tipo);
     if (proveedor.trim()) qs.set("mProv", proveedor.trim());
     if (factura.trim()) qs.set("mFac", factura.trim());
+    if (soporte === "sin") qs.set("mSoporte", "sin");
 
     startTransition(() => router.push(`/mantenimientos${qs.toString() ? `?${qs.toString()}` : ""}`));
   };
@@ -58,6 +61,7 @@ export function MantenimientoFiltrosForm({ inicial }: { inicial: MantenimientoFi
     setTipo("");
     setProveedor("");
     setFactura("");
+    setSoporte("");
     startTransition(() => router.push("/mantenimientos"));
   };
 
@@ -66,7 +70,7 @@ export function MantenimientoFiltrosForm({ inicial }: { inicial: MantenimientoFi
       <p className="text-xs font-medium text-muted-foreground">
         Filtros compuestos (se combinan todos los que llene).
       </p>
-      <div className="grid gap-2 grid-cols-2 md:grid-cols-4 lg:grid-cols-7 items-end">
+      <div className="grid gap-2 grid-cols-2 md:grid-cols-4 lg:grid-cols-8 items-end">
         <div className="flex flex-col gap-1">
           <Label className="text-xs text-muted-foreground">Placa</Label>
           <Input placeholder="Placa" value={placa} onChange={(e) => setPlaca(e.target.value)} className="h-9" />
@@ -113,6 +117,18 @@ export function MantenimientoFiltrosForm({ inicial }: { inicial: MantenimientoFi
         <div className="flex flex-col gap-1">
           <Label className="text-xs text-muted-foreground">Factura</Label>
           <Input placeholder="Factura" value={factura} onChange={(e) => setFactura(e.target.value)} className="h-9" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Soporte</Label>
+          <Select value={soporte || TIPOS_ALL} onValueChange={(v) => setSoporte(v === TIPOS_ALL ? "" : v)}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Soporte" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TIPOS_ALL}>Todos</SelectItem>
+              <SelectItem value="sin">Sin soporte</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">

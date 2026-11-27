@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { esDia } from '@/lib/fechas';
+import { HALLAZGOS_CRITICOS } from '@/lib/hallazgos-criticos';
 import { validarObligatoriosSiniestro } from '@/lib/siniestro-datos';
 import { ESTADO_VALORACION_OPCIONES, VALORACION_OPCIONES } from '@/lib/valoraciones-lista';
 import { TIPOS_MANTENIMIENTO_BIOMEDICO } from '@/lib/biomedico-fechas';
@@ -7,33 +8,56 @@ import { errorDeDocumento, mensajeCelular, normalizarCelularColombia, normalizar
 
 // Schema de validación para mantenimiento
 export const maintenanceSchema = z.object({
-  vehicleId: z.string().uuid('ID de vehículo inválido'),
-  fecha: z.date().max(new Date(), 'No puede ser fecha futura'),
-  kilometrajeActual: z.number().int().positive('Kilometraje debe ser positivo'),
+  vehicleId: z.string({ required_error: 'Selecciona un vehículo' }).uuid('Selecciona un vehículo'),
+  // Se compara al validar, no al cargar el módulo: un `new Date()` en la definición se congelaba y rechazaba la fecha de hoy.
+  fecha: z
+    .date({ required_error: 'Selecciona la fecha', invalid_type_error: 'Selecciona la fecha' })
+    .refine((d) => d.getTime() <= Date.now(), 'No puede ser fecha futura'),
+  kilometrajeActual: z
+    .number({ required_error: 'Ingresa el kilometraje', invalid_type_error: 'Ingresa el kilometraje' })
+    .int('El kilometraje debe ser un número entero')
+    .positive('Kilometraje debe ser positivo'),
   tipo: z.enum(['PREVENTIVO', 'CORRECTIVO'], {
     required_error: 'Debe seleccionar un tipo de mantenimiento',
   }),
-  categoriaId: z.number().int().positive('Debe seleccionar una categoría'),
+  categoriaId: z
+    .number({ required_error: 'Debe seleccionar una categoría', invalid_type_error: 'Debe seleccionar una categoría' })
+    .int()
+    .positive('Debe seleccionar una categoría'),
   descripcionTrabajo: z.string().min(10, 'Mínimo 10 caracteres'),
   proveedor: z.string().min(1, 'Requerido'),
   supplierId: z.number().int().optional(),
-  valor: z.number().nonnegative('El valor no puede ser negativo'),
+  valor: z.number({ required_error: 'Ingresa el valor', invalid_type_error: 'Ingresa el valor' }).nonnegative('El valor no puede ser negativo'),
   numeroFactura: z.string().optional(),
-  tiempoFueraServicioHoras: z.number().nonnegative().default(0),
+  tiempoFueraServicioHoras: z
+    .number({ invalid_type_error: 'Ingresa las horas (0 si no estuvo fuera de servicio)' })
+    .nonnegative('Las horas no pueden ser negativas')
+    .default(0),
   notasAdicionales: z.string().optional(),
   incidentId: z.number().int().optional(),
+  // Ruta del soporte ya subido (ver `subirSoporteMantenimiento`); la acción comprueba que sea del propio usuario.
+  soportePath: z.string().max(200).optional(),
 });
 
 export type MaintenanceFormData = z.infer<typeof maintenanceSchema>;
 
 // Schema de validación para incidente/novedad (severidad opcional si el reporter no la define; servidor usa MEDIA)
-export const incidentSchema = z.object({
-  vehicleId: z.string().uuid('ID de vehículo inválido'),
-  descripcion: z.string().min(10, 'Mínimo 10 caracteres').max(2000, 'Máximo 2000 caracteres'),
-  severidad: z.enum(['BAJA', 'MEDIA', 'ALTA']).optional(),
-  reportadoPor: z.string().min(3, 'Mínimo 3 caracteres'),
-  afectaOperatividad: z.boolean().default(false),
-});
+export const incidentSchema = z
+  .object({
+    vehicleId: z.string().uuid('ID de vehículo inválido'),
+    descripcion: z.string().max(2000, 'Máximo 2000 caracteres'),
+    severidad: z.enum(['BAJA', 'MEDIA', 'ALTA']).optional(),
+    reportadoPor: z.string().min(3, 'Mínimo 3 caracteres'),
+    afectaOperatividad: z.boolean().default(false),
+    // Hallazgo de la lista cerrada: lo que vuelve crítica a la novedad. No se deduce del texto de la descripción.
+    hallazgoCritico: z.enum(HALLAZGOS_CRITICOS).optional(),
+  })
+  .superRefine((v, ctx) => {
+    // Con un hallazgo crítico basta con el hallazgo: el detalle es opcional (en una emergencia no se bloquea el reporte).
+    if (!v.hallazgoCritico && v.descripcion.length < 10) {
+      ctx.addIssue({ code: z.ZodIssueCode.too_small, minimum: 10, type: 'string', inclusive: true, message: 'Mínimo 10 caracteres', path: ['descripcion'] });
+    }
+  });
 
 export type IncidentFormData = z.infer<typeof incidentSchema>;
 
@@ -765,6 +789,7 @@ export const medicalServiceSchema = z.object({
   fecha_hora_llegada_intermedia: optStr,
   fecha_hora_salida_intermedia: optStr,
   direccion_destino: optStr,
+  notas_ubicacion: optStr,
   fecha_hora_llegada_destino: optStr,
   fecha_hora_salida_destino: optStr,
   finalidad_traslado: optStr,
@@ -794,8 +819,8 @@ export type MedicalServiceFormData = z.input<typeof medicalServiceSchema>;
 
 // Perfiles de formulario por tipo de servicio (Regulación, QA 2026-07-22):
 // cada tipo de servicio real muestra un subconjunto de secciones/campos.
-// Enfermería Domiciliaria comparte perfil con Medicina Domiciliaria por
-// similitud (visita a domicilio) — a confirmar con un usuario real.
+// Enfermería Domiciliaria ya no existe como servicio (Daniel, 2026-11-23): se conserva aquí solo para que los
+// servicios históricos de SISRES que traen ese valor abran con el perfil de Medicina Domiciliaria. No se ofrece al crear.
 export const PERFIL_FORMULARIO_SERVICIO = {
   MEDICINA_DOMICILIARIA: ["MEDICINA DOMICILIARIA", "ENFERMERIA DOMICILIARIA"],
   TRASLADO: ["TAB SIMPLE", "TAB DOBLE", "TAB SENCILLO", "TAM SIMPLE", "TAM DOBLE", "TRASLADO AEREO"],

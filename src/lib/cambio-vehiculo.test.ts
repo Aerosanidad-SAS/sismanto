@@ -7,6 +7,7 @@ import {
   etiquetaRazon,
   filasDeCambio,
   planificarCambioDelDia,
+  reasignacionOvemDelDia,
   serviciosMovibles,
   tripulacionVigente,
   validarFiltroCambios,
@@ -123,4 +124,43 @@ test("validarFiltroCambios: fechas, rango máximo e ids con forma de UUID", () =
 test("etiquetaRazon: español para los códigos conocidos, el código tal cual para los demás", () => {
   assert.equal(etiquetaRazon("REPARACION"), "Vehículo a reparación");
   assert.equal(etiquetaRazon("ANTIGUO"), "ANTIGUO");
+});
+
+const svc = (id: number, ovem: string | null, etapa = "PROGRAMADO", inicio: string | null = null) => ({
+  id,
+  etapa,
+  fecha_hora_inicio_desplazamiento: inicio,
+  ovem_user_id: ovem,
+});
+
+test("reasignacionOvemDelDia: el servicio de un OVEM que ya no opera pasa al conductor del día", () => {
+  assert.deepEqual(reasignacionOvemDelDia([svc(1, "viejo"), svc(2, "viejo")], ["nuevo"]), [
+    { id: 1, ovem: "nuevo" },
+    { id: 2, ovem: "nuevo" },
+  ]);
+});
+
+test("reasignacionOvemDelDia: un servicio sin OVEM queda con el conductor principal", () => {
+  assert.deepEqual(reasignacionOvemDelDia([svc(1, null)], ["a", "b"]), [{ id: 1, ovem: "a" }]);
+});
+
+test("reasignacionOvemDelDia: con dos conductores, el servicio que ya es de uno de ellos se queda donde está", () => {
+  assert.deepEqual(reasignacionOvemDelDia([svc(1, "b"), svc(2, "a"), svc(3, "viejo")], ["a", "b"]), [{ id: 3, ovem: "a" }]);
+});
+
+test("reasignacionOvemDelDia: sin conductores el servicio queda sin OVEM, y el que ya está sin OVEM no cambia", () => {
+  assert.deepEqual(reasignacionOvemDelDia([svc(1, "viejo"), svc(2, null)], []), [{ id: 1, ovem: null }]);
+});
+
+test("reasignacionOvemDelDia: no devuelve los que ya están bien", () => {
+  assert.deepEqual(reasignacionOvemDelDia([svc(1, "a")], ["a"]), []);
+});
+
+test("reasignacionOvemDelDia: los servicios iniciados o en otra etapa nunca se tocan", () => {
+  const servicios = [svc(1, "viejo", "CURSO"), svc(2, "viejo", "PROGRAMADO", "2026-10-26T10:00:00-05:00"), svc(3, "viejo", "FINALIZADO"), svc(4, "viejo")];
+  assert.deepEqual(reasignacionOvemDelDia(servicios, ["nuevo"]), [{ id: 4, ovem: "nuevo" }]);
+});
+
+test("reasignacionOvemDelDia: de dos conductores a uno, los servicios del que sale pasan al que queda", () => {
+  assert.deepEqual(reasignacionOvemDelDia([svc(1, "b"), svc(2, "a")], ["a"]), [{ id: 1, ovem: "a" }]);
 });

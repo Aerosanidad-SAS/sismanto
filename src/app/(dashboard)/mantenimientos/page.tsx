@@ -32,6 +32,7 @@ async function fetchMantenimientos(searchParams: {
   mTipo?: string;
   mProv?: string;
   mFac?: string;
+  mSoporte?: string;
 }) {
   try {
     const supabase = createClient();
@@ -75,6 +76,8 @@ async function fetchMantenimientos(searchParams: {
     const fac = searchParams.mFac?.trim();
     if (fac) q = q.ilike("numero_factura", `%${fac}%`);
     if (categoriaIds) q = q.in("categoria_id", categoriaIds);
+    // «Sin soporte»: correctivos registrados con la regla de Airplan (migración 139) que no tienen archivo.
+    if (searchParams.mSoporte === "sin") q = q.eq("requiere_soporte", true).is("soporte_path", null);
 
     const { data } = await q;
     return data || [];
@@ -93,6 +96,7 @@ export default async function MantenimientosPage(
       mTipo?: string;
       mProv?: string;
       mFac?: string;
+      mSoporte?: string;
     }>;
   }
 ) {
@@ -143,6 +147,7 @@ export default async function MantenimientosPage(
               tipo: searchParams.mTipo,
               proveedor: searchParams.mProv,
               factura: searchParams.mFac,
+              soporte: searchParams.mSoporte,
             }}
           />
         </CardContent>
